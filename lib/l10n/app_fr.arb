@@ -68,5 +68,21 @@
   "fontLigaturesDescription": "Activer les ligatures de police dans le code",
   "selectFontFamily": "Sélectionner la police",
   "selectLanguage": "Sélectionner la langue",
-  "format": "Formater"
+  "format": "Formater",
+  "liveShare": "Partage en Direct",
+  "hostSession": "Créer une Session",
+  "joinSession": "Rejoindre la Session",
+  "stopSession": "Arrêter la Session",
+  "disconnectSession": "Se déconnecter",
+  "sessionActive": "Session Active",
+  "hostingAt": "Hébergé sur :",
+  "connectedTo": "Connecté à :",
+  "userName": "Votre Nom",
+  "usersList": "Participants",
+  "chat": "Chat",
+  "messagePlaceholder": "Tapez un message...",
+  "connectError": "Erreur de connexion",
+  "invalidAddress": "Adresse invalide",
+  "joinLink": "Adresse IP de la session",
+  "localIps": "IPs Locales :"
 }

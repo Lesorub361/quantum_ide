@@ -23,6 +23,7 @@ import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/collaboration_service.dart';
 
 class EditorFile {
   final String path;
@@ -287,6 +288,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
       controller.addListener(() {
         _handleContentChange(path);
+        _handleCursorMove(path);
       });
 
       final newList = [...state.openFiles, newFile];
@@ -299,6 +301,10 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
       // Handle LSP open
       _lspService.onFileOpened(path, content);
+
+      // Handle Collaboration Sync
+      ref.read(collaborationProvider.notifier).initializeFileSync(path, content);
+      _handleCursorMove(path);
       
       // Calculate diff immediately if there are proposed AI changes
       if (hasProposed) {
@@ -315,6 +321,13 @@ class EditorNotifier extends StateNotifier<EditorState> {
     if (index == -1) return;
 
     final file = state.openFiles[index];
+    
+    // Broadcast text changes instantly for collaboration
+    final collabService = ref.read(collaborationProvider.notifier);
+    if (!collabService.isApplyingRemoteChange) {
+      collabService.handleLocalChange(path, file.controller.text);
+    }
+
     final isModified = file.controller.text != file.originalContent;
 
     // Synchronous update only when isModified flag actually changes —
@@ -344,6 +357,30 @@ class EditorNotifier extends StateNotifier<EditorState> {
         _autoSaveTimers.remove(path);
       });
     }
+  }
+
+  void _handleCursorMove(String path) {
+    final index = state.openFiles.indexWhere((f) => f.path == path);
+    if (index == -1) return;
+
+    final file = state.openFiles[index];
+    final selection = file.controller.selection;
+
+    final collabService = ref.read(collaborationProvider.notifier);
+    if (collabService.isApplyingRemoteChange) return;
+
+    final extent = selection.extent;
+    final base = selection.base;
+
+    collabService.handleLocalCursorMove(
+      path,
+      extent.index,
+      extent.offset,
+      selection.isCollapsed ? -1 : base.index,
+      selection.isCollapsed ? -1 : base.offset,
+      selection.isCollapsed ? -1 : extent.index,
+      selection.isCollapsed ? -1 : extent.offset,
+    );
   }
 
   void _updateDiff(String path) async {
@@ -443,6 +480,11 @@ class EditorNotifier extends StateNotifier<EditorState> {
     state = state.copyWith(activeTabIndex: index);
     ref.read(gitProvider.notifier).refreshStatus();
     _persistWorkspaceFiles();
+
+    // Notify collaboration about active tab change
+    if (state.openFiles.isNotEmpty && index < state.openFiles.length) {
+      _handleCursorMove(state.openFiles[index].path);
+    }
   }
 
   void updateDiagnostics(String path, List<CodeDiagnostic> diagnostics) {
@@ -616,6 +658,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
       );
       controller.addListener(() {
         _handleContentChange(path);
+        _handleCursorMove(path);
       });
       
       final editorFile = EditorFile(
@@ -626,6 +669,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
       );
       
       // Handle LSP open and diagnostics in background
+      ref.read(collaborationProvider.notifier).initializeFileSync(path, content);
       _lspService.onFileOpened(path, content).then((_) {
         _lspService.getDiagnostics(path).then((diagnostics) {
           updateDiagnostics(path, diagnostics);

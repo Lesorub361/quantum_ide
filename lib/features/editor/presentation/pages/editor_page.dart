@@ -61,6 +61,8 @@ import 'package:quantum_ide/features/git/presentation/widgets/git_panel.dart';
 import 'package:quantum_ide/features/preview/presentation/widgets/web_preview_panel.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/packages_panel.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_panels.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/live_share_panel.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_painter.dart';
 
 // ─── Вспомогательные функции для диалогов и меню ───────────────────────────
 
@@ -368,6 +370,7 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
             _buildActivityIcon(ref, 7, LucideIcons.toy_brick, 'Пакеты', selectedTab == 7),
             _buildActivityIcon(ref, 8, LucideIcons.play, isRu ? 'Запуск' : 'Run', selectedTab == 8),
             _buildActivityIcon(ref, 9, LucideIcons.hammer, isRu ? 'Сборка' : 'Build', selectedTab == 9),
+            _buildActivityIcon(ref, 10, LucideIcons.users, 'Live Share', selectedTab == 10),
           ],
         ),
       ),
@@ -401,6 +404,9 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
         break;
       case 9:
         activePanel = const SidebarBuildPanel();
+        break;
+      case 10:
+        activePanel = const LiveSharePanel();
         break;
       case 0:
       default:
@@ -1996,6 +2002,16 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                 controller: controller,
                 markers: _diffMarkers,
                 notifier: notifier,
+              ),
+            ),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: CollaborationPainter(
+                  notifier: notifier,
+                  filePath: file.path,
+                  ref: ref,
+                ),
+                size: Size.zero,
               ),
             ),
           ],

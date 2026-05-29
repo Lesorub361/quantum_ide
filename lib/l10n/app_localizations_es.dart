@@ -976,4 +976,49 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get format => 'Formatear';
+
+  @override
+  String get liveShare => 'Desarrollo Colaborativo';
+
+  @override
+  String get hostSession => 'Crear Sesión';
+
+  @override
+  String get joinSession => 'Unirse a la Sesión';
+
+  @override
+  String get stopSession => 'Detener Sesión';
+
+  @override
+  String get disconnectSession => 'Desconectar';
+
+  @override
+  String get sessionActive => 'Sesión Activa';
+
+  @override
+  String get hostingAt => 'Hospedado en:';
+
+  @override
+  String get connectedTo => 'Conectado a:';
+
+  @override
+  String get userName => 'Tu Nombre';
+
+  @override
+  String get usersList => 'Participantes';
+
+  @override
+  String get messagePlaceholder => 'Escribe un mensaje...';
+
+  @override
+  String get connectError => 'Error de conexión';
+
+  @override
+  String get invalidAddress => 'Dirección no válida';
+
+  @override
+  String get joinLink => 'Dirección IP de la sesión';
+
+  @override
+  String get localIps => 'IPs Locales:';
 }

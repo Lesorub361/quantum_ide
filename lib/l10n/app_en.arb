@@ -524,6 +524,22 @@
   "fontLigaturesDescription": "Enable font ligatures in code (e.g., -> or !=)",
   "selectFontFamily": "Select Font Family",
   "selectLanguage": "Select Language",
-  "format": "Format"
+  "format": "Format",
+  "liveShare": "Live Share",
+  "hostSession": "Host Session",
+  "joinSession": "Join Session",
+  "stopSession": "Stop Session",
+  "disconnectSession": "Disconnect",
+  "sessionActive": "Session Active",
+  "hostingAt": "Hosting at:",
+  "connectedTo": "Connected to:",
+  "userName": "Your Name",
+  "usersList": "Participants",
+  "chat": "Chat",
+  "messagePlaceholder": "Type a message...",
+  "connectError": "Connection error",
+  "invalidAddress": "Invalid address",
+  "joinLink": "Session IP address",
+  "localIps": "Local IPs:"
 }
 

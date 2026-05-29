@@ -1841,6 +1841,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Format'**
   String get format;
+
+  /// No description provided for @liveShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Live Share'**
+  String get liveShare;
+
+  /// No description provided for @hostSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Host Session'**
+  String get hostSession;
+
+  /// No description provided for @joinSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Join Session'**
+  String get joinSession;
+
+  /// No description provided for @stopSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Session'**
+  String get stopSession;
+
+  /// No description provided for @disconnectSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get disconnectSession;
+
+  /// No description provided for @sessionActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Session Active'**
+  String get sessionActive;
+
+  /// No description provided for @hostingAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Hosting at:'**
+  String get hostingAt;
+
+  /// No description provided for @connectedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to:'**
+  String get connectedTo;
+
+  /// No description provided for @userName.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Name'**
+  String get userName;
+
+  /// No description provided for @usersList.
+  ///
+  /// In en, this message translates to:
+  /// **'Participants'**
+  String get usersList;
+
+  /// No description provided for @messagePlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a message...'**
+  String get messagePlaceholder;
+
+  /// No description provided for @connectError.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection error'**
+  String get connectError;
+
+  /// No description provided for @invalidAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid address'**
+  String get invalidAddress;
+
+  /// No description provided for @joinLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Session IP address'**
+  String get joinLink;
+
+  /// No description provided for @localIps.
+  ///
+  /// In en, this message translates to:
+  /// **'Local IPs:'**
+  String get localIps;
 }
 
 class _AppLocalizationsDelegate

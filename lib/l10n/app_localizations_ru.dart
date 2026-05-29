@@ -978,4 +978,49 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get format => 'Форматировать';
+
+  @override
+  String get liveShare => 'Совместная разработка';
+
+  @override
+  String get hostSession => 'Создать сессию';
+
+  @override
+  String get joinSession => 'Подключиться к сессии';
+
+  @override
+  String get stopSession => 'Остановить сессию';
+
+  @override
+  String get disconnectSession => 'Отключиться';
+
+  @override
+  String get sessionActive => 'Сессия активна';
+
+  @override
+  String get hostingAt => 'Хостинг на:';
+
+  @override
+  String get connectedTo => 'Подключен к:';
+
+  @override
+  String get userName => 'Ваше имя';
+
+  @override
+  String get usersList => 'Участники';
+
+  @override
+  String get messagePlaceholder => 'Введите сообщение...';
+
+  @override
+  String get connectError => 'Ошибка подключения';
+
+  @override
+  String get invalidAddress => 'Неверный адрес';
+
+  @override
+  String get joinLink => 'IP-адрес сессии';
+
+  @override
+  String get localIps => 'Локальные IP:';
 }

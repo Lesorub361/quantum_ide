@@ -976,4 +976,49 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get format => 'Formater';
+
+  @override
+  String get liveShare => 'Partage en Direct';
+
+  @override
+  String get hostSession => 'Créer une Session';
+
+  @override
+  String get joinSession => 'Rejoindre la Session';
+
+  @override
+  String get stopSession => 'Arrêter la Session';
+
+  @override
+  String get disconnectSession => 'Se déconnecter';
+
+  @override
+  String get sessionActive => 'Session Active';
+
+  @override
+  String get hostingAt => 'Hébergé sur :';
+
+  @override
+  String get connectedTo => 'Connecté à :';
+
+  @override
+  String get userName => 'Votre Nom';
+
+  @override
+  String get usersList => 'Participants';
+
+  @override
+  String get messagePlaceholder => 'Tapez un message...';
+
+  @override
+  String get connectError => 'Erreur de connexion';
+
+  @override
+  String get invalidAddress => 'Adresse invalide';
+
+  @override
+  String get joinLink => 'Adresse IP de la session';
+
+  @override
+  String get localIps => 'IPs Locales :';
 }

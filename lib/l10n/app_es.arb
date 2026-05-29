@@ -68,5 +68,21 @@
   "fontLigaturesDescription": "Habilitar ligaduras tipográficas en el código",
   "selectFontFamily": "Seleccionar fuente",
   "selectLanguage": "Seleccionar idioma",
-  "format": "Formatear"
+  "format": "Formatear",
+  "liveShare": "Desarrollo Colaborativo",
+  "hostSession": "Crear Sesión",
+  "joinSession": "Unirse a la Sesión",
+  "stopSession": "Detener Sesión",
+  "disconnectSession": "Desconectar",
+  "sessionActive": "Sesión Activa",
+  "hostingAt": "Hospedado en:",
+  "connectedTo": "Conectado a:",
+  "userName": "Tu Nombre",
+  "usersList": "Participantes",
+  "chat": "Chat",
+  "messagePlaceholder": "Escribe un mensaje...",
+  "connectError": "Error de conexión",
+  "invalidAddress": "Dirección no válida",
+  "joinLink": "Dirección IP de la sesión",
+  "localIps": "IPs Locales:"
 }

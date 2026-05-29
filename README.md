@@ -59,6 +59,8 @@ Below is the directory structure of the application source code (`lib/`):
 - **Workspace Management**: Android Storage Access Framework (SAF) folder picker, project templates, bookmarks, recent workspaces.
 - **Quantum Editor**: Virtualized text rendering, real-time syntax highlighting for multiple languages, autosave, tabs, visual diff indicators, diagnostics, customizable keyboard accessory keys.
 - **Embedded Sandbox Terminal**: Native terminal PTY integration running an Ubuntu 24.04 PRoot environment. Automounts android storages, supports auto-recovery, customized `.bashrc`, dynamic tools configuration.
+- **Language Server Protocol (LSP)**: Complete support for HTML, CSS, JavaScript, and TypeScript within the PRoot sandbox. Offers smart autocomplete, documentation hovers, usages lookup, rename refactoring, and code formatting.
+- **Live Share (Real-time Collaboration)**: Host or join shared coding sessions over local networks. Synchronizes document text changes instantly using diff-match-patch alongside remote cursor caret lines, selections, and floating developer name flags. Includes a built-in session developer chat.
 - **Multi-backend AI Assistant**: Built-in chat panel supporting Google Gemini (Flash & Pro), Groq, DeepSeek, OpenRouter, and local models (Ollama/LM Studio). Smart debounced (700ms) code autocompletion.
 - **Built-in Git Client**: Diff tool, status tracker, visual conflict solver, and commit flow integration.
 - **Mobile Build Tools & Diagnostics**: Automated ARM64 Linux toolchain setup (NDK, SDK symlinking, AAPT2 patcher), Java JDK 17 setup, background `dart analyze` processing, project-wide problems panel, APK building and signing.
@@ -72,12 +74,15 @@ Below is the directory structure of the application source code (`lib/`):
 
 Here are the features currently in development or planned:
 
-- [ ] **LSP Integration**: Add language server support for HTML, CSS, JavaScript, and TypeScript inside the sandbox for full auto-complete, go-to-definition, and complex linting.
-- [ ] **Live Collaboration (Live Share)**: Add real-time multiplayer editing using CRDT synchronization with cursor sharing and voice/chat options.
+- [x] **LSP Integration**: Add language server support for HTML, CSS, JavaScript, and TypeScript inside the sandbox for full auto-complete, go-to-definition, and complex linting. (Completed)
+- [x] **Live Collaboration (Live Share)**: Add real-time multiplayer editing using CRDT/diff-match-patch synchronization with cursor sharing and voice/chat options. (Completed)
 - [ ] **WASM Plugin System**: Add support for running WebAssembly-based custom plugins compiled from Rust, Go, or C++ to extend the editor's capabilities.
 - [ ] **KVM MicroVM Integration**: Support hardware-accelerated Linux kernels inside lightweight micro-VMs on Android 15+ to bypass PRoot constraints.
 - [ ] **Foldable Layout Support**: Auto-splitting panels (terminal/editor/preview) across physical screen folds on foldable smartphones and tablets.
 - [ ] **Local AI completions (MLC LLM)**: Integrate Qwen-Coder or Llama-3-Coder running directly on the device's NPU.
+- [ ] **Docker & Container Support**: Enable lightweight containers inside the development sandbox.
+- [ ] **Remote SSH Development**: Connect to and edit files on remote servers directly from the IDE.
+- [ ] **Themes & Plugins Marketplace**: Discover and install community-developed themes and extension plugins.
 
 ---
 

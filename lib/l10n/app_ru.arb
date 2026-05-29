@@ -524,6 +524,22 @@
   "fontLigaturesDescription": "Включить лигатуры в коде (например, -> или !=)",
   "selectFontFamily": "Выберите шрифт",
   "selectLanguage": "Выберите язык",
-  "format": "Форматировать"
+  "format": "Форматировать",
+  "liveShare": "Совместная разработка",
+  "hostSession": "Создать сессию",
+  "joinSession": "Подключиться к сессии",
+  "stopSession": "Остановить сессию",
+  "disconnectSession": "Отключиться",
+  "sessionActive": "Сессия активна",
+  "hostingAt": "Хостинг на:",
+  "connectedTo": "Подключен к:",
+  "userName": "Ваше имя",
+  "usersList": "Участники",
+  "chat": "Чат",
+  "messagePlaceholder": "Введите сообщение...",
+  "connectError": "Ошибка подключения",
+  "invalidAddress": "Неверный адрес",
+  "joinLink": "IP-адрес сессии",
+  "localIps": "Локальные IP:"
 }
 
