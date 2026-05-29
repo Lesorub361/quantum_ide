@@ -1023,4 +1023,43 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get localIps => 'Локальные IP:';
+
+  @override
+  String get wasmPlugins => 'Плагины WASM';
+
+  @override
+  String get installPlugin => 'Установить плагин (.wasm)';
+
+  @override
+  String get noPluginsInstalled => 'Нет установленных плагинов WASM';
+
+  @override
+  String get pluginEnabled => 'Плагин включен';
+
+  @override
+  String get pluginDisabled => 'Плагин выключен';
+
+  @override
+  String get runWasmAction => 'Запустить WASM плагин';
+
+  @override
+  String get noActiveSelection => 'Текст не выбран. Применить ко всему файлу?';
+
+  @override
+  String get applyToSelection => 'Применить к выделению';
+
+  @override
+  String get applyToDocument => 'Применить к документу';
+
+  @override
+  String get logs => 'Логи';
+
+  @override
+  String get clearLogs => 'Очистить логи';
+
+  @override
+  String get deletePlugin => 'Удалить плагин';
+
+  @override
+  String get resetToDefaults => 'Сбросить настройки';
 }

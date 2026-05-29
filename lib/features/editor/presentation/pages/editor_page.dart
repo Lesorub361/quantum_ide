@@ -63,6 +63,9 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/packages_pane
 import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_panels.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/live_share_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_painter.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:quantum_ide/core/services/wasm_plugin_service.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/wasm_plugins_panel.dart';
 
 // ─── Вспомогательные функции для диалогов и меню ───────────────────────────
 
@@ -371,6 +374,7 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
             _buildActivityIcon(ref, 8, LucideIcons.play, isRu ? 'Запуск' : 'Run', selectedTab == 8),
             _buildActivityIcon(ref, 9, LucideIcons.hammer, isRu ? 'Сборка' : 'Build', selectedTab == 9),
             _buildActivityIcon(ref, 10, LucideIcons.users, 'Live Share', selectedTab == 10),
+            _buildActivityIcon(ref, 11, LucideIcons.puzzle, isRu ? 'Плагины' : 'Plugins', selectedTab == 11),
           ],
         ),
       ),
@@ -407,6 +411,9 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
         break;
       case 10:
         activePanel = const LiveSharePanel();
+        break;
+      case 11:
+        activePanel = const WasmPluginsPanel();
         break;
       case 0:
       default:
@@ -918,6 +925,212 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _isDragging = false;
 
+  void _showWasmActionSelector(BuildContext context, WidgetRef ref, int activeFileIndex) {
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final wasmState = ref.read(wasmPluginServiceProvider);
+    final enabledPlugins = wasmState.plugins.where((p) => p.isEnabled).toList();
+
+    if (enabledPlugins.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isRu ? 'Нет активных WASM плагинов' : 'No active WASM plugins'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF13151D),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                isRu ? 'Выберите действие плагина' : 'Select Plugin Action',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  physics: const BouncingScrollPhysics(),
+                  itemCount: enabledPlugins.length,
+                  itemBuilder: (context, pIdx) {
+                    final plugin = enabledPlugins[pIdx];
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                          child: Text(
+                            plugin.name,
+                            style: GoogleFonts.inter(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        ...plugin.actions.map((action) {
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                            title: Text(
+                              action.name,
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                            ),
+                            subtitle: Text(
+                              action.description,
+                              style: const TextStyle(color: Colors.white38, fontSize: 11),
+                            ),
+                            trailing: const Icon(LucideIcons.play, size: 12, color: Colors.cyanAccent),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _runWasmActionOnEditor(context, ref, plugin.id, action.id, activeFileIndex);
+                            },
+                          );
+                        }),
+                        const Divider(color: Colors.white10),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _runWasmActionOnEditor(
+    BuildContext context,
+    WidgetRef ref,
+    String pluginId,
+    int actionId,
+    int activeFileIndex,
+  ) async {
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final editorState = ref.read(editorProvider);
+    if (editorState.openFiles.isEmpty || activeFileIndex >= editorState.openFiles.length) return;
+
+    final file = editorState.openFiles[activeFileIndex];
+    final controller = file.controller;
+
+    String textToProcess = '';
+    bool isSelection = false;
+
+    String getSelectedText(CodeLineEditingController controller) {
+      final selection = controller.selection;
+      if (selection.isCollapsed) return '';
+      final text = controller.text;
+      final lines = text.split('\n');
+      final startLine = selection.start.index;
+      final startCol = selection.start.offset;
+      final endLine = selection.end.index;
+      final endCol = selection.end.offset;
+
+      if (startLine >= lines.length || endLine >= lines.length) return '';
+
+      if (startLine == endLine) {
+        return lines[startLine].substring(
+          startCol.clamp(0, lines[startLine].length),
+          endCol.clamp(0, lines[startLine].length),
+        );
+      }
+
+      final buffer = StringBuffer();
+      buffer.writeln(lines[startLine].substring(startCol.clamp(0, lines[startLine].length)));
+      for (int i = startLine + 1; i < endLine; i++) {
+        buffer.writeln(lines[i]);
+      }
+      buffer.write(lines[endLine].substring(0, endCol.clamp(0, lines[endLine].length)));
+      return buffer.toString();
+    }
+
+    final selectedText = getSelectedText(controller);
+
+    if (selectedText.isNotEmpty) {
+      textToProcess = selectedText;
+      isSelection = true;
+    } else {
+      final apply = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF13151D),
+          title: Text(isRu ? 'Текст не выбран' : 'No selection', style: const TextStyle(color: Colors.white)),
+          content: Text(
+            isRu ? 'Применить действие плагина ко всему файлу?' : 'Apply plugin action to the entire file?',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(isRu ? 'Отмена' : 'Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(isRu ? 'Применить' : 'Apply'),
+            ),
+          ],
+        ),
+      );
+
+      if (apply != true) return;
+      textToProcess = controller.text;
+      isSelection = false;
+    }
+
+    if (!context.mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(color: Colors.cyanAccent),
+      ),
+    );
+
+    try {
+      final processedText = await ref.read(wasmPluginServiceProvider.notifier).executeAction(
+        pluginId,
+        actionId,
+        textToProcess,
+      );
+
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading indicator
+      }
+
+      if (isSelection) {
+        controller.replaceSelection(processedText);
+      } else {
+        controller.text = processedText;
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isRu ? 'Плагин выполнен успешно' : 'Plugin executed successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Close loading indicator
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(isRu ? 'Ошибка выполнения: $e' : 'Execution error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1237,6 +1450,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
                           ),
                           _ActionIconButton(
+                            icon: LucideIcons.puzzle,
+                            tooltip: isRu ? 'Запустить WASM плагин' : 'Run WASM Plugin',
+                            onTap: () => _showWasmActionSelector(context, ref, safeActiveIndex),
+                          ),
+                          _ActionIconButton(
                             icon: LucideIcons.terminal,
                             tooltip: isRu ? 'Терминал' : 'Terminal',
                             onTap: () {
@@ -1280,14 +1498,136 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         ),
       ),
       endDrawer: isDesktop ? null : const RightChatPanel(isInline: false),
-      body: isDesktop ? Row(
+      body: Stack(
         children: [
-          const _FileDrawer(isInline: true),
-          Expanded(child: mainBody),
-          if (ref.watch(rightChatPanelOpenProvider))
-            const RightChatPanel(isInline: true),
+          Positioned(
+            left: 0,
+            top: 0,
+            width: 1,
+            height: 1,
+            child: SizedBox(
+              width: 1,
+              height: 1,
+              child: InAppWebView(
+                initialSettings: InAppWebViewSettings(
+                  javaScriptEnabled: true,
+                  domStorageEnabled: true,
+                ),
+                initialData: InAppWebViewInitialData(
+                  data: """
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                      <title>WASM Runner</title>
+                      <script>
+                        window.plugins = window.plugins || {};
+
+                        function registerLogs(pluginId, msg) {
+                          if (window.flutter_inappwebview) {
+                            window.flutter_inappwebview.callHandler('onPluginLog', { pluginId: pluginId, message: msg });
+                          }
+                        }
+
+                        window.loadWasmPlugin = async function(pluginId, base64Bytes) {
+                          try {
+                            const binaryString = atob(base64Bytes);
+                            const len = binaryString.length;
+                            const bytes = new Uint8Array(len);
+                            for (let i = 0; i < len; i++) {
+                              bytes[i] = binaryString.charCodeAt(i);
+                            }
+                            
+                            const memory = new WebAssembly.Memory({ initial: 256, maximum: 512 });
+                            
+                            const importObject = {
+                              env: {
+                                memory: memory,
+                                host_log: (ptr, length) => {
+                                  const buffer = new Uint8Array(memory.buffer, ptr, length);
+                                  const msg = new TextDecoder('utf-8').decode(buffer);
+                                  registerLogs(pluginId, msg);
+                                }
+                              }
+                            };
+                            
+                            const { instance } = await WebAssembly.instantiate(bytes, importObject);
+                            
+                            window.plugins[pluginId] = {
+                              instance: instance,
+                              memory: instance.exports.memory || memory
+                            };
+                            
+                            return { success: true };
+                          } catch (e) {
+                            console.error("Failed to load WASM plugin:", e);
+                            return { success: false, error: e.toString() };
+                          }
+                        };
+
+                        window.runWasmAction = async function(pluginId, actionId, inputText) {
+                          const plugin = window.plugins[pluginId];
+                          if (!plugin) throw new Error("Plugin not loaded");
+                          
+                          const instance = plugin.instance;
+                          const memory = plugin.memory;
+                          
+                          const utf8Encoder = new TextEncoder();
+                          const inputBytes = utf8Encoder.encode(inputText);
+                          const inputLen = inputBytes.length;
+                          
+                          if (!instance.exports.alloc) {
+                            throw new Error("WASM module must export an 'alloc' function");
+                          }
+                          
+                          const inputPtr = instance.exports.alloc(inputLen);
+                          const memoryBuffer = new Uint8Array(memory.buffer);
+                          memoryBuffer.set(inputBytes, inputPtr);
+                          
+                          if (!instance.exports.run_plugin) {
+                            throw new Error("WASM module must export a 'run_plugin' function");
+                          }
+                          
+                          const resultPacked = instance.exports.run_plugin(actionId, inputPtr, inputLen);
+                          const packedBig = BigInt(resultPacked);
+                          const resultPtr = Number(packedBig >> 32n);
+                          const resultLen = Number(packedBig & 0xFFFFFFFFn);
+                          
+                          const resultBuffer = new Uint8Array(memory.buffer, resultPtr, resultLen);
+                          const outputText = new TextDecoder('utf-8').decode(resultBuffer);
+                          
+                          if (instance.exports.dealloc) {
+                            instance.exports.dealloc(inputPtr, inputLen);
+                            instance.exports.dealloc(resultPtr, resultLen);
+                          }
+                          
+                          return outputText;
+                        };
+                      </script>
+                    </head>
+                    <body>
+                      <h3>WASM Plugin Runner Sandbox</h3>
+                    </body>
+                    </html>
+                  """,
+                ),
+                onWebViewCreated: (controller) {
+                  ref.read(wasmPluginServiceProvider.notifier).setController(controller);
+                },
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: isDesktop ? Row(
+              children: [
+                const _FileDrawer(isInline: true),
+                Expanded(child: mainBody),
+                if (ref.watch(rightChatPanelOpenProvider))
+                  const RightChatPanel(isInline: true),
+              ],
+            ) : mainBody,
+          ),
         ],
-      ) : mainBody,
+      ),
       bottomNavigationBar: const StatusBar(),
     ),
   );

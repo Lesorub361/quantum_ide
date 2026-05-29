@@ -1021,4 +1021,44 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get localIps => 'IPs Locales:';
+
+  @override
+  String get wasmPlugins => 'Complementos WASM';
+
+  @override
+  String get installPlugin => 'Instalar complemento (.wasm)';
+
+  @override
+  String get noPluginsInstalled => 'No hay complementos WASM instalados';
+
+  @override
+  String get pluginEnabled => 'Complemento habilitado';
+
+  @override
+  String get pluginDisabled => 'Complemento deshabilitado';
+
+  @override
+  String get runWasmAction => 'Ejecutar acción WASM';
+
+  @override
+  String get noActiveSelection =>
+      '¿No hay selección de texto. Aplicar a todo el archivo?';
+
+  @override
+  String get applyToSelection => 'Aplicar a la selección';
+
+  @override
+  String get applyToDocument => 'Aplicar al documento';
+
+  @override
+  String get logs => 'Registros';
+
+  @override
+  String get clearLogs => 'Limpiar registros';
+
+  @override
+  String get deletePlugin => 'Eliminar complemento';
+
+  @override
+  String get resetToDefaults => 'Restablecer';
 }

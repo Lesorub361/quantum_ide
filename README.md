@@ -76,7 +76,7 @@ Here are the features currently in development or planned:
 
 - [x] **LSP Integration**: Add language server support for HTML, CSS, JavaScript, and TypeScript inside the sandbox for full auto-complete, go-to-definition, and complex linting. (Completed)
 - [x] **Live Collaboration (Live Share)**: Add real-time multiplayer editing using CRDT/diff-match-patch synchronization with cursor sharing and voice/chat options. (Completed)
-- [ ] **WASM Plugin System**: Add support for running WebAssembly-based custom plugins compiled from Rust, Go, or C++ to extend the editor's capabilities.
+- [x] **WASM Plugin System**: Add support for running WebAssembly-based custom plugins compiled from Rust, Go, or C++ to extend the editor's capabilities. (Completed)
 - [ ] **KVM MicroVM Integration**: Support hardware-accelerated Linux kernels inside lightweight micro-VMs on Android 15+ to bypass PRoot constraints.
 - [ ] **Foldable Layout Support**: Auto-splitting panels (terminal/editor/preview) across physical screen folds on foldable smartphones and tablets.
 - [ ] **Local AI completions (MLC LLM)**: Integrate Qwen-Coder or Llama-3-Coder running directly on the device's NPU.

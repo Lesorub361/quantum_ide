@@ -540,6 +540,19 @@
   "connectError": "Connection error",
   "invalidAddress": "Invalid address",
   "joinLink": "Session IP address",
-  "localIps": "Local IPs:"
+  "localIps": "Local IPs:",
+  "wasmPlugins": "WASM Plugins",
+  "installPlugin": "Install Plugin (.wasm)",
+  "noPluginsInstalled": "No WASM plugins installed",
+  "pluginEnabled": "Plugin enabled",
+  "pluginDisabled": "Plugin disabled",
+  "runWasmAction": "Run WASM Action",
+  "noActiveSelection": "No text selected. Apply to the entire file?",
+  "applyToSelection": "Apply to Selection",
+  "applyToDocument": "Apply to Document",
+  "logs": "Logs",
+  "clearLogs": "Clear Logs",
+  "deletePlugin": "Delete Plugin",
+  "resetToDefaults": "Reset to Defaults"
 }
 

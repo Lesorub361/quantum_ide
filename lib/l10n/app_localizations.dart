@@ -1931,6 +1931,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Local IPs:'**
   String get localIps;
+
+  /// No description provided for @wasmPlugins.
+  ///
+  /// In en, this message translates to:
+  /// **'WASM Plugins'**
+  String get wasmPlugins;
+
+  /// No description provided for @installPlugin.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Plugin (.wasm)'**
+  String get installPlugin;
+
+  /// No description provided for @noPluginsInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'No WASM plugins installed'**
+  String get noPluginsInstalled;
+
+  /// No description provided for @pluginEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin enabled'**
+  String get pluginEnabled;
+
+  /// No description provided for @pluginDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Plugin disabled'**
+  String get pluginDisabled;
+
+  /// No description provided for @runWasmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Run WASM Action'**
+  String get runWasmAction;
+
+  /// No description provided for @noActiveSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'No text selected. Apply to the entire file?'**
+  String get noActiveSelection;
+
+  /// No description provided for @applyToSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to Selection'**
+  String get applyToSelection;
+
+  /// No description provided for @applyToDocument.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply to Document'**
+  String get applyToDocument;
+
+  /// No description provided for @logs.
+  ///
+  /// In en, this message translates to:
+  /// **'Logs'**
+  String get logs;
+
+  /// No description provided for @clearLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Logs'**
+  String get clearLogs;
+
+  /// No description provided for @deletePlugin.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Plugin'**
+  String get deletePlugin;
+
+  /// No description provided for @resetToDefaults.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to Defaults'**
+  String get resetToDefaults;
 }
 
 class _AppLocalizationsDelegate

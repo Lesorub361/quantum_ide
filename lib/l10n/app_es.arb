@@ -84,5 +84,18 @@
   "connectError": "Error de conexión",
   "invalidAddress": "Dirección no válida",
   "joinLink": "Dirección IP de la sesión",
-  "localIps": "IPs Locales:"
+  "localIps": "IPs Locales:",
+  "wasmPlugins": "Complementos WASM",
+  "installPlugin": "Instalar complemento (.wasm)",
+  "noPluginsInstalled": "No hay complementos WASM instalados",
+  "pluginEnabled": "Complemento habilitado",
+  "pluginDisabled": "Complemento deshabilitado",
+  "runWasmAction": "Ejecutar acción WASM",
+  "noActiveSelection": "¿No hay selección de texto. Aplicar a todo el archivo?",
+  "applyToSelection": "Aplicar a la selección",
+  "applyToDocument": "Aplicar al documento",
+  "logs": "Registros",
+  "clearLogs": "Limpiar registros",
+  "deletePlugin": "Eliminar complemento",
+  "resetToDefaults": "Restablecer"
 }

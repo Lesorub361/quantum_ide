@@ -540,6 +540,19 @@
   "connectError": "Ошибка подключения",
   "invalidAddress": "Неверный адрес",
   "joinLink": "IP-адрес сессии",
-  "localIps": "Локальные IP:"
+  "localIps": "Локальные IP:",
+  "wasmPlugins": "Плагины WASM",
+  "installPlugin": "Установить плагин (.wasm)",
+  "noPluginsInstalled": "Нет установленных плагинов WASM",
+  "pluginEnabled": "Плагин включен",
+  "pluginDisabled": "Плагин выключен",
+  "runWasmAction": "Запустить WASM плагин",
+  "noActiveSelection": "Текст не выбран. Применить ко всему файлу?",
+  "applyToSelection": "Применить к выделению",
+  "applyToDocument": "Применить к документу",
+  "logs": "Логи",
+  "clearLogs": "Очистить логи",
+  "deletePlugin": "Удалить плагин",
+  "resetToDefaults": "Сбросить настройки"
 }
 
