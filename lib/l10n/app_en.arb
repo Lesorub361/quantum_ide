@@ -1,0 +1,325 @@
+{
+  "appTitle": "QuantumIDE",
+  "explorer": "Explorer",
+  "newFile": "New File",
+  "newFolder": "New Folder",
+  "refresh": "Refresh",
+  "rename": "Rename",
+  "delete": "Delete",
+  "cancel": "Cancel",
+  "save": "Save",
+  "create": "Create",
+  "projectNotOpened": "Project not opened",
+  "selectFileToStart": "Select a file in the explorer to start working",
+  "openExplorer": "Open Explorer",
+  "confirmDelete": "Confirm Delete",
+  "areYouSureDelete": "Are you sure you want to delete {name}?",
+  "@areYouSureDelete": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "terminal": "Terminal",
+  "run": "Run",
+  "build": "Build",
+  "aiAgent": "AI Agent",
+  "servers": "Servers",
+  "buildLogs": "Build Logs",
+  "appLogs": "App Logs",
+  "copy": "Copy",
+  "stop": "Stop",
+  "hotReload": "Hot Reload",
+  "clear": "Clear",
+  "runProject": "Run Project",
+  "pubGet": "Pub Get",
+  "setupSdk": "Setup SDK",
+  "clean": "Clean",
+  "buildApk": "Build APK",
+  "welcomeMessage": "Welcome to your premium environment.",
+  "typeRunToStart": "Type run to start your project.",
+  "settings": "Settings",
+  "interfaceAndLocalization": "Interface & Localization",
+  "language": "Language",
+  "theme": "Theme",
+  "darkTheme": "Dark Theme",
+  "lightTheme": "Light Theme",
+  "colorPalette": "Color Palette",
+  "customColor": "Custom Color",
+  "accentColor": "Accent Color",
+  "projectIcon": "Project Icon",
+  "defaultAccent": "Default",
+  "codeEditor": "Code Editor",
+  "editorFontSize": "Editor Font Size",
+  "autoCompletion": "Auto-completion",
+  "showCodeHints": "Show code hints",
+  "aiAutoCompletion": "AI Auto-completion",
+  "geminiCodeGeneration": "Gemini code generation",
+  "wordWrap": "Word Wrap",
+  "wordWrapDescription": "Soft wrap lines in editor",
+  "lineNumbers": "Line Numbers",
+  "showLineNumbers": "Show line numbers",
+  "minimap": "Minimap",
+  "showMinimap": "Show editor minimap",
+  "autoSave": "Auto-save",
+  "autoSaveDescription": "Save changes after 2s",
+  "terminalFontSize": "Terminal Font Size",
+  "terminalTheme": "Terminal Theme",
+  "toolsAndAi": "Tools & AI",
+  "aiProviders": "AI Providers",
+  "aiProvidersSubtitle": "Gemini, OpenAI, Ollama etc.",
+  "ubuntuPackages": "Ubuntu Packages",
+  "manageCliTools": "Manage CLI tools",
+  "hosts": "Hosts",
+  "localRemoteHosts": "Local/remote hosts",
+  "system": "System",
+  "showHiddenFiles": "Show Hidden Files",
+  "showHiddenFilesDescription": "Show .* files",
+  "vibration": "Vibration",
+  "hapticFeedback": "Haptic feedback",
+  "aboutApp": "About App",
+  "aboutAppSubtitle": "Quantum IDE v1.0.0",
+  "selectPalette": "Select Palette",
+  "close": "Close",
+  "resetToDefault": "Reset to Default",
+  "aboutDialogContent": "AI-powered mobile IDE built with Flutter.\n© 2026 Quantum IDE",
+  "ubuntuDarkPurple": "Ubuntu Dark Purple",
+  "pureDark": "Pure Dark",
+  "searchProjects": "Search projects...",
+  "open": "Open",
+  "market": "Market",
+  "projectsHeader": "Projects ({count})",
+  "@projectsHeader": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noProjects": "No projects",
+  "nothingFound": "Nothing found",
+  "createFirstProject": "Create first project",
+  "projectActions": "Project Actions",
+  "fixAndroidBuild": "Fix Android Build (AGP + compileSdk)",
+  "patchAndroidBuildDescription": "Patch android-36 / AGP 8.7.3 / compileSdk 35",
+  "buildApkDescription": "flutter build apk --debug",
+  "apkBuildFixed": "✅ Android build files fixed for \"{name}\"",
+  "@apkBuildFixed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmDeleteTitle": "Delete \"{name}\"?",
+  "@confirmDeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmDeleteMessage": "Delete only from the list or delete files as well?",
+  "deleteFromListOnly": "From list",
+  "deleteFromDisk": "From disk",
+  "projectSettings": "Project Settings",
+  "createProject": "Create Project",
+  "projectName": "Project Name",
+  "projectType": "PROJECT TYPE",
+  "androidCompileSdkVersion": "ANDROID compileSdk VERSION",
+  "defaultSdkVersion": "Default: 35",
+  "targetPlatforms": "TARGET DEVICES / PLATFORMS",
+  "saveAction": "Save",
+  "code": "Code",
+  "preview": "Preview",
+  "fastCommands": "QUICK COMMANDS",
+  "serverAddress": "Server Address",
+  "copied": "Copied: {value}",
+  "@copied": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "stopServer": "Stop",
+  "command": "COMMAND",
+  "serverStarted": "Server Started",
+  "openAddressInBrowser": "Open this address in Android browser",
+  "copyUrl": "Copy URL",
+  "openProjectToSeeCommands": "Open a project to see run commands",
+  "running": "Running...",
+  "chat": "Chat",
+  "agents": "Agents",
+  "askAiHint": "Ask {provider}...",
+  "@askAiHint": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "selectModel": "Select Model",
+  "clearHistory": "Clear History",
+  "askAboutCode": "Ask about the code",
+  "you": "You",
+  "workingOnFile": "I'm working on the file: {file}. \nHere is its content:\n```\n{code}\n```\n\nMy question: {question}",
+  "@workingOnFile": {
+    "placeholders": {
+      "file": { "type": "String" },
+      "code": { "type": "String" },
+      "question": { "type": "String" }
+    }
+  },
+  "aiAskDialogTitle": "AI Agent Query",
+  "aiAskFolder": "Folder: {name}",
+  "@aiAskFolder": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "aiAskFile": "File: {name}",
+  "@aiAskFile": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "aiAskFolderHint": "Describe the task (e.g. \"create a controller\", \"add a data model\"...)",
+  "aiAskFileHint": "What needs to be done? (e.g. \"add email validation\", \"optimize method\"...)",
+  "decline": "Decline",
+  "apply": "Apply",
+  "showChanges": "Show changes",
+  "changesInFile": "Changes in {name}",
+  "@changesInFile": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "noFilesFound": "No files found",
+  "retry": "Retry",
+  "errorOccurred": "Error: {error}",
+  "@errorOccurred": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "aiProvidersInfo": "Add API keys for different AI providers. Local models (Ollama/LM Studio) do not require a key.",
+  "activeProvider": "Active Provider",
+  "requiresApiKeyLabel": "Requires API Key",
+  "localNoKey": "Local — no key",
+  "activeCaps": "ACTIVE",
+  "apiKeyLabel": "API Key",
+  "keySaved": "API key saved",
+  "urlSaved": "URL saved",
+  "serverUrlLabel": "Server URL",
+  "ollamaPhoneHint": "💡 To connect from a phone, use your computer's IP (e.g. http://192.168.1.10:11434)",
+  "modelLabel": "MODEL",
+  "searching": "Searching...",
+  "findModels": "Find Models",
+  "searchModelHint": "Search by model name...",
+  "customModelHint": "Or enter model name manually...",
+  "modelInstalled": "Model set to {name}",
+  "@modelInstalled": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "modelsNotFound": "No models found. Click \"Find Models\".",
+  "available": "Available",
+  "quotaLimit": "Quota limit / high load",
+  "unavailable": "Unavailable",
+  "availableCaps": "AVAILABLE",
+  "activateProvider": "Activate Provider",
+  "providerActivated": "{name} activated",
+  "@providerActivated": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "send": "Send",
+  "acceptAll": "Accept All",
+  "rejectAll": "Reject All",
+  "projectAnalysis": "Project Analysis",
+  "problemsFound": "Problems found: {count} ({errors} errors, {warnings} warnings)",
+  "@problemsFound": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "errors": { "type": "int" },
+      "warnings": { "type": "int" }
+    }
+  },
+  "fixWithAi": "Fix with AI",
+  "runningCommand": "Running command: {command}...",
+  "@runningCommand": {
+    "placeholders": {
+      "command": { "type": "String" }
+    }
+  },
+  "applyingChange": "Applying change: {path}...",
+  "@applyingChange": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "fileSuccessfullyWritten": "File {path} successfully written.",
+  "@fileSuccessfullyWritten": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "fileSuccessfullyDeleted": "File {path} successfully deleted.",
+  "@fileSuccessfullyDeleted": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "commandExecutedResult": "Command \"{command}\" executed. Result:\n{result}",
+  "@commandExecutedResult": {
+    "placeholders": {
+      "command": { "type": "String" },
+      "result": { "type": "String" }
+    }
+  },
+  "commandSentToTerminal": "Command \"{command}\" sent to terminal.",
+  "@commandSentToTerminal": {
+    "placeholders": {
+      "command": { "type": "String" }
+    }
+  },
+  "unknownActionType": "Unknown action type: {type}",
+  "@unknownActionType": {
+    "placeholders": {
+      "type": { "type": "String" }
+    }
+  },
+  "failedToApplyAction": "Failed to apply action: {error}",
+  "@failedToApplyAction": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "noErrorsFound": "No errors found",
+  "noErrorsDescription": "Code analyzer checked your project. No issues or warnings found.",
+  "closeProject": "Close Project",
+  "closeProjectConfirm": "Are you sure you want to close this project?",
+  "sortByName": "By Name",
+  "sortBySize": "By Size",
+  "sortByDate": "By Date",
+  "goToDefinition": "Go to Definition",
+  "documentation": "Documentation",
+  "usages": "Usages",
+  "cut": "Cut",
+  "paste": "Paste",
+  "selectAll": "Select All",
+  "line": "Line",
+  "column": "Column",
+  "info": "Info",
+  "ok": "OK",
+  "problems": "Problems",
+  "packages": "Packages",
+  "tools": "Tools",
+  "searchFiles": "Search files...",
+  "imageLoadError": "Error loading image"
+}
+

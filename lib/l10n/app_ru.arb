@@ -1,0 +1,325 @@
+{
+  "appTitle": "QuantumIDE",
+  "explorer": "Проводник",
+  "newFile": "Новый файл",
+  "newFolder": "Новая папка",
+  "refresh": "Обновить",
+  "rename": "Переименовать",
+  "delete": "Удалить",
+  "cancel": "Отмена",
+  "save": "Сохранить",
+  "create": "Создать",
+  "projectNotOpened": "Проект не открыт",
+  "selectFileToStart": "Выберите файл в проводнике, чтобы начать работу",
+  "openExplorer": "Открыть проводник",
+  "confirmDelete": "Подтвердите удаление",
+  "areYouSureDelete": "Вы уверены, что хотите удалить {name}?",
+  "@areYouSureDelete": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "terminal": "Терминал",
+  "run": "Запуск",
+  "build": "Сборка",
+  "aiAgent": "AI Агент",
+  "servers": "Серверы",
+  "buildLogs": "Логи сборки",
+  "appLogs": "Логи приложения",
+  "copy": "Копировать",
+  "stop": "Стоп",
+  "hotReload": "Hot Reload",
+  "clear": "Очистить",
+  "runProject": "Запустить проект",
+  "pubGet": "Pub Get",
+  "setupSdk": "Настроить SDK",
+  "clean": "Очистить",
+  "buildApk": "Собрать APK",
+  "welcomeMessage": "Добро пожаловать в премиум-среду.",
+  "typeRunToStart": "Введите run для запуска вашего проекта.",
+  "settings": "Настройки",
+  "interfaceAndLocalization": "Интерфейс и локализация",
+  "language": "Язык",
+  "theme": "Тема оформления",
+  "darkTheme": "Тёмная тема",
+  "lightTheme": "Светлая тема",
+  "colorPalette": "Цветовая палитра",
+  "customColor": "Custom Color",
+  "accentColor": "Акцентный цвет",
+  "projectIcon": "Иконка проекта",
+  "defaultAccent": "По умолчанию",
+  "codeEditor": "Редактор кода",
+  "editorFontSize": "Размер шрифта",
+  "autoCompletion": "Автодополнение",
+  "showCodeHints": "Показывать подсказки кода",
+  "aiAutoCompletion": "AI-автодополнение",
+  "geminiCodeGeneration": "Генерация кода от Gemini",
+  "wordWrap": "Перенос строк",
+  "wordWrapDescription": "Word wrap в редакторе",
+  "lineNumbers": "Номера строк",
+  "showLineNumbers": "Показывать нумерацию",
+  "minimap": "Миникарта",
+  "showMinimap": "Minimap в редакторе",
+  "autoSave": "Автосохранение",
+  "autoSaveDescription": "Сохранять через 2 сек",
+  "terminalFontSize": "Размер шрифта терминала",
+  "terminalTheme": "Тема терминала",
+  "toolsAndAi": "Инструменты и AI",
+  "aiProviders": "AI Провайдеры",
+  "aiProvidersSubtitle": "Gemini, OpenAI, Ollama и др.",
+  "ubuntuPackages": "Пакеты Ubuntu",
+  "manageCliTools": "Управление CLI утилитами",
+  "hosts": "Серверы",
+  "localRemoteHosts": "Локальные/удалённые хосты",
+  "system": "Система",
+  "showHiddenFiles": "Скрытые файлы",
+  "showHiddenFilesDescription": "Показывать .* файлы",
+  "vibration": "Вибрация",
+  "hapticFeedback": "Haptic Feedback",
+  "aboutApp": "О приложении",
+  "aboutAppSubtitle": "Quantum IDE v1.0.0",
+  "selectPalette": "Выберите палитру",
+  "close": "ЗАКРЫТЬ",
+  "resetToDefault": "СБРОСИТЬ ПО УМОЛЧАНИЮ",
+  "aboutDialogContent": "Мобильная IDE с поддержкой AI, созданная на Flutter.\n© 2026 Quantum IDE",
+  "ubuntuDarkPurple": "Ubuntu Dark Purple",
+  "pureDark": "Pure Dark",
+  "searchProjects": "Поиск проектов...",
+  "open": "Открыть",
+  "market": "Маркет",
+  "projectsHeader": "Проекты ({count})",
+  "@projectsHeader": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "noProjects": "Нет проектов",
+  "nothingFound": "Ничего не найдено",
+  "createFirstProject": "Создать первый проект",
+  "projectActions": "Действия над проектом",
+  "fixAndroidBuild": "Исправить сборку (AGP + compileSdk)",
+  "patchAndroidBuildDescription": "Патч android-36 / AGP 8.7.3 / compileSdk 35",
+  "buildApkDescription": "flutter build apk --debug",
+  "apkBuildFixed": "✅ Android build файлы исправлены для «{name}»",
+  "@apkBuildFixed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmDeleteTitle": "Удалить \"{name}\"?",
+  "@confirmDeleteTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmDeleteMessage": "Удалить только из списка или вместе с файлами?",
+  "deleteFromListOnly": "Из списка",
+  "deleteFromDisk": "С диска",
+  "projectSettings": "Настройки проекта",
+  "createProject": "Создать проект",
+  "projectName": "Название проекта",
+  "projectType": "ТИП ПРОЕКТА",
+  "androidCompileSdkVersion": "ВЕРСИЯ ANDROID compileSdk",
+  "defaultSdkVersion": "По умолчанию: 35",
+  "targetPlatforms": "ЦЕЛЕВЫЕ УСТРОЙСТВА / ПЛАТФОРМЫ",
+  "saveAction": "Сохранить",
+  "code": "Код",
+  "preview": "Предпросмотр",
+  "fastCommands": "БЫСТРЫЕ КОМАНДЫ",
+  "serverAddress": "Адрес сервера",
+  "copied": "Скопировано: {value}",
+  "@copied": {
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "stopServer": "Остановить",
+  "command": "КОМАНДА",
+  "serverStarted": "Сервер запущен",
+  "openAddressInBrowser": "Откройте этот адрес в браузере Android",
+  "copyUrl": "Копировать URL",
+  "openProjectToSeeCommands": "Откройте проект чтобы увидеть команды запуска",
+  "running": "Выполняется...",
+  "chat": "Чат",
+  "agents": "Агенты",
+  "askAiHint": "Спросить {provider}...",
+  "@askAiHint": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "selectModel": "Выберите модель",
+  "clearHistory": "Очистить историю",
+  "askAboutCode": "Задайте вопрос по коду",
+  "you": "Вы",
+  "workingOnFile": "Я работаю над файлом: {file}. \nВот его содержимое:\n```\n{code}\n```\n\nМой вопрос: {question}",
+  "@workingOnFile": {
+    "placeholders": {
+      "file": { "type": "String" },
+      "code": { "type": "String" },
+      "question": { "type": "String" }
+    }
+  },
+  "aiAskDialogTitle": "Запрос к AI Агенту",
+  "aiAskFolder": "Папка: {name}",
+  "@aiAskFolder": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "aiAskFile": "Файл: {name}",
+  "@aiAskFile": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "aiAskFolderHint": "Опишите задачу (например: \"создай контроллер\", \"добавь модель данных\"...) ",
+  "aiAskFileHint": "Что нужно сделать? (например: \"добавь валидацию email\", \"оптимизируй метод\"...) ",
+  "decline": "Отклонить",
+  "apply": "Применить",
+  "showChanges": "Показать изменения",
+  "changesInFile": "Изменения в {name}",
+  "@changesInFile": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "noFilesFound": "Ничего не найдено",
+  "retry": "Повторить",
+  "errorOccurred": "Ошибка: {error}",
+  "@errorOccurred": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "aiProvidersInfo": "Добавьте API ключи для разных AI провайдеров. Для локальных моделей (Ollama/LM Studio) ключ не требуется.",
+  "activeProvider": "Активный провайдер",
+  "requiresApiKeyLabel": "Требует API ключ",
+  "localNoKey": "Локальный — без ключа",
+  "activeCaps": "АКТИВЕН",
+  "apiKeyLabel": "API Ключ",
+  "keySaved": "Ключ сохранён",
+  "urlSaved": "URL сохранён",
+  "serverUrlLabel": "URL сервера",
+  "ollamaPhoneHint": "💡 Для подключения с телефона используйте IP вашего компьютера (напр. http://192.168.1.10:11434)",
+  "modelLabel": "МОДЕЛЬ",
+  "searching": "Поиск...",
+  "findModels": "Найти модели",
+  "searchModelHint": "Поиск по названию модели...",
+  "customModelHint": "Или введите название модели вручную...",
+  "modelInstalled": "Модель установлена: {name}",
+  "@modelInstalled": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "modelsNotFound": "Модели не найдены. Нажмите «Найти модели».",
+  "available": "Доступна",
+  "quotaLimit": "Лимит квоты / нагрузка",
+  "unavailable": "Недоступна",
+  "availableCaps": "ДОСТУПНА",
+  "activateProvider": "Активировать провайдер",
+  "providerActivated": "Провайдер {name} активирован",
+  "@providerActivated": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "send": "Отправить",
+  "acceptAll": "Принять все",
+  "rejectAll": "Отклонить все",
+  "projectAnalysis": "Анализ проекта",
+  "problemsFound": "Проблем найдено: {count} ({errors} ошибок, {warnings} предупреждений)",
+  "@problemsFound": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "errors": { "type": "int" },
+      "warnings": { "type": "int" }
+    }
+  },
+  "fixWithAi": "Исправить ИИ",
+  "runningCommand": "Выполняю команду: {command}...",
+  "@runningCommand": {
+    "placeholders": {
+      "command": { "type": "String" }
+    }
+  },
+  "applyingChange": "Применяю изменение: {path}...",
+  "@applyingChange": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "fileSuccessfullyWritten": "Файл {path} успешно записан.",
+  "@fileSuccessfullyWritten": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "fileSuccessfullyDeleted": "Файл {path} успешно удален.",
+  "@fileSuccessfullyDeleted": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "commandExecutedResult": "Команда \"{command}\" выполнена. Результат:\n{result}",
+  "@commandExecutedResult": {
+    "placeholders": {
+      "command": { "type": "String" },
+      "result": { "type": "String" }
+    }
+  },
+  "commandSentToTerminal": "Команда \"{command}\" отправлена в терминал.",
+  "@commandSentToTerminal": {
+    "placeholders": {
+      "command": { "type": "String" }
+    }
+  },
+  "unknownActionType": "Неизвестный тип действия: {type}",
+  "@unknownActionType": {
+    "placeholders": {
+      "type": { "type": "String" }
+    }
+  },
+  "failedToApplyAction": "Не удалось применить действие: {error}",
+  "@failedToApplyAction": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "noErrorsFound": "Ошибок не обнаружено",
+  "noErrorsDescription": "Анализатор кода проверил ваш проект. Проблем или предупреждений не найдено.",
+  "closeProject": "Закрыть проект",
+  "closeProjectConfirm": "Вы действительно хотите закрыть этот проект?",
+  "sortByName": "По имени",
+  "sortBySize": "По размеру",
+  "sortByDate": "По дате",
+  "goToDefinition": "Переход к определению",
+  "documentation": "Документация",
+  "usages": "Использования",
+  "cut": "Вырезать",
+  "paste": "Вставить",
+  "selectAll": "Выбрать все",
+  "line": "Строка",
+  "column": "Колонка",
+  "info": "Инфо",
+  "ok": "ОК",
+  "problems": "Ошибки",
+  "packages": "Пакеты",
+  "tools": "Инструменты",
+  "searchFiles": "Поиск файлов...",
+  "imageLoadError": "Ошибка загрузки изображения"
+}
+

@@ -1,0 +1,649 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class AppLocalizationsEn extends AppLocalizations {
+  AppLocalizationsEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get appTitle => 'QuantumIDE';
+
+  @override
+  String get explorer => 'Explorer';
+
+  @override
+  String get newFile => 'New File';
+
+  @override
+  String get newFolder => 'New Folder';
+
+  @override
+  String get refresh => 'Refresh';
+
+  @override
+  String get rename => 'Rename';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get create => 'Create';
+
+  @override
+  String get projectNotOpened => 'Project not opened';
+
+  @override
+  String get selectFileToStart =>
+      'Select a file in the explorer to start working';
+
+  @override
+  String get openExplorer => 'Open Explorer';
+
+  @override
+  String get confirmDelete => 'Confirm Delete';
+
+  @override
+  String areYouSureDelete(String name) {
+    return 'Are you sure you want to delete $name?';
+  }
+
+  @override
+  String get terminal => 'Terminal';
+
+  @override
+  String get run => 'Run';
+
+  @override
+  String get build => 'Build';
+
+  @override
+  String get aiAgent => 'AI Agent';
+
+  @override
+  String get servers => 'Servers';
+
+  @override
+  String get buildLogs => 'Build Logs';
+
+  @override
+  String get appLogs => 'App Logs';
+
+  @override
+  String get copy => 'Copy';
+
+  @override
+  String get stop => 'Stop';
+
+  @override
+  String get hotReload => 'Hot Reload';
+
+  @override
+  String get clear => 'Clear';
+
+  @override
+  String get runProject => 'Run Project';
+
+  @override
+  String get pubGet => 'Pub Get';
+
+  @override
+  String get setupSdk => 'Setup SDK';
+
+  @override
+  String get clean => 'Clean';
+
+  @override
+  String get buildApk => 'Build APK';
+
+  @override
+  String get welcomeMessage => 'Welcome to your premium environment.';
+
+  @override
+  String get typeRunToStart => 'Type run to start your project.';
+
+  @override
+  String get settings => 'Settings';
+
+  @override
+  String get interfaceAndLocalization => 'Interface & Localization';
+
+  @override
+  String get language => 'Language';
+
+  @override
+  String get theme => 'Theme';
+
+  @override
+  String get darkTheme => 'Dark Theme';
+
+  @override
+  String get lightTheme => 'Light Theme';
+
+  @override
+  String get colorPalette => 'Color Palette';
+
+  @override
+  String get customColor => 'Custom Color';
+
+  @override
+  String get accentColor => 'Accent Color';
+
+  @override
+  String get projectIcon => 'Project Icon';
+
+  @override
+  String get defaultAccent => 'Default';
+
+  @override
+  String get codeEditor => 'Code Editor';
+
+  @override
+  String get editorFontSize => 'Editor Font Size';
+
+  @override
+  String get autoCompletion => 'Auto-completion';
+
+  @override
+  String get showCodeHints => 'Show code hints';
+
+  @override
+  String get aiAutoCompletion => 'AI Auto-completion';
+
+  @override
+  String get geminiCodeGeneration => 'Gemini code generation';
+
+  @override
+  String get wordWrap => 'Word Wrap';
+
+  @override
+  String get wordWrapDescription => 'Soft wrap lines in editor';
+
+  @override
+  String get lineNumbers => 'Line Numbers';
+
+  @override
+  String get showLineNumbers => 'Show line numbers';
+
+  @override
+  String get minimap => 'Minimap';
+
+  @override
+  String get showMinimap => 'Show editor minimap';
+
+  @override
+  String get autoSave => 'Auto-save';
+
+  @override
+  String get autoSaveDescription => 'Save changes after 2s';
+
+  @override
+  String get terminalFontSize => 'Terminal Font Size';
+
+  @override
+  String get terminalTheme => 'Terminal Theme';
+
+  @override
+  String get toolsAndAi => 'Tools & AI';
+
+  @override
+  String get aiProviders => 'AI Providers';
+
+  @override
+  String get aiProvidersSubtitle => 'Gemini, OpenAI, Ollama etc.';
+
+  @override
+  String get ubuntuPackages => 'Ubuntu Packages';
+
+  @override
+  String get manageCliTools => 'Manage CLI tools';
+
+  @override
+  String get hosts => 'Hosts';
+
+  @override
+  String get localRemoteHosts => 'Local/remote hosts';
+
+  @override
+  String get system => 'System';
+
+  @override
+  String get showHiddenFiles => 'Show Hidden Files';
+
+  @override
+  String get showHiddenFilesDescription => 'Show .* files';
+
+  @override
+  String get vibration => 'Vibration';
+
+  @override
+  String get hapticFeedback => 'Haptic feedback';
+
+  @override
+  String get aboutApp => 'About App';
+
+  @override
+  String get aboutAppSubtitle => 'Quantum IDE v1.0.0';
+
+  @override
+  String get selectPalette => 'Select Palette';
+
+  @override
+  String get close => 'Close';
+
+  @override
+  String get resetToDefault => 'Reset to Default';
+
+  @override
+  String get aboutDialogContent =>
+      'AI-powered mobile IDE built with Flutter.\n© 2026 Quantum IDE';
+
+  @override
+  String get ubuntuDarkPurple => 'Ubuntu Dark Purple';
+
+  @override
+  String get pureDark => 'Pure Dark';
+
+  @override
+  String get searchProjects => 'Search projects...';
+
+  @override
+  String get open => 'Open';
+
+  @override
+  String get market => 'Market';
+
+  @override
+  String projectsHeader(int count) {
+    return 'Projects ($count)';
+  }
+
+  @override
+  String get noProjects => 'No projects';
+
+  @override
+  String get nothingFound => 'Nothing found';
+
+  @override
+  String get createFirstProject => 'Create first project';
+
+  @override
+  String get projectActions => 'Project Actions';
+
+  @override
+  String get fixAndroidBuild => 'Fix Android Build (AGP + compileSdk)';
+
+  @override
+  String get patchAndroidBuildDescription =>
+      'Patch android-36 / AGP 8.7.3 / compileSdk 35';
+
+  @override
+  String get buildApkDescription => 'flutter build apk --debug';
+
+  @override
+  String apkBuildFixed(String name) {
+    return '✅ Android build files fixed for \"$name\"';
+  }
+
+  @override
+  String confirmDeleteTitle(String name) {
+    return 'Delete \"$name\"?';
+  }
+
+  @override
+  String get confirmDeleteMessage =>
+      'Delete only from the list or delete files as well?';
+
+  @override
+  String get deleteFromListOnly => 'From list';
+
+  @override
+  String get deleteFromDisk => 'From disk';
+
+  @override
+  String get projectSettings => 'Project Settings';
+
+  @override
+  String get createProject => 'Create Project';
+
+  @override
+  String get projectName => 'Project Name';
+
+  @override
+  String get projectType => 'PROJECT TYPE';
+
+  @override
+  String get androidCompileSdkVersion => 'ANDROID compileSdk VERSION';
+
+  @override
+  String get defaultSdkVersion => 'Default: 35';
+
+  @override
+  String get targetPlatforms => 'TARGET DEVICES / PLATFORMS';
+
+  @override
+  String get saveAction => 'Save';
+
+  @override
+  String get code => 'Code';
+
+  @override
+  String get preview => 'Preview';
+
+  @override
+  String get fastCommands => 'QUICK COMMANDS';
+
+  @override
+  String get serverAddress => 'Server Address';
+
+  @override
+  String copied(String value) {
+    return 'Copied: $value';
+  }
+
+  @override
+  String get stopServer => 'Stop';
+
+  @override
+  String get command => 'COMMAND';
+
+  @override
+  String get serverStarted => 'Server Started';
+
+  @override
+  String get openAddressInBrowser => 'Open this address in Android browser';
+
+  @override
+  String get copyUrl => 'Copy URL';
+
+  @override
+  String get openProjectToSeeCommands => 'Open a project to see run commands';
+
+  @override
+  String get running => 'Running...';
+
+  @override
+  String get chat => 'Chat';
+
+  @override
+  String get agents => 'Agents';
+
+  @override
+  String askAiHint(String provider) {
+    return 'Ask $provider...';
+  }
+
+  @override
+  String get selectModel => 'Select Model';
+
+  @override
+  String get clearHistory => 'Clear History';
+
+  @override
+  String get askAboutCode => 'Ask about the code';
+
+  @override
+  String get you => 'You';
+
+  @override
+  String workingOnFile(String file, String code, String question) {
+    return 'I\'m working on the file: $file. \nHere is its content:\n```\n$code\n```\n\nMy question: $question';
+  }
+
+  @override
+  String get aiAskDialogTitle => 'AI Agent Query';
+
+  @override
+  String aiAskFolder(String name) {
+    return 'Folder: $name';
+  }
+
+  @override
+  String aiAskFile(String name) {
+    return 'File: $name';
+  }
+
+  @override
+  String get aiAskFolderHint =>
+      'Describe the task (e.g. \"create a controller\", \"add a data model\"...)';
+
+  @override
+  String get aiAskFileHint =>
+      'What needs to be done? (e.g. \"add email validation\", \"optimize method\"...)';
+
+  @override
+  String get decline => 'Decline';
+
+  @override
+  String get apply => 'Apply';
+
+  @override
+  String get showChanges => 'Show changes';
+
+  @override
+  String changesInFile(String name) {
+    return 'Changes in $name';
+  }
+
+  @override
+  String get noFilesFound => 'No files found';
+
+  @override
+  String get retry => 'Retry';
+
+  @override
+  String errorOccurred(String error) {
+    return 'Error: $error';
+  }
+
+  @override
+  String get aiProvidersInfo =>
+      'Add API keys for different AI providers. Local models (Ollama/LM Studio) do not require a key.';
+
+  @override
+  String get activeProvider => 'Active Provider';
+
+  @override
+  String get requiresApiKeyLabel => 'Requires API Key';
+
+  @override
+  String get localNoKey => 'Local — no key';
+
+  @override
+  String get activeCaps => 'ACTIVE';
+
+  @override
+  String get apiKeyLabel => 'API Key';
+
+  @override
+  String get keySaved => 'API key saved';
+
+  @override
+  String get urlSaved => 'URL saved';
+
+  @override
+  String get serverUrlLabel => 'Server URL';
+
+  @override
+  String get ollamaPhoneHint =>
+      '💡 To connect from a phone, use your computer\'s IP (e.g. http://192.168.1.10:11434)';
+
+  @override
+  String get modelLabel => 'MODEL';
+
+  @override
+  String get searching => 'Searching...';
+
+  @override
+  String get findModels => 'Find Models';
+
+  @override
+  String get searchModelHint => 'Search by model name...';
+
+  @override
+  String get customModelHint => 'Or enter model name manually...';
+
+  @override
+  String modelInstalled(String name) {
+    return 'Model set to $name';
+  }
+
+  @override
+  String get modelsNotFound => 'No models found. Click \"Find Models\".';
+
+  @override
+  String get available => 'Available';
+
+  @override
+  String get quotaLimit => 'Quota limit / high load';
+
+  @override
+  String get unavailable => 'Unavailable';
+
+  @override
+  String get availableCaps => 'AVAILABLE';
+
+  @override
+  String get activateProvider => 'Activate Provider';
+
+  @override
+  String providerActivated(String name) {
+    return '$name activated';
+  }
+
+  @override
+  String get send => 'Send';
+
+  @override
+  String get acceptAll => 'Accept All';
+
+  @override
+  String get rejectAll => 'Reject All';
+
+  @override
+  String get projectAnalysis => 'Project Analysis';
+
+  @override
+  String problemsFound(int count, int errors, int warnings) {
+    return 'Problems found: $count ($errors errors, $warnings warnings)';
+  }
+
+  @override
+  String get fixWithAi => 'Fix with AI';
+
+  @override
+  String runningCommand(String command) {
+    return 'Running command: $command...';
+  }
+
+  @override
+  String applyingChange(String path) {
+    return 'Applying change: $path...';
+  }
+
+  @override
+  String fileSuccessfullyWritten(String path) {
+    return 'File $path successfully written.';
+  }
+
+  @override
+  String fileSuccessfullyDeleted(String path) {
+    return 'File $path successfully deleted.';
+  }
+
+  @override
+  String commandExecutedResult(String command, String result) {
+    return 'Command \"$command\" executed. Result:\n$result';
+  }
+
+  @override
+  String commandSentToTerminal(String command) {
+    return 'Command \"$command\" sent to terminal.';
+  }
+
+  @override
+  String unknownActionType(String type) {
+    return 'Unknown action type: $type';
+  }
+
+  @override
+  String failedToApplyAction(String error) {
+    return 'Failed to apply action: $error';
+  }
+
+  @override
+  String get noErrorsFound => 'No errors found';
+
+  @override
+  String get noErrorsDescription =>
+      'Code analyzer checked your project. No issues or warnings found.';
+
+  @override
+  String get closeProject => 'Close Project';
+
+  @override
+  String get closeProjectConfirm =>
+      'Are you sure you want to close this project?';
+
+  @override
+  String get sortByName => 'By Name';
+
+  @override
+  String get sortBySize => 'By Size';
+
+  @override
+  String get sortByDate => 'By Date';
+
+  @override
+  String get goToDefinition => 'Go to Definition';
+
+  @override
+  String get documentation => 'Documentation';
+
+  @override
+  String get usages => 'Usages';
+
+  @override
+  String get cut => 'Cut';
+
+  @override
+  String get paste => 'Paste';
+
+  @override
+  String get selectAll => 'Select All';
+
+  @override
+  String get line => 'Line';
+
+  @override
+  String get column => 'Column';
+
+  @override
+  String get info => 'Info';
+
+  @override
+  String get ok => 'OK';
+
+  @override
+  String get problems => 'Problems';
+
+  @override
+  String get packages => 'Packages';
+
+  @override
+  String get tools => 'Tools';
+
+  @override
+  String get searchFiles => 'Search files...';
+
+  @override
+  String get imageLoadError => 'Error loading image';
+}
