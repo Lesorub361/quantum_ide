@@ -6,6 +6,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
+import 'app_localizations_es.dart';
+import 'app_localizations_fr.dart';
 import 'app_localizations_ru.dart';
 
 // ignore_for_file: type=lint
@@ -95,6 +97,8 @@ abstract class AppLocalizations {
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
+    Locale('es'),
+    Locale('fr'),
     Locale('ru'),
   ];
 
@@ -1267,6 +1271,570 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error loading image'**
   String get imageLoadError;
+
+  /// No description provided for @unsaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsaved'**
+  String get unsaved;
+
+  /// No description provided for @saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get saved;
+
+  /// No description provided for @lineCol.
+  ///
+  /// In en, this message translates to:
+  /// **'Ln {line}, Col {col}'**
+  String lineCol(int line, int col);
+
+  /// No description provided for @noOpenFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No open files in editor'**
+  String get noOpenFiles;
+
+  /// No description provided for @fileNotFoundOnDisk.
+  ///
+  /// In en, this message translates to:
+  /// **'File not found on disk'**
+  String get fileNotFoundOnDisk;
+
+  /// No description provided for @parsingError.
+  ///
+  /// In en, this message translates to:
+  /// **'Parsing error: {error}'**
+  String parsingError(String error);
+
+  /// No description provided for @outlineEmptyOrUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Outline empty or unsupported'**
+  String get outlineEmptyOrUnsupported;
+
+  /// No description provided for @outlineHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Structure: {filename}'**
+  String outlineHeader(String filename);
+
+  /// No description provided for @projectFolderNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Project folder not found'**
+  String get projectFolderNotFound;
+
+  /// No description provided for @rootFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'[Files in root]'**
+  String get rootFiles;
+
+  /// No description provided for @scanningError.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning error: {error}'**
+  String scanningError(String error);
+
+  /// No description provided for @deleteFileConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete File'**
+  String get deleteFileConfirmTitle;
+
+  /// No description provided for @deleteFileConfirmMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Are you sure you want to permanently delete file:\n\n{name}\nSize: {size}?'**
+  String deleteFileConfirmMessage(String name, String size);
+
+  /// No description provided for @fileDeletedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'File deleted successfully'**
+  String get fileDeletedSuccess;
+
+  /// No description provided for @deleteFileError.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete error: {error}'**
+  String deleteFileError(String error);
+
+  /// No description provided for @diskSpaceAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'Disk space analysis...'**
+  String get diskSpaceAnalysis;
+
+  /// No description provided for @projectFolderEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Project folder empty'**
+  String get projectFolderEmpty;
+
+  /// No description provided for @projectSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Project size:'**
+  String get projectSize;
+
+  /// No description provided for @folderDistribution.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder Distribution'**
+  String get folderDistribution;
+
+  /// No description provided for @topHeavyFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Top 10 Heavy Files'**
+  String get topHeavyFiles;
+
+  /// No description provided for @noHeavyFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No heavy files'**
+  String get noHeavyFiles;
+
+  /// No description provided for @searchPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Search contents...'**
+  String get searchPlaceholder;
+
+  /// No description provided for @searchCaseSensitive.
+  ///
+  /// In en, this message translates to:
+  /// **'Case sensitive'**
+  String get searchCaseSensitive;
+
+  /// No description provided for @searchWholeWord.
+  ///
+  /// In en, this message translates to:
+  /// **'Whole word'**
+  String get searchWholeWord;
+
+  /// No description provided for @searchRegex.
+  ///
+  /// In en, this message translates to:
+  /// **'Regular expression'**
+  String get searchRegex;
+
+  /// No description provided for @searchInvalidRegex.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid regular expression'**
+  String get searchInvalidRegex;
+
+  /// No description provided for @searchNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'No matches found'**
+  String get searchNoMatches;
+
+  /// No description provided for @searchMatchesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {matches} matches in {files} files'**
+  String searchMatchesFound(int matches, int files);
+
+  /// No description provided for @searchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Search error: {error}'**
+  String searchError(String error);
+
+  /// No description provided for @searchingInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching...'**
+  String get searchingInProgress;
+
+  /// No description provided for @searchPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter query to search'**
+  String get searchPrompt;
+
+  /// No description provided for @apkSigner.
+  ///
+  /// In en, this message translates to:
+  /// **'APK Signer'**
+  String get apkSigner;
+
+  /// No description provided for @createKeystore.
+  ///
+  /// In en, this message translates to:
+  /// **'Create Keystore'**
+  String get createKeystore;
+
+  /// No description provided for @stepSelectApk.
+  ///
+  /// In en, this message translates to:
+  /// **'Step 1: Select APK to sign'**
+  String get stepSelectApk;
+
+  /// No description provided for @selectApk.
+  ///
+  /// In en, this message translates to:
+  /// **'Select APK'**
+  String get selectApk;
+
+  /// No description provided for @selectCustomPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Specify custom path...'**
+  String get selectCustomPath;
+
+  /// No description provided for @apkPathHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Full path to APK file on device'**
+  String get apkPathHint;
+
+  /// No description provided for @stepSelectKeystore.
+  ///
+  /// In en, this message translates to:
+  /// **'Step 2: Select Keystore'**
+  String get stepSelectKeystore;
+
+  /// No description provided for @selectKeystore.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Keystore'**
+  String get selectKeystore;
+
+  /// No description provided for @keystorePathHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Full path to .jks/.keystore file'**
+  String get keystorePathHint;
+
+  /// No description provided for @stepSignSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Step 3: Signing settings'**
+  String get stepSignSettings;
+
+  /// No description provided for @keystorePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Keystore password'**
+  String get keystorePassword;
+
+  /// No description provided for @keyAlias.
+  ///
+  /// In en, this message translates to:
+  /// **'Key Alias'**
+  String get keyAlias;
+
+  /// No description provided for @keyAliasPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Key Alias password'**
+  String get keyAliasPassword;
+
+  /// No description provided for @outputApkName.
+  ///
+  /// In en, this message translates to:
+  /// **'Output APK filename'**
+  String get outputApkName;
+
+  /// No description provided for @signApkButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign APK'**
+  String get signApkButton;
+
+  /// No description provided for @install.
+  ///
+  /// In en, this message translates to:
+  /// **'Install'**
+  String get install;
+
+  /// No description provided for @refreshProjectFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh project files list'**
+  String get refreshProjectFiles;
+
+  /// No description provided for @newKeystoreParams.
+  ///
+  /// In en, this message translates to:
+  /// **'New Keystore parameters'**
+  String get newKeystoreParams;
+
+  /// No description provided for @keystoreFilenameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Filename (e.g. release.jks)'**
+  String get keystoreFilenameHint;
+
+  /// No description provided for @storePasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Keystore password (min 6 chars)'**
+  String get storePasswordHint;
+
+  /// No description provided for @keyAliasHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Key alias (e.g. key)'**
+  String get keyAliasHint;
+
+  /// No description provided for @developerInfoDn.
+  ///
+  /// In en, this message translates to:
+  /// **'Developer Info (DN)'**
+  String get developerInfoDn;
+
+  /// No description provided for @devNameCn.
+  ///
+  /// In en, this message translates to:
+  /// **'First and last name (CN)'**
+  String get devNameCn;
+
+  /// No description provided for @devUnitOu.
+  ///
+  /// In en, this message translates to:
+  /// **'Organizational Unit (OU)'**
+  String get devUnitOu;
+
+  /// No description provided for @devOrgO.
+  ///
+  /// In en, this message translates to:
+  /// **'Organization (O)'**
+  String get devOrgO;
+
+  /// No description provided for @devCityL.
+  ///
+  /// In en, this message translates to:
+  /// **'City or Locality (L)'**
+  String get devCityL;
+
+  /// No description provided for @devStateS.
+  ///
+  /// In en, this message translates to:
+  /// **'State or Province (S)'**
+  String get devStateS;
+
+  /// No description provided for @devCountryC.
+  ///
+  /// In en, this message translates to:
+  /// **'Country Code (C)'**
+  String get devCountryC;
+
+  /// No description provided for @genKeystoreButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate Keystore'**
+  String get genKeystoreButton;
+
+  /// No description provided for @logSignGen.
+  ///
+  /// In en, this message translates to:
+  /// **'SIGNING & GENERATION LOG'**
+  String get logSignGen;
+
+  /// No description provided for @clearLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Log'**
+  String get clearLog;
+
+  /// No description provided for @logPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing and generation log will be displayed here.'**
+  String get logPlaceholder;
+
+  /// No description provided for @signProjectScanError.
+  ///
+  /// In en, this message translates to:
+  /// **'Project scan error: {error}'**
+  String signProjectScanError(String error);
+
+  /// No description provided for @signKeystoreSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Keystore selected: {path}'**
+  String signKeystoreSelected(String path);
+
+  /// No description provided for @signFilePickError.
+  ///
+  /// In en, this message translates to:
+  /// **'File pick error: {error}'**
+  String signFilePickError(String error);
+
+  /// No description provided for @signNoOpenProject.
+  ///
+  /// In en, this message translates to:
+  /// **'No open project'**
+  String get signNoOpenProject;
+
+  /// No description provided for @signNoApkSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No APK selected'**
+  String get signNoApkSelected;
+
+  /// No description provided for @signNoKeystoreSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'No Keystore selected'**
+  String get signNoKeystoreSelected;
+
+  /// No description provided for @signFillAllFields.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill all signing fields'**
+  String get signFillAllFields;
+
+  /// No description provided for @signApkProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Signing APK: {apk}...'**
+  String signApkProgress(String apk);
+
+  /// No description provided for @signKeyFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Key file: {key} (alias: {alias})'**
+  String signKeyFile(String key, String alias);
+
+  /// No description provided for @signRunningApksigner.
+  ///
+  /// In en, this message translates to:
+  /// **'Running apksigner...'**
+  String get signRunningApksigner;
+
+  /// No description provided for @signVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying signature...'**
+  String get signVerifying;
+
+  /// No description provided for @signSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'APK signed and verified successfully!'**
+  String get signSuccess;
+
+  /// No description provided for @signVerifyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Signature verification failed or error occurred.'**
+  String get signVerifyFailed;
+
+  /// No description provided for @signError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error signing APK: {error}'**
+  String signError(String error);
+
+  /// No description provided for @genKeystoreFillFields.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill key generation fields'**
+  String get genKeystoreFillFields;
+
+  /// No description provided for @genKeystoreProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating Keystore: {name}...'**
+  String genKeystoreProgress(String name);
+
+  /// No description provided for @genKeystoreSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Keystore created successfully at: {name}'**
+  String genKeystoreSuccess(String name);
+
+  /// No description provided for @genKeystoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to create Keystore.'**
+  String get genKeystoreFailed;
+
+  /// No description provided for @genKeystoreError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error generating Keystore: {error}'**
+  String genKeystoreError(String error);
+
+  /// No description provided for @installApkProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting APK installation: {apk}'**
+  String installApkProgress(String apk);
+
+  /// No description provided for @installApkResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Installation result: {msg}'**
+  String installApkResult(String msg);
+
+  /// No description provided for @installApkNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'APK file not found: {path}'**
+  String installApkNotFound(String path);
+
+  /// No description provided for @installApkError.
+  ///
+  /// In en, this message translates to:
+  /// **'Installation error: {error}'**
+  String installApkError(String error);
+
+  /// No description provided for @glassmorphismEffects.
+  ///
+  /// In en, this message translates to:
+  /// **'Glassmorphism Effects'**
+  String get glassmorphismEffects;
+
+  /// No description provided for @glassOpacity.
+  ///
+  /// In en, this message translates to:
+  /// **'Glass Opacity'**
+  String get glassOpacity;
+
+  /// No description provided for @backdropBlur.
+  ///
+  /// In en, this message translates to:
+  /// **'Backdrop Blur'**
+  String get backdropBlur;
+
+  /// No description provided for @editorFontFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'Editor Font Family'**
+  String get editorFontFamily;
+
+  /// No description provided for @fontLigatures.
+  ///
+  /// In en, this message translates to:
+  /// **'Font Ligatures'**
+  String get fontLigatures;
+
+  /// No description provided for @fontLigaturesDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable font ligatures in code (e.g., -> or !=)'**
+  String get fontLigaturesDescription;
+
+  /// No description provided for @selectFontFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Font Family'**
+  String get selectFontFamily;
+
+  /// No description provided for @selectLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Language'**
+  String get selectLanguage;
 }
 
 class _AppLocalizationsDelegate
@@ -1280,7 +1848,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'ru'].contains(locale.languageCode);
+      <String>['en', 'es', 'fr', 'ru'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -1291,6 +1859,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
+    case 'es':
+      return AppLocalizationsEs();
+    case 'fr':
+      return AppLocalizationsFr();
     case 'ru':
       return AppLocalizationsRu();
   }

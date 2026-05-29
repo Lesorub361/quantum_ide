@@ -320,6 +320,209 @@
   "packages": "Пакеты",
   "tools": "Инструменты",
   "searchFiles": "Поиск файлов...",
-  "imageLoadError": "Ошибка загрузки изображения"
+  "imageLoadError": "Ошибка загрузки изображения",
+  "unsaved": "Не сохранено",
+  "saved": "Сохранено",
+  "lineCol": "Стр {line}, Кол {col}",
+  "@lineCol": {
+    "placeholders": {
+      "line": { "type": "int" },
+      "col": { "type": "int" }
+    }
+  },
+  "noOpenFiles": "Нет открытых файлов в редакторе",
+  "fileNotFoundOnDisk": "Файл не найден на диске",
+  "parsingError": "Ошибка парсинга: {error}",
+  "@parsingError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "outlineEmptyOrUnsupported": "Структура кода пуста или не поддерживается",
+  "outlineHeader": "Структура: {filename}",
+  "@outlineHeader": {
+    "placeholders": {
+      "filename": { "type": "String" }
+    }
+  },
+  "projectFolderNotFound": "Папка проекта не найдена",
+  "rootFiles": "[Файлы в корне]",
+  "scanningError": "Ошибка сканирования: {error}",
+  "@scanningError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "deleteFileConfirmTitle": "Удаление файла",
+  "deleteFileConfirmMessage": "Вы уверены, что хотите безвозвратно удалить файл:\n\n{name}\nРазмер: {size}?",
+  "@deleteFileConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "size": { "type": "String" }
+    }
+  },
+  "fileDeletedSuccess": "Файл успешно удален",
+  "deleteFileError": "Ошибка удаления: {error}",
+  "@deleteFileError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "diskSpaceAnalysis": "Анализ дискового пространства...",
+  "projectFolderEmpty": "Папка проекта пуста",
+  "projectSize": "Размер проекта:",
+  "folderDistribution": "Распределение по папкам",
+  "topHeavyFiles": "Топ-10 тяжелых файлов",
+  "noHeavyFiles": "Нет тяжелых файлов",
+  "searchPlaceholder": "Поиск по содержимому...",
+  "searchCaseSensitive": "Учитывать регистр",
+  "searchWholeWord": "Целое слово",
+  "searchRegex": "Регулярные выражения",
+  "searchInvalidRegex": "Некорректное регулярное выражение",
+  "searchNoMatches": "Совпадений не найдено",
+  "searchMatchesFound": "Найдено {matches} совпадений в {files} файлах",
+  "@searchMatchesFound": {
+    "placeholders": {
+      "matches": { "type": "int" },
+      "files": { "type": "int" }
+    }
+  },
+  "searchError": "Ошибка поиска: {error}",
+  "@searchError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "searchingInProgress": "Идет поиск...",
+  "searchPrompt": "Введите запрос для поиска",
+  "apkSigner": "Подпись APK",
+  "createKeystore": "Создать Keystore",
+  "stepSelectApk": "Шаг 1: Выберите APK для подписи",
+  "selectApk": "Выберите APK",
+  "selectCustomPath": "Указать свой путь...",
+  "apkPathHint": "Полный путь к APK файлу на устройстве",
+  "stepSelectKeystore": "Шаг 2: Выберите ключ (Keystore)",
+  "selectKeystore": "Выберите Keystore",
+  "keystorePathHint": "Полный путь к файлу .jks/.keystore",
+  "stepSignSettings": "Шаг 3: Настройки подписи",
+  "keystorePassword": "Пароль Keystore",
+  "keyAlias": "Key Alias (псевдоним)",
+  "keyAliasPassword": "Пароль Key Alias",
+  "outputApkName": "Имя выходного APK-файла",
+  "signApkButton": "Подписать APK",
+  "install": "Установить",
+  "refreshProjectFiles": "Обновить список файлов проекта",
+  "newKeystoreParams": "Параметры нового ключа (Keystore)",
+  "keystoreFilenameHint": "Имя файла (например, release.jks)",
+  "storePasswordHint": "Пароль хранилища (минимум 6 символов)",
+  "keyAliasHint": "Алиас ключа (например, key)",
+  "developerInfoDn": "Информация о разработчике (DN)",
+  "devNameCn": "Имя и фамилия (CN)",
+  "devUnitOu": "Отдел (OU)",
+  "devOrgO": "Организация (O)",
+  "devCityL": "Город (L)",
+  "devStateS": "Штат/Область (S)",
+  "devCountryC": "Код страны (C)",
+  "genKeystoreButton": "Сгенерировать Keystore",
+  "logSignGen": "ЛОГ ПОДПИСИ И ГЕНЕРАЦИИ",
+  "clearLog": "Очистить лог",
+  "logPlaceholder": "Здесь будет выведен лог выполнения операций подписи.",
+  "signProjectScanError": "Ошибка сканирования проекта: {error}",
+  "@signProjectScanError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "signKeystoreSelected": "Выбран файл через FilePicker: {path}",
+  "@signKeystoreSelected": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "signFilePickError": "Ошибка выбора файла: {error}",
+  "@signFilePickError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "signNoOpenProject": "Нет открытого проекта",
+  "signNoApkSelected": "Не выбран исходный APK",
+  "signNoKeystoreSelected": "Не выбран файл Keystore",
+  "signFillAllFields": "Заполните все поля подписи",
+  "signApkProgress": "Подпись APK: {apk}...",
+  "@signApkProgress": {
+    "placeholders": {
+      "apk": { "type": "String" }
+    }
+  },
+  "signKeyFile": "Файл ключа: {key} (alias: {alias})",
+  "@signKeyFile": {
+    "placeholders": {
+      "key": { "type": "String" },
+      "alias": { "type": "String" }
+    }
+  },
+  "signRunningApksigner": "Запуск apksigner...",
+  "signVerifying": "Верификация подписи...",
+  "signSuccess": "APK успешно подписан и верифицирован!",
+  "signVerifyFailed": "Подпись не верифицирована или произошла ошибка.",
+  "signError": "Ошибка при подписи APK: {error}",
+  "@signError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "genKeystoreFillFields": "Заполните ключевые поля генерации",
+  "genKeystoreProgress": "Генерация Keystore: {name}...",
+  "@genKeystoreProgress": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "genKeystoreSuccess": "Keystore успешно создан по пути: {name}",
+  "@genKeystoreSuccess": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "genKeystoreFailed": "Не удалось создать файл Keystore.",
+  "genKeystoreError": "Ошибка при генерации Keystore: {error}",
+  "@genKeystoreError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "installApkProgress": "Запуск установки APK: {apk}",
+  "@installApkProgress": {
+    "placeholders": {
+      "apk": { "type": "String" }
+    }
+  },
+  "installApkResult": "Результат установки: {msg}",
+  "@installApkResult": {
+    "placeholders": {
+      "msg": { "type": "String" }
+    }
+  },
+  "installApkNotFound": "Файл APK не найден: {path}",
+  "@installApkNotFound": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "installApkError": "Ошибка установки: {error}",
+  "@installApkError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "glassmorphismEffects": "Эффекты стекла (Glassmorphism)",
+  "glassOpacity": "Прозрачность эффекта",
+  "backdropBlur": "Размытие фона (Blur)",
+  "editorFontFamily": "Шрифт редактора",
+  "fontLigatures": "Лигатуры шрифта",
+  "fontLigaturesDescription": "Включить лигатуры в коде (например, -> или !=)",
+  "selectFontFamily": "Выберите шрифт",
+  "selectLanguage": "Выберите язык"
 }
 

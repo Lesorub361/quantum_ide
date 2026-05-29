@@ -10,6 +10,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';
 import '../../../../core/utils/path_mapper.dart';
+import '../../../../l10n/app_localizations.dart';
 
 class ApkSignerWidget extends ConsumerStatefulWidget {
   const ApkSignerWidget({super.key});
@@ -59,7 +60,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   @override
   void initState() {
     super.initState();
-    _scanWorkspaceFiles();
+    Future.microtask(() => _scanWorkspaceFiles());
   }
 
   @override
@@ -120,7 +121,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
         }
       });
     } catch (e) {
-      _addLog('Ошибка сканирования проекта: $e', isError: true);
+      _addLog(AppLocalizations.of(context)!.signProjectScanError(e.toString()), isError: true);
     }
   }
 
@@ -154,6 +155,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   }
 
   Future<void> _pickFile({required bool isApk}) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       final FilePickerResult? result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -172,17 +174,18 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
             _selectedKeystore = 'custom';
           }
         });
-        _addLog('Выбран файл через FilePicker: $path');
+        _addLog(l10n.signKeystoreSelected(path));
       }
     } catch (e) {
-      _addLog('Ошибка выбора файла: $e', isError: true);
+      _addLog(l10n.signFilePickError(e.toString()), isError: true);
     }
   }
 
   Future<void> _signApk() async {
+    final l10n = AppLocalizations.of(context)!;
     final workspacePath = ref.read(workspaceProvider).currentPath;
     if (workspacePath == null) {
-      _addLog('Нет открытого проекта', isError: true);
+      _addLog(l10n.signNoOpenProject, isError: true);
       return;
     }
 
@@ -190,11 +193,11 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
     final String? keystorePath = _selectedKeystore == 'custom' ? _customKeystoreController.text : _selectedKeystore;
 
     if (apkPath == null || apkPath.isEmpty) {
-      _addLog('Не выбран исходный APK', isError: true);
+      _addLog(l10n.signNoApkSelected, isError: true);
       return;
     }
     if (keystorePath == null || keystorePath.isEmpty) {
-      _addLog('Не выбран файл Keystore', isError: true);
+      _addLog(l10n.signNoKeystoreSelected, isError: true);
       return;
     }
 
@@ -204,7 +207,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
     final signedName = _signedApkNameController.text.trim();
 
     if (ksPass.isEmpty || alias.isEmpty || keyPass.isEmpty || signedName.isEmpty) {
-      _addLog('Заполните все поля подписи', isError: true);
+      _addLog(l10n.signFillAllFields, isError: true);
       return;
     }
 
@@ -222,8 +225,8 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
       final String outputApkHost = p.join(p.dirname(apkPath), signedName);
       final String outputApkGuest = _toGuestPath(outputApkHost, runtime);
 
-      _addLog('Подпись APK: ${p.basename(apkPath)}...');
-      _addLog('Файл ключа: ${p.basename(keystorePath)} (alias: $alias)');
+      _addLog(l10n.signApkProgress(p.basename(apkPath)));
+      _addLog(l10n.signKeyFile(p.basename(keystorePath), alias));
 
       final signCmd = 'apksigner sign '
           '--ks "$keystoreGuest" '
@@ -232,14 +235,14 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
           '--key-pass pass:"$keyPass" '
           '--out "$outputApkGuest" "$inputApkGuest"';
 
-      _addLog('Запуск apksigner...');
+      _addLog(l10n.signRunningApksigner);
       final output = await runtime.runCommand(signCmd);
       if (output.isNotEmpty) {
         _addLog(output);
       }
 
       // Verify the signed APK
-      _addLog('Верификация подписи...');
+      _addLog(l10n.signVerifying);
       final verifyCmd = 'apksigner verify -v "$outputApkGuest"';
       final verifyOutput = await runtime.runCommand(verifyCmd);
       _addLog(verifyOutput);
@@ -248,16 +251,16 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
           verifyOutput.contains('Verified using v2 scheme') || 
           verifyOutput.contains('Verified using v3 scheme') ||
           verifyOutput.toLowerCase().contains('verified')) {
-        _addLog('APK успешно подписан и верифицирован!', isSuccess: true);
+        _addLog(l10n.signSuccess, isSuccess: true);
         setState(() {
           _lastSignedApkPath = outputApkHost;
         });
         _scanWorkspaceFiles();
       } else {
-        _addLog('Подпись не верифицирована или произошла ошибка.', isError: true);
+        _addLog(l10n.signVerifyFailed, isError: true);
       }
     } catch (e) {
-      _addLog('Ошибка при подписи APK: $e', isError: true);
+      _addLog(l10n.signError(e.toString()), isError: true);
     } finally {
       setState(() {
         _isLoading = false;
@@ -266,9 +269,10 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   }
 
   Future<void> _generateKeystore() async {
+    final l10n = AppLocalizations.of(context)!;
     final workspacePath = ref.read(workspaceProvider).currentPath;
     if (workspacePath == null) {
-      _addLog('Нет открытого проекта', isError: true);
+      _addLog(l10n.signNoOpenProject, isError: true);
       return;
     }
 
@@ -278,7 +282,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
     final keyPass = _genKeyPassController.text;
 
     if (name.isEmpty || ksPass.isEmpty || alias.isEmpty || keyPass.isEmpty) {
-      _addLog('Заполните ключевые поля генерации', isError: true);
+      _addLog(l10n.genKeystoreFillFields, isError: true);
       return;
     }
 
@@ -301,7 +305,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
       final c = _genCController.text;
       final dname = 'CN=$cn, OU=$ou, O=$o, L=$l, S=$s, C=$c';
 
-      _addLog('Генерация Keystore: $name...');
+      _addLog(l10n.genKeystoreProgress(name));
       
       // Run keytool command
       final genCmd = 'keytool -genkeypair -v '
@@ -318,13 +322,13 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
       }
 
       if (File(hostKeystorePath).existsSync()) {
-        _addLog('Keystore успешно создан по пути: $name', isSuccess: true);
+        _addLog(l10n.genKeystoreSuccess(name), isSuccess: true);
         _scanWorkspaceFiles();
       } else {
-        _addLog('Не удалось создать файл Keystore.', isError: true);
+        _addLog(l10n.genKeystoreFailed, isError: true);
       }
     } catch (e) {
-      _addLog('Ошибка при генерации Keystore: $e', isError: true);
+      _addLog(l10n.genKeystoreError(e.toString()), isError: true);
     } finally {
       setState(() {
         _isLoading = false;
@@ -333,16 +337,17 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   }
 
   Future<void> _installApk(String apkPath) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       if (await File(apkPath).exists()) {
-        _addLog('Запуск установки APK: ${p.basename(apkPath)}');
+        _addLog(l10n.installApkProgress(p.basename(apkPath)));
         final result = await OpenFilex.open(apkPath);
-        _addLog('Результат установки: ${result.message}');
+        _addLog(l10n.installApkResult(result.message));
       } else {
-        _addLog('Файл APK не найден: $apkPath', isError: true);
+        _addLog(l10n.installApkNotFound(apkPath), isError: true);
       }
     } catch (e) {
-      _addLog('Ошибка установки: $e', isError: true);
+      _addLog(l10n.installApkError(e.toString()), isError: true);
     }
   }
 
@@ -361,14 +366,14 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               labelColor: Colors.cyanAccent,
               unselectedLabelColor: Colors.white38,
               labelStyle: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
-              tabs: const [
+              tabs: [
                 Tab(
-                  icon: Icon(LucideIcons.pen_tool, size: 16),
-                  text: 'Подпись APK',
+                  icon: const Icon(LucideIcons.pen_tool, size: 16),
+                  text: AppLocalizations.of(context)!.apkSigner,
                 ),
                 Tab(
-                  icon: Icon(LucideIcons.key_round, size: 16),
-                  text: 'Создать Keystore',
+                  icon: const Icon(LucideIcons.key_round, size: 16),
+                  text: AppLocalizations.of(context)!.createKeystore,
                 ),
               ],
             ),
@@ -391,13 +396,14 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   }
 
   Widget _buildSignTab() {
+    final l10n = AppLocalizations.of(context)!;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('Шаг 1: Выберите APK для подписи'),
+          _buildSectionHeader(l10n.stepSelectApk),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -413,7 +419,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                     child: DropdownButton<String>(
                       value: _selectedApk,
                       dropdownColor: const Color(0xFF13161C),
-                      hint: const Text('Выберите APK', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                      hint: Text(l10n.selectApk, style: const TextStyle(color: Colors.white24, fontSize: 13)),
                       style: const TextStyle(color: Colors.white, fontSize: 13),
                       isExpanded: true,
                       items: [
@@ -421,9 +427,9 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                           value: path,
                           child: Text(p.basename(path), overflow: TextOverflow.ellipsis),
                         )),
-                        const DropdownMenuItem(
+                        DropdownMenuItem(
                           value: 'custom',
-                          child: Text('Указать свой путь...'),
+                          child: Text(l10n.selectCustomPath),
                         ),
                       ],
                       onChanged: (val) {
@@ -454,14 +460,14 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
             const SizedBox(height: 8),
             _buildTextField(
               controller: _customApkController,
-              hintText: 'Полный путь к APK файлу на устройстве',
+              hintText: l10n.apkPathHint,
               icon: LucideIcons.file_code,
               onChanged: (val) => _updateSignedApkDefaultName(val),
             ),
           ],
           
           const SizedBox(height: 16),
-          _buildSectionHeader('Шаг 2: Выберите ключ (Keystore)'),
+          _buildSectionHeader(l10n.stepSelectKeystore),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -477,7 +483,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                     child: DropdownButton<String>(
                       value: _selectedKeystore,
                       dropdownColor: const Color(0xFF13161C),
-                      hint: const Text('Выберите Keystore', style: TextStyle(color: Colors.white24, fontSize: 13)),
+                      hint: Text(l10n.selectKeystore, style: const TextStyle(color: Colors.white24, fontSize: 13)),
                       style: const TextStyle(color: Colors.white, fontSize: 13),
                       isExpanded: true,
                       items: [
@@ -485,9 +491,9 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                           value: path,
                           child: Text(p.basename(path), overflow: TextOverflow.ellipsis),
                         )),
-                        const DropdownMenuItem(
+                        DropdownMenuItem(
                           value: 'custom',
-                          child: Text('Указать свой путь...'),
+                          child: Text(l10n.selectCustomPath),
                         ),
                       ],
                       onChanged: (val) => setState(() => _selectedKeystore = val),
@@ -511,17 +517,17 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
             const SizedBox(height: 8),
             _buildTextField(
               controller: _customKeystoreController,
-              hintText: 'Полный путь к файлу .jks/.keystore',
+              hintText: l10n.keystorePathHint,
               icon: LucideIcons.key_round,
             ),
           ],
 
           const SizedBox(height: 16),
-          _buildSectionHeader('Шаг 3: Настройки подписи'),
+          _buildSectionHeader(l10n.stepSignSettings),
           const SizedBox(height: 8),
           _buildTextField(
             controller: _ksPasswordController,
-            hintText: 'Пароль Keystore',
+            hintText: l10n.keystorePassword,
             icon: LucideIcons.lock,
             obscureText: true,
           ),
@@ -531,7 +537,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _keyAliasController,
-                  hintText: 'Key Alias (псевдоним)',
+                  hintText: l10n.keyAlias,
                   icon: LucideIcons.user,
                 ),
               ),
@@ -539,7 +545,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _keyPasswordController,
-                  hintText: 'Пароль Key Alias',
+                  hintText: l10n.keyAliasPassword,
                   icon: LucideIcons.lock_keyhole,
                   obscureText: true,
                 ),
@@ -549,7 +555,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
           const SizedBox(height: 8),
           _buildTextField(
             controller: _signedApkNameController,
-            hintText: 'Имя выходного APK-файла',
+            hintText: l10n.outputApkName,
             icon: LucideIcons.package_check,
           ),
 
@@ -562,7 +568,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                   icon: _isLoading 
                       ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                       : const Icon(LucideIcons.pen_tool, size: 16),
-                  label: Text('Подписать APK', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                  label: Text(l10n.signApkButton, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.greenAccent,
                     foregroundColor: Colors.black,
@@ -576,7 +582,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                 ElevatedButton.icon(
                   onPressed: () => _installApk(_lastSignedApkPath!),
                   icon: const Icon(LucideIcons.download, size: 16),
-                  label: Text('Установить', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                  label: Text(l10n.install, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.cyanAccent,
                     foregroundColor: Colors.black,
@@ -591,7 +597,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
           ElevatedButton.icon(
             onPressed: _scanWorkspaceFiles,
             icon: const Icon(LucideIcons.refresh_cw, size: 14),
-            label: Text('Обновить список файлов проекта', style: GoogleFonts.inter(fontSize: 11)),
+            label: Text(l10n.refreshProjectFiles, style: GoogleFonts.inter(fontSize: 11)),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.white.withValues(alpha: 0.05),
               foregroundColor: Colors.white70,
@@ -606,23 +612,24 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   }
 
   Widget _buildGenerateTab() {
+    final l10n = AppLocalizations.of(context)!;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionHeader('Параметры нового ключа (Keystore)'),
+          _buildSectionHeader(l10n.newKeystoreParams),
           const SizedBox(height: 8),
           _buildTextField(
             controller: _genNameController,
-            hintText: 'Имя файла (например, release.jks)',
+            hintText: l10n.keystoreFilenameHint,
             icon: LucideIcons.file_key,
           ),
           const SizedBox(height: 8),
           _buildTextField(
             controller: _genKsPassController,
-            hintText: 'Пароль хранилища (минимум 6 символов)',
+            hintText: l10n.storePasswordHint,
             icon: LucideIcons.lock,
             obscureText: true,
           ),
@@ -632,7 +639,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _genAliasController,
-                  hintText: 'Алиас ключа (например, key)',
+                  hintText: l10n.keyAliasHint,
                   icon: LucideIcons.user,
                 ),
               ),
@@ -640,7 +647,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _genKeyPassController,
-                  hintText: 'Пароль алиаса',
+                  hintText: l10n.keyAliasPassword,
                   icon: LucideIcons.lock_keyhole,
                   obscureText: true,
                 ),
@@ -648,11 +655,11 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildSectionHeader('Информация о разработчике (DN)'),
+          _buildSectionHeader(l10n.developerInfoDn),
           const SizedBox(height: 8),
           _buildTextField(
             controller: _genCnController,
-            hintText: 'Имя и фамилия (CN)',
+            hintText: l10n.devNameCn,
             icon: LucideIcons.user_check,
           ),
           const SizedBox(height: 8),
@@ -661,7 +668,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _genOuController,
-                  hintText: 'Отдел (OU)',
+                  hintText: l10n.devUnitOu,
                   icon: LucideIcons.briefcase,
                 ),
               ),
@@ -669,7 +676,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _genOController,
-                  hintText: 'Организация (O)',
+                  hintText: l10n.devOrgO,
                   icon: LucideIcons.building,
                 ),
               ),
@@ -681,7 +688,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _genLController,
-                  hintText: 'Город (L)',
+                  hintText: l10n.devCityL,
                   icon: LucideIcons.map_pin,
                 ),
               ),
@@ -689,7 +696,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               Expanded(
                 child: _buildTextField(
                   controller: _genSController,
-                  hintText: 'Штат/Область (S)',
+                  hintText: l10n.devStateS,
                   icon: LucideIcons.map,
                 ),
               ),
@@ -698,7 +705,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                 width: 80,
                 child: _buildTextField(
                   controller: _genCController,
-                  hintText: 'Код страны (C)',
+                  hintText: l10n.devCountryC,
                   icon: LucideIcons.globe,
                 ),
               ),
@@ -712,7 +719,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
               icon: _isLoading 
                   ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                   : const Icon(LucideIcons.key, size: 16),
-              label: Text('Сгенерировать Keystore', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+              label: Text(l10n.genKeystoreButton, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.amberAccent,
                 foregroundColor: Colors.black,
@@ -767,6 +774,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   }
 
   Widget _buildLogsPanel() {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       height: 160,
       width: double.infinity,
@@ -789,7 +797,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                     const Icon(LucideIcons.terminal, size: 13, color: Colors.cyanAccent),
                     const SizedBox(width: 6),
                     Text(
-                      'ЛОГ ПОДПИСИ И ГЕНЕРАЦИИ',
+                      l10n.logSignGen,
                       style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.5), fontSize: 10, fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -799,7 +807,7 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                   onPressed: () => setState(() => _logs.clear()),
                   constraints: const BoxConstraints(),
                   padding: EdgeInsets.zero,
-                  tooltip: 'Очистить лог',
+                  tooltip: l10n.clearLog,
                 ),
               ],
             ),
@@ -808,10 +816,10 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
           // Log output lines
           Expanded(
             child: _logs.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'Здесь будет выведен лог выполнения операций подписи.',
-                      style: TextStyle(color: Colors.white24, fontSize: 11),
+                      l10n.logPlaceholder,
+                      style: const TextStyle(color: Colors.white24, fontSize: 11),
                     ),
                   )
                 : ListView.builder(

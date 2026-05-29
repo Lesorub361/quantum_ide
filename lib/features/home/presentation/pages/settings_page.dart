@@ -16,7 +16,6 @@ class SettingsPage extends ConsumerWidget {
     final s = ref.watch(settingsProvider);
     final sn = ref.read(settingsProvider.notifier);
     final theme = Theme.of(context);
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -49,9 +48,9 @@ class SettingsPage extends ConsumerWidget {
                   // ─── Основное ───────────────────────────────
                   _sectionHeader(context, AppLocalizations.of(context)!.interfaceAndLocalization),
                   _settingsGroup(context, [
-                    _tile(context, icon: LucideIcons.languages, title: AppLocalizations.of(context)!.language, subtitle: Localizations.localeOf(context).languageCode == 'ru' ? 'Русский' : 'English',
+                    _tile(context, icon: LucideIcons.languages, title: AppLocalizations.of(context)!.language, subtitle: _getLanguageName(Localizations.localeOf(context).languageCode),
                       trailing: _badge(context, Localizations.localeOf(context).languageCode.toUpperCase(), theme.colorScheme.primary),
-                      onTap: () => ref.read(localeProvider.notifier).toggleLocale()),
+                      onTap: () => _showLanguageDialog(context, ref)),
                     _tile(context, icon: LucideIcons.palette, title: AppLocalizations.of(context)!.theme, subtitle: s.themeMode == ThemeMode.dark ? AppLocalizations.of(context)!.darkTheme : AppLocalizations.of(context)!.lightTheme,
                       trailing: Icon(s.themeMode == ThemeMode.dark ? LucideIcons.moon : LucideIcons.sun, size: 18, color: theme.colorScheme.primary),
                       onTap: () => sn.setThemeMode(s.themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark)),
@@ -80,12 +79,12 @@ class SettingsPage extends ConsumerWidget {
 
                   const SizedBox(height: 24),
                   // ─── Эффекты Стекла (Glassmorphism) ─────────────
-                  _sectionHeader(context, isRu ? 'Эффекты стекла (Glassmorphism)' : 'Glassmorphism Effects'),
+                  _sectionHeader(context, AppLocalizations.of(context)!.glassmorphismEffects),
                   _settingsGroup(context, [
-                    _tile(context, icon: LucideIcons.layers, title: isRu ? 'Прозрачность эффекта' : 'Glass Opacity', subtitle: '${(s.glassmorphismOpacity * 100).toInt()}%',
-                      onTap: () => _showSliderDialog(context, isRu ? 'Прозрачность эффекта' : 'Glass Opacity', s.glassmorphismOpacity, 0.05, 0.60, sn.setGlassmorphismOpacity, isPercentage: true, divisions: 11)),
-                    _tile(context, icon: LucideIcons.blend, title: isRu ? 'Размытие фона (Blur)' : 'Backdrop Blur', subtitle: '${s.glassmorphismBlur.toInt()} px',
-                      onTap: () => _showSliderDialog(context, isRu ? 'Размытие фона (Blur)' : 'Backdrop Blur', s.glassmorphismBlur, 0.0, 30.0, sn.setGlassmorphismBlur)),
+                    _tile(context, icon: LucideIcons.layers, title: AppLocalizations.of(context)!.glassOpacity, subtitle: '${(s.glassmorphismOpacity * 100).toInt()}%',
+                      onTap: () => _showSliderDialog(context, AppLocalizations.of(context)!.glassOpacity, s.glassmorphismOpacity, 0.05, 0.60, sn.setGlassmorphismOpacity, isPercentage: true, divisions: 11)),
+                    _tile(context, icon: LucideIcons.blend, title: AppLocalizations.of(context)!.backdropBlur, subtitle: '${s.glassmorphismBlur.toInt()} px',
+                      onTap: () => _showSliderDialog(context, AppLocalizations.of(context)!.backdropBlur, s.glassmorphismBlur, 0.0, 30.0, sn.setGlassmorphismBlur)),
                   ]),
 
                   const SizedBox(height: 24),
@@ -94,9 +93,9 @@ class SettingsPage extends ConsumerWidget {
                   _settingsGroup(context, [
                     _tile(context, icon: LucideIcons.type, title: AppLocalizations.of(context)!.editorFontSize, subtitle: '${s.fontSize.toInt()} px',
                       onTap: () => _showSliderDialog(context, AppLocalizations.of(context)!.editorFontSize, s.fontSize, 8, 32, sn.setFontSize)),
-                    _tile(context, icon: LucideIcons.code, title: isRu ? 'Шрифт редактора' : 'Editor Font Family', subtitle: s.editorFontFamily,
+                    _tile(context, icon: LucideIcons.code, title: AppLocalizations.of(context)!.editorFontFamily, subtitle: s.editorFontFamily,
                       onTap: () => _showFontFamilyDialog(context, s.editorFontFamily, sn.setEditorFontFamily)),
-                    _switchTile(context, title: isRu ? 'Лигатуры шрифта' : 'Font Ligatures', subtitle: isRu ? 'Включить лигатуры в коде (например, -> или !=)' : 'Enable font ligatures in code', value: s.editorFontLigatures, onChanged: sn.setEditorFontLigatures),
+                    _switchTile(context, title: AppLocalizations.of(context)!.fontLigatures, subtitle: AppLocalizations.of(context)!.fontLigaturesDescription, value: s.editorFontLigatures, onChanged: sn.setEditorFontLigatures),
                     _switchTile(context, title: AppLocalizations.of(context)!.autoCompletion, subtitle: AppLocalizations.of(context)!.showCodeHints, value: s.autoCompletion, onChanged: sn.setAutoCompletion),
                     _switchTile(context, title: AppLocalizations.of(context)!.aiAutoCompletion, subtitle: AppLocalizations.of(context)!.geminiCodeGeneration, value: s.aiAutoCompletion, onChanged: sn.setAiAutoCompletion),
                     _switchTile(context, title: AppLocalizations.of(context)!.wordWrap, subtitle: AppLocalizations.of(context)!.wordWrapDescription, value: s.wordWrap, onChanged: sn.setWordWrap),
@@ -312,7 +311,7 @@ class SettingsPage extends ConsumerWidget {
         backgroundColor: theme.colorScheme.surfaceContainerHigh,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text(
-          Localizations.localeOf(context).languageCode == 'ru' ? 'Выберите шрифт' : 'Select Font Family',
+          AppLocalizations.of(context)!.selectFontFamily,
           style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
         ),
         content: SizedBox(
@@ -479,6 +478,67 @@ class SettingsPage extends ConsumerWidget {
             ),
           );
         }).toList()),
+      ),
+    );
+  }
+
+  String _getLanguageName(String code) {
+    switch (code) {
+      case 'en': return 'English';
+      case 'ru': return 'Русский';
+      case 'es': return 'Español';
+      case 'fr': return 'Français';
+      default: return code.toUpperCase();
+    }
+  }
+
+  void _showLanguageDialog(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final currentLocale = Localizations.localeOf(context);
+    final languages = [
+      ['en', 'English'],
+      ['ru', 'Русский'],
+      ['es', 'Español'],
+      ['fr', 'Français'],
+    ];
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.colorScheme.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          AppLocalizations.of(context)!.selectLanguage,
+          style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: languages.length,
+            itemBuilder: (ctx, i) {
+              final code = languages[i][0];
+              final name = languages[i][1];
+              final isSel = currentLocale.languageCode == code;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isSel ? theme.colorScheme.primary.withValues(alpha: 0.1) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: isSel ? theme.colorScheme.primary : theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+                ),
+                child: ListTile(
+                  dense: true,
+                  title: Text(name, style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14)),
+                  trailing: isSel ? Icon(LucideIcons.check, color: theme.colorScheme.primary, size: 16) : null,
+                  onTap: () {
+                    ref.read(localeProvider.notifier).setLocale(Locale(code));
+                    Navigator.pop(ctx);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

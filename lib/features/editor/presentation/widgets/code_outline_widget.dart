@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class OutlineItem {
   final String name;
@@ -29,7 +30,8 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
   List<OutlineItem> _outlineItems = [];
   String _activePath = '';
   bool _loading = false;
-  String _errorMessage = '';
+  String? _errorKey;
+  String _errorDetail = '';
 
   @override
   void initState() {
@@ -44,7 +46,8 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
         setState(() {
           _outlineItems = [];
           _activePath = '';
-          _errorMessage = 'Нет открытых файлов в редакторе';
+          _errorKey = 'noOpenFiles';
+          _errorDetail = '';
         });
       }
       return;
@@ -53,7 +56,8 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
     if (mounted) {
       setState(() {
         _loading = true;
-        _errorMessage = '';
+        _errorKey = null;
+        _errorDetail = '';
         _activePath = activeFile;
       });
     }
@@ -73,7 +77,8 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
         if (mounted) {
           setState(() {
             _outlineItems = [];
-            _errorMessage = 'Файл не найден на диске';
+            _errorKey = 'fileNotFoundOnDisk';
+            _errorDetail = '';
             _loading = false;
           });
         }
@@ -82,7 +87,8 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
       if (mounted) {
         setState(() {
           _outlineItems = [];
-          _errorMessage = 'Ошибка парсинга: $e';
+          _errorKey = 'parsingError';
+          _errorDetail = e.toString();
           _loading = false;
         });
       }
@@ -191,12 +197,24 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
       }
     });
 
-    if (_errorMessage.isNotEmpty) {
+    final l10n = AppLocalizations.of(context)!;
+    String? resolvedError;
+    if (_errorKey != null) {
+      if (_errorKey == 'noOpenFiles') {
+        resolvedError = l10n.noOpenFiles;
+      } else if (_errorKey == 'fileNotFoundOnDisk') {
+        resolvedError = l10n.fileNotFoundOnDisk;
+      } else if (_errorKey == 'parsingError') {
+        resolvedError = l10n.parsingError(_errorDetail);
+      }
+    }
+
+    if (resolvedError != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text(
-            _errorMessage,
+            resolvedError,
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white30, fontSize: 12),
           ),
@@ -215,13 +233,13 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
     }
 
     if (_outlineItems.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16.0),
           child: Text(
-            'Структура кода пуста или не поддерживается',
+            l10n.outlineEmptyOrUnsupported,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white24, fontSize: 12),
+            style: const TextStyle(color: Colors.white24, fontSize: 12),
           ),
         ),
       );
@@ -237,7 +255,7 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
               const Icon(LucideIcons.list, size: 14, color: Colors.white54),
               const SizedBox(width: 6),
               Text(
-                'Структура: ${p.basename(_activePath)}',
+                l10n.outlineHeader(p.basename(_activePath)),
                 style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
               ),
               const Spacer(),

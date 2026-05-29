@@ -4,52 +4,52 @@ import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
 
-/// The translations for English (`en`).
-class AppLocalizationsEn extends AppLocalizations {
-  AppLocalizationsEn([String locale = 'en']) : super(locale);
+/// The translations for Spanish Castilian (`es`).
+class AppLocalizationsEs extends AppLocalizations {
+  AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
   String get appTitle => 'QuantumIDE';
 
   @override
-  String get explorer => 'Explorer';
+  String get explorer => 'Explorador';
 
   @override
-  String get newFile => 'New File';
+  String get newFile => 'Nuevo archivo';
 
   @override
-  String get newFolder => 'New Folder';
+  String get newFolder => 'Nueva carpeta';
 
   @override
-  String get refresh => 'Refresh';
+  String get refresh => 'Actualizar';
 
   @override
-  String get rename => 'Rename';
+  String get rename => 'Renombrar';
 
   @override
-  String get delete => 'Delete';
+  String get delete => 'Eliminar';
 
   @override
-  String get cancel => 'Cancel';
+  String get cancel => 'Cancelar';
 
   @override
-  String get save => 'Save';
+  String get save => 'Guardar';
 
   @override
-  String get create => 'Create';
+  String get create => 'Crear';
 
   @override
-  String get projectNotOpened => 'Project not opened';
+  String get projectNotOpened => 'Proyecto no abierto';
 
   @override
   String get selectFileToStart =>
-      'Select a file in the explorer to start working';
+      'Selecciona un archivo en el explorador para empezar a trabajar';
 
   @override
-  String get openExplorer => 'Open Explorer';
+  String get openExplorer => 'Abrir Explorador';
 
   @override
-  String get confirmDelete => 'Confirm Delete';
+  String get confirmDelete => 'Confirmar eliminación';
 
   @override
   String areYouSureDelete(String name) {
@@ -60,16 +60,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get terminal => 'Terminal';
 
   @override
-  String get run => 'Run';
+  String get run => 'Ejecutar';
 
   @override
-  String get build => 'Build';
+  String get build => 'Compilar';
 
   @override
-  String get aiAgent => 'AI Agent';
+  String get aiAgent => 'Agente IA';
 
   @override
-  String get servers => 'Servers';
+  String get servers => 'Servidores';
 
   @override
   String get buildLogs => 'Build Logs';
@@ -111,31 +111,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get typeRunToStart => 'Type run to start your project.';
 
   @override
-  String get settings => 'Settings';
+  String get settings => 'Ajustes';
 
   @override
-  String get interfaceAndLocalization => 'Interface & Localization';
+  String get interfaceAndLocalization => 'Interfaz y localización';
 
   @override
-  String get language => 'Language';
+  String get language => 'Idioma';
 
   @override
-  String get theme => 'Theme';
+  String get theme => 'Tema';
 
   @override
-  String get darkTheme => 'Dark Theme';
+  String get darkTheme => 'Tema oscuro';
 
   @override
-  String get lightTheme => 'Light Theme';
+  String get lightTheme => 'Tema claro';
 
   @override
-  String get colorPalette => 'Color Palette';
+  String get colorPalette => 'Paleta de colores';
 
   @override
   String get customColor => 'Custom Color';
 
   @override
-  String get accentColor => 'Accent Color';
+  String get accentColor => 'Color de acento';
 
   @override
   String get projectIcon => 'Project Icon';
@@ -144,13 +144,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get defaultAccent => 'Default';
 
   @override
-  String get codeEditor => 'Code Editor';
+  String get codeEditor => 'Editor de código';
 
   @override
-  String get editorFontSize => 'Editor Font Size';
+  String get editorFontSize => 'Tamaño de fuente del editor';
 
   @override
-  String get autoCompletion => 'Auto-completion';
+  String get autoCompletion => 'Autocompletado';
 
   @override
   String get showCodeHints => 'Show code hints';
@@ -162,46 +162,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get geminiCodeGeneration => 'Gemini code generation';
 
   @override
-  String get wordWrap => 'Word Wrap';
+  String get wordWrap => 'Ajuste de línea';
 
   @override
   String get wordWrapDescription => 'Soft wrap lines in editor';
 
   @override
-  String get lineNumbers => 'Line Numbers';
+  String get lineNumbers => 'Números de línea';
 
   @override
   String get showLineNumbers => 'Show line numbers';
 
   @override
-  String get minimap => 'Minimap';
+  String get minimap => 'Minimapa';
 
   @override
   String get showMinimap => 'Show editor minimap';
 
   @override
-  String get autoSave => 'Auto-save';
+  String get autoSave => 'Guardado automático';
 
   @override
   String get autoSaveDescription => 'Save changes after 2s';
 
   @override
-  String get terminalFontSize => 'Terminal Font Size';
+  String get terminalFontSize => 'Tamaño de fuente de terminal';
 
   @override
-  String get terminalTheme => 'Terminal Theme';
+  String get terminalTheme => 'Tema de terminal';
 
   @override
-  String get toolsAndAi => 'Tools & AI';
+  String get toolsAndAi => 'Herramientas e IA';
 
   @override
-  String get aiProviders => 'AI Providers';
+  String get aiProviders => 'Proveedores de IA';
 
   @override
   String get aiProvidersSubtitle => 'Gemini, OpenAI, Ollama etc.';
 
   @override
-  String get ubuntuPackages => 'Ubuntu Packages';
+  String get ubuntuPackages => 'Paquetes Ubuntu';
 
   @override
   String get manageCliTools => 'Manage CLI tools';
@@ -213,7 +213,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get localRemoteHosts => 'Local/remote hosts';
 
   @override
-  String get system => 'System';
+  String get system => 'Sistema';
 
   @override
   String get showHiddenFiles => 'Show Hidden Files';
@@ -228,7 +228,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hapticFeedback => 'Haptic feedback';
 
   @override
-  String get aboutApp => 'About App';
+  String get aboutApp => 'Acerca de la aplicación';
 
   @override
   String get aboutAppSubtitle => 'Quantum IDE v1.0.0';
@@ -237,10 +237,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectPalette => 'Select Palette';
 
   @override
-  String get close => 'Close';
+  String get close => 'Cerrar';
 
   @override
-  String get resetToDefault => 'Reset to Default';
+  String get resetToDefault => 'Restablecer valores predeterminados';
 
   @override
   String get aboutDialogContent =>
@@ -267,13 +267,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get noProjects => 'No projects';
+  String get noProjects => 'Sin proyectos';
 
   @override
   String get nothingFound => 'Nothing found';
 
   @override
-  String get createFirstProject => 'Create first project';
+  String get createFirstProject => 'Crear primer proyecto';
 
   @override
   String get projectActions => 'Project Actions';
@@ -309,16 +309,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteFromDisk => 'From disk';
 
   @override
-  String get projectSettings => 'Project Settings';
+  String get projectSettings => 'Ajustes del proyecto';
 
   @override
-  String get createProject => 'Create Project';
+  String get createProject => 'Crear proyecto';
 
   @override
-  String get projectName => 'Project Name';
+  String get projectName => 'Nombre del proyecto';
 
   @override
-  String get projectType => 'PROJECT TYPE';
+  String get projectType => 'TIPO DE PROYECTO';
 
   @override
   String get androidCompileSdkVersion => 'ANDROID compileSdk VERSION';
@@ -330,13 +330,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get targetPlatforms => 'TARGET DEVICES / PLATFORMS';
 
   @override
-  String get saveAction => 'Save';
+  String get saveAction => 'Guardar';
 
   @override
-  String get code => 'Code';
+  String get code => 'Código';
 
   @override
-  String get preview => 'Preview';
+  String get preview => 'Previsualización';
 
   @override
   String get fastCommands => 'QUICK COMMANDS';
@@ -374,7 +374,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chat => 'Chat';
 
   @override
-  String get agents => 'Agents';
+  String get agents => 'Agentes';
 
   @override
   String askAiHint(String provider) {
@@ -520,7 +520,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get send => 'Send';
+  String get send => 'Enviar';
 
   @override
   String get acceptAll => 'Accept All';
@@ -633,25 +633,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ok => 'OK';
 
   @override
-  String get problems => 'Problems';
+  String get problems => 'Problemas';
 
   @override
-  String get packages => 'Packages';
+  String get packages => 'Paquetes';
 
   @override
-  String get tools => 'Tools';
+  String get tools => 'Herramientas';
 
   @override
-  String get searchFiles => 'Search files...';
+  String get searchFiles => 'Buscar archivos...';
 
   @override
   String get imageLoadError => 'Error loading image';
 
   @override
-  String get unsaved => 'Unsaved';
+  String get unsaved => 'Sin guardar';
 
   @override
-  String get saved => 'Saved';
+  String get saved => 'Guardado';
 
   @override
   String lineCol(int line, int col) {
@@ -950,27 +950,27 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get glassmorphismEffects => 'Glassmorphism Effects';
+  String get glassmorphismEffects => 'Efectos de vidrio (Glassmorphism)';
 
   @override
-  String get glassOpacity => 'Glass Opacity';
+  String get glassOpacity => 'Opacidad del vidrio';
 
   @override
-  String get backdropBlur => 'Backdrop Blur';
+  String get backdropBlur => 'Desenfoque de fondo';
 
   @override
-  String get editorFontFamily => 'Editor Font Family';
+  String get editorFontFamily => 'Fuente del editor';
 
   @override
-  String get fontLigatures => 'Font Ligatures';
+  String get fontLigatures => 'Ligaduras tipográficas';
 
   @override
   String get fontLigaturesDescription =>
-      'Enable font ligatures in code (e.g., -> or !=)';
+      'Habilitar ligaduras tipográficas en el código';
 
   @override
-  String get selectFontFamily => 'Select Font Family';
+  String get selectFontFamily => 'Seleccionar fuente';
 
   @override
-  String get selectLanguage => 'Select Language';
+  String get selectLanguage => 'Seleccionar idioma';
 }

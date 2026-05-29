@@ -9,6 +9,7 @@ import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 // Используем ConsumerStatefulWidget, чтобы управлять подпиской на контроллер
 // вручную — без ValueListenableBuilder, который вызывает setState во время
@@ -133,15 +134,15 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       if (activeFile.isModified)
-                        const _StatusBarItem(
+                        _StatusBarItem(
                           icon: LucideIcons.circle_alert,
-                          label: 'Не сохранено',
+                          label: AppLocalizations.of(context)!.unsaved,
                           color: Colors.amberAccent,
                         )
                       else
-                        const _StatusBarItem(
+                        _StatusBarItem(
                           icon: LucideIcons.circle_check_big,
-                          label: 'Сохранено',
+                          label: AppLocalizations.of(context)!.saved,
                           color: Colors.greenAccent,
                         ),
                       const SizedBox(width: 16),
@@ -150,8 +151,8 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                       // ValueListenableBuilder (который падал во время initState).
                       _StatusBarItem(
                         label: pos != null
-                            ? 'Стр ${pos.index + 1}, Кол ${pos.offset + 1}'
-                            : 'Стр 1, Кол 1',
+                            ? AppLocalizations.of(context)!.lineCol(pos.index + 1, pos.offset + 1)
+                            : AppLocalizations.of(context)!.lineCol(1, 1),
                       ),
                       const SizedBox(width: 16),
   

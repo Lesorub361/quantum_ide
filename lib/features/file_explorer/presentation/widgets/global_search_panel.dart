@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class GlobalSearchPanel extends ConsumerStatefulWidget {
   const GlobalSearchPanel({super.key});
@@ -53,7 +54,8 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
   
   bool _searching = false;
   List<_FileSearchGroup> _results = [];
-  String _statusMessage = '';
+  String? _statusKey;
+  Map<String, dynamic>? _statusArgs;
 
   @override
   void dispose() {
@@ -74,7 +76,8 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
     if (query.isEmpty) {
       setState(() {
         _results = [];
-        _statusMessage = '';
+        _statusKey = null;
+        _statusArgs = null;
         _searching = false;
       });
       return;
@@ -84,7 +87,8 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
     if (workspacePath == null || workspacePath.isEmpty) {
       setState(() {
         _results = [];
-        _statusMessage = 'Проект не открыт';
+        _statusKey = 'projectNotOpened';
+        _statusArgs = null;
         _searching = false;
       });
       return;
@@ -92,7 +96,8 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
 
     setState(() {
       _searching = true;
-      _statusMessage = 'Поиск...';
+      _statusKey = 'searchingInProgress';
+      _statusArgs = null;
     });
 
     try {
@@ -109,7 +114,8 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
             regex = RegExp(query, caseSensitive: _caseSensitive);
           } catch (e) {
             setState(() {
-              _statusMessage = 'Некорректное регулярное выражение';
+              _statusKey = 'searchInvalidRegex';
+              _statusArgs = null;
               _searching = false;
             });
             return;
@@ -177,20 +183,46 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
       setState(() {
         _results = searchResults;
         _searching = false;
-        _statusMessage = searchResults.isEmpty 
-            ? 'Совпадений не найдено' 
-            : 'Найдено $totalMatches совпадений в ${_results.length} файлах';
+        if (searchResults.isEmpty) {
+          _statusKey = 'searchNoMatches';
+          _statusArgs = null;
+        } else {
+          _statusKey = 'searchMatchesFound';
+          _statusArgs = {'matches': totalMatches, 'files': _results.length};
+        }
       });
     } catch (e) {
       setState(() {
         _searching = false;
-        _statusMessage = 'Ошибка поиска: $e';
+        _statusKey = 'searchError';
+        _statusArgs = {'error': e.toString()};
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    String resolvedStatus = '';
+    if (_statusKey != null) {
+      if (_statusKey == 'projectNotOpened') {
+        resolvedStatus = l10n.projectNotOpened;
+      } else if (_statusKey == 'searchingInProgress') {
+        resolvedStatus = l10n.searchingInProgress;
+      } else if (_statusKey == 'searchInvalidRegex') {
+        resolvedStatus = l10n.searchInvalidRegex;
+      } else if (_statusKey == 'searchNoMatches') {
+        resolvedStatus = l10n.searchNoMatches;
+      } else if (_statusKey == 'searchMatchesFound') {
+        final matches = _statusArgs?['matches'] as int? ?? 0;
+        final files = _statusArgs?['files'] as int? ?? 0;
+        resolvedStatus = l10n.searchMatchesFound(matches, files);
+      } else if (_statusKey == 'searchError') {
+        final error = _statusArgs?['error'] as String? ?? '';
+        resolvedStatus = l10n.searchError(error);
+      }
+    }
+
     return Column(
       children: [
         Padding(
@@ -203,7 +235,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                 onChanged: (_) => _onSearchChanged(),
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: 'Поиск по содержимому...',
+                  hintText: l10n.searchPlaceholder,
                   hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
                   prefixIcon: const Icon(LucideIcons.search, size: 14, color: Colors.white30),
                   isDense: true,
@@ -228,7 +260,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                 children: [
                   _buildToggleOption(
                     label: 'Aa',
-                    tooltip: 'Учитывать регистр',
+                    tooltip: l10n.searchCaseSensitive,
                     value: _caseSensitive,
                     onTap: () {
                       setState(() => _caseSensitive = !_caseSensitive);
@@ -238,7 +270,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                   const SizedBox(width: 6),
                   _buildToggleOption(
                     label: '""',
-                    tooltip: 'Целое слово',
+                    tooltip: l10n.searchWholeWord,
                     value: _wholeWord,
                     onTap: () {
                       setState(() => _wholeWord = !_wholeWord);
@@ -248,7 +280,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
                   const SizedBox(width: 6),
                   _buildToggleOption(
                     label: '.*',
-                    tooltip: 'Регулярные выражения',
+                    tooltip: l10n.searchRegex,
                     value: _useRegex,
                     onTap: () {
                       setState(() => _useRegex = !_useRegex);
@@ -267,13 +299,13 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
             ],
           ),
         ),
-        if (_statusMessage.isNotEmpty)
+        if (resolvedStatus.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 4.0),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                _statusMessage,
+                resolvedStatus,
                 style: const TextStyle(color: Colors.white38, fontSize: 11),
               ),
             ),
@@ -283,7 +315,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
           child: _results.isEmpty
               ? Center(
                   child: Text(
-                    _searching ? 'Идет поиск...' : 'Введите запрос для поиска',
+                    _searching ? l10n.searchingInProgress : l10n.searchPrompt,
                     style: const TextStyle(color: Colors.white24, fontSize: 12),
                   ),
                 )

@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class DiskAnalyzerWidget extends ConsumerStatefulWidget {
   const DiskAnalyzerWidget({super.key});
@@ -46,7 +47,8 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
   List<_FolderSizeInfo> _folderSizes = [];
   List<_FileSizeInfo> _largestFiles = [];
   int _totalSize = 0;
-  String _errorMsg = '';
+  String? _errorKey;
+  String _errorDetail = '';
   int _touchedIndex = -1;
 
   final List<Color> _chartColors = [
@@ -72,14 +74,16 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
     final workspacePath = ref.read(workspaceProvider).currentPath;
     if (workspacePath == null || workspacePath.isEmpty) {
       setState(() {
-        _errorMsg = 'Проект не открыт';
+        _errorKey = 'projectNotOpened';
+        _errorDetail = '';
       });
       return;
     }
 
     setState(() {
       _scanning = true;
-      _errorMsg = '';
+      _errorKey = null;
+      _errorDetail = '';
       _folderSizes = [];
       _largestFiles = [];
       _totalSize = 0;
@@ -89,7 +93,8 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
       final rootDir = Directory(workspacePath);
       if (!await rootDir.exists()) {
         setState(() {
-          _errorMsg = 'Папка проекта не найдена';
+          _errorKey = 'projectFolderNotFound';
+          _errorDetail = '';
           _scanning = false;
         });
         return;
@@ -146,7 +151,7 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
 
       if (rootFilesSize > 0) {
         foldersList.add(_FolderSizeInfo(
-          name: '[Файлы в корне]',
+          name: '[root]',
           path: workspacePath,
           sizeInBytes: rootFilesSize,
           color: Colors.grey,
@@ -171,7 +176,8 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMsg = 'Ошибка сканирования: $e';
+          _errorKey = 'scanningError';
+          _errorDetail = e.toString();
           _scanning = false;
         });
       }
@@ -191,19 +197,20 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
   }
 
   void _showDeleteConfirm(BuildContext context, _FileSizeInfo fileInfo) {
+    final l10n = AppLocalizations.of(context)!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1E2230),
-        title: const Text('Удаление файла', style: TextStyle(color: Colors.white)),
+        title: Text(l10n.deleteFileConfirmTitle, style: const TextStyle(color: Colors.white)),
         content: Text(
-          'Вы уверены, что хотите безвозвратно удалить файл:\n\n${fileInfo.name}\nРазмер: ${_formatSize(fileInfo.sizeInBytes)}?',
+          l10n.deleteFileConfirmMessage(fileInfo.name, _formatSize(fileInfo.sizeInBytes)),
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white38)),
+            child: Text(l10n.cancel, style: const TextStyle(color: Colors.white38)),
           ),
           TextButton(
             onPressed: () async {
@@ -214,17 +221,17 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
                 if (await file.exists()) {
                   await file.delete();
                   messenger.showSnackBar(
-                    const SnackBar(content: Text('Файл успешно удален')),
+                    SnackBar(content: Text(l10n.fileDeletedSuccess)),
                   );
                   _runScan();
                 }
               } catch (e) {
                 messenger.showSnackBar(
-                  SnackBar(content: Text('Ошибка удаления: $e')),
+                  SnackBar(content: Text(l10n.deleteFileError(e.toString()))),
                 );
               }
             },
-            child: const Text('Удалить', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            child: Text(l10n.delete, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -233,12 +240,24 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_errorMsg.isNotEmpty) {
+    final l10n = AppLocalizations.of(context)!;
+    String? resolvedError;
+    if (_errorKey != null) {
+      if (_errorKey == 'projectNotOpened') {
+        resolvedError = l10n.projectNotOpened;
+      } else if (_errorKey == 'projectFolderNotFound') {
+        resolvedError = l10n.projectFolderNotFound;
+      } else if (_errorKey == 'scanningError') {
+        resolvedError = l10n.scanningError(_errorDetail);
+      }
+    }
+
+    if (resolvedError != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Text(
-            _errorMsg,
+            resolvedError,
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white38, fontSize: 12),
           ),
@@ -254,7 +273,7 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
             const CircularProgressIndicator(color: Colors.redAccent),
             const SizedBox(height: 16),
             Text(
-              'Анализ дискового пространства...',
+              l10n.diskSpaceAnalysis,
               style: GoogleFonts.inter(color: Colors.white54, fontSize: 12),
             ),
           ],
@@ -265,7 +284,7 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
     if (_folderSizes.isEmpty) {
       return Center(
         child: Text(
-          'Папка проекта пуста',
+          l10n.projectFolderEmpty,
           style: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
         ),
       );
@@ -283,9 +302,9 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Размер проекта:',
-                    style: TextStyle(color: Colors.white38, fontSize: 9.5),
+                  Text(
+                    l10n.projectSize,
+                    style: const TextStyle(color: Colors.white38, fontSize: 9.5),
                   ),
                   Text(
                     _formatSize(_totalSize),
@@ -340,9 +359,9 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
               ],
 
               // 2. Folder List
-              const Text(
-                'Распределение по папкам',
-                style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
+              Text(
+                l10n.folderDistribution,
+                style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               ..._folderSizes.map((folder) {
@@ -350,6 +369,8 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
                     ? (folder.sizeInBytes / _totalSize) * 100 
                     : 0.0;
                 
+                final displayName = folder.name == '[root]' ? l10n.rootFiles : folder.name;
+
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 4.0),
                   child: Row(
@@ -365,7 +386,7 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          folder.name,
+                          displayName,
                           style: const TextStyle(color: Colors.white70, fontSize: 11.5),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -387,15 +408,15 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
               const Divider(color: Colors.white10, height: 24),
 
               // 3. Top 10 heavy files
-              const Text(
-                'Топ-10 тяжелых файлов',
-                style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
+              Text(
+                l10n.topHeavyFiles,
+                style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               if (_largestFiles.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text('Нет тяжелых файлов', style: TextStyle(color: Colors.white24, fontSize: 11)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Text(l10n.noHeavyFiles, style: const TextStyle(color: Colors.white24, fontSize: 11)),
                 )
               else
                 ..._largestFiles.map((file) => _buildFileItemWidget(file)),

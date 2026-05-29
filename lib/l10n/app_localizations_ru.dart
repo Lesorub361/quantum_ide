@@ -647,4 +647,332 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get imageLoadError => 'Ошибка загрузки изображения';
+
+  @override
+  String get unsaved => 'Не сохранено';
+
+  @override
+  String get saved => 'Сохранено';
+
+  @override
+  String lineCol(int line, int col) {
+    return 'Стр $line, Кол $col';
+  }
+
+  @override
+  String get noOpenFiles => 'Нет открытых файлов в редакторе';
+
+  @override
+  String get fileNotFoundOnDisk => 'Файл не найден на диске';
+
+  @override
+  String parsingError(String error) {
+    return 'Ошибка парсинга: $error';
+  }
+
+  @override
+  String get outlineEmptyOrUnsupported =>
+      'Структура кода пуста или не поддерживается';
+
+  @override
+  String outlineHeader(String filename) {
+    return 'Структура: $filename';
+  }
+
+  @override
+  String get projectFolderNotFound => 'Папка проекта не найдена';
+
+  @override
+  String get rootFiles => '[Файлы в корне]';
+
+  @override
+  String scanningError(String error) {
+    return 'Ошибка сканирования: $error';
+  }
+
+  @override
+  String get deleteFileConfirmTitle => 'Удаление файла';
+
+  @override
+  String deleteFileConfirmMessage(String name, String size) {
+    return 'Вы уверены, что хотите безвозвратно удалить файл:\n\n$name\nРазмер: $size?';
+  }
+
+  @override
+  String get fileDeletedSuccess => 'Файл успешно удален';
+
+  @override
+  String deleteFileError(String error) {
+    return 'Ошибка удаления: $error';
+  }
+
+  @override
+  String get diskSpaceAnalysis => 'Анализ дискового пространства...';
+
+  @override
+  String get projectFolderEmpty => 'Папка проекта пуста';
+
+  @override
+  String get projectSize => 'Размер проекта:';
+
+  @override
+  String get folderDistribution => 'Распределение по папкам';
+
+  @override
+  String get topHeavyFiles => 'Топ-10 тяжелых файлов';
+
+  @override
+  String get noHeavyFiles => 'Нет тяжелых файлов';
+
+  @override
+  String get searchPlaceholder => 'Поиск по содержимому...';
+
+  @override
+  String get searchCaseSensitive => 'Учитывать регистр';
+
+  @override
+  String get searchWholeWord => 'Целое слово';
+
+  @override
+  String get searchRegex => 'Регулярные выражения';
+
+  @override
+  String get searchInvalidRegex => 'Некорректное регулярное выражение';
+
+  @override
+  String get searchNoMatches => 'Совпадений не найдено';
+
+  @override
+  String searchMatchesFound(int matches, int files) {
+    return 'Найдено $matches совпадений в $files файлах';
+  }
+
+  @override
+  String searchError(String error) {
+    return 'Ошибка поиска: $error';
+  }
+
+  @override
+  String get searchingInProgress => 'Идет поиск...';
+
+  @override
+  String get searchPrompt => 'Введите запрос для поиска';
+
+  @override
+  String get apkSigner => 'Подпись APK';
+
+  @override
+  String get createKeystore => 'Создать Keystore';
+
+  @override
+  String get stepSelectApk => 'Шаг 1: Выберите APK для подписи';
+
+  @override
+  String get selectApk => 'Выберите APK';
+
+  @override
+  String get selectCustomPath => 'Указать свой путь...';
+
+  @override
+  String get apkPathHint => 'Полный путь к APK файлу на устройстве';
+
+  @override
+  String get stepSelectKeystore => 'Шаг 2: Выберите ключ (Keystore)';
+
+  @override
+  String get selectKeystore => 'Выберите Keystore';
+
+  @override
+  String get keystorePathHint => 'Полный путь к файлу .jks/.keystore';
+
+  @override
+  String get stepSignSettings => 'Шаг 3: Настройки подписи';
+
+  @override
+  String get keystorePassword => 'Пароль Keystore';
+
+  @override
+  String get keyAlias => 'Key Alias (псевдоним)';
+
+  @override
+  String get keyAliasPassword => 'Пароль Key Alias';
+
+  @override
+  String get outputApkName => 'Имя выходного APK-файла';
+
+  @override
+  String get signApkButton => 'Подписать APK';
+
+  @override
+  String get install => 'Установить';
+
+  @override
+  String get refreshProjectFiles => 'Обновить список файлов проекта';
+
+  @override
+  String get newKeystoreParams => 'Параметры нового ключа (Keystore)';
+
+  @override
+  String get keystoreFilenameHint => 'Имя файла (например, release.jks)';
+
+  @override
+  String get storePasswordHint => 'Пароль хранилища (минимум 6 символов)';
+
+  @override
+  String get keyAliasHint => 'Алиас ключа (например, key)';
+
+  @override
+  String get developerInfoDn => 'Информация о разработчике (DN)';
+
+  @override
+  String get devNameCn => 'Имя и фамилия (CN)';
+
+  @override
+  String get devUnitOu => 'Отдел (OU)';
+
+  @override
+  String get devOrgO => 'Организация (O)';
+
+  @override
+  String get devCityL => 'Город (L)';
+
+  @override
+  String get devStateS => 'Штат/Область (S)';
+
+  @override
+  String get devCountryC => 'Код страны (C)';
+
+  @override
+  String get genKeystoreButton => 'Сгенерировать Keystore';
+
+  @override
+  String get logSignGen => 'ЛОГ ПОДПИСИ И ГЕНЕРАЦИИ';
+
+  @override
+  String get clearLog => 'Очистить лог';
+
+  @override
+  String get logPlaceholder =>
+      'Здесь будет выведен лог выполнения операций подписи.';
+
+  @override
+  String signProjectScanError(String error) {
+    return 'Ошибка сканирования проекта: $error';
+  }
+
+  @override
+  String signKeystoreSelected(String path) {
+    return 'Выбран файл через FilePicker: $path';
+  }
+
+  @override
+  String signFilePickError(String error) {
+    return 'Ошибка выбора файла: $error';
+  }
+
+  @override
+  String get signNoOpenProject => 'Нет открытого проекта';
+
+  @override
+  String get signNoApkSelected => 'Не выбран исходный APK';
+
+  @override
+  String get signNoKeystoreSelected => 'Не выбран файл Keystore';
+
+  @override
+  String get signFillAllFields => 'Заполните все поля подписи';
+
+  @override
+  String signApkProgress(String apk) {
+    return 'Подпись APK: $apk...';
+  }
+
+  @override
+  String signKeyFile(String key, String alias) {
+    return 'Файл ключа: $key (alias: $alias)';
+  }
+
+  @override
+  String get signRunningApksigner => 'Запуск apksigner...';
+
+  @override
+  String get signVerifying => 'Верификация подписи...';
+
+  @override
+  String get signSuccess => 'APK успешно подписан и верифицирован!';
+
+  @override
+  String get signVerifyFailed =>
+      'Подпись не верифицирована или произошла ошибка.';
+
+  @override
+  String signError(String error) {
+    return 'Ошибка при подписи APK: $error';
+  }
+
+  @override
+  String get genKeystoreFillFields => 'Заполните ключевые поля генерации';
+
+  @override
+  String genKeystoreProgress(String name) {
+    return 'Генерация Keystore: $name...';
+  }
+
+  @override
+  String genKeystoreSuccess(String name) {
+    return 'Keystore успешно создан по пути: $name';
+  }
+
+  @override
+  String get genKeystoreFailed => 'Не удалось создать файл Keystore.';
+
+  @override
+  String genKeystoreError(String error) {
+    return 'Ошибка при генерации Keystore: $error';
+  }
+
+  @override
+  String installApkProgress(String apk) {
+    return 'Запуск установки APK: $apk';
+  }
+
+  @override
+  String installApkResult(String msg) {
+    return 'Результат установки: $msg';
+  }
+
+  @override
+  String installApkNotFound(String path) {
+    return 'Файл APK не найден: $path';
+  }
+
+  @override
+  String installApkError(String error) {
+    return 'Ошибка установки: $error';
+  }
+
+  @override
+  String get glassmorphismEffects => 'Эффекты стекла (Glassmorphism)';
+
+  @override
+  String get glassOpacity => 'Прозрачность эффекта';
+
+  @override
+  String get backdropBlur => 'Размытие фона (Blur)';
+
+  @override
+  String get editorFontFamily => 'Шрифт редактора';
+
+  @override
+  String get fontLigatures => 'Лигатуры шрифта';
+
+  @override
+  String get fontLigaturesDescription =>
+      'Включить лигатуры в коде (например, -> или !=)';
+
+  @override
+  String get selectFontFamily => 'Выберите шрифт';
+
+  @override
+  String get selectLanguage => 'Выберите язык';
 }

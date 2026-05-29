@@ -320,6 +320,209 @@
   "packages": "Packages",
   "tools": "Tools",
   "searchFiles": "Search files...",
-  "imageLoadError": "Error loading image"
+  "imageLoadError": "Error loading image",
+  "unsaved": "Unsaved",
+  "saved": "Saved",
+  "lineCol": "Ln {line}, Col {col}",
+  "@lineCol": {
+    "placeholders": {
+      "line": { "type": "int" },
+      "col": { "type": "int" }
+    }
+  },
+  "noOpenFiles": "No open files in editor",
+  "fileNotFoundOnDisk": "File not found on disk",
+  "parsingError": "Parsing error: {error}",
+  "@parsingError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "outlineEmptyOrUnsupported": "Outline empty or unsupported",
+  "outlineHeader": "Structure: {filename}",
+  "@outlineHeader": {
+    "placeholders": {
+      "filename": { "type": "String" }
+    }
+  },
+  "projectFolderNotFound": "Project folder not found",
+  "rootFiles": "[Files in root]",
+  "scanningError": "Scanning error: {error}",
+  "@scanningError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "deleteFileConfirmTitle": "Delete File",
+  "deleteFileConfirmMessage": "Are you sure you want to permanently delete file:\n\n{name}\nSize: {size}?",
+  "@deleteFileConfirmMessage": {
+    "placeholders": {
+      "name": { "type": "String" },
+      "size": { "type": "String" }
+    }
+  },
+  "fileDeletedSuccess": "File deleted successfully",
+  "deleteFileError": "Delete error: {error}",
+  "@deleteFileError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "diskSpaceAnalysis": "Disk space analysis...",
+  "projectFolderEmpty": "Project folder empty",
+  "projectSize": "Project size:",
+  "folderDistribution": "Folder Distribution",
+  "topHeavyFiles": "Top 10 Heavy Files",
+  "noHeavyFiles": "No heavy files",
+  "searchPlaceholder": "Search contents...",
+  "searchCaseSensitive": "Case sensitive",
+  "searchWholeWord": "Whole word",
+  "searchRegex": "Regular expression",
+  "searchInvalidRegex": "Invalid regular expression",
+  "searchNoMatches": "No matches found",
+  "searchMatchesFound": "Found {matches} matches in {files} files",
+  "@searchMatchesFound": {
+    "placeholders": {
+      "matches": { "type": "int" },
+      "files": { "type": "int" }
+    }
+  },
+  "searchError": "Search error: {error}",
+  "@searchError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "searchingInProgress": "Searching...",
+  "searchPrompt": "Enter query to search",
+  "apkSigner": "APK Signer",
+  "createKeystore": "Create Keystore",
+  "stepSelectApk": "Step 1: Select APK to sign",
+  "selectApk": "Select APK",
+  "selectCustomPath": "Specify custom path...",
+  "apkPathHint": "Full path to APK file on device",
+  "stepSelectKeystore": "Step 2: Select Keystore",
+  "selectKeystore": "Select Keystore",
+  "keystorePathHint": "Full path to .jks/.keystore file",
+  "stepSignSettings": "Step 3: Signing settings",
+  "keystorePassword": "Keystore password",
+  "keyAlias": "Key Alias",
+  "keyAliasPassword": "Key Alias password",
+  "outputApkName": "Output APK filename",
+  "signApkButton": "Sign APK",
+  "install": "Install",
+  "refreshProjectFiles": "Refresh project files list",
+  "newKeystoreParams": "New Keystore parameters",
+  "keystoreFilenameHint": "Filename (e.g. release.jks)",
+  "storePasswordHint": "Keystore password (min 6 chars)",
+  "keyAliasHint": "Key alias (e.g. key)",
+  "developerInfoDn": "Developer Info (DN)",
+  "devNameCn": "First and last name (CN)",
+  "devUnitOu": "Organizational Unit (OU)",
+  "devOrgO": "Organization (O)",
+  "devCityL": "City or Locality (L)",
+  "devStateS": "State or Province (S)",
+  "devCountryC": "Country Code (C)",
+  "genKeystoreButton": "Generate Keystore",
+  "logSignGen": "SIGNING & GENERATION LOG",
+  "clearLog": "Clear Log",
+  "logPlaceholder": "Signing and generation log will be displayed here.",
+  "signProjectScanError": "Project scan error: {error}",
+  "@signProjectScanError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "signKeystoreSelected": "Keystore selected: {path}",
+  "@signKeystoreSelected": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "signFilePickError": "File pick error: {error}",
+  "@signFilePickError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "signNoOpenProject": "No open project",
+  "signNoApkSelected": "No APK selected",
+  "signNoKeystoreSelected": "No Keystore selected",
+  "signFillAllFields": "Fill all signing fields",
+  "signApkProgress": "Signing APK: {apk}...",
+  "@signApkProgress": {
+    "placeholders": {
+      "apk": { "type": "String" }
+    }
+  },
+  "signKeyFile": "Key file: {key} (alias: {alias})",
+  "@signKeyFile": {
+    "placeholders": {
+      "key": { "type": "String" },
+      "alias": { "type": "String" }
+    }
+  },
+  "signRunningApksigner": "Running apksigner...",
+  "signVerifying": "Verifying signature...",
+  "signSuccess": "APK signed and verified successfully!",
+  "signVerifyFailed": "Signature verification failed or error occurred.",
+  "signError": "Error signing APK: {error}",
+  "@signError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "genKeystoreFillFields": "Fill key generation fields",
+  "genKeystoreProgress": "Generating Keystore: {name}...",
+  "@genKeystoreProgress": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "genKeystoreSuccess": "Keystore created successfully at: {name}",
+  "@genKeystoreSuccess": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "genKeystoreFailed": "Failed to create Keystore.",
+  "genKeystoreError": "Error generating Keystore: {error}",
+  "@genKeystoreError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "installApkProgress": "Starting APK installation: {apk}",
+  "@installApkProgress": {
+    "placeholders": {
+      "apk": { "type": "String" }
+    }
+  },
+  "installApkResult": "Installation result: {msg}",
+  "@installApkResult": {
+    "placeholders": {
+      "msg": { "type": "String" }
+    }
+  },
+  "installApkNotFound": "APK file not found: {path}",
+  "@installApkNotFound": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "installApkError": "Installation error: {error}",
+  "@installApkError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "glassmorphismEffects": "Glassmorphism Effects",
+  "glassOpacity": "Glass Opacity",
+  "backdropBlur": "Backdrop Blur",
+  "editorFontFamily": "Editor Font Family",
+  "fontLigatures": "Font Ligatures",
+  "fontLigaturesDescription": "Enable font ligatures in code (e.g., -> or !=)",
+  "selectFontFamily": "Select Font Family",
+  "selectLanguage": "Select Language"
 }
 

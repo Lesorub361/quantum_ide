@@ -36,6 +36,8 @@ class QuantumApp extends ConsumerWidget {
       supportedLocales: const [
         Locale('en'),
         Locale('ru'),
+        Locale('es'),
+        Locale('fr'),
       ],
     );
   }
