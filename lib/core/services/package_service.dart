@@ -225,6 +225,42 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               }
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'java')).exists() || hasJvm;
               break;
+            case 'java-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'jdtls')).exists();
+              break;
+            case 'kotlin-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'kotlin-language-server')).exists();
+              break;
+            case 'typescript-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'typescript-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'typescript-language-server')).exists();
+              break;
+            case 'html-css-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vscode-html-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-language-server')).exists();
+              break;
+            case 'yaml-json-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'yaml-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'yaml-language-server')).exists();
+              break;
+            case 'markdown-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'marksman')).exists();
+              break;
+            case 'vue-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vue-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vue-language-server')).exists();
+              break;
+            case 'php-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'intelephense')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'intelephense')).exists();
+              break;
+            case 'python-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'pyright-langserver')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright-langserver')).exists();
+              break;
+            case 'local-ai-qwen':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'llama-server')).exists();
+              break;
           }
         }
       }

@@ -142,13 +142,13 @@ class LspService {
       if (key == 'ts') {
         commandArgs = ['typescript-language-server', '--stdio'];
       } else if (key == 'html') {
-        commandArgs = ['vscode-html-languageserver', '--stdio'];
+        commandArgs = ['vscode-html-language-server', '--stdio'];
       } else if (key == 'css') {
-        commandArgs = ['vscode-css-languageserver', '--stdio'];
+        commandArgs = ['vscode-css-language-server', '--stdio'];
       } else if (key == 'yaml') {
         commandArgs = ['yaml-language-server', '--stdio'];
       } else if (key == 'json') {
-        commandArgs = ['vscode-json-languageserver', '--stdio'];
+        commandArgs = ['vscode-json-language-server', '--stdio'];
       } else if (key == 'markdown') {
         commandArgs = ['marksman', 'server'];
       } else if (key == 'java') {

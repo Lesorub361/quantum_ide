@@ -523,6 +523,7 @@
   "fontLigatures": "Font Ligatures",
   "fontLigaturesDescription": "Enable font ligatures in code (e.g., -> or !=)",
   "selectFontFamily": "Select Font Family",
-  "selectLanguage": "Select Language"
+  "selectLanguage": "Select Language",
+  "format": "Format"
 }
 

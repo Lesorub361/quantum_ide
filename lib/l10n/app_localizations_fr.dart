@@ -973,4 +973,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get selectLanguage => 'Sélectionner la langue';
+
+  @override
+  String get format => 'Formater';
 }

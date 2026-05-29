@@ -67,5 +67,6 @@
   "fontLigatures": "Ligatures de police",
   "fontLigaturesDescription": "Activer les ligatures de police dans le code",
   "selectFontFamily": "Sélectionner la police",
-  "selectLanguage": "Sélectionner la langue"
+  "selectLanguage": "Sélectionner la langue",
+  "format": "Formater"
 }

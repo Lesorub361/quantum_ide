@@ -864,6 +864,12 @@ class EditorNotifier extends StateNotifier<EditorState> {
     await _lspService.rename(path, cursor.index, cursor.offset, newName);
   }
 
+  Future<void> formatActiveFile() async {
+    final path = state.activeFilePath;
+    if (path == null) return;
+    await _lspService.format(path);
+  }
+
   void applyLSPEdits(String filePath, List<dynamic> edits) {
     final index = state.openFiles.indexWhere((f) => f.path == filePath);
     if (index == -1) return;

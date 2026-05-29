@@ -523,6 +523,7 @@
   "fontLigatures": "Лигатуры шрифта",
   "fontLigaturesDescription": "Включить лигатуры в коде (например, -> или !=)",
   "selectFontFamily": "Выберите шрифт",
-  "selectLanguage": "Выберите язык"
+  "selectLanguage": "Выберите язык",
+  "format": "Форматировать"
 }
 

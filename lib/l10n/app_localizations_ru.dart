@@ -975,4 +975,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get selectLanguage => 'Выберите язык';
+
+  @override
+  String get format => 'Форматировать';
 }

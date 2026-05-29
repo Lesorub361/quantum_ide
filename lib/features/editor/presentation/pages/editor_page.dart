@@ -1950,6 +1950,16 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
             ),
           );
 
+          buttonItems.add(
+            ContextMenuButtonItem(
+              label: l10n.format,
+              onPressed: () {
+                onDismiss();
+                ref.read(editorProvider.notifier).formatActiveFile();
+              },
+            ),
+          );
+
           return AdaptiveTextSelectionToolbar.buttonItems(
             anchors: anchors,
             buttonItems: buttonItems,
