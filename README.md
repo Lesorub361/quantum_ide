@@ -1,33 +1,104 @@
-# QuantumIDE
+# 🚀 QuantumIDE
 
-QuantumIDE is a next-generation AI-powered mobile IDE for web development, built with Flutter.
+QuantumIDE is a next-generation, AI-powered mobile Integrated Development Environment (IDE) built specifically for web development, running natively on Android using Flutter. It provides a complete development environment including a code editor, local terminal sandbox, Git, and advanced AI assistance.
 
-## Features
+---
 
-- **AI-powered**: Integrated Gemini AI for code suggestions and chat.
-- **Terminal**: Built-in PTY terminal with Ubuntu 24.04 support.
-- **Editor**: Modern code editor with syntax highlighting and autocomplete.
-- **Multi-platform**: Built with Flutter for high performance.
-- **Built-in ARM64 Support**: Automatic configuration of Android SDK/NDK for ARM64 Linux environments.
+## 🛠️ Technology Stack
 
-## ARM64 Linux Support
+- **Framework**: [Flutter](https://flutter.dev) (Material 3, customized layout)
+- **State Management**: [Riverpod](https://riverpod.dev)
+- **Navigation**: [GoRouter](https://pub.dev/packages/go_router)
+- **Code Editor**: `re_editor` + `re_highlight`
+- **Terminal & Shell**: `xterm.dart` + `flutter_pty`
+- **AI Engine**: `google_generative_ai` (Gemini) + custom connectors for DeepSeek, Groq, OpenRouter, and Local AI (Ollama/LM Studio)
+- **Design & Themes**: `flex_color_scheme` + glassmorphic visual effects
+- **Typography**: *Outfit* (for UI) & *JetBrains Mono* (for Code)
 
-QuantumIDE now automatically detects and configures itself for ARM64 Linux environments.
+---
 
-### Automatic Fixes
-- **SDK Symlinking**: Automatically redirects x86_64 SDK binaries to native ARM64 tools.
-- **Project Patching**: Automatically updates Android Gradle Plugin (AGP) and fixes `gradle.properties` for projects.
-- **Environment**: Pre-configured with necessary environment variables and helpful aliases.
+## 📂 Project Structure
 
-### One-Click Setup
-If some build tools are missing, you can use the **Fix Environment (Wrench icon)** button in the Editor's Environment section to automatically install all required system packages (`adb`, `clang`, `cmake`, etc.).
+Below is the directory structure of the application source code (`lib/`):
 
-## Getting Started
+*   **`lib/main.dart`**: Application entrypoint.
+*   **`lib/app.dart`**: Main configuration of `MaterialApp`, themes, and router.
+*   **`lib/core/`**: Core services and system-wide state:
+    *   `models/`: Core models like code diagnostics and AI configurations.
+    *   `providers/`: App-level providers (e.g. localization).
+    *   `router/`: Navigation and routing rules via GoRouter.
+    *   `theme/`: Dynamic theme configuration (FlexColorScheme, glassmorphism styles).
+    *   `utils/`: Conversion utilities, path mappings (host <-> sandbox).
+    *   `services/`: Background processing and platform services:
+        *   `ai_service.dart`, `ai_autocomplete_service.dart`, `ai_context_compressor.dart`: AI integration.
+        *   `lsp_service.dart`, `lsp_autocomplete_service.dart`, `analysis_service.dart`: Code intelligence, diagnostics, and LSP.
+        *   `git_service.dart`, `diff_service.dart`: Git operations and gutter diff markers.
+        *   `runtime_service.dart`, `native_terminal.dart`: Android PRoot setup and shell process bridge.
+        *   `package_service.dart`, `pub_package_service.dart`: APT packages, Android build toolchain, and pub.dev API.
+        *   `workspace_service.dart`, `project_service.dart`: Workspaces, build orchestrator, and templates.
+        *   *New services in progress*: `ai_agent_orchestrator.dart`, `crdt_sync_service.dart`, `microvm_service.dart`, `wasm_plugin_runner.dart`.
+*   **`lib/features/`**: Feature-driven modules:
+    *   `ai_assistant/`: Real-time AI chat panel, settings, and MCP (Model Context Protocol) configs.
+    *   `editor/`: Code editor, tabs manager, autocomplete, code diagnostics panel, outline, and accessory bar.
+    *   `file_explorer/`: Bookmarks, tree view, search panel, and disk analyzer widget.
+    *   `git/`: Version control panel, diff viewer, and merge conflicts solver page.
+    *   `home/`: Home/launch screen, project templates, local servers launcher, and IDE settings.
+    *   `preview/`: Browser preview, console logging, and debugging controls.
+    *   `terminal/`: Multi-tab terminal interface, virtual keys panel, and Gradle/APK signing widgets.
+    *   *New modules in progress*: `collaboration/` (Live Share), `plugins/` (WASM plugin manager).
+*   **`lib/models/`**: Shared data models (e.g., chat sessions, package models).
+*   **`lib/shared/`**: Global widgets:
+    *   `layout/`: Dynamic screen split manager (`foldable_split_manager.dart`).
+    *   `widgets/`: Glass containers, breadcrumbs, status bars, and layout scaffolding.
+*   **`lib/l10n/`**: Localization resources (RU/EN).
 
-1. Clone the repository.
-2. Run `flutter pub get`.
-3. Run `flutter run`.
+---
 
-## License
+## 🟢 Implemented Features
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- **Workspace Management**: Android Storage Access Framework (SAF) folder picker, project templates, bookmarks, recent workspaces.
+- **Quantum Editor**: Virtualized text rendering, real-time syntax highlighting for multiple languages, autosave, tabs, visual diff indicators, diagnostics, customizable keyboard accessory keys.
+- **Embedded Sandbox Terminal**: Native terminal PTY integration running an Ubuntu 24.04 PRoot environment. Automounts android storages, supports auto-recovery, customized `.bashrc`, dynamic tools configuration.
+- **Multi-backend AI Assistant**: Built-in chat panel supporting Google Gemini (Flash & Pro), Groq, DeepSeek, OpenRouter, and local models (Ollama/LM Studio). Smart debounced (700ms) code autocompletion.
+- **Built-in Git Client**: Diff tool, status tracker, visual conflict solver, and commit flow integration.
+- **Mobile Build Tools & Diagnostics**: Automated ARM64 Linux toolchain setup (NDK, SDK symlinking, AAPT2 patcher), Java JDK 17 setup, background `dart analyze` processing, project-wide problems panel, APK building and signing.
+- **Web Preview**: Built-in chromium-based WebView previewing, console log forwarder, local server listener.
+- **Premium Design System**: Glassmorphism (blur filters), smooth micro-animations, customizable project accent colors, Outfit and JetBrains Mono typography, custom Lucide icons.
+- **Localization**: Full Russian and English interfaces.
+
+---
+
+## 🔮 Roadmap / Future Tasks
+
+Here are the features currently in development or planned:
+
+- [ ] **LSP Integration**: Add language server support for HTML, CSS, JavaScript, and TypeScript inside the sandbox for full auto-complete, go-to-definition, and complex linting.
+- [ ] **Live Collaboration (Live Share)**: Add real-time multiplayer editing using CRDT synchronization with cursor sharing and voice/chat options.
+- [ ] **WASM Plugin System**: Add support for running WebAssembly-based custom plugins compiled from Rust, Go, or C++ to extend the editor's capabilities.
+- [ ] **KVM MicroVM Integration**: Support hardware-accelerated Linux kernels inside lightweight micro-VMs on Android 15+ to bypass PRoot constraints.
+- [ ] **Foldable Layout Support**: Auto-splitting panels (terminal/editor/preview) across physical screen folds on foldable smartphones and tablets.
+- [ ] **Local AI completions (MLC LLM)**: Integrate Qwen-Coder or Llama-3-Coder running directly on the device's NPU.
+
+---
+
+## 🤝 Join the Development! (We welcome contributors)
+
+We are actively looking for developers, designers, and open-source enthusiasts to join our project! Whether you want to fix bugs, write documentation, implement features from the roadmap, or test the IDE on different devices, you are very welcome.
+
+### How to Contribute:
+1. **Fork** the repository and clone it locally.
+2. Check out the roadmap above or browse open GitHub Issues.
+3. Set up the development environment:
+   ```bash
+   flutter pub get
+   flutter run
+   ```
+4. Create a feature branch, commit your changes, and submit a **Pull Request**.
+
+If you have questions or want to discuss architecture, feel free to join our chat/discussions or open an issue!
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License - see the `LICENSE` file for details.
