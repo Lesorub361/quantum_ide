@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class SidebarGitPanel extends ConsumerStatefulWidget {
   const SidebarGitPanel({super.key});
@@ -26,6 +27,8 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
   Widget build(BuildContext context) {
     final gitState = ref.watch(gitProvider);
     final gitNotifier = ref.read(gitProvider.notifier);
+
+    final l10n = AppLocalizations.of(context)!;
 
     if (gitState.isLoading) {
       return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
@@ -56,13 +59,13 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Репозиторий не найден',
+                  l10n.repositoryNotFound,
                   style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Инициализируйте локальный Git-репозиторий для отслеживания изменений.',
+                  l10n.initGitRepoDescription,
                   style: GoogleFonts.inter(color: Colors.white38, fontSize: 11, height: 1.4),
                   textAlign: TextAlign.center,
                 ),
@@ -70,7 +73,7 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                 ElevatedButton.icon(
                   onPressed: () => gitNotifier.init(),
                   icon: const Icon(LucideIcons.git_fork, size: 13),
-                  label: const Text('Инициализировать Git'),
+                  label: Text(l10n.initGitAction),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.amberAccent.withValues(alpha: 0.15),
                     foregroundColor: Colors.amberAccent,
@@ -120,19 +123,19 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
               padding: const EdgeInsets.all(12),
               children: [
                 if (status.conflictedFiles.isNotEmpty) ...[
-                  _buildGitSectionHeader('КОНФЛИКТЫ', status.conflictedFiles.length),
+                  _buildGitSectionHeader(l10n.gitConflicted, status.conflictedFiles.length),
                   ...status.conflictedFiles.map((f) => _buildGitFileItem(f, isStaged: false, isConflicted: true)),
                 ],
                 if (status.stagedFiles.isNotEmpty) ...[
-                  _buildGitSectionHeader('ИНДЕКСИРОВАНО', status.stagedFiles.length),
+                  _buildGitSectionHeader(l10n.gitStaged, status.stagedFiles.length),
                   ...status.stagedFiles.map((f) => _buildGitFileItem(f, isStaged: true)),
                 ],
                 if (status.modifiedFiles.isNotEmpty) ...[
-                  _buildGitSectionHeader('ИЗМЕНЕНО', status.modifiedFiles.length),
+                  _buildGitSectionHeader(l10n.gitModified, status.modifiedFiles.length),
                   ...status.modifiedFiles.map((f) => _buildGitFileItem(f, isStaged: false)),
                 ],
                 if (status.untrackedFiles.isNotEmpty) ...[
-                  _buildGitSectionHeader('НЕОТСЛЕЖИВАЕМОЕ', status.untrackedFiles.length),
+                  _buildGitSectionHeader(l10n.gitUntracked, status.untrackedFiles.length),
                   ...status.untrackedFiles.map((f) => _buildGitFileItem(f, isStaged: false, isUntracked: true)),
                 ],
                 const SizedBox(height: 16),
@@ -149,7 +152,7 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                         TextField(
                           controller: _commitController,
                           decoration: InputDecoration(
-                            hintText: 'Сообщение коммита...',
+                            hintText: l10n.commitMessageHint,
                             hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 11),
                             filled: true,
                             fillColor: Colors.black.withValues(alpha: 0.2),

@@ -67,7 +67,6 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
   Widget build(BuildContext context) {
     final collabState = ref.watch(collaborationProvider);
     final l10n = AppLocalizations.of(context)!;
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
 
     // Auto scroll chat when new messages arrive
     ref.listen<CollaborationState>(collaborationProvider, (previous, next) {
@@ -122,7 +121,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
                       const SizedBox(height: 16),
                       _buildJoinHostControls(context, collabState, l10n),
                     ] else ...[
-                      _buildSessionInfoCard(context, collabState, l10n, isRu),
+                      _buildSessionInfoCard(context, collabState, l10n),
                       const SizedBox(height: 16),
                       _buildParticipantsSection(context, collabState, l10n),
                       const SizedBox(height: 16),
@@ -171,7 +170,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
           ),
           const SizedBox(height: 12),
           Text(
-            'ЦВЕТ КУРСОРА',
+            l10n.cursorColor,
             style: GoogleFonts.inter(fontSize: 9, color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 0.5),
           ),
           const SizedBox(height: 8),
@@ -234,7 +233,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
             const Expanded(child: Divider(color: Colors.white10)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: Text('ИЛИ', style: GoogleFonts.inter(fontSize: 10, color: Colors.white24, fontWeight: FontWeight.bold)),
+              child: Text(l10n.or, style: GoogleFonts.inter(fontSize: 10, color: Colors.white24, fontWeight: FontWeight.bold)),
             ),
             const Expanded(child: Divider(color: Colors.white10)),
           ],
@@ -302,7 +301,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
     );
   }
 
-  Widget _buildSessionInfoCard(BuildContext context, CollaborationState state, AppLocalizations l10n, bool isRu) {
+  Widget _buildSessionInfoCard(BuildContext context, CollaborationState state, AppLocalizations l10n) {
     final title = state.isHosting ? l10n.hostingAt : l10n.connectedTo;
     
     // For Host, list local IPs. For Guest, show Host IP.
@@ -370,7 +369,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: '${state.localIps.first}:9090'));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('IP скопирован в буфер обмена')),
+                      SnackBar(content: Text(l10n.ipCopiedToClipboard)),
                     );
                   },
                 ),
@@ -423,6 +422,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
             ref.read(editorProvider).activeFilePath != null
               ? p.basename(ref.read(editorProvider).activeFilePath!)
               : null,
+            l10n,
             isMe: true,
           ),
           // Remote Users
@@ -431,6 +431,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
               user.name,
               user.color,
               user.activeFile != null ? p.basename(user.activeFile!) : null,
+              l10n,
             );
           }),
         ],
@@ -438,7 +439,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
     );
   }
 
-  Widget _buildParticipantTile(String name, Color color, String? activeFile, {bool isMe = false}) {
+  Widget _buildParticipantTile(String name, Color color, String? activeFile, AppLocalizations l10n, {bool isMe = false}) {
     final initials = name.isNotEmpty ? name.substring(0, min(name.length, 2)).toUpperCase() : '??';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
@@ -474,21 +475,21 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
                           color: Colors.white10,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text('Вы', style: TextStyle(color: Colors.white54, fontSize: 8)),
+                        child: Text(l10n.you, style: const TextStyle(color: Colors.white54, fontSize: 8)),
                       ),
                     ],
                   ],
                 ),
                 if (activeFile != null)
                   Text(
-                    'Редактирует: $activeFile',
+                    l10n.editingFile(activeFile),
                     style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.35)),
                     overflow: TextOverflow.ellipsis,
                   )
                 else
-                  const Text(
-                    'Просматривает проект',
-                    style: TextStyle(fontSize: 10, color: Colors.white30),
+                  Text(
+                    l10n.viewingProject,
+                    style: const TextStyle(fontSize: 10, color: Colors.white30),
                   ),
               ],
             ),

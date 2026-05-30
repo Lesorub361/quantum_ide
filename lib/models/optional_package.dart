@@ -83,7 +83,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'local-ai-qwen',
     name: 'Local Llama Server',
-    description: 'Локальный движок для запуска оффлайн ИИ моделей (llama-server и llama-cli).',
+    description: 'Local engine to run offline AI models (llama-server and llama-cli).',
     command: '${_aptPrefix}apt update && apt install -y curl wget tar && mkdir -p /tmp/llama_download && cd /tmp/llama_download && wget -q https://github.com/ggml-org/llama.cpp/releases/download/b4200/llama-b4200-bin-ubuntu-arm64.tar.gz && tar -xzf llama-b4200-bin-ubuntu-arm64.tar.gz && cp bin/llama-server /usr/bin/llama-server && cp bin/llama-cli /usr/bin/llama-cli && rm -rf /tmp/llama_download && echo "Llama Server installed successfully"',
     icon: LucideIcons.brain,
     category: 'AI Tools',

@@ -4,6 +4,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class KeyboardAccessoryBar extends ConsumerWidget {
   final CodeLineEditingController controller;
@@ -118,6 +119,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final l10n = AppLocalizations.of(context)!;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = bottomInset > 0;
 
@@ -154,7 +156,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       // Zoom controls
       buildBtn(
         icon: LucideIcons.zoom_out,
-        tooltip: 'Уменьшить шрифт',
+        tooltip: l10n.decreaseFontSize,
         onPressed: () {
           _triggerHaptic(ref);
           final newSize = (settings.fontSize - 1.0).clamp(10.0, 30.0);
@@ -163,7 +165,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       ),
       buildBtn(
         icon: LucideIcons.zoom_in,
-        tooltip: 'Увеличить шрифт',
+        tooltip: l10n.increaseFontSize,
         onPressed: () {
           _triggerHaptic(ref);
           final newSize = (settings.fontSize + 1.0).clamp(10.0, 30.0);
@@ -179,7 +181,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       // Undo & Redo controls
       buildBtn(
         icon: LucideIcons.undo_2,
-        tooltip: 'Отменить',
+        tooltip: l10n.undo,
         onPressed: () {
           _triggerHaptic(ref);
           try {
@@ -189,7 +191,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       ),
       buildBtn(
         icon: LucideIcons.redo_2,
-        tooltip: 'Повторить',
+        tooltip: l10n.redo,
         onPressed: () {
           _triggerHaptic(ref);
           try {
@@ -206,22 +208,22 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       // Cursor navigation controls
       buildBtn(
         icon: LucideIcons.chevron_left,
-        tooltip: 'Влево',
+        tooltip: l10n.moveLeft,
         onPressed: () => _moveCursorLeft(ref),
       ),
       buildBtn(
         icon: LucideIcons.chevron_up,
-        tooltip: 'Вверх',
+        tooltip: l10n.moveUp,
         onPressed: () => _moveCursorUp(ref),
       ),
       buildBtn(
         icon: LucideIcons.chevron_down,
-        tooltip: 'Вниз',
+        tooltip: l10n.moveDown,
         onPressed: () => _moveCursorDown(ref),
       ),
       buildBtn(
         icon: LucideIcons.chevron_right,
-        tooltip: 'Вправо',
+        tooltip: l10n.moveRight,
         onPressed: () => _moveCursorRight(ref),
       ),
     ];
@@ -257,7 +259,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                 // Button to open keyboard
                 buildBtn(
                   icon: LucideIcons.keyboard,
-                  tooltip: 'Редактировать',
+                  tooltip: l10n.edit,
                   color: Colors.cyanAccent,
                   onPressed: () {
                     _triggerHaptic(ref);
@@ -289,7 +291,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             children: [
               buildBtn(
                 icon: LucideIcons.zoom_out,
-                tooltip: 'Уменьшить',
+                tooltip: l10n.decreaseFontSize,
                 onPressed: () {
                   _triggerHaptic(ref);
                   final newSize = (settings.fontSize - 1.0).clamp(10.0, 30.0);
@@ -298,7 +300,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               ),
               buildBtn(
                 icon: LucideIcons.zoom_in,
-                tooltip: 'Увеличить',
+                tooltip: l10n.increaseFontSize,
                 onPressed: () {
                   _triggerHaptic(ref);
                   final newSize = (settings.fontSize + 1.0).clamp(10.0, 30.0);
@@ -307,7 +309,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               ),
               buildBtn(
                 icon: LucideIcons.undo_2,
-                tooltip: 'Отменить',
+                tooltip: l10n.undo,
                 onPressed: () {
                   _triggerHaptic(ref);
                   try {
@@ -317,7 +319,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               ),
               buildBtn(
                 icon: LucideIcons.redo_2,
-                tooltip: 'Повторить',
+                tooltip: l10n.redo,
                 onPressed: () {
                   _triggerHaptic(ref);
                   try {
@@ -378,22 +380,22 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             children: [
               buildBtn(
                 icon: LucideIcons.chevron_left,
-                tooltip: 'Влево',
+                tooltip: l10n.moveLeft,
                 onPressed: () => _moveCursorLeft(ref),
               ),
               buildBtn(
                 icon: LucideIcons.chevron_up,
-                tooltip: 'Вверх',
+                tooltip: l10n.moveUp,
                 onPressed: () => _moveCursorUp(ref),
               ),
               buildBtn(
                 icon: LucideIcons.chevron_down,
-                tooltip: 'Вниз',
+                tooltip: l10n.moveDown,
                 onPressed: () => _moveCursorDown(ref),
               ),
               buildBtn(
                 icon: LucideIcons.chevron_right,
-                tooltip: 'Вправо',
+                tooltip: l10n.moveRight,
                 onPressed: () => _moveCursorRight(ref),
               ),
             ],

@@ -354,7 +354,7 @@ class AINotifier extends StateNotifier<AIState> {
   }
 
   Future<void> askAI(String prompt) async {
-    final isRu = _ref.read(localeProvider).languageCode == 'ru';
+    final l10n = _ref.read(localizationsProvider);
     
     final userMessage = ChatMessage(
       role: MessageRole.user,
@@ -369,7 +369,7 @@ class AINotifier extends StateNotifier<AIState> {
       error: null,
       totalTokens: state.totalTokens + userTokens,
       activeAgentRole: 'Planner', // Start with Planner
-      currentStatusMessage: isRu ? 'Анализ задачи и планирование...' : 'Analyzing task & planning...',
+      currentStatusMessage: l10n.analyzingTaskAndPlanning,
     );
     _updateMessagesAndSync([...state.messages, userMessage]);
 
@@ -384,7 +384,7 @@ class AINotifier extends StateNotifier<AIState> {
     try {
       final workspacePath = _ref.read(workspaceProvider).currentPath;
       if (workspacePath == null) {
-        throw Exception(isRu ? 'Проект не открыт' : 'No project is open');
+        throw Exception(l10n.projectNotOpened);
       }
 
       while (state.isLoading) {
@@ -398,9 +398,7 @@ class AINotifier extends StateNotifier<AIState> {
             ...state.messages,
             ChatMessage(
               role: MessageRole.system,
-              content: isRu 
-                  ? "🤖 Превышен лимит шагов агента ($maxSteps). Автопилот остановлен."
-                  : "🤖 Agent step limit ($maxSteps) exceeded. Autopilot stopped.",
+              content: l10n.agentStepLimitExceeded(maxSteps),
               timestamp: DateTime.now(),
             )
           ]);
@@ -520,21 +518,17 @@ class AINotifier extends StateNotifier<AIState> {
           // Move from Planner to Coder once the plan is made
           state = state.copyWith(
             activeAgentRole: 'Coder',
-            currentStatusMessage: isRu ? 'Генерация изменений кода...' : 'Generating code changes...',
+            currentStatusMessage: l10n.generatingCodeChanges,
           );
           _updateMessagesAndSync([
             ...state.messages,
             ChatMessage(
               role: MessageRole.system,
-              content: isRu
-                  ? "📝 Составлен план выполнения задачи. Перехожу к роли Кодера..."
-                  : "📝 Execution plan constructed. Transitioning to Coder role...",
+              content: l10n.executionPlanConstructed,
               timestamp: DateTime.now(),
             )
           ]);
-          nextPrompt = isRu 
-              ? "План принят. Пожалуйста, реализуй изменения согласно предложенному плану и выдай действия (actions)." 
-              : "Plan accepted. Please implement the changes according to the proposed plan and output the actions.";
+          nextPrompt = "Plan accepted. Please implement the changes according to the proposed plan and output the actions.";
           await Future.delayed(const Duration(milliseconds: 500));
           continue;
         }
@@ -545,11 +539,9 @@ class AINotifier extends StateNotifier<AIState> {
             // Check if we should validate
             state = state.copyWith(
               activeAgentRole: 'Validator',
-              currentStatusMessage: isRu ? 'Проверка корректности реализации...' : 'Verifying implementation correctness...',
+              currentStatusMessage: l10n.verifyingImplementation,
             );
-            nextPrompt = isRu 
-                ? "Пожалуйста, проверь правильность реализации. Есть ли ошибки компиляции?"
-                : "Please verify the implementation. Are there any compilation or analyzer errors?";
+            nextPrompt = "Please verify the implementation. Are there any compilation or analyzer errors?";
             continue;
           } else {
             // Done
@@ -599,9 +591,7 @@ class AINotifier extends StateNotifier<AIState> {
             ...state.messages,
             ChatMessage(
               role: MessageRole.system,
-              content: isRu 
-                  ? "❌ Заблокированы небезопасные действия вне рабочей области:\n$blockedText"
-                  : "❌ Blocked unsafe actions outside workspace scope:\n$blockedText",
+              content: l10n.blockedUnsafeActions(blockedText),
               timestamp: DateTime.now(),
             )
           ]);
@@ -619,9 +609,7 @@ class AINotifier extends StateNotifier<AIState> {
             ...state.messages,
             ChatMessage(
               role: MessageRole.system,
-              content: isRu 
-                  ? "⚠️ Ожидание одобрения: Обнаружены действия с высоким риском или выключен автопилот. Подтвердите выполнение в панели ИИ."
-                  : "⚠️ Awaiting approval: High-risk actions detected or autopilot is restricted. Please approve them in the AI panel.",
+              content: l10n.awaitingApprovalHighRisk,
               timestamp: DateTime.now(),
             )
           ]);
@@ -646,9 +634,7 @@ class AINotifier extends StateNotifier<AIState> {
           final actionsListText = allowedActions
               .map((a) => "- ${a.type.toUpperCase()}: ${a.path.isNotEmpty ? p.relative(a.path, from: workspacePath) : a.content}")
               .join('\n');
-          final feedbackContent = isRu
-              ? "🤖 Автопилот (шаг $currentStep): Автоматическое одобрение действий:\n$actionsListText\n\nРезультаты:\n${results.join('\n')}"
-              : "🤖 Autopilot (step $currentStep): Auto-Approval of actions:\n$actionsListText\n\nResults:\n${results.join('\n')}";
+          final feedbackContent = l10n.autopilotStepSummary(currentStep, actionsListText, results.join('\n'));
 
           final taskName = state.messages.isNotEmpty ? state.messages.first.content : 'AI Assistant Task';
 
@@ -674,9 +660,7 @@ class AINotifier extends StateNotifier<AIState> {
           // Transition to Validator to verify the compile state
           state = state.copyWith(
             activeAgentRole: 'Validator',
-            currentStatusMessage: isRu 
-                ? 'Запуск статического анализа проекта (dart analyze)...' 
-                : 'Running project static analysis (dart analyze)...',
+            currentStatusMessage: l10n.runningStaticAnalysis,
           );
           
           // Trigger compiler analysis first and await it
@@ -722,9 +706,7 @@ class AINotifier extends StateNotifier<AIState> {
                 ...state.messages,
                 ChatMessage(
                   role: MessageRole.system,
-                  content: isRu
-                      ? "⚠️ Агент не смог автоматически устранить ошибки после $maxErrorFixAttempts попыток.\n\n**Оставшиеся ошибки:**\n$errorReport\n\nПожалуйста, опишите проблему или исправьте вручную."
-                      : "⚠️ Agent failed to fix errors after $maxErrorFixAttempts attempts.\n\n**Remaining errors:**\n$errorReport\n\nPlease describe the issue or fix manually.",
+                  content: l10n.agentFailedToFixErrors(maxErrorFixAttempts, errorReport),
                   timestamp: DateTime.now(),
                 )
               ]);
@@ -733,18 +715,14 @@ class AINotifier extends StateNotifier<AIState> {
 
             state = state.copyWith(
               activeAgentRole: 'Coder',
-              currentStatusMessage: isRu ? 'Исправление ошибок компиляции...' : 'Fixing compilation errors...',
+              currentStatusMessage: l10n.fixingCompilationErrors,
             );
-            nextPrompt = isRu
-                ? "Валидация выявила ошибки компиляции (попытка $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n**Точные ошибки из анализатора:**\n$errorReport\n\nДля каждой ошибки:\n1. Прочитай файл через read_file если нужен контекст\n2. Исправь только строки с ошибкой, не переписывай весь файл без необходимости"
-                : "Validation found compilation errors (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n**Exact analyzer errors:**\n$errorReport\n\nFor each error:\n1. Read the file via read_file if you need context\n2. Fix only the lines with errors, avoid rewriting entire file unnecessarily";
+            nextPrompt = "Validation found compilation errors (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n**Exact analyzer errors:**\n$errorReport\n\nFor each error:\n1. Read the file via read_file if you need context\n2. Fix only the lines with errors, avoid rewriting entire file unnecessarily";
           } else {
             consecutiveErrorFixAttempts = 0;
             lastErrorFiles = {};
             state = state.copyWith(currentStatusMessage: null);
-            nextPrompt = isRu 
-                ? "Все изменения применены успешно. Ошибок компиляции нет. Проверь корректность логики или сообщи о завершении."
-                : "All changes applied successfully. No compilation errors. Verify logic correctness or report completion.";
+            nextPrompt = "All changes applied successfully. No compilation errors. Verify logic correctness or report completion.";
           }
         }
       }
@@ -874,7 +852,7 @@ class AINotifier extends StateNotifier<AIState> {
   }
 
   Future<String> applyAction(AIAction action, {bool runInBackground = true}) async {
-    final isRu = _ref.read(localeProvider).languageCode == 'ru';
+    final l10n = _ref.read(localizationsProvider);
     final workspacePath = _ref.read(workspaceProvider).currentPath;
 
     final relPath = workspacePath != null && action.path.startsWith(workspacePath)
@@ -885,38 +863,38 @@ class AINotifier extends StateNotifier<AIState> {
       String statusMsg;
       switch (action.type) {
         case 'read_file':
-          statusMsg = isRu ? 'Чтение файла $relPath...' : 'Reading file $relPath...';
+          statusMsg = l10n.readingFile(relPath);
           break;
         case 'edit':
         case 'create':
-          statusMsg = isRu ? 'Сохранение файла $relPath...' : 'Saving file $relPath...';
+          statusMsg = l10n.savingFile(relPath);
           break;
         case 'delete':
-          statusMsg = isRu ? 'Удаление файла $relPath...' : 'Deleting file $relPath...';
+          statusMsg = l10n.deletingFile(relPath);
           break;
         case 'command':
-          statusMsg = isRu ? 'Запуск команды "${action.content}"...' : 'Running command "${action.content}"...';
+          statusMsg = l10n.runningCommandStatus(action.content);
           break;
         case 'grep_search':
-          statusMsg = isRu ? 'Поиск в коде: "${action.content}"...' : 'Searching code: "${action.content}"...';
+          statusMsg = l10n.searchingCode(action.content);
           break;
         case 'list_dir':
-          statusMsg = isRu ? 'Получение списка папки $relPath...' : 'Listing directory $relPath...';
+          statusMsg = l10n.listingDirectory(relPath);
           break;
         case 'find_symbols':
-          statusMsg = isRu ? 'Поиск символов: "${action.content}"...' : 'Finding symbols: "${action.content}"...';
+          statusMsg = l10n.findingSymbols(action.content);
           break;
         case 'web_search':
-          statusMsg = isRu ? 'Поиск в интернете: "${action.content}"...' : 'Searching web: "${action.content}"...';
+          statusMsg = l10n.searchingWeb(action.content);
           break;
         case 'web_fetch':
-          statusMsg = isRu ? 'Загрузка веб-страницы: ${action.path}...' : 'Fetching web page: ${action.path}...';
+          statusMsg = l10n.fetchingWebPage(action.path);
           break;
         case 'mcp':
           statusMsg = 'MCP Server ${action.server} -> ${action.tool}...';
           break;
         default:
-          statusMsg = isRu ? 'Выполнение действия...' : 'Executing action...';
+          statusMsg = l10n.executingAction;
       }
       state = state.copyWith(currentStatusMessage: statusMsg);
     }
@@ -925,9 +903,7 @@ class AINotifier extends StateNotifier<AIState> {
     if (workspacePath != null && 
         (action.type == 'edit' || action.type == 'create' || action.type == 'delete') &&
         !_permissionService.isPathInScope(action.path, workspacePath)) {
-      return isRu
-          ? 'Ошибка: Попытка изменения файла за пределами проекта.'
-          : 'Error: Attempted file modification outside the project scope.';
+      return l10n.safetyGuardFileOutsideWorkspace;
     }
 
     try {
@@ -936,9 +912,7 @@ class AINotifier extends StateNotifier<AIState> {
           // Агент запрашивает содержимое файла перед правкой
           final targetFile = File(action.path);
           if (!targetFile.existsSync()) {
-            return isRu
-                ? 'Файл не найден: ${action.path}'
-                : 'File not found: ${action.path}';
+            return l10n.fileNotFound(action.path);
           }
           final content = await targetFile.readAsString();
           // Отмечаем что агент прочитал файл (для проводника)
@@ -951,12 +925,13 @@ class AINotifier extends StateNotifier<AIState> {
             );
           }
           final lineCount = '\n'.allMatches(content).length + 1;
+          final truncatedSuffix = content.length > 8000
+              ? '\n\n${l10n.fileTruncatedSuffix(lineCount)}'
+              : '';
           final truncated = content.length > 8000
-              ? '${content.substring(0, 8000)}\n\n... [обрезано до 8000 символов из $lineCount строк]'
+              ? '${content.substring(0, 8000)}$truncatedSuffix'
               : content;
-          return isRu
-              ? 'Содержимое файла `$relPath` ($lineCount строк):\n\n```\n$truncated\n```'
-              : 'File contents of `$relPath` ($lineCount lines):\n\n```\n$truncated\n```';
+          return l10n.fileContentsHeader(relPath, lineCount, truncated);
         case 'edit':
         case 'create':
           final file = File(action.path);
@@ -977,9 +952,7 @@ class AINotifier extends StateNotifier<AIState> {
           await file.parent.create(recursive: true);
           await file.writeAsString(action.content);
           removeAction(action);
-          return isRu
-              ? 'Файл ${action.path} успешно записан.'
-              : 'File ${action.path} successfully written.';
+          return l10n.fileSuccessfullyWritten(action.path);
         case 'delete':
           final file = File(action.path);
           if (await file.exists()) {
@@ -989,9 +962,7 @@ class AINotifier extends StateNotifier<AIState> {
             await file.delete(recursive: true);
           }
           removeAction(action);
-          return isRu
-              ? 'Файл ${action.path} успешно удален.'
-              : 'File ${action.path} successfully deleted.';
+          return l10n.fileSuccessfullyDeleted(action.path);
         case 'command':
           final cmdText = action.content.trim().toLowerCase();
           
@@ -1000,9 +971,7 @@ class AINotifier extends StateNotifier<AIState> {
           for (final path in paths) {
             final absPath = p.isAbsolute(path) ? path : p.join(workspacePath ?? '', path);
             if (workspacePath != null && !_permissionService.isPathInScope(absPath, workspacePath)) {
-              return isRu
-                  ? 'Ошибка безопасности: Команда ссылается на путь вне проекта.'
-                  : 'Security error: Command references path outside project scope.';
+              return l10n.commandRefPathOutsideWorkspace;
             }
           }
 
@@ -1031,33 +1000,27 @@ class AINotifier extends StateNotifier<AIState> {
           }
           if (isBlocked) {
             removeAction(action);
-            return isRu
-                ? 'Ошибка безопасности: Команда содержит заблокированную инструкцию "$blockedReason".'
-                : 'Security error: Command contains blocked instruction "$blockedReason".';
+            return l10n.commandBlockedUnsafe(blockedReason);
           }
 
           if (runInBackground) {
             final runtime = _ref.read(runtimeServiceProvider);
             final result = await runtime.runCommand(action.content, workingDirectory: workspacePath);
             removeAction(action);
-            return isRu
-                ? 'Команда "${action.content}" выполнена. Результат:\n$result'
-                : 'Command "${action.content}" executed. Result:\n$result';
+            return l10n.commandExecutedResult(action.content, result);
           } else {
             await _ref.read(terminalTabsProvider.notifier).sendCommand(action.content);
             _ref.read(panelProvider.notifier).selectTab(PanelTab.terminal);
             removeAction(action);
-            return isRu
-                ? 'Команда "${action.content}" отправлена в терминал.'
-                : 'Command "${action.content}" sent to terminal.';
+            return l10n.commandSentToTerminal(action.content);
           }
         case 'grep_search':
           final query = action.content.trim();
           if (query.isEmpty) {
-            return isRu ? 'Ошибка: Запрос для поиска пуст.' : 'Error: Search query is empty.';
+            return l10n.searchQueryEmpty;
           }
           if (workspacePath == null) {
-            return isRu ? 'Ошибка: Рабочая область не найдена.' : 'Error: Workspace not found.';
+            return l10n.workspaceNotFound;
           }
           final dir = Directory(workspacePath);
           final results = <String>[];
@@ -1101,46 +1064,41 @@ class AINotifier extends StateNotifier<AIState> {
               if (matchCount >= 50) break;
             }
           } catch (e) {
-            return isRu ? 'Ошибка при поиске: $e' : 'Error searching: $e';
+            return l10n.failedToApplyActionWithError('searching: $e');
           }
           removeAction(action);
           if (results.isEmpty) {
-            return isRu 
-                ? 'Совпадений для "$query" не найдено.' 
-                : 'No matches found for "$query".';
+            return l10n.aiSearchNoMatches(query);
           }
-          return isRu
-              ? 'Найдено $matchCount совпадений для "$query":\n\n${results.join('\n')}'
-              : 'Found $matchCount matches for "$query":\n\n${results.join('\n')}';
+          return l10n.aiSearchMatchesFound(matchCount, query, results.join('\n'));
         case 'find_symbols':
           final query = action.content.trim();
           if (workspacePath == null) {
-            return isRu ? 'Ошибка: Рабочая область не найдена.' : 'Error: Workspace not found.';
+            return l10n.failedToApplyActionWithError('Workspace not found');
           }
           final symbols = _ref.read(symbolIndexerProvider.notifier).searchSymbols(query);
           removeAction(action);
           if (symbols.isEmpty) {
-            return isRu 
-                ? 'Символов по запросу "$query" не найдено.' 
-                : 'No symbols found matching "$query".';
+            return l10n.searchSymbolsNoMatches(query);
           }
           final List<String> symbolLines = [];
           for (final symbol in symbols) {
             final symbolRelPath = p.relative(symbol.filePath, from: workspacePath);
-            symbolLines.add('- [${symbol.type.toUpperCase()}] ${symbol.name} (файл: $symbolRelPath, строка: ${symbol.lineNumber})');
+            symbolLines.add(l10n.searchSymbolsItem(
+              symbol.type.toUpperCase(),
+              symbol.name,
+              symbolRelPath,
+              symbol.lineNumber,
+            ));
           }
-          return isRu
-              ? 'Найдено ${symbols.length} символов по запросу "$query":\n\n${symbolLines.join('\n')}'
-              : 'Found ${symbols.length} symbols matching "$query":\n\n${symbolLines.join('\n')}';
+          return l10n.searchSymbolsMatchesFound(symbols.length, query, symbolLines.join('\n'));
         case 'list_dir':
           final targetPath = action.path.isEmpty 
               ? (workspacePath ?? '') 
               : (p.isAbsolute(action.path) ? action.path : p.join(workspacePath ?? '', action.path));
           final directory = Directory(targetPath);
           if (!directory.existsSync()) {
-            return isRu 
-                ? 'Директория не найдена: $targetPath' 
-                : 'Directory not found: $targetPath';
+            return l10n.directoryNotFound(targetPath);
           }
           final items = <String>[];
           try {
@@ -1152,15 +1110,13 @@ class AINotifier extends StateNotifier<AIState> {
               items.add('$type $name');
             }
           } catch (e) {
-            return isRu ? 'Ошибка чтения директории: $e' : 'Error reading directory: $e';
+            return l10n.failedToApplyActionWithError('reading directory: $e');
           }
           removeAction(action);
           if (items.isEmpty) {
-            return isRu ? 'Директория пуста.' : 'Directory is empty.';
+            return l10n.directoryEmpty;
           }
-          return isRu
-              ? 'Содержимое директории:\n\n${items.join('\n')}'
-              : 'Directory contents:\n\n${items.join('\n')}';
+          return l10n.directoryContentsHeader(items.join('\n'));
         case 'web_search':
           final searchResult = await _performWebSearch(action.content);
           removeAction(action);
@@ -1171,19 +1127,17 @@ class AINotifier extends StateNotifier<AIState> {
           return fetchResult;
         case 'mcp':
           if (action.server == null || action.tool == null) {
-            return isRu ? 'Ошибка: Имя сервера или инструмента MCP не указано.' : 'Error: MCP server or tool name is not specified.';
+            return l10n.mcpMissingParams;
           }
           final mcpService = _ref.read(mcpServiceProvider.notifier);
           final mcpResult = await mcpService.executeMcpTool(action.server!, action.tool!, action.arguments ?? {});
           removeAction(action);
           return jsonEncode(mcpResult);
         default:
-          return isRu
-              ? 'Неизвестный тип действия: ${action.type}'
-              : 'Unknown action type: ${action.type}';
+          return l10n.unknownAction(action.type);
       }
     } catch (e) {
-      final errMsg = isRu ? 'Не удалось применить действие: $e' : 'Failed to apply action: $e';
+      final errMsg = l10n.failedToApplyActionWithError(e.toString());
       state = state.copyWith(error: errMsg);
       return errMsg;
     }
@@ -1191,14 +1145,17 @@ class AINotifier extends StateNotifier<AIState> {
 
   Future<void> executeActionManually(AIAction action) async {
     removeAction(action);
-    final isRu = _ref.read(localeProvider).languageCode == 'ru';
+    final l10n = _ref.read(localizationsProvider);
+    final relPath = _ref.read(workspaceProvider).currentPath != null && action.path.startsWith(_ref.read(workspaceProvider).currentPath!)
+        ? p.relative(action.path, from: _ref.read(workspaceProvider).currentPath!)
+        : action.path;
     _updateMessagesAndSync([
       ...state.messages,
       ChatMessage(
         role: MessageRole.system,
         content: action.type == 'command'
-            ? (isRu ? '🤖 Выполняю команду: ${action.content}...' : '🤖 Running command: ${action.content}...')
-            : (isRu ? '🤖 Применяю изменение: ${action.path}...' : '🤖 Applying change: ${action.path}...'),
+            ? l10n.runningCommandLabel(action.content)
+            : l10n.applyingChangeLabel(relPath),
         timestamp: DateTime.now(),
       ),
     ]);
@@ -1219,9 +1176,7 @@ class AINotifier extends StateNotifier<AIState> {
     ]);
 
     if (action.type == 'command') {
-      final analysisPrompt = isRu
-          ? 'Результат выполнения команды "${action.content}":\n$result\n\nПроанализируй результат. Если возникли ошибки, исправь их.'
-          : 'Result of running command "${action.content}":\n$result\n\nAnalyze the result. If errors occurred, fix them.';
+      final analysisPrompt = 'Result of running command "${action.content}":\n$result\n\nAnalyze the result. If errors occurred, fix them.';
       await askAI(analysisPrompt);
     }
   }
@@ -1230,17 +1185,20 @@ class AINotifier extends StateNotifier<AIState> {
     final actionsCopy = List<AIAction>.from(actions);
     String commandResult = '';
     String lastCommand = '';
-    final isRu = _ref.read(localeProvider).languageCode == 'ru';
+    final l10n = _ref.read(localizationsProvider);
     
     for (final action in actionsCopy) {
       removeAction(action);
+      final relPath = _ref.read(workspaceProvider).currentPath != null && action.path.startsWith(_ref.read(workspaceProvider).currentPath!)
+          ? p.relative(action.path, from: _ref.read(workspaceProvider).currentPath!)
+          : action.path;
       _updateMessagesAndSync([
         ...state.messages,
         ChatMessage(
           role: MessageRole.system,
           content: action.type == 'command'
-              ? (isRu ? '🤖 Выполняю команду: ${action.content}...' : '🤖 Running command: ${action.content}...')
-              : (isRu ? '🤖 Применяю изменение: ${action.path}...' : '🤖 Applying change: ${action.path}...'),
+              ? l10n.runningCommandLabel(action.content)
+              : l10n.applyingChangeLabel(relPath),
           timestamp: DateTime.now(),
         ),
       ]);
@@ -1267,9 +1225,7 @@ class AINotifier extends StateNotifier<AIState> {
     }
 
     if (lastCommand.isNotEmpty) {
-      final analysisPrompt = isRu
-          ? 'Результаты выполнения команды "$lastCommand":\n$commandResult\n\nПроанализируй результат. Если возникли ошибки, исправь их.'
-          : 'Results of running command "$lastCommand":\n$commandResult\n\nAnalyze the result. If errors occurred, fix them.';
+      final analysisPrompt = 'Results of running command "$lastCommand":\n$commandResult\n\nAnalyze the result. If errors occurred, fix them.';
       await askAI(analysisPrompt);
     }
   }

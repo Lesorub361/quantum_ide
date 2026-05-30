@@ -553,6 +553,766 @@
   "logs": "Логи",
   "clearLogs": "Очистить логи",
   "deletePlugin": "Удалить плагин",
-  "resetToDefaults": "Сбросить настройки"
+  "resetToDefaults": "Сбросить настройки",
+  "welcomeTitle": "Добро пожаловать!",
+  "welcomeSubtitle": "Выберите проект для работы или создайте новый",
+  "lastActiveProject": "Последний активный проект",
+  "runTooltip": "Запустить",
+  "actionsTooltip": "Действия",
+  "packagesTooltip": "Пакеты",
+  "extensionsAndTools": "Расширения & Инструменты",
+  "searchExtensionsHint": "Поиск расширений...",
+  "searchPubdevHint": "Поиск библиотек на pub.dev (например, dio)...",
+  "tabAll": "Все",
+  "tabInstalled": "Установленные",
+  "tabLanguagesAndAi": "Языки и ИИ",
+  "tabTools": "Инструменты",
+  "tabBuild": "Сборка",
+  "tabSdkPlatforms": "Платформы SDK",
+  "tabPubLibraries": "Библиотеки Pub",
+  "readyToBuildApk": "Готовы к сборке APK?",
+  "installAndroidSdkJava": "Установите Android SDK & Java 17",
+  "sdkSetupDescription": "Это настроит SDK, компиляторы, утилиты zipalign, apksigner, оптимизирует настройки сети Gradle и подготовит ваше окружение к компиляции проектов.",
+  "initializingDevEnvironment": "Инициализация среды разработки...",
+  "viewAction": "Посмотреть",
+  "startSdkSetup": "Начать настройку окружения",
+  "buildIssues": "Проблемы со сборкой?",
+  "restoreAndroidGradleEnv": "Восстановление окружения Android & Gradle",
+  "wrenchFixDescription": "Автоматически исправляет ошибки AAPT2 daemon, выставляет правильные разрешения для проектов, восстанавливает бинарник компилятора ресурсов и настраивает потоки Gradle.",
+  "runningWrenchFix": "Запуск исправления окружения сборки...",
+  "startWrenchFix": "Запустить исправление (Wrench Fix)",
+  "statusInstalledCaps": "УСТАНОВЛЕНО",
+  "reinstallOrUpdateTooltip": "Переустановить / Обновить",
+  "updatingPackage": "Обновление {name}...",
+  "@updatingPackage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "installingPackage": "Установка {name}...",
+  "@installingPackage": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "installAction": "Установить",
+  "searchPubdevTitle": "Поиск Flutter-библиотек",
+  "searchPubdevDescription": "Введите название библиотеки (например: dio, bloc, riverpod) в поиск выше и нажмите Enter",
+  "loadError": "Ошибка загрузки: {error}",
+  "@loadError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "addAction": "Добавить",
+  "openProjectToInstallLibraries": "Сначала откройте проект, чтобы добавлять библиотеки.",
+  "installingLibrary": "Установка библиотеки {name}...",
+  "@installingLibrary": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "importError": "Ошибка импорта: {error}",
+  "@importError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "filesImportedSuccessfully": "Файлы успешно импортированы",
+  "dragFilesHereToImport": "Перетащите файлы сюда для импорта",
+  "selectedCount": "Выбрано: {count}",
+  "@selectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectAllTooltip": "Выбрать все",
+  "copyTooltip": "Копировать",
+  "copiedCount": "Скопировано объектов: {count}",
+  "@copiedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "cutTooltip": "Вырезать",
+  "cutCount": "Вырезано объектов: {count}",
+  "@cutCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "zipTooltip": "Сжать в ZIP",
+  "deleteTooltip": "Удалить",
+  "foldersCount": "Папок: {count}",
+  "@foldersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "askAiAction": "Спросить ИИ",
+  "explainAiAction": "ИИ: Объяснить",
+  "documentAiAction": "ИИ: Документация",
+  "testAiAction": "ИИ: Создать тесты",
+  "optimizeAiAction": "ИИ: Оптимизировать",
+  "pasteCount": "Вставить ({count})",
+  "@pasteCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "archiveNameHint": "Имя архива",
+  "compressAction": "Сжать",
+  "archiveCreatedSuccessfully": "Архив успешно создан!",
+  "compressionError": "Ошибка сжатия: {error}",
+  "@compressionError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "archiveExtractedSuccessfully": "Архив успешно распакован!",
+  "extractionError": "Ошибка распаковки: {error}",
+  "@extractionError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "deleteSelectedTitle": "Удалить выбранное?",
+  "deleteSelectedConfirmation": "Вы уверены, что хотите удалить {count} элементов?",
+  "@deleteSelectedConfirmation": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectedElementsDeleted": "Выбранные элементы удалены!",
+  "deleteError": "Ошибка удаления: {error}",
+  "@deleteError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "filesPastedSuccessfully": "Файлы успешно вставлены!",
+  "pasteError": "Ошибка вставки: {error}",
+  "@pasteError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "repositoryNotFound": "Репозиторий не найден",
+  "initGitRepoDescription": "Инициализируйте локальный Git-репозиторий для отслеживания изменений.",
+  "initGitAction": "Инициализировать Git",
+  "gitConflicted": "КОНФЛИКТЫ",
+  "gitStaged": "ИНДЕКСИРОВАНО",
+  "gitModified": "ИЗМЕНЕНО",
+  "gitUntracked": "НЕОТСЛЕЖИВАЕМОЕ",
+  "commitMessageHint": "Сообщение коммита...",
+  "resetChangesTitle": "Сбросить изменения?",
+  "resetChangesConfirmation": "Вы действительно хотите безвозвратно сбросить все незакоммиченные изменения в этом файле?",
+  "resetAction": "Сбросить",
+  "changesReset": "Изменения сброшены",
+  "resetError": "Ошибка сброса: {error}",
+  "@resetError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "normalView": "Обычный вид",
+  "splitView": "Сплит-вид (Side-by-Side)",
+  "stagedMessage": "Файл добавлен в индекс",
+  "unstagedMessage": "Файл убран из индекса",
+  "stageError": "Ошибка индексации: {error}",
+  "@stageError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "failedToLoadChanges": "Не удалось загрузить изменения",
+  "noChanges": "Нет изменений",
+  "fileIdenticalToHead": "Этот файл полностью совпадает с HEAD",
+  "runTerminalTooltip": "Запустить",
+  "restartTerminalTooltip": "Перезапустить",
+  "consoleSubTab": "Консоль",
+  "signApkSubTab": "Подпись APK",
+  "copiedToClipboard": "Скопировано в буфер обмена",
+  "back": "Назад",
+  "tryChangingSearchQuery": "Попробуйте изменить запрос поиска",
+  "incomingBranch": "Входящая ветка",
+  "resolveConflictsBeforeSaving": "Пожалуйста, разрешите все конфликты перед сохранением!",
+  "fileSavedAndStaged": "Файл успешно сохранен и добавлен в индекс Git",
+  "saveError": "Ошибка при сохранении: {error}",
+  "@saveError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "acceptMerge": "Принять слияние",
+  "errorLoadingConflictFile": "Ошибка загрузки конфликтного файла",
+  "conflictsNotFound": "Конфликты не найдены",
+  "noConflictMarkersFound": "В данном файле отсутствуют стандартные маркеры конфликтов Git.",
+  "backToGit": "Назад к Git",
+  "conflictBlock": "Конфликтный блок",
+  "currentChangesOurs": "Текущие изменения (Ours / HEAD)",
+  "incomingChanges": "Входящие изменения ({branch})",
+  "@incomingChanges": {
+    "placeholders": {
+      "branch": { "type": "String" }
+    }
+  },
+  "useThisVersion": "Использовать эту версию",
+  "mergeResultEditable": "Результат слияния (Редактируемый)",
+  "chooseVersionOrWriteHint": "Выберите одну из версий выше или напишите свой вариант разрешения конфликта...",
+  "markAsResolvedHint": "* Чтобы пометить этот блок как разрешенный, введите или выберите текст.",
+  "emptyLabel": "(Пусто)",
+  "stageAction": "Индексировать",
+  "unstageAction": "Убрать из индекса",
+  "cursorColor": "ЦВЕТ КУРСОРА",
+  "or": "ИЛИ",
+  "ipCopiedToClipboard": "IP скопирован в буфер обмена",
+  "editingFile": "Редактирует: {file}",
+  "@editingFile": {
+    "placeholders": {
+      "file": { "type": "String" }
+    }
+  },
+  "viewingProject": "Просматривает проект",
+  "noProblemsFound": "Проблем в коде не обнаружено",
+  "problemsList": "Список проблем",
+  "sendToAi": "Отправить ИИ",
+  "helpMeFixErrors": "Пожалуйста, помоги мне исправить следующие ошибки компиляции в проекте:",
+  "lineColumn": "Строка {line}, колонка {col}",
+  "@lineColumn": {
+    "placeholders": {
+      "line": { "type": "int" },
+      "col": { "type": "int" }
+    }
+  },
+  "decreaseFontSize": "Уменьшить шрифт",
+  "increaseFontSize": "Увеличить шрифт",
+  "undo": "Отменить",
+  "redo": "Повторить",
+  "moveLeft": "Влево",
+  "moveUp": "Вверх",
+  "moveDown": "Вниз",
+  "moveRight": "Вправо",
+  "edit": "Редактировать",
+  "packagesAndEnv": "Пакеты и окружение",
+  "packagesInstalledCount": "Установлено: {count}/{total}",
+  "@packagesInstalledCount": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "flutterProject": "Flutter Проект",
+  "pythonProject": "Python Проект",
+  "nodejsProject": "Node.js Проект",
+  "dartProject": "Dart Проект",
+  "webProject": "Web Проект",
+  "androidProject": "Android Проект",
+  "genericProject": "Проект",
+  "runPC": "Запуск (ПК)",
+  "runMob": "Запуск (Тел.)",
+  "startServer": "Старт Сервера",
+  "buildAPK": "Собрать APK",
+  "startTheProject": "Запустите проект",
+  "outputCopied": "Вывод скопирован",
+  "console": "Консоль",
+  "signApk": "Подпись APK",
+  "buildPC": "Сборка (ПК)",
+  "buildLogs": "Логи сборки",
+  "resetPlugins": "Сбросить плагины",
+  "resetPluginsConfirmation": "Это удалит все пользовательские плагины и восстановит настройки по умолчанию. Продолжить?",
+  "resetPluginsTitle": "Сбросить плагины?",
+  "installWasm": "Установить .wasm",
+  "noPluginsInstalled": "Нет установленных плагинов",
+  "availableActions": "Доступные действия:",
+  "logsTerminal": "Терминал логов",
+  "clearLogs": "Очистить логи",
+  "deletePlugin": "Удалить плагин",
+  "noLogsCaptured": "Лонгборд логов пуст",
+  "installWasmPluginTitle": "Установка WASM Плагина",
+  "selectWasmFile": "Выбрать .wasm файл",
+  "pluginName": "Название плагина",
+  "nameRequired": "Введите название",
+  "pluginDescription": "Описание",
+  "descriptionRequired": "Введите описание",
+  "exposedActions": "Действия плагина",
+  "add": "Добавить",
+  "pickWasmFileFirst": "Выберите .wasm файл",
+  "pluginInstalledSuccessfully": "Плагин успешно установлен",
+  "failedToInstall": "Ошибка установки: {error}",
+  "@failedToInstall": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "mcpServersTitle": "Модули ИИ: MCP Серверы",
+  "activeServers": "Активные серверы ({count})",
+  "@activeServers": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "repository": "Репозиторий",
+  "noMcpServers": "Нет добавленных MCP серверов",
+  "goToRepository": "Перейти в Репозиторий",
+  "addManually": "Добавить вручную",
+  "addServerManually": "Добавить сервер вручную",
+  "installed": "УСТАНОВЛЕН",
+  "install": "Установить",
+  "packageDetail": "Пакет: {detail}",
+  "@packageDetail": {
+    "placeholders": {
+      "detail": { "type": "String" }
+    }
+  },
+  "authParam": "Параметр авторизации: {key}",
+  "@authParam": {
+    "placeholders": {
+      "key": { "type": "String" }
+    }
+  },
+  "enterValueFor": "Введите значение для {key}",
+  "@enterValueFor": {
+    "placeholders": {
+      "key": { "type": "String" }
+    }
+  },
+  "enterLabel": "Введите {label}",
+  "@enterLabel": {
+    "placeholders": {
+      "label": { "type": "String" }
+    }
+  },
+  "installPreset": "Установка: {name}",
+  "@installPreset": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "serverName": "Имя сервера",
+  "exampleLocalSearch": "Например: local-search",
+  "connectionType": "Тип подключения",
+  "stdioLocal": "Stdio (Локальный процесс)",
+  "sseHttp": "SSE (HTTP-поток)",
+  "startCommand": "Команда запуска",
+  "exampleStartCommand": "Например: node или npx или python3",
+  "argsSpace": "Аргументы (через пробел)",
+  "searchFilesHint": "Поиск файлов... (введите \"#\" для символов)",
+  "searchSymbolsHint": "Поиск символов в коде...",
+  "modeFiles": "РЕЖИМ: ФАЙЛЫ",
+  "modeSymbols": "РЕЖИМ: СИМВОЛЫ",
+  "resultsCount": "Найдено: {count}",
+  "@resultsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "noResults": "Ничего не найдено",
+  "confirmDeleteTitle": "Подтвердите удаление",
+  "confirmDeleteMultiple": "Вы действительно хотите удалить {count} объектов?",
+  "@confirmDeleteMultiple": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "archiveExtracted": "Архив успешно распакован!",
+  "archiveCreated": "Архив успешно создан!",
+  "compressToZip": "Сжать в ZIP",
+  "folderLabel": "Папка: {name}",
+  "@folderLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "fileLabel": "Файл: {name}",
+  "@fileLabel": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "whatShouldAiDoFolder": "Что сделать с этой папкой?",
+  "whatShouldAiDoFile": "Что сделать с этим файлом?",
+  "askAi": "Спросить ИИ",
+  "askAiDesc": "Интерактивный диалог с ИИ-ассистентом",
+  "explainStructure": "ИИ: Объяснить структуру",
+  "explainStructureDesc": "Детальное описание кода или папки",
+  "addDoc": "ИИ: Добавить документацию",
+  "addDocDesc": "Сгенерировать docstrings и комментарии",
+  "generateTests": "ИИ: Создать тесты",
+  "generateTestsDesc": "Написать unit-тесты для кода",
+  "optimizeCode": "ИИ: Оптимизировать",
+  "optimizeCodeDesc": "Предложить улучшения производительности",
+  "newFile": "Новый файл",
+  "newFileDesc": "Создать файл в этой папке",
+  "newFolder": "Новая папка",
+  "newFolderDesc": "Создать подпапку",
+  "removeFromBookmarks": "Удалить из закладок",
+  "removeFromBookmarksDesc": "Убрать файл из быстрого доступа",
+  "addToBookmarks": "Добавить в закладки",
+  "addToBookmarksDesc": "Закрепить файл для быстрого доступа",
+  "copyDesc": "Добавить в буфер обмена",
+  "cutDesc": "Переместить файлы",
+  "pasteDesc": "Вставить скопированные объекты",
+  "renameDesc": "Изменить имя элемента",
+  "extractZip": "Распаковать ZIP",
+  "extractZipDesc": "Извлечь файлы из архива",
+  "compressZip": "Сжать в ZIP",
+  "compressZipDesc": "Создать ZIP архив",
+  "compressSelectedZip": "Сжать выбранные в ZIP",
+  "compressSelectedZipDesc": "Создать архив из выбранных объектов",
+  "deleteDesc": "Безвозвратное удаление",
+  "empty": "пусто",
+  "nameFolderHint": "имя_папки",
+  "nameFileHint": "имя_файла.txt",
+  "itemMoved": "Элемент успешно перемещен",
+  "moveError": "Ошибка перемещения: {error}",
+  "@moveError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "image": "ИЗОБРАЖЕНИЕ",
+  "document": "ДОКУМЕНТ",
+  "failedToLoadImage": "Не удалось загрузить изображение",
+  "failedToReadFile": "Ошибка чтения файла: {error}",
+  "@failedToReadFile": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "aiSettings": "Настройки ИИ",
+  "provider": "Провайдер",
+  "model": "Модель",
+  "apiKey": "API Ключ",
+  "customBaseUrl": "Базовый URL (Custom Base URL)",
+  "defaultHint": "По умолчанию: {url}",
+  "@defaultHint": {
+    "placeholders": {
+      "url": { "type": "String" }
+    }
+  },
+  "chatWithAi": "ЧАТ С ИИ",
+  "chatHistory": "История чатов",
+  "newChat": "Новый чат",
+  "chat": "Чат",
+  "agents": "Агенты",
+  "internetAccess": "Доступ в интернет",
+  "mcpServers": "MCP Серверы",
+  "stop": "Стоп",
+  "manualMode": "Ручной",
+  "safeAutopilot": "Авто:Безопасный",
+  "fullAutonomy": "Авто:Полный",
+  "agentsNotInstalled": "Агенты не установлены",
+  "installGeminiCliInSettings": "Установите gemini-cli в настройках",
+  "stopAgent": "ОСТАНОВИТЬ АГЕНТА",
+  "withChanges": "с изменениями",
+  "rejectAll": "Отклонить все",
+  "acceptAll": "Принять все",
+  "attachOpenFile": "Прикрепить открытый файл",
+  "noHistoryFound": "История пуста",
+  "untitled": "Без названия",
+  "messagesCount": "{count} сообщений",
+  "@messagesCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "close": "Закрыть",
+  "systemEnv": "Системное окружение",
+  "fixEnvironmentArm64": "Исправить окружение (ARM64)",
+  "environment": "Окружение",
+  "collapseAll": "Свернуть все",
+  "elementMovedToRoot": "Элемент перемещен в корень",
+  "bookmarks": "Закладки",
+  "noActiveWasmPlugins": "Нет активных WASM плагинов",
+  "selectPluginAction": "Выберите действие плагина",
+  "noSelection": "Текст не выбран",
+  "applyPluginToFile": "Применить действие плагина ко всему файлу?",
+  "apply": "Применить",
+  "pluginExecutedSuccess": "Плагин выполнен успешно",
+  "executionError": "Ошибка выполнения: {error}",
+  "@executionError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "quickSearch": "Быстрый поиск (Ctrl+P)",
+  "saveTooltip": "Сохранить",
+  "runWasmPlugin": "Запустить WASM плагин",
+  "aiChat": "Чат с ИИ",
+  "home": "Домой",
+  "pendingDiff": "Ожидающий Diff",
+  "keep": "Принять",
+  "reject": "Отклонить",
+  "keepAll": "Принять все",
+  "ranAction": "Выполнено: {content}",
+  "@ranAction": {
+    "placeholders": {
+      "content": { "type": "String" }
+    }
+  },
+  "created": "Создан",
+  "deleted": "Удален",
+  "edited": "Изменен",
+  "taskExecution": "Выполнение задачи",
+  "stepNumber": "Шаг {step}/{total}",
+  "@stepNumber": {
+    "placeholders": {
+      "step": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "filesChangedCount": "Изменено файлов: {count} (+{additions} -{deletions})",
+  "@filesChangedCount": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "additions": { "type": "int" },
+      "deletions": { "type": "int" }
+    }
+  },
+  "commandsExecutedCount": "Команд выполнено: {count}",
+  "@commandsExecutedCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "changesAccepted": "Изменения успешно сохранены",
+  "undoneChanges": "Отменено изменений: {count}",
+  "@undoneChanges": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "discardedFileChanges": "Отменено изменение файла {file}",
+  "@discardedFileChanges": {
+    "placeholders": {
+      "file": { "type": "String" }
+    }
+  },
+  "thinking": "Вычисление...",
+  "planner": "ПЛАНИРОВЩИК",
+  "coder": "КОДЕР",
+  "validator": "ВАЛИДАТОР",
+  "aiAgentRole": "ИИ-АГЕНТ",
+  "resubmit": "Отправить",
+  "system": "Система",
+  "rollbackHistoryToStep": "Откатить историю и код к этому шагу",
+  "confirmRollback": "Подтверждение отката",
+  "rollbackConfirmationText": "Все изменения кода, сделанные после этого сообщения, будут отменены, а последующие сообщения удалены. Продолжить?",
+  "yesRollback": "Да, откатить",
+  "changesApplied": "Изменения применены",
+  "codeCopied": "Код скопирован в буфер",
+  "outOfScope": "Вне проекта!",
+  "low": "Низкий",
+  "medium": "Средний",
+  "high": "Высокий",
+  "applied": "Применено",
+  "resolveConflictTooltip": "Разрешить конфликт",
+  "panel1": "ПАНЕЛЬ 1",
+  "panel2": "ПАНЕЛЬ 2",
+  "localWebServer": "Локальный веб-сервер",
+  "webServerDesc": "Запустите веб-сервер, чтобы просматривать результаты сборки вашего проекта прямо внутри IDE.",
+  "startWebServer": "Запустить веб-сервер",
+  "stopWebServer": "Остановить веб-сервер",
+  "copyAll": "Копировать всё",
+  "clearTerminal": "Очистить терминал",
+  "openInExternalBrowser": "Открыть во внешнем браузере",
+  "search": "Поиск",
+  "structure": "Структура",
+  "disk": "Диск",
+  "plugins": "Плагины",
+  "added": "добавлено",
+  "removed": "удалено",
+  "modified": "изменено",
+  "selectedObjectsCount": "Выбрано объектов: {count}",
+  "@selectedObjectsCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "explainFolderPreset": "Объясни назначение и структуру этой папки.",
+  "explainFilePreset": "Подробно объясни назначение и логику работы этого файла.",
+  "addDocFolderPreset": "Добавь документацию, docstrings и подробные комментарии к коду во всех файлах этой папки.",
+  "addDocFilePreset": "Добавь понятную документацию, docstrings и подробные комментарии к коду в этом файле.",
+  "generateTestsFolderPreset": "Напиши unit-тесты для файлов в этой папке.",
+  "generateTestsFilePreset": "Напиши комплексные unit-тесты для кода в этом файле.",
+  "optimizeFolderPreset": "Проанализируй код в этой папке и предложи оптимизацию производительности и читаемости.",
+  "optimizeFilePreset": "Проанализируй код в этом файле и предложи варианты оптимизации производительности, читаемости и архитектуры.",
+  "deleteSelected": "Удалить выбранные",
+  "manual": "Ручной",
+  "autoSafe": "Авто:Безопасный",
+  "autoFull": "Авто:Полный",
+  "filesCount": "{count} {count, plural, one{{count} файл} few{{count} файла} other{{count} файлов}}",
+  "@filesCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
+  "localAiEngineTitle": "ДВИЖОК ЛОКАЛЬНОГО ИИ",
+  "ollamaRunningLocally": "Ollama запущен локально",
+  "ollamaRunningLocallyDesc": "Убедитесь, что Ollama запущена на вашей системе. Вы можете запустить её командой \"ollama serve\" и загрузить нужные модели командой \"ollama pull <модель>\".",
+  "lmStudioRunningLocally": "LM Studio запущен локально",
+  "lmStudioRunningLocallyDesc": "Убедитесь, что сервер LM Studio запущен. Вы можете включить Local Server в приложении LM Studio и загрузить нужную модель.",
+  "ollamaNotDetected": "Ollama не обнаружен",
+  "ollamaNotDetectedDesc": "Установите Ollama на устройстве и убедитесь что он запущен. URL можно изменить выше.",
+  "checkConnection": "Проверить подключение",
+  "availableOllamaModels": "ДОСТУПНЫЕ OLLAMA МОДЕЛИ",
+  "llamaServerInstallRequired": "Требуется установка llama-server",
+  "llamaServerInstallRequiredDesc": "Для запуска локальных моделей ИИ необходим движок llama-server. Нажмите кнопку ниже, чтобы установить его автоматически.",
+  "installing": "Установка...",
+  "installLlamaServerRuntime": "Установить Llama Server Runtime",
+  "ollamaModelsTitle": "OLLAMA МОДЕЛИ",
+  "localAiModelsTitle": "ЛОКАЛЬНЫЕ ИИ МОДЕЛИ",
+  "serverStatusAndControl": "СТАТУС И УПРАВЛЕНИЕ СЕРВЕРОМ",
+  "downloadOllamaModelPrompt": "Скачайте хотя бы одну Ollama-модель, чтобы начать работу.",
+  "downloadModelToStartServerPrompt": "Загрузите хотя бы одну модель выше, чтобы запустить локальный сервер.",
+  "localLlamaServerLabel": "Локальный сервер llama-server",
+  "connected": "Подключён",
+  "runningPort8080": "Запущен (порт 8080)",
+  "starting": "Запуск...",
+  "stopped": "Остановлен",
+  "refresh": "Обновить",
+  "start": "Старт",
+  "activeCaps": "АКТИВНА",
+  "gbFormat": "{size} ГБ",
+  "@gbFormat": {
+    "placeholders": {
+      "size": { "type": "String" }
+    }
+  },
+  "ramGbFormat": "~{size} ГБ ОЗУ",
+  "@ramGbFormat": {
+    "placeholders": {
+      "size": { "type": "String" }
+    }
+  },
+  "select": "Выбрать",
+  "download": "Скачать",
+  "refreshPreview": "Обновить предпросмотр",
+  "inFolder": "в {folder}",
+  "@inFolder": {
+    "placeholders": {
+      "folder": { "type": "String" }
+    }
+  },
+  "llamaServerBuiltIn": "llama-server (встроенный)",
+  "localAiDisplayName": "Локальный ИИ",
+  "notRequired": "не требуется",
+  "mcpGithubDesc": "Интеграция с репозиториями, тикетами (issues) и PR на GitHub.",
+  "mcpGoogleSearchDesc": "Позволяет ИИ-агенту производить живой поиск в Google.",
+  "mcpFetchDesc": "Скачивание веб-страниц и автоматический перевод их в Markdown.",
+  "mcpPostgresDesc": "Подключение, чтение структуры таблиц и выполнение SQL-запросов к PostgreSQL.",
+  "mcpPostgresArg": "Ссылка для подключения (postgresql://...)",
+  "mcpSqliteDesc": "Подключение и инспектирование баз данных SQLite в вашем проекте.",
+  "mcpSqliteArg": "Путь к файлу БД SQLite (например: db.sqlite)",
+  "mcpMemoryDesc": "Семантическое хранилище долговременной памяти для вашего ИИ-агента.",
+  "mcpBraveSearchDesc": "Позволяет ИИ-агенту выполнять веб-поиск с использованием Brave API.",
+  "mcpPuppeteerDesc": "Автоматизация браузера, создание скриншотов, клики по элементам и скрапинг веб-страниц.",
+  "mcpFirecrawlDesc": "Преобразование любого веб-сайта в чистый Markdown или структурированный JSON.",
+  "mcpNotionDesc": "Позволяет читать, изменять страницы, базы данных и комментарии в Notion.",
+  "mcpSlackDesc": "Предоставляет возможность читать каналы, общаться и отправлять уведомления в Slack.",
+  "mcpGitDesc": "Просмотр коммитов, сравнение версий, поиск по коммитам и файлам Git локально.",
+  "mcpGitlabDesc": "Управление проектами GitLab, тикетами, PR и CI/CD пайплайнами.",
+  "mcpSentryDesc": "Получение логов ошибок и инспектирование сбоев вашего приложения на Sentry.",
+  "mcpAirtableDesc": "Чтение, создание и обновление записей в базах данных и таблицах Airtable.",
+  "mcpSequentialThinkingDesc": "Организация размышлений ИИ-агента для структурированного решения сложных задач.",
+  "phantomProcessesTitle": "Фантомные процессы (Android 12/13+)",
+  "phantomProcessesVersion": "Требуется ADB-настройка для стабильной компиляции",
+  "phantomProcessesError": "В Android 12+ системный убийца процессов (Phantom Process Killer) принудительно убивает сборки (Gradle/Java/Node/Dart), если лимит превышает 32 активных процесса.\n\nДля отключения выполните через ADB на ПК:\n\nadb shell \"/system/bin/device_config put activity_manager max_phantom_processes 2147483647\"\n\nadb shell \"/system/bin/settings put global settings_enable_monitor_phantom_procs false\"",
+  "androidJarCorruptError": "android.jar повреждён ({api}). Нажмите «Исправить окружение» для переустановки.",
+  "@androidJarCorruptError": {
+    "placeholders": {
+      "api": { "type": "String" }
+    }
+  },
+  "androidSdkPlatformsHealthy": "android-35 / android-36 — исправны",
+  "checkFailed": "Проверка не удалась: {error}",
+  "@checkFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "analyzingTaskAndPlanning": "Анализ задачи и планирование...",
+  "agentStepLimitExceeded": "🤖 Превышен лимит шагов агента ({limit}). Автопилот остановлен.",
+  "generatingCodeChanges": "Генерация изменений кода...",
+  "executionPlanConstructed": "📝 Составлен план выполнения задачи. Перехожу к роли Кодера...",
+  "verifyingImplementation": "Проверка корректности реализации...",
+  "blockedUnsafeActions": "❌ Заблокированы небезопасные действия вне рабочей области:\n{blockedText}",
+  "awaitingApprovalHighRisk": "⚠️ Ожидание одобрения: Обнаружены действия с высоким риском или выключен автопилот. Подтвердите выполнение в панели ИИ.",
+  "autopilotStepSummary": "🤖 Автопилот (шаг {step}): Автоматическое одобрение действий:\n{actionsListText}\n\nРезультаты:\n{results}",
+  "runningStaticAnalysis": "Запуск статического анализа проекта (dart analyze)...",
+  "agentFailedToFixErrors": "⚠️ Агент не смог автоматически устранить ошибки после {maxAttempts} попыток.\n\n**Оставшиеся ошибки:**\n{errorReport}\n\nПожалуйста, опишите проблему или исправьте вручную.",
+  "fixingCompilationErrors": "Исправление ошибок компиляции...",
+  "readingFile": "Чтение файла {path}...",
+  "savingFile": "Сохранение файла {path}...",
+  "deletingFile": "Удаление файла {path}...",
+  "runningCommandStatus": "Запуск команды \"{command}\"...",
+  "searchingCode": "Поиск в коде: \"{query}\"...",
+  "listingDirectory": "Получение списка папки {path}...",
+  "findingSymbols": "Поиск символов: \"{query}\"...",
+  "searchingWeb": "Поиск в интернете: \"{query}\"...",
+  "fetchingWebPage": "Загрузка веб-страницы: {path}...",
+  "executingAction": "Выполнение действия...",
+  "runningCommandLabel": "🤖 Выполняю команду: {command}...",
+  "applyingChangeLabel": "🤖 Применяю изменение: {path}...",
+  "commandSentToTerminalLabel": "🤖 Команда \"{command}\" отправлена в терминал.",
+  "runningCommandResultLabel": "Команда \"{command}\" выполнена. Результат:\n{result}",
+  "fileNotFound": "Файл не найден: {path}",
+  "fileContentsHeader": "Содержимое файла `{path}` ({lineCount} строк):\n\n```\n{truncated}\n```",
+  "fileTruncatedSuffix": "... [обрезано до 8000 символов из {lineCount} строк]",
+  "safetyGuardFileOutsideWorkspace": "Ошибка: Попытка изменения файла за пределами проекта.",
+  "commandRefPathOutsideWorkspace": "Ошибка безопасности: Команда ссылается на путь вне проекта.",
+  "commandBlockedUnsafe": "Ошибка безопасности: Команда содержит заблокированную инструкцию \"{blocked}\".",
+  "aiSearchNoMatches": "Совпадений для \"{query}\" не найдено.",
+  "aiSearchMatchesFound": "Найдено {matchCount} совпадений для \"{query}\":\n\n{results}",
+  "searchSymbolsNoMatches": "Символов по запросу \"{query}\" не найдено.",
+  "searchSymbolsMatchesFound": "Найдено {count} символов по запросу \"{query}\":\n\n{results}",
+  "searchSymbolsItem": "- [{type}] {name} (файл: {path}, строка: {line})",
+  "directoryNotFound": "Директория не найдена: {path}",
+  "directoryEmpty": "Диретория пуста.",
+  "directoryContentsHeader": "Содержимое директории:\n\n{items}",
+  "mcpMissingParams": "Ошибка: Имя сервера или инструмента MCP не указано.",
+  "unknownAction": "Неизвестный тип действия: {type}",
+  "failedToApplyActionWithError": "Не удалось применить действие: {error}",
+  "searchQueryEmpty": "Ошибка: Запрос для поиска пуст.",
+  "workspaceNotFound": "Ошибка: Рабочая область не найдена.",
+  "webPreviewStopped": "Веб-превью остановлено",
+  "webPreviewStartInstructions": "Запустите сервер и нажмите кнопку Play."
 }
+
+
 

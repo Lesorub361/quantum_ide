@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 
 class McpServersDialog extends ConsumerStatefulWidget {
@@ -32,6 +33,56 @@ class McpPreset {
 }
 
 class _McpServersDialogState extends ConsumerState<McpServersDialog> {
+  String _getPresetDescription(BuildContext context, McpPreset preset) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (preset.id) {
+      case 'github':
+        return l10n.mcpGithubDesc;
+      case 'google-search':
+        return l10n.mcpGoogleSearchDesc;
+      case 'fetch':
+        return l10n.mcpFetchDesc;
+      case 'postgres':
+        return l10n.mcpPostgresDesc;
+      case 'sqlite':
+        return l10n.mcpSqliteDesc;
+      case 'memory':
+        return l10n.mcpMemoryDesc;
+      case 'brave-search':
+        return l10n.mcpBraveSearchDesc;
+      case 'puppeteer':
+        return l10n.mcpPuppeteerDesc;
+      case 'firecrawl':
+        return l10n.mcpFirecrawlDesc;
+      case 'notion':
+        return l10n.mcpNotionDesc;
+      case 'slack':
+        return l10n.mcpSlackDesc;
+      case 'git':
+        return l10n.mcpGitDesc;
+      case 'gitlab':
+        return l10n.mcpGitlabDesc;
+      case 'sentry':
+        return l10n.mcpSentryDesc;
+      case 'airtable':
+        return l10n.mcpAirtableDesc;
+      case 'sequential-thinking':
+        return l10n.mcpSequentialThinkingDesc;
+      default:
+        return preset.description;
+    }
+  }
+
+  String _getArgLabel(BuildContext context, McpPreset preset, String label) {
+    final l10n = AppLocalizations.of(context)!;
+    if (preset.id == 'postgres') {
+      return l10n.mcpPostgresArg;
+    } else if (preset.id == 'sqlite') {
+      return l10n.mcpSqliteArg;
+    }
+    return label;
+  }
+
   final _nameController = TextEditingController();
   final _commandController = TextEditingController();
   final _argsController = TextEditingController();
@@ -218,7 +269,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
-          'Модули ИИ: MCP Серверы',
+          AppLocalizations.of(context)!.mcpServersTitle,
           style: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.bold,
@@ -244,10 +295,10 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       child: Row(
         children: [
           Expanded(
-            child: _buildTabButton(0, 'Активные серверов (${mcpServers.length})'),
+            child: _buildTabButton(0, AppLocalizations.of(context)!.activeServers(mcpServers.length)),
           ),
           Expanded(
-            child: _buildTabButton(1, 'Репозиторий'),
+            child: _buildTabButton(1, AppLocalizations.of(context)!.repository),
           ),
         ],
       ),
@@ -331,7 +382,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
           Icon(LucideIcons.bot, size: 48, color: Colors.white.withValues(alpha: 0.1)),
           const SizedBox(height: 12),
           Text(
-            'Нет добавленных MCP серверов',
+            AppLocalizations.of(context)!.noMcpServers,
             style: GoogleFonts.inter(color: Colors.white30, fontSize: 12),
           ),
           const SizedBox(height: 16),
@@ -344,7 +395,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                     side: const BorderSide(color: Colors.white10),
                   ),
                   onPressed: () => setState(() => _activeTab = 1),
-                  child: const Text('Перейти в Репозиторий', style: TextStyle(fontSize: 11)),
+                  child: Text(AppLocalizations.of(context)!.goToRepository, style: const TextStyle(fontSize: 11)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -357,7 +408,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                     side: const BorderSide(color: Color(0x3FFF3C3C)),
                   ),
                   onPressed: () => setState(() => _isAddingManual = true),
-                  child: const Text('Добавить вручную', style: TextStyle(fontSize: 11)),
+                  child: Text(AppLocalizations.of(context)!.addManually, style: const TextStyle(fontSize: 11)),
                 ),
               ),
             ],
@@ -456,7 +507,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
             minimumSize: const Size.fromHeight(36),
           ),
           icon: const Icon(LucideIcons.plus, size: 14),
-          label: const Text('Добавить сервер вручную', style: TextStyle(fontSize: 11)),
+          label: Text(AppLocalizations.of(context)!.addServerManually, style: const TextStyle(fontSize: 11)),
           onPressed: () => setState(() => _isAddingManual = true),
         ),
       ],
@@ -496,7 +547,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        'УСТАНОВЛЕН',
+                        AppLocalizations.of(context)!.installed,
                         style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 8, fontWeight: FontWeight.bold),
                       ),
                     )
@@ -517,18 +568,18 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                           _installingPreset = preset;
                         });
                       },
-                      child: const Text('Установить', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      child: Text(AppLocalizations.of(context)!.install, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
-                preset.description,
+                _getPresetDescription(context, preset),
                 style: GoogleFonts.inter(color: Colors.white38, fontSize: 10.5),
               ),
               const SizedBox(height: 6),
               Text(
-                'Пакет: ${preset.args.last}',
+                AppLocalizations.of(context)!.packageDetail(preset.args.last),
                 style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent.withValues(alpha: 0.5), fontSize: 9),
               ),
             ],
@@ -551,12 +602,12 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Параметр авторизации: $envKey', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Text(AppLocalizations.of(context)!.authParam(envKey), style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
               const SizedBox(height: 6),
               TextField(
                 controller: controller,
                 style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                decoration: _inputDecoration('Введите значение для $envKey'),
+                decoration: _inputDecoration(AppLocalizations.of(context)!.enterValueFor(envKey)),
               ),
             ],
           ),
@@ -574,12 +625,12 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Text(_getArgLabel(context, preset, label), style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
               const SizedBox(height: 6),
               TextField(
                 controller: controller,
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
-                decoration: _inputDecoration('Введите $label'),
+                decoration: _inputDecoration(AppLocalizations.of(context)!.enterLabel(_getArgLabel(context, preset, label))),
               ),
             ],
           ),
@@ -591,12 +642,12 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Установка: ${preset.name}',
+          AppLocalizations.of(context)!.installPreset(preset.name),
           style: GoogleFonts.inter(color: const Color(0xFFFF3C3C), fontWeight: FontWeight.bold, fontSize: 13),
         ),
         const SizedBox(height: 4),
         Text(
-          preset.description,
+          _getPresetDescription(context, preset),
           style: GoogleFonts.inter(color: Colors.white38, fontSize: 10.5),
         ),
         const SizedBox(height: 14),
@@ -613,7 +664,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _clearForm,
-                child: const Text('Назад'),
+                child: Text(AppLocalizations.of(context)!.back),
               ),
             ),
             const SizedBox(width: 12),
@@ -655,7 +706,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                   service.addServer(config);
                   _clearForm();
                 },
-                child: const Text('Установить'),
+                child: Text(AppLocalizations.of(context)!.install),
               ),
             ),
           ],
@@ -669,7 +720,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Добавление вручную',
+          AppLocalizations.of(context)!.addServerManually,
           style: GoogleFonts.inter(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 13),
         ),
         const SizedBox(height: 12),
@@ -678,22 +729,22 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Имя сервера', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                Text(AppLocalizations.of(context)!.serverName, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _nameController,
                   style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
-                  decoration: _inputDecoration('Например: local-search'),
+                  decoration: _inputDecoration(AppLocalizations.of(context)!.exampleLocalSearch),
                 ),
                 const SizedBox(height: 12),
 
-                Text('Тип подключения', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                Text(AppLocalizations.of(context)!.connectionType, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
                 const SizedBox(height: 6),
                 Row(
                   children: [
                     Expanded(
                       child: ChoiceChip(
-                        label: const Text('Stdio (Локальный процесс)'),
+                        label: Text(AppLocalizations.of(context)!.stdioLocal),
                         selected: _selectedType == McpServerType.stdio,
                         onSelected: (selected) {
                           if (selected) setState(() => _selectedType = McpServerType.stdio);
@@ -703,7 +754,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: ChoiceChip(
-                        label: const Text('SSE (HTTP-поток)'),
+                        label: Text(AppLocalizations.of(context)!.sseHttp),
                         selected: _selectedType == McpServerType.sse,
                         onSelected: (selected) {
                           if (selected) setState(() => _selectedType = McpServerType.sse);
@@ -715,16 +766,16 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                 const SizedBox(height: 12),
 
                 if (_selectedType == McpServerType.stdio) ...[
-                  Text('Команда запуска', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                  Text(AppLocalizations.of(context)!.startCommand, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _commandController,
                     style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                    decoration: _inputDecoration('Например: node или npx или python3'),
+                    decoration: _inputDecoration(AppLocalizations.of(context)!.exampleStartCommand),
                   ),
                   const SizedBox(height: 12),
 
-                  Text('Аргументы (через пробел)', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                  Text(AppLocalizations.of(context)!.argsSpace, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _argsController,
@@ -750,7 +801,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
             Expanded(
               child: OutlinedButton(
                 onPressed: _clearForm,
-                child: const Text('Назад'),
+                child: Text(AppLocalizations.of(context)!.back),
               ),
             ),
             const SizedBox(width: 12),
@@ -774,7 +825,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                   service.addServer(config);
                   _clearForm();
                 },
-                child: const Text('Добавить'),
+                child: Text(AppLocalizations.of(context)!.add),
               ),
             ),
           ],

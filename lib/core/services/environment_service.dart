@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/core/providers/locale_provider.dart';
 import 'runtime_service.dart';
 
 class ToolStatus {
@@ -44,6 +46,7 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
     }
 
     state = state.copyWith(isChecking: true);
+    final l10n = _ref.read(localizationsProvider);
 
     final tools = <ToolStatus>[];
 
@@ -56,15 +59,14 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
     tools.add(await _checkTool(runtime, 'ninja', '--version'));
 
     // Check Android SDK platform health
-    tools.add(await _checkAndroidSdkHealth(runtime));
+    tools.add(await _checkAndroidSdkHealth(runtime, l10n));
 
     if (Platform.isAndroid) {
       tools.add(ToolStatus(
-        name: 'Фантомные процессы (Android 12/13+)',
+        name: l10n.phantomProcessesTitle,
         isInstalled: false,
-        version: 'Требуется ADB-настройка для стабильной компиляции',
-        error:
-            'В Android 12+ системный убийца процессов (Phantom Process Killer) принудительно убивает сборки (Gradle/Java/Node/Dart), если лимит превышает 32 активных процесса.\n\nДля отключения выполните через ADB на ПК:\n\nadb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"\n\nadb shell "/system/bin/settings put global settings_enable_monitor_phantom_procs false"',
+        version: l10n.phantomProcessesVersion,
+        error: l10n.phantomProcessesError,
       ));
     }
 
@@ -72,7 +74,7 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
   }
 
   /// Проверяет целостность android.jar для android-36 и android-35.
-  Future<ToolStatus> _checkAndroidSdkHealth(RuntimeService runtime) async {
+  Future<ToolStatus> _checkAndroidSdkHealth(RuntimeService runtime, AppLocalizations l10n) async {
     try {
       // Проверяем android-36 сначала, потом android-35
       for (final api in ['android-36', 'android-35']) {
@@ -86,8 +88,7 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
           return ToolStatus(
             name: 'Android SDK ($api)',
             isInstalled: false,
-            error:
-                'android.jar повреждён ($api). Нажмите «Исправить окружение» для переустановки.',
+            error: l10n.androidJarCorruptError(api),
           );
         }
       }
@@ -95,13 +96,13 @@ class EnvironmentService extends StateNotifier<EnvironmentState> {
       return ToolStatus(
         name: 'Android SDK platforms',
         isInstalled: true,
-        version: 'android-35 / android-36 — исправны',
+        version: l10n.androidSdkPlatformsHealthy,
       );
     } catch (e) {
       return ToolStatus(
         name: 'Android SDK platforms',
         isInstalled: false,
-        error: 'Проверка не удалась: $e',
+        error: l10n.checkFailed(e.toString()),
       );
     }
   }

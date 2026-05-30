@@ -59,7 +59,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     final packages = ref.watch(packageServiceProvider);
     final editorState = ref.watch(editorProvider);
     final rightWidth = widget.isInline ? ref.watch(rightPanelWidthProvider) : 340.0;
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
+
 
     final content = SafeArea(
       child: Column(
@@ -79,7 +80,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    isRu ? 'ЧАТ С ИИ' : 'CHAT WITH AI',
+                    l10n.chatWithAi,
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
@@ -91,8 +92,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 // Chat History Button
                 IconButton(
                   icon: const Icon(LucideIcons.history, size: 14, color: Colors.cyanAccent),
-                  onPressed: () => _showChatHistoryDialog(context, ref, isRu),
-                  tooltip: isRu ? 'История чатов' : 'Chat History',
+                  onPressed: () => _showChatHistoryDialog(context, ref),
+                  tooltip: l10n.chatHistory,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -103,13 +104,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   onPressed: () {
                     ref.read(aiProvider.notifier).startNewSession();
                   },
-                  tooltip: isRu ? 'Новый чат' : 'New Chat',
+                  tooltip: l10n.newChat,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 8),
                 // Options menu
-                _buildOptionsMenu(context, ref, isRu),
+                _buildOptionsMenu(context, ref),
                 const SizedBox(width: 8),
                 // Close button
                 IconButton(
@@ -133,10 +134,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       // Provider/Model Selection Card
-                      _buildProviderModelCard(context, ref, isRu),
+                      _buildProviderModelCard(context, ref),
 
                       // Status row: Autopilot & Badges
-                      _buildStatusRow(context, ref, aiState, isRu),
+                      _buildStatusRow(context, ref, aiState),
 
                       const SizedBox(height: 4),
 
@@ -150,8 +151,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                         ),
                         child: Row(
                           children: [
-                            _buildAIModeTab(mode, AIPanelMode.chat, isRu ? 'Чат' : 'Chat', LucideIcons.message_square),
-                            _buildAIModeTab(mode, AIPanelMode.cli, isRu ? 'Агенты' : 'Agents', LucideIcons.bot),
+                            _buildAIModeTab(mode, AIPanelMode.chat, l10n.chat, LucideIcons.message_square),
+                            _buildAIModeTab(mode, AIPanelMode.cli, l10n.agents, LucideIcons.bot),
                           ],
                         ),
                       ),
@@ -227,9 +228,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildOptionsMenu(BuildContext context, WidgetRef ref, bool isRu) {
+  Widget _buildOptionsMenu(BuildContext context, WidgetRef ref) {
     final mcpService = ref.watch(mcpServiceProvider.notifier);
     final internetAccess = mcpService.internetAccess;
+    final l10n = AppLocalizations.of(context)!;
 
     return PopupMenuButton<String>(
       icon: const Icon(LucideIcons.ellipsis_vertical, size: 14, color: Colors.white60),
@@ -259,7 +261,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               ),
               const SizedBox(width: 8),
               Text(
-                isRu ? 'Доступ в интернет' : 'Internet Access',
+                l10n.internetAccess,
                 style: const TextStyle(color: Colors.white, fontSize: 11),
               ),
             ],
@@ -272,7 +274,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               const Icon(LucideIcons.terminal, size: 12, color: Colors.cyanAccent),
               const SizedBox(width: 8),
               Text(
-                isRu ? 'MCP Серверы' : 'MCP Servers',
+                l10n.mcpServers,
                 style: const TextStyle(color: Colors.white, fontSize: 11),
               ),
             ],
@@ -282,9 +284,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildProviderModelCard(BuildContext context, WidgetRef ref, bool isRu) {
+  Widget _buildProviderModelCard(BuildContext context, WidgetRef ref) {
     final aiSvc = ref.watch(aiServiceProvider);
     final provider = AiProviders.byId(aiSvc.selectedProviderId);
+    final l10n = AppLocalizations.of(context)!;
 
     return InkWell(
       onTap: () {
@@ -310,7 +313,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    provider.displayName,
+                    provider.id == 'local_edge' ? l10n.localAiDisplayName : provider.displayName,
                     style: GoogleFonts.inter(fontSize: 9, color: Colors.white54, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 1),
@@ -329,14 +332,14 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildStatusRow(BuildContext context, WidgetRef ref, AIState aiState, bool isRu) {
+  Widget _buildStatusRow(BuildContext context, WidgetRef ref, AIState aiState) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Autopilot Approval Mode
-          _buildAutopilotModeBadge(context, ref, aiState, isRu),
+          _buildAutopilotModeBadge(context, ref, aiState),
           
           // Token and System Stats Badges
           Row(
@@ -352,7 +355,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildAutopilotModeBadge(BuildContext context, WidgetRef ref, AIState aiState, bool isRu) {
+  Widget _buildAutopilotModeBadge(BuildContext context, WidgetRef ref, AIState aiState) {
+    final l10n = AppLocalizations.of(context)!;
     if (aiState.isLoading && aiState.isAutopilot) {
       return InkWell(
         onTap: () => ref.read(aiProvider.notifier).stopAutopilot(),
@@ -370,7 +374,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               const Icon(LucideIcons.square, size: 10, color: Colors.redAccent),
               const SizedBox(width: 4),
               Text(
-                isRu ? 'Стоп' : 'Stop',
+                l10n.stop,
                 style: GoogleFonts.inter(fontSize: 9, color: Colors.redAccent, fontWeight: FontWeight.bold),
               ),
             ],
@@ -387,17 +391,17 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       case AiApprovalMode.manual:
         modeIcon = LucideIcons.user;
         modeColor = Colors.white38;
-        modeLabel = isRu ? 'Ручной' : 'Manual';
+        modeLabel = l10n.manual;
         break;
       case AiApprovalMode.semiAutonomous:
         modeIcon = LucideIcons.bot;
         modeColor = Colors.purpleAccent;
-        modeLabel = isRu ? 'Авто:Безопасный' : 'Auto:Safe';
+        modeLabel = l10n.autoSafe;
         break;
       case AiApprovalMode.fullAutonomous:
         modeIcon = LucideIcons.zap;
         modeColor = Colors.orangeAccent;
-        modeLabel = isRu ? 'Авто:Полный' : 'Auto:Full';
+        modeLabel = l10n.autoFull;
         break;
     }
 
@@ -414,7 +418,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             children: [
               const Icon(LucideIcons.user, size: 12, color: Colors.white54),
               const SizedBox(width: 8),
-              Text(isRu ? 'Ручной режим' : 'Manual Mode', style: const TextStyle(color: Colors.white, fontSize: 11)),
+              Text(l10n.manualMode, style: const TextStyle(color: Colors.white, fontSize: 11)),
             ],
           ),
         ),
@@ -424,7 +428,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             children: [
               const Icon(LucideIcons.bot, size: 12, color: Colors.purpleAccent),
               const SizedBox(width: 8),
-              Text(isRu ? 'Безопасный автопилот' : 'Safe Autopilot', style: const TextStyle(color: Colors.white, fontSize: 11)),
+              Text(l10n.safeAutopilot, style: const TextStyle(color: Colors.white, fontSize: 11)),
             ],
           ),
         ),
@@ -434,7 +438,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             children: [
               const Icon(LucideIcons.zap, size: 12, color: Colors.orangeAccent),
               const SizedBox(width: 8),
-              Text(isRu ? 'Полная автономность' : 'Full Autonomy', style: const TextStyle(color: Colors.white, fontSize: 11)),
+              Text(l10n.fullAutonomy, style: const TextStyle(color: Colors.white, fontSize: 11)),
             ],
           ),
         ),
@@ -569,12 +573,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               Icon(LucideIcons.package_search, size: 36, color: Colors.white.withValues(alpha: 0.1)),
               const SizedBox(height: 12),
               Text(
-                'Агенты не установлены',
+                AppLocalizations.of(context)!.agentsNotInstalled,
                 style: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
               ),
               const SizedBox(height: 2),
               Text(
-                'Установите gemini-cli в настройках',
+                AppLocalizations.of(context)!.installGeminiCliInSettings,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(color: Colors.white24, fontSize: 10),
               ),
@@ -682,7 +686,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       ),
                     ),
                     onPressed: () => ref.read(editorProvider.notifier).stopAgent(),
-                    child: const Text('ОСТАНОВИТЬ АГЕНТА', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: Text(AppLocalizations.of(context)!.stopAgent, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -743,7 +747,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   }
 
   Widget _buildProposedActionsStickyPanel(AIState aiState) {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
     final fileCount = aiState.proposedActions.where((a) => a.type != 'command').length;
     
     return Container(
@@ -775,13 +779,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
                   ),
                   child: Text(
-                    '$fileCount ${isRu ? (fileCount == 1 ? 'файл' : fileCount < 5 ? 'файла' : 'файлов') : (fileCount == 1 ? 'file' : 'files')}',
+                    l10n.filesCount(fileCount),
                     style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  isRu ? 'с изменениями' : 'with changes',
+                  l10n.withChanges,
                   style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
                 ),
                 const Spacer(),
@@ -796,7 +800,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Text(
-                      isRu ? 'Отклонить все' : 'Reject all',
+                      l10n.rejectAll,
                       style: GoogleFonts.inter(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500),
                     ),
                   ),
@@ -815,7 +819,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      isRu ? 'Принять все' : 'Accept all',
+                      l10n.acceptAll,
                       style: GoogleFonts.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -946,7 +950,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               maxLines: 4,
               minLines: 1,
               decoration: InputDecoration(
-                hintText: l10n.askAiHint(provider.displayName),
+                hintText: l10n.askAiHint(provider.id == 'local_edge' ? l10n.localAiDisplayName : provider.displayName),
                 hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
                 border: InputBorder.none,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -962,9 +966,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                             _attachActiveFile = !_attachActiveFile;
                           });
                         },
-                        tooltip: Localizations.localeOf(context).languageCode == 'ru'
-                            ? 'Прикрепить открытый файл'
-                            : 'Attach open file',
+                        tooltip: AppLocalizations.of(context)!.attachOpenFile,
                       )
                     : null,
                 suffixIcon: IconButton(
@@ -1005,7 +1007,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  void _showChatHistoryDialog(BuildContext context, WidgetRef ref, bool isRu) {
+  void _showChatHistoryDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
       builder: (context) {
@@ -1013,6 +1015,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           builder: (context, ref, child) {
             final aiState = ref.watch(aiProvider);
             final notifier = ref.read(aiProvider.notifier);
+            final l10n = AppLocalizations.of(context)!;
             
             return AlertDialog(
               backgroundColor: const Color(0xFF1E2230),
@@ -1022,7 +1025,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   const Icon(LucideIcons.history, color: Colors.cyanAccent, size: 18),
                   const SizedBox(width: 8),
                   Text(
-                    isRu ? 'История чатов' : 'Chat History',
+                    l10n.chatHistory,
                     style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -1033,7 +1036,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 child: aiState.sessions.isEmpty
                     ? Center(
                         child: Text(
-                          isRu ? 'История пуста' : 'No history found',
+                          l10n.noHistoryFound,
                           style: const TextStyle(color: Colors.white38, fontSize: 13),
                         ),
                       )
@@ -1059,7 +1062,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                             child: ListTile(
                               dense: true,
                               title: Text(
-                                session.title.isNotEmpty ? session.title : (isRu ? 'Без названия' : 'Untitled'),
+                                session.title.isNotEmpty ? session.title : l10n.untitled,
                                 style: TextStyle(
                                   color: isCurrent ? Colors.cyanAccent : Colors.white,
                                   fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
@@ -1069,7 +1072,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               subtitle: Text(
-                                '${session.messages.length} ${isRu ? "сообщений" : "messages"} • ${_formatDate(session.createdAt)}',
+                                '${l10n.messagesCount(session.messages.length)} • ${_formatDate(session.createdAt)}',
                                 style: const TextStyle(color: Colors.white30, fontSize: 9.5),
                               ),
                               onTap: () {
@@ -1090,7 +1093,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text(isRu ? 'Закрыть' : 'Close', style: const TextStyle(color: Colors.cyanAccent)),
+                  child: Text(l10n.close, style: const TextStyle(color: Colors.cyanAccent)),
                 ),
               ],
             );

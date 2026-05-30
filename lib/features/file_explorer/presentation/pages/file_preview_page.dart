@@ -4,6 +4,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:path/path.dart' as p;
 
 class FilePreviewPage extends StatelessWidget {
@@ -26,6 +27,7 @@ class FilePreviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final fileName = p.basename(filePath);
     final isImg = _isImage(filePath);
 
@@ -59,7 +61,7 @@ class FilePreviewPage extends StatelessWidget {
               backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
               side: const BorderSide(color: Color(0x3FFF3C3C)),
               label: Text(
-                isImg ? 'ИЗОБРАЖЕНИЕ' : 'ДОКУМЕНТ',
+                isImg ? l10n.image : l10n.document,
                 style: const TextStyle(color: Color(0xFFFF3C3C), fontSize: 9, fontWeight: FontWeight.bold),
               ),
             ),
@@ -78,13 +80,13 @@ class FilePreviewPage extends StatelessWidget {
           ),
         ),
         child: isImg 
-            ? _buildImagePreview() 
-            : _buildMarkdownPreview(),
+            ? _buildImagePreview(l10n) 
+            : _buildMarkdownPreview(l10n),
       ),
     );
   }
 
-  Widget _buildImagePreview() {
+  Widget _buildImagePreview(AppLocalizations l10n) {
     return Center(
       child: ClipRRect(
         child: PhotoView(
@@ -101,7 +103,7 @@ class FilePreviewPage extends StatelessWidget {
               children: [
                 const Icon(LucideIcons.image_off, size: 48, color: Colors.redAccent),
                 const SizedBox(height: 12),
-                Text('Не удалось загрузить изображение', style: GoogleFonts.inter(color: Colors.white38, fontSize: 13)),
+                Text(l10n.failedToLoadImage, style: GoogleFonts.inter(color: Colors.white38, fontSize: 13)),
               ],
             ),
           ),
@@ -110,7 +112,7 @@ class FilePreviewPage extends StatelessWidget {
     );
   }
 
-  Widget _buildMarkdownPreview() {
+  Widget _buildMarkdownPreview(AppLocalizations l10n) {
     return FutureBuilder<String>(
       future: File(filePath).readAsString(),
       builder: (context, snapshot) {
@@ -120,7 +122,7 @@ class FilePreviewPage extends StatelessWidget {
 
         if (snapshot.hasError) {
           return Center(
-            child: Text('Ошибка чтения файла: ${snapshot.error}', style: const TextStyle(color: Colors.white30)),
+            child: Text(l10n.failedToReadFile(snapshot.error.toString()), style: const TextStyle(color: Colors.white30)),
           );
         }
 

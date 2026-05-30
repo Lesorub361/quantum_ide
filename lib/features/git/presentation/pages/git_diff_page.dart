@@ -8,6 +8,7 @@ import 'package:diff_match_patch/diff_match_patch.dart';
 import 'package:quantum_ide/core/services/git_service.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 
 enum LineType { added, removed, normal }
@@ -185,9 +186,10 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
         _isStaged = true;
       }
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isStaged ? 'Файл добавлен в индекс' : 'Файл убран из индекса'),
+            content: Text(_isStaged ? l10n.stagedMessage : l10n.unstagedMessage),
             backgroundColor: const Color(0xFF0F172A),
             duration: const Duration(seconds: 1),
           ),
@@ -195,8 +197,9 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка индексации: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text(l10n.stageError(e.toString())), backgroundColor: Colors.redAccent),
         );
       }
     } finally {
@@ -207,6 +210,7 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
   }
 
   Future<void> _confirmDiscardChanges() async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -215,22 +219,22 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
           children: [
             const Icon(LucideIcons.triangle_alert, color: Colors.orangeAccent),
             const SizedBox(width: 8),
-            const Text('Сбросить изменения?', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(l10n.resetChangesTitle, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text(
-          'Вы действительно хотите безвозвратно сбросить все незакоммиченные изменения в этом файле?',
-          style: TextStyle(color: Colors.white70, fontSize: 13),
+        content: Text(
+          l10n.resetChangesConfirmation,
+          style: const TextStyle(color: Colors.white70, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white38)),
+            child: Text(l10n.cancel, style: const TextStyle(color: Colors.white38)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text('Сбросить', style: TextStyle(color: Colors.white)),
+            child: Text(l10n.resetAction, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -246,15 +250,17 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
         await ref.read(gitProvider.notifier).refreshStatus();
 
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           Navigator.of(context).pop(); // Close page after discard
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Изменения сброшены'), backgroundColor: Colors.green),
+            SnackBar(content: Text(l10n.changesReset), backgroundColor: Colors.green),
           );
         }
       } catch (e) {
         if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка сброса: $e'), backgroundColor: Colors.redAccent),
+            SnackBar(content: Text(l10n.resetError(e.toString())), backgroundColor: Colors.redAccent),
           );
         }
       } finally {
@@ -267,20 +273,21 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFF080A10),
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
-            Expanded(child: _buildBody()),
+            _buildHeader(l10n),
+            Expanded(child: _buildBody(l10n)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppLocalizations l10n) {
     return GlassContainer(
       blur: 20,
       opacity: 0.05,
@@ -318,7 +325,7 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
               _buildHeaderButton(
                 icon: _isSideBySide ? LucideIcons.list : LucideIcons.columns_2,
                 color: Colors.cyanAccent,
-                tooltip: _isSideBySide ? 'Обычный вид' : 'Сплит-вид (Side-by-Side)',
+                tooltip: _isSideBySide ? l10n.normalView : l10n.splitView,
                 onTap: () {
                   setState(() {
                     _isSideBySide = !_isSideBySide;
@@ -330,7 +337,7 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
               _buildHeaderButton(
                 icon: LucideIcons.trash_2,
                 color: Colors.redAccent,
-                tooltip: 'Сбросить изменения',
+                tooltip: l10n.resetChangesTitle,
                 onTap: _confirmDiscardChanges,
               ),
               const SizedBox(width: 8),
@@ -338,7 +345,7 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
               _buildHeaderButton(
                 icon: _isStaged ? LucideIcons.circle_minus : LucideIcons.circle_plus,
                 color: _isStaged ? Colors.amberAccent : Colors.greenAccent,
-                tooltip: _isStaged ? 'Убрать из индекса' : 'Индексировать',
+                tooltip: _isStaged ? l10n.unstageAction : l10n.stageAction,
                 onTap: _toggleStaging,
               ),
             ],
@@ -375,7 +382,7 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppLocalizations l10n) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
     }
@@ -389,7 +396,7 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
             children: [
               const Icon(LucideIcons.circle_alert, size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
-              const Text('Не удалось загрузить изменения', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+              Text(l10n.failedToLoadChanges, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Text(_error, style: const TextStyle(color: Colors.white38, fontSize: 11), textAlign: TextAlign.center),
             ],
@@ -405,9 +412,9 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
           children: [
             const Icon(LucideIcons.circle_check, size: 48, color: Colors.greenAccent),
             const SizedBox(height: 16),
-            const Text('Нет изменений', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+            Text(l10n.noChanges, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            const Text('Этот файл полностью совпадает с HEAD', style: TextStyle(color: Colors.white38, fontSize: 11)),
+            Text(l10n.fileIdenticalToHead, style: const TextStyle(color: Colors.white38, fontSize: 11)),
           ],
         ),
       );

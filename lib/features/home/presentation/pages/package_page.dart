@@ -9,6 +9,7 @@ import 'package:quantum_ide/core/services/pub_package_service.dart';
 import 'package:quantum_ide/models/pub_package.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class PackagePage extends ConsumerStatefulWidget {
   const PackagePage({super.key});
@@ -105,7 +106,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
               ),
               const SizedBox(height: 16),
               Text(
-                'Ничего не найдено',
+                AppLocalizations.of(context)!.nothingFound,
                 style: GoogleFonts.outfit(
                   fontWeight: FontWeight.bold,
                   fontSize: 16,
@@ -114,7 +115,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
               ),
               const SizedBox(height: 6),
               Text(
-                'Попробуйте изменить запрос поиска',
+                AppLocalizations.of(context)!.tryChangingSearchQuery,
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
@@ -222,7 +223,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                           color: theme.colorScheme.onSurface.withValues(alpha: 0.03),
                           child: IconButton(
                             icon: Icon(LucideIcons.arrow_left, color: theme.colorScheme.onSurface, size: 20),
-                            tooltip: 'Назад',
+                            tooltip: AppLocalizations.of(context)!.back,
                             onPressed: () => context.go('/'),
                           ),
                         ),
@@ -230,7 +231,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                       Expanded(
                         child: Center(
                           child: Text(
-                            'Расширения & Инструменты',
+                            AppLocalizations.of(context)!.extensionsAndTools,
                             style: GoogleFonts.outfit(
                               fontWeight: FontWeight.bold,
                               fontSize: 20,
@@ -277,8 +278,8 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                             style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
                             decoration: InputDecoration(
                               hintText: _tabController.index == 6
-                                  ? 'Поиск библиотек на pub.dev (например, dio)...'
-                                  : 'Поиск расширений...',
+                                  ? AppLocalizations.of(context)!.searchPubdevHint
+                                  : AppLocalizations.of(context)!.searchExtensionsHint,
                               hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                               border: InputBorder.none,
                             ),
@@ -307,14 +308,14 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                   labelStyle: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
                   unselectedLabelStyle: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  tabs: const [
-                    Tab(child: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Все'))),
-                    Tab(child: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Установленные'))),
-                    Tab(child: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Языки и ИИ'))),
-                    Tab(child: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Инструменты'))),
-                    Tab(child: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Сборка'))),
-                    Tab(child: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Платформы SDK'))),
-                    Tab(child: Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('Библиотеки Pub'))),
+                  tabs: [
+                    Tab(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(AppLocalizations.of(context)!.tabAll))),
+                    Tab(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(AppLocalizations.of(context)!.tabInstalled))),
+                    Tab(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(AppLocalizations.of(context)!.tabLanguagesAndAi))),
+                    Tab(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(AppLocalizations.of(context)!.tabTools))),
+                    Tab(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(AppLocalizations.of(context)!.tabBuild))),
+                    Tab(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(AppLocalizations.of(context)!.tabSdkPlatforms))),
+                    Tab(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8), child: Text(AppLocalizations.of(context)!.tabPubLibraries))),
                   ],
                 ),
 
@@ -398,7 +399,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Готовы к сборке APK?',
+                      AppLocalizations.of(context)!.readyToBuildApk,
                       style: GoogleFonts.outfit(
                         color: theme.colorScheme.onPrimary,
                         fontWeight: FontWeight.bold,
@@ -407,7 +408,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Установите Android SDK & Java 17',
+                      AppLocalizations.of(context)!.installAndroidSdkJava,
                       style: GoogleFonts.inter(
                         color: theme.colorScheme.onPrimary.withValues(alpha: 0.7),
                         fontSize: 13,
@@ -421,7 +422,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
           ),
           const SizedBox(height: 18),
           Text(
-            'Это настроит SDK, компиляторы, утилиты zipalign, apksigner, оптимизирует настройки сети Gradle и подготовит ваше окружение к компиляции проектов.',
+            AppLocalizations.of(context)!.sdkSetupDescription,
             style: GoogleFonts.inter(
               color: theme.colorScheme.onPrimary.withValues(alpha: 0.85),
               fontSize: 13,
@@ -440,11 +441,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     content: Text(
-                      'Инициализация среды разработки...',
+                      AppLocalizations.of(context)!.initializingDevEnvironment,
                       style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w500),
                     ),
                     action: SnackBarAction(
-                      label: 'Посмотреть',
+                      label: AppLocalizations.of(context)!.viewAction,
                       textColor: theme.colorScheme.primary,
                       onPressed: () => context.push('/terminal'),
                     ),
@@ -459,7 +460,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                 elevation: 0,
               ),
               child: Text(
-                'Начать настройку окружения',
+                AppLocalizations.of(context)!.startSdkSetup,
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
@@ -522,7 +523,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Проблемы со сборкой?',
+                      AppLocalizations.of(context)!.buildIssues,
                       style: GoogleFonts.outfit(
                         color: onCardColor,
                         fontWeight: FontWeight.bold,
@@ -531,7 +532,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Восстановление окружения Android & Gradle',
+                      AppLocalizations.of(context)!.restoreAndroidGradleEnv,
                       style: GoogleFonts.inter(
                         color: onCardColor.withValues(alpha: 0.7),
                         fontSize: 13,
@@ -545,7 +546,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
           ),
           const SizedBox(height: 18),
           Text(
-            'Автоматически исправляет ошибки AAPT2 daemon, выставляет правильные разрешения для проектов, восстанавливает бинарник компилятора ресурсов и настраивает потоки Gradle.',
+            AppLocalizations.of(context)!.wrenchFixDescription,
             style: GoogleFonts.inter(
               color: onCardColor.withValues(alpha: 0.85),
               fontSize: 13,
@@ -564,11 +565,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     content: Text(
-                      'Запуск исправления окружения сборки...',
+                      AppLocalizations.of(context)!.runningWrenchFix,
                       style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w500),
                     ),
                     action: SnackBarAction(
-                      label: 'Посмотреть',
+                      label: AppLocalizations.of(context)!.viewAction,
                       textColor: theme.colorScheme.primary,
                       onPressed: () => context.push('/terminal'),
                     ),
@@ -583,7 +584,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                 elevation: 0,
               ),
               child: Text(
-                'Запустить исправление (Wrench Fix)',
+                AppLocalizations.of(context)!.startWrenchFix,
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
@@ -658,7 +659,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                                     Icon(LucideIcons.badge_check, color: theme.colorScheme.primary, size: 12),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'УСТАНОВЛЕНО',
+                                      AppLocalizations.of(context)!.statusInstalledCaps,
                                       style: GoogleFonts.inter(
                                         fontSize: 8,
                                         fontWeight: FontWeight.w900,
@@ -704,7 +705,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
         children: [
           IconButton(
             icon: Icon(LucideIcons.refresh_cw, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5), size: 16),
-            tooltip: 'Переустановить / Обновить',
+            tooltip: AppLocalizations.of(context)!.reinstallOrUpdateTooltip,
             onPressed: () {
               ref.read(packageServiceProvider.notifier).installPackage(pkg);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -713,11 +714,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   content: Text(
-                    'Обновление ${pkg.name}...',
+                    AppLocalizations.of(context)!.updatingPackage(pkg.name),
                     style: GoogleFonts.inter(color: theme.colorScheme.onSurface),
                   ),
                   action: SnackBarAction(
-                    label: 'Посмотреть',
+                    label: AppLocalizations.of(context)!.viewAction,
                     textColor: theme.colorScheme.primary,
                     onPressed: () => context.push('/terminal'),
                   ),
@@ -760,13 +761,13 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Установка ${pkg.name}...',
+                    AppLocalizations.of(context)!.installingPackage(pkg.name),
                     style: GoogleFonts.inter(color: theme.colorScheme.onSurface),
                   ),
                 ],
               ),
               action: SnackBarAction(
-                label: 'Посмотреть',
+                label: AppLocalizations.of(context)!.viewAction,
                 textColor: theme.colorScheme.primary,
                 onPressed: () => context.push('/terminal'),
               ),
@@ -783,7 +784,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: Text(
-          'Установить',
+          AppLocalizations.of(context)!.installAction,
           style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
         ),
       ),
@@ -806,7 +807,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                   Icon(LucideIcons.package_search, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
                   const SizedBox(height: 16),
                   Text(
-                    'Поиск Flutter-библиотек',
+                    AppLocalizations.of(context)!.searchPubdevTitle,
                     style: GoogleFonts.outfit(
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
@@ -815,7 +816,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Введите название библиотеки (например: dio, bloc, riverpod) в поиск выше и нажмите Enter',
+                    AppLocalizations.of(context)!.searchPubdevDescription,
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 13,
@@ -840,7 +841,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
       loading: () => Center(child: CircularProgressIndicator(color: theme.colorScheme.primary)),
       error: (err, _) => Center(
         child: Text(
-          'Ошибка загрузки: $err',
+          AppLocalizations.of(context)!.loadError(err.toString()),
           style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 13),
         ),
       ),
@@ -957,7 +958,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         child: Text(
-          'Добавить',
+          AppLocalizations.of(context)!.addAction,
           style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
         ),
       ),
@@ -970,7 +971,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
     if (workspace.currentPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Сначала откройте проект, чтобы добавлять библиотеки.'),
+          content: Text(AppLocalizations.of(context)!.openProjectToInstallLibraries),
           backgroundColor: theme.colorScheme.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -985,11 +986,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Установка библиотеки ${pkg.name}...'),
+        content: Text(AppLocalizations.of(context)!.installingLibrary(pkg.name)),
         backgroundColor: theme.colorScheme.primary,
         behavior: SnackBarBehavior.floating,
         action: SnackBarAction(
-          label: 'Посмотреть',
+          label: AppLocalizations.of(context)!.viewAction,
           textColor: theme.colorScheme.onPrimary,
           onPressed: () => context.push('/terminal'),
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 
@@ -70,6 +71,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
   @override
   Widget build(BuildContext context) {
     final aiSvc = ref.watch(aiServiceProvider);
+    final l10n = AppLocalizations.of(context)!;
     
     return Dialog(
       backgroundColor: const Color(0xFF1E2230),
@@ -85,7 +87,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Настройки ИИ',
+                    l10n.aiSettings,
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -103,7 +105,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
               const Divider(color: Colors.white10, height: 20),
               
               // Provider Selector
-              Text('Провайдер', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Text(l10n.provider, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -141,7 +143,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
               const SizedBox(height: 16),
 
               // Model Selector
-              Text('Модель', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Text(l10n.model, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -187,7 +189,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
 
               // API Key
               if (AiProviders.byId(_selectedProviderId).requiresApiKey) ...[
-                Text('API Ключ', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                Text(l10n.apiKey, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _keyController,
@@ -222,13 +224,13 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
               ],
 
               // Custom Base URL
-              Text('Базовый URL (Custom Base URL)', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Text(l10n.customBaseUrl, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
               const SizedBox(height: 6),
               TextField(
                 controller: _urlController,
                 style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
                 decoration: InputDecoration(
-                  hintText: 'По умолчанию: ${AiProviders.byId(_selectedProviderId).baseUrl}',
+                  hintText: l10n.defaultHint(AiProviders.byId(_selectedProviderId).baseUrl),
                   hintStyle: const TextStyle(color: Colors.white24),
                   filled: true,
                   fillColor: Colors.white.withValues(alpha: 0.05),
@@ -256,7 +258,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: () => Navigator.pop(context),
-                      child: Text('Отмена', style: GoogleFonts.inter(color: Colors.white70, fontSize: 13)),
+                      child: Text(l10n.cancel, style: GoogleFonts.inter(color: Colors.white70, fontSize: 13)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -285,7 +287,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
                           Navigator.pop(context);
                         }
                       },
-                      child: Text('Сохранить', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+                      child: Text(l10n.save, style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
                     ),
                   ),
                 ],

@@ -382,7 +382,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           leading: _buildProviderIcon(p.id),
           title: Text(
-            p.displayName,
+            p.id == 'local_edge' ? l10n.localAiDisplayName : p.displayName,
             style: GoogleFonts.inter(
               color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.w700,
@@ -535,7 +535,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(l10n.providerActivated(p.displayName)),
+                          content: Text(l10n.providerActivated(p.id == 'local_edge' ? l10n.localAiDisplayName : p.displayName)),
                           backgroundColor: theme.colorScheme.primary,
                           behavior: SnackBarBehavior.floating,
                           shape: RoundedRectangleBorder(
@@ -1212,11 +1212,12 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
     final svc = ref.read(aiServiceProvider);
     final currentEngine = svc.selectedLocalEngine;
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label('ДВИЖОК ЛОКАЛЬНОГО ИИ'),
+        _label(l10n.localAiEngineTitle),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
@@ -1255,7 +1256,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      eng.displayName,
+                      eng == LocalAiEngine.llamaServer ? l10n.llamaServerBuiltIn : eng.displayName,
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -1276,16 +1277,14 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
         ] else if (currentEngine == LocalAiEngine.ollama) ...[
           _buildExternalEngineNote(
             icon: LucideIcons.terminal,
-            title: 'Ollama запущен локально',
-            description:
-                'Убедитесь, что Ollama запущена на вашей системе. Вы можете запустить её командой "ollama serve" и загрузить нужные модели командой "ollama pull <модель>".',
+            title: l10n.ollamaRunningLocally,
+            description: l10n.ollamaRunningLocallyDesc,
           ),
         ] else if (currentEngine == LocalAiEngine.lmStudio) ...[
           _buildExternalEngineNote(
             icon: LucideIcons.monitor,
-            title: 'LM Studio запущен локально',
-            description:
-                'Убедитесь, что сервер LM Studio запущен. Вы можете включить Local Server в приложении LM Studio и загрузить нужную модель.',
+            title: l10n.lmStudioRunningLocally,
+            description: l10n.lmStudioRunningLocallyDesc,
           ),
         ],
       ],
@@ -1349,6 +1348,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
         final currentEngine = svc.settings.selectedLocalEngine;
         final isOllama = currentEngine == LocalAiEngine.ollama;
         final engineModels = availableLocalModels.where((m) => m.engine == currentEngine).toList();
+        final l10n = AppLocalizations.of(context)!;
 
         // ─── Ollama: not connected ───
         if (isOllama && !state.isBinaryInstalled) {
@@ -1371,7 +1371,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Ollama не обнаружен',
+                            l10n.ollamaNotDetected,
                             style: GoogleFonts.inter(
                               fontWeight: FontWeight.bold,
                               color: theme.colorScheme.primary,
@@ -1383,7 +1383,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Установите Ollama на устройстве и убедитесь что он запущен. URL можно изменить выше.',
+                      l10n.ollamaNotDetectedDesc,
                       style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 12),
@@ -1392,7 +1392,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                       child: ElevatedButton.icon(
                         onPressed: () => notifier.checkStatus(),
                         icon: const Icon(LucideIcons.refresh_cw, size: 16),
-                        label: const Text('Проверить подключение'),
+                        label: Text(l10n.checkConnection),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.primary,
                           foregroundColor: theme.colorScheme.onPrimary,
@@ -1408,7 +1408,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                 ),
               ),
               const SizedBox(height: 16),
-              _label('ДОСТУПНЫЕ OLLAMA МОДЕЛИ'),
+              _label(l10n.availableOllamaModels),
               const SizedBox(height: 8),
               ..._buildModelCards(engineModels, state, notifier, theme),
             ],
@@ -1433,7 +1433,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Требуется установка llama-server',
+                        l10n.llamaServerInstallRequired,
                         style: GoogleFonts.inter(
                           fontWeight: FontWeight.bold,
                           color: theme.colorScheme.primary,
@@ -1445,7 +1445,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Для запуска локальных моделей ИИ необходим движок llama-server. Нажмите кнопку ниже, чтобы установить его автоматически.',
+                  l10n.llamaServerInstallRequiredDesc,
                   style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 12),
@@ -1463,7 +1463,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                             ),
                           )
                         : const Icon(LucideIcons.download, size: 16),
-                    label: Text(state.isBinaryInstalling ? 'Установка...' : 'Установить Llama Server Runtime'),
+                    label: Text(state.isBinaryInstalling ? l10n.installing : l10n.installLlamaServerRuntime),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary,
                       foregroundColor: theme.colorScheme.onPrimary,
@@ -1484,11 +1484,11 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _label(isOllama ? 'OLLAMA МОДЕЛИ' : 'ЛОКАЛЬНЫЕ ИИ МОДЕЛИ'),
+            _label(isOllama ? l10n.ollamaModelsTitle : l10n.localAiModelsTitle),
             const SizedBox(height: 8),
             ..._buildModelCards(engineModels, state, notifier, theme),
             const SizedBox(height: 16),
-            _label('СТАТУС И УПРАВЛЕНИЕ СЕРВЕРОМ'),
+            _label(l10n.serverStatusAndControl),
             const SizedBox(height: 8),
             if (!state.isModelDownloaded) ...[
               Container(
@@ -1501,8 +1501,8 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                 ),
                 child: Text(
                   isOllama
-                      ? 'Скачайте хотя бы одну Ollama-модель, чтобы начать работу.'
-                      : 'Загрузите хотя бы одну модель выше, чтобы запустить локальный сервер.',
+                      ? l10n.downloadOllamaModelPrompt
+                      : l10n.downloadModelToStartServerPrompt,
                   style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
@@ -1525,7 +1525,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isOllama ? 'Ollama' : 'Локальный сервер llama-server',
+                              isOllama ? 'Ollama' : l10n.localLlamaServerLabel,
                               style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                             const SizedBox(height: 4),
@@ -1537,8 +1537,8 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                                 const SizedBox(width: 6),
                                 Text(
                                   state.isRunning
-                                      ? (isOllama ? 'Подключён' : 'Запущен (порт 8080)')
-                                      : (state.isStarting ? 'Запуск...' : 'Остановлен'),
+                                      ? (isOllama ? l10n.connected : l10n.runningPort8080)
+                                      : (state.isStarting ? l10n.starting : l10n.stopped),
                                   style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                                 ),
                               ],
@@ -1549,7 +1549,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                           ElevatedButton.icon(
                             onPressed: () => notifier.checkStatus(),
                             icon: const Icon(LucideIcons.refresh_cw, size: 14),
-                            label: const Text('Обновить'),
+                            label: Text(l10n.refresh),
                             style: ElevatedButton.styleFrom(
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                             ),
@@ -1561,7 +1561,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                                 ElevatedButton.icon(
                                   onPressed: () => notifier.startServer(),
                                   icon: const Icon(LucideIcons.play, size: 14),
-                                  label: const Text('Старт'),
+                                  label: Text(l10n.start),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: theme.colorScheme.primary,
                                     foregroundColor: theme.colorScheme.onPrimary,
@@ -1578,7 +1578,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                                 ElevatedButton.icon(
                                   onPressed: () => notifier.stopServer(),
                                   icon: const Icon(LucideIcons.square, size: 14),
-                                  label: const Text('Стоп'),
+                                  label: Text(l10n.stop),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: theme.colorScheme.error,
                                     foregroundColor: Colors.white,
@@ -1677,7 +1677,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
-                                'АКТИВНА',
+                                AppLocalizations.of(context)!.activeCaps,
                                 style: GoogleFonts.inter(
                                   color: theme.colorScheme.primary,
                                   fontSize: 9,
@@ -1704,9 +1704,9 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
               children: [
                 Row(
                   children: [
-                    _metaChip(theme, LucideIcons.hard_drive, '${model.sizeGb.toStringAsFixed(2)} ГБ'),
+                    _metaChip(theme, LucideIcons.hard_drive, AppLocalizations.of(context)!.gbFormat(model.sizeGb.toStringAsFixed(2))),
                     const SizedBox(width: 8),
-                    _metaChip(theme, LucideIcons.cpu, '~${model.ramRequiredGb.toStringAsFixed(1)} ГБ ОЗУ'),
+                    _metaChip(theme, LucideIcons.cpu, AppLocalizations.of(context)!.ramGbFormat(model.ramRequiredGb.toStringAsFixed(1))),
                   ],
                 ),
                 if (isDownloading) ...[
@@ -1720,7 +1720,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                       if (!isActive)
                         TextButton(
                           onPressed: () => notifier.selectModel(model.id),
-                          child: Text('Выбрать', style: GoogleFonts.inter(fontSize: 12)),
+                          child: Text(AppLocalizations.of(context)!.select, style: GoogleFonts.inter(fontSize: 12)),
                         ),
                       IconButton(
                         icon: Icon(LucideIcons.trash_2, color: theme.colorScheme.error, size: 18),
@@ -1732,7 +1732,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                   ElevatedButton.icon(
                     onPressed: isAnyDownloading ? null : () => notifier.downloadModel(model.id),
                     icon: const Icon(LucideIcons.download, size: 12),
-                    label: Text('Скачать', style: GoogleFonts.inter(fontSize: 11)),
+                    label: Text(AppLocalizations.of(context)!.download, style: GoogleFonts.inter(fontSize: 11)),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),

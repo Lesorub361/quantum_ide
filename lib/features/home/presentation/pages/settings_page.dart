@@ -488,6 +488,7 @@ class SettingsPage extends ConsumerWidget {
       case 'ru': return 'Русский';
       case 'es': return 'Español';
       case 'fr': return 'Français';
+      case 'zh': return '中文';
       default: return code.toUpperCase();
     }
   }
@@ -500,6 +501,7 @@ class SettingsPage extends ConsumerWidget {
       ['ru', 'Русский'],
       ['es', 'Español'],
       ['fr', 'Français'],
+      ['zh', '中文'],
     ];
     showDialog(
       context: context,

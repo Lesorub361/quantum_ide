@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 
 class SidebarPackagesPanel extends ConsumerWidget {
@@ -11,7 +12,8 @@ class SidebarPackagesPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final packages = ref.watch(packageServiceProvider);
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
+    final installedCount = packages.where((p) => p.isInstalled).length;
 
     return Column(
       children: [
@@ -27,7 +29,7 @@ class SidebarPackagesPanel extends ConsumerWidget {
               const Icon(LucideIcons.toy_brick, size: 14, color: Colors.cyanAccent),
               const SizedBox(width: 8),
               Text(
-                isRu ? 'Пакеты и окружение' : 'Packages & Env',
+                l10n.packagesAndEnv,
                 style: GoogleFonts.inter(
                   color: Colors.white70,
                   fontSize: 11,
@@ -36,9 +38,7 @@ class SidebarPackagesPanel extends ConsumerWidget {
               ),
               const Spacer(),
               Text(
-                isRu 
-                    ? 'Установлено: ${packages.where((p) => p.isInstalled).length}/${packages.length}'
-                    : 'Installed: ${packages.where((p) => p.isInstalled).length}/${packages.length}',
+                l10n.packagesInstalledCount(installedCount, packages.length),
                 style: GoogleFonts.inter(
                   color: Colors.white38,
                   fontSize: 10,
@@ -104,7 +104,7 @@ class SidebarPackagesPanel extends ConsumerWidget {
                             ref.read(packageServiceProvider.notifier).installPackage(pkg);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(isRu ? 'Обновление пакета ${pkg.name}...' : 'Updating package ${pkg.name}...'),
+                                content: Text(l10n.updatingPackage(pkg.name)),
                               ),
                             );
                           },
@@ -115,7 +115,7 @@ class SidebarPackagesPanel extends ConsumerWidget {
                             ref.read(packageServiceProvider.notifier).installPackage(pkg);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(isRu ? 'Установка пакета ${pkg.name}...' : 'Installing package ${pkg.name}...'),
+                                content: Text(l10n.installingPackage(pkg.name)),
                               ),
                             );
                           },
@@ -129,7 +129,7 @@ class SidebarPackagesPanel extends ConsumerWidget {
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
-                          child: Text(isRu ? 'Установить' : 'Install', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          child: Text(l10n.installAction, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         ),
                     ],
                   ),

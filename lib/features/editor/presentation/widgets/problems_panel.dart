@@ -8,6 +8,7 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class ProblemsPanel extends ConsumerWidget {
   const ProblemsPanel({super.key});
@@ -16,7 +17,7 @@ class ProblemsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final editorState = ref.watch(editorProvider);
     final workspaceRoot = ref.watch(workspaceProvider).currentPath ?? '';
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     // Filter files that have diagnostics (only for files in current workspace)
     final diagnosticsMap = <String, List<CodeDiagnostic>>{};
@@ -37,7 +38,7 @@ class ProblemsPanel extends ConsumerWidget {
             Icon(LucideIcons.circle_check, size: 40, color: Colors.greenAccent.withValues(alpha: 0.4)),
             const SizedBox(height: 12),
             Text(
-              isRu ? 'Проблем в коде не обнаружено' : 'No problems found in workspace',
+              l10n.noProblemsFound,
               style: GoogleFonts.inter(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w500),
             ),
           ],
@@ -60,7 +61,7 @@ class ProblemsPanel extends ConsumerWidget {
               const Icon(LucideIcons.circle_alert, size: 14, color: Colors.white54),
               const SizedBox(width: 6),
               Text(
-                isRu ? 'Список проблем' : 'Problems List',
+                l10n.problemsList,
                 style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
@@ -68,9 +69,7 @@ class ProblemsPanel extends ConsumerWidget {
                 TextButton.icon(
                   onPressed: () {
                     final buffer = StringBuffer();
-                    buffer.writeln(isRu
-                        ? 'Пожалуйста, помоги мне исправить следующие ошибки компиляции в проекте:'
-                        : 'Please help me fix the following compilation errors in my project:');
+                    buffer.writeln(l10n.helpMeFixErrors);
                     diagnosticsMap.forEach((filePath, diags) {
                       final relPath = workspaceRoot.isNotEmpty && filePath.startsWith(workspaceRoot)
                           ? p.relative(filePath, from: workspaceRoot)
@@ -88,7 +87,7 @@ class ProblemsPanel extends ConsumerWidget {
                   },
                   icon: const Icon(LucideIcons.sparkles, size: 12, color: Colors.purpleAccent),
                   label: Text(
-                    isRu ? 'Отправить ИИ' : 'Send to AI',
+                    l10n.sendToAi,
                     style: const TextStyle(color: Colors.purpleAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
                   ),
                   style: TextButton.styleFrom(
@@ -206,9 +205,7 @@ class ProblemsPanel extends ConsumerWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  isRu
-                                      ? 'Строка $line, колонка $column'
-                                      : 'Line $line, Column $column',
+                                  l10n.lineColumn(line, column),
                                   style: GoogleFonts.inter(color: Colors.white24, fontSize: 9.5),
                                 ),
                               ],

@@ -103,7 +103,7 @@ Future<void> _showCreateDialog(BuildContext context, WidgetRef ref, String baseP
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: InputDecoration(hintText: isDir ? 'имя_папки' : 'файл.txt'),
+        decoration: InputDecoration(hintText: isDir ? AppLocalizations.of(context)!.nameFolderHint : AppLocalizations.of(context)!.nameFileHint),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(AppLocalizations.of(context)!.cancel)),
@@ -151,9 +151,9 @@ void _showEnvironmentBottomSheet(BuildContext context, WidgetRef ref) {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Системное окружение',
-                        style: TextStyle(
+                      Text(
+                        AppLocalizations.of(context)!.systemEnv,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
@@ -174,7 +174,7 @@ void _showEnvironmentBottomSheet(BuildContext context, WidgetRef ref) {
                             ),
                           IconButton(
                             icon: const Icon(LucideIcons.wrench, size: 18, color: Colors.orangeAccent),
-                            tooltip: 'Исправить окружение (ARM64)',
+                            tooltip: AppLocalizations.of(context)!.fixEnvironmentArm64,
                             onPressed: () => ref.read(environmentProvider.notifier).fixEnvironment(),
                           ),
                         ],
@@ -335,7 +335,6 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
     final workspacePath = ref.watch(workspaceProvider).currentPath ?? '';
     final selectedTab = ref.watch(drawerTabProvider);
     final editorState = ref.watch(editorProvider);
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
 
     // Count workspace diagnostics problems
     int totalProblems = 0;
@@ -363,18 +362,18 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
         child: Column(
           children: [
             const SizedBox(height: 12),
-            _buildActivityIcon(ref, 0, LucideIcons.files, 'Проводник', selectedTab == 0),
-            _buildActivityIcon(ref, 1, LucideIcons.search, 'Поиск', selectedTab == 1),
-            _buildActivityIcon(ref, 2, LucideIcons.list, 'Структура', selectedTab == 2),
-            _buildActivityIcon(ref, 3, LucideIcons.chart_pie, 'Диск', selectedTab == 3),
-            _buildActivityIcon(ref, 4, LucideIcons.circle_alert, 'Проблемы', selectedTab == 4, badgeCount: totalProblems),
+            _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0),
+            _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1),
+            _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2),
+            _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3),
+            _buildActivityIcon(ref, 4, LucideIcons.circle_alert, AppLocalizations.of(context)!.problems, selectedTab == 4, badgeCount: totalProblems),
             _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount),
-            _buildActivityIcon(ref, 6, LucideIcons.server, 'Предпросмотр', selectedTab == 6),
-            _buildActivityIcon(ref, 7, LucideIcons.toy_brick, 'Пакеты', selectedTab == 7),
-            _buildActivityIcon(ref, 8, LucideIcons.play, isRu ? 'Запуск' : 'Run', selectedTab == 8),
-            _buildActivityIcon(ref, 9, LucideIcons.hammer, isRu ? 'Сборка' : 'Build', selectedTab == 9),
-            _buildActivityIcon(ref, 10, LucideIcons.users, 'Live Share', selectedTab == 10),
-            _buildActivityIcon(ref, 11, LucideIcons.puzzle, isRu ? 'Плагины' : 'Plugins', selectedTab == 11),
+            _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6),
+            _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7),
+            _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8),
+            _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9),
+            _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10),
+            _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11),
           ],
         ),
       ),
@@ -451,12 +450,12 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
                         children: [
                           _DrawerActionIcon(
                             icon: LucideIcons.wrench,
-                            tooltip: 'Окружение',
+                            tooltip: AppLocalizations.of(context)!.environment,
                             onPressed: () => _showEnvironmentBottomSheet(context, ref),
                           ),
                           _DrawerActionIcon(
                             icon: LucideIcons.folder_closed,
-                            tooltip: 'Свернуть все',
+                            tooltip: AppLocalizations.of(context)!.collapseAll,
                             onPressed: () {
                               ref.read(expandedFoldersProvider.notifier).setExpanded({});
                             },
@@ -519,14 +518,16 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
                     try {
                       await ref.read(fileExplorerProvider.notifier).moveEntity(draggedPath, workspacePath);
                       if (context.mounted) {
+                        final l10n = AppLocalizations.of(context)!;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Элемент перемещен в корень')),
+                          SnackBar(content: Text(l10n.elementMovedToRoot)),
                         );
                       }
                     } catch (e) {
                       if (context.mounted) {
+                        final l10n = AppLocalizations.of(context)!;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Ошибка перемещения: $e')),
+                          SnackBar(content: Text(l10n.moveError(e.toString()))),
                         );
                       }
                     }
@@ -627,8 +628,7 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
     if (bookmarks.isEmpty) {
       return const SizedBox.shrink();
     }
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
-    final title = isRu ? 'Закладки' : 'Bookmarks';
+    final title = AppLocalizations.of(context)!.bookmarks;
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -926,14 +926,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   bool _isDragging = false;
 
   void _showWasmActionSelector(BuildContext context, WidgetRef ref, int activeFileIndex) {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
     final wasmState = ref.read(wasmPluginServiceProvider);
     final enabledPlugins = wasmState.plugins.where((p) => p.isEnabled).toList();
 
     if (enabledPlugins.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isRu ? 'Нет активных WASM плагинов' : 'No active WASM plugins'),
+          content: Text(l10n.noActiveWasmPlugins),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -954,7 +954,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isRu ? 'Выберите действие плагина' : 'Select Plugin Action',
+                l10n.selectPluginAction,
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
               ),
               const SizedBox(height: 12),
@@ -1013,7 +1013,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     int actionId,
     int activeFileIndex,
   ) async {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
     final editorState = ref.read(editorProvider);
     if (editorState.openFiles.isEmpty || activeFileIndex >= editorState.openFiles.length) return;
 
@@ -1061,19 +1061,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         context: context,
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF13151D),
-          title: Text(isRu ? 'Текст не выбран' : 'No selection', style: const TextStyle(color: Colors.white)),
+          title: Text(l10n.noSelection, style: const TextStyle(color: Colors.white)),
           content: Text(
-            isRu ? 'Применить действие плагина ко всему файлу?' : 'Apply plugin action to the entire file?',
+            l10n.applyPluginToFile,
             style: const TextStyle(color: Colors.white70),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: Text(isRu ? 'Отмена' : 'Cancel'),
+              child: Text(l10n.cancel),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              child: Text(isRu ? 'Применить' : 'Apply'),
+              child: Text(l10n.apply),
             ),
           ],
         ),
@@ -1113,7 +1113,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isRu ? 'Плагин выполнен успешно' : 'Plugin executed successfully'),
+            content: Text(l10n.pluginExecutedSuccess),
             backgroundColor: Colors.green,
           ),
         );
@@ -1123,7 +1123,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         Navigator.pop(context); // Close loading indicator
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(isRu ? 'Ошибка выполнения: $e' : 'Execution error: $e'),
+            content: Text(l10n.executionError(e.toString())),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -1173,7 +1173,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final panelNotifier = ref.read(panelProvider.notifier);
     
     final isDesktop = MediaQuery.of(context).size.width > 800;
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     // Слушаем смену workspace ОДИН РАЗ — не на каждый build()
     ref.listen<WorkspaceState>(workspaceProvider, (prev, next) {
@@ -1304,7 +1304,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         constraints: const BoxConstraints(),
                         onPressed: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
-                        tooltip: isRu ? 'Быстрый поиск (Ctrl+P)' : 'Quick Search (Ctrl+P)',
+                        tooltip: AppLocalizations.of(context)!.quickSearch,
                       ),
                     ],
                   ),
@@ -1423,7 +1423,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         IconButton(
                           icon: const Icon(LucideIcons.library, size: 16, color: Colors.blueAccent),
                           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                          tooltip: 'Открыть проводник',
+                          tooltip: AppLocalizations.of(context)!.openExplorer,
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           constraints: const BoxConstraints(),
                         )
@@ -1434,7 +1434,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             ref.read(workspaceProvider.notifier).closeWorkspace();
                             context.go('/');
                           },
-                          tooltip: 'Назад',
+                          tooltip: AppLocalizations.of(context)!.back,
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           constraints: const BoxConstraints(),
                         ),
@@ -1446,17 +1446,17 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         children: [
                           _ActionIconButton(
                             icon: LucideIcons.save,
-                            tooltip: isRu ? 'Сохранить' : 'Save',
+                            tooltip: AppLocalizations.of(context)!.saveTooltip,
                             onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
                           ),
                           _ActionIconButton(
                             icon: LucideIcons.puzzle,
-                            tooltip: isRu ? 'Запустить WASM плагин' : 'Run WASM Plugin',
+                            tooltip: AppLocalizations.of(context)!.runWasmPlugin,
                             onTap: () => _showWasmActionSelector(context, ref, safeActiveIndex),
                           ),
                           _ActionIconButton(
                             icon: LucideIcons.terminal,
-                            tooltip: isRu ? 'Терминал' : 'Terminal',
+                            tooltip: AppLocalizations.of(context)!.terminal,
                             onTap: () {
                               if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
                                 panelNotifier.closePanel();
@@ -1468,7 +1468,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           ),
                           _ActionIconButton(
                             icon: LucideIcons.message_square,
-                            tooltip: isRu ? 'Чат с ИИ' : 'AI Chat',
+                            tooltip: AppLocalizations.of(context)!.aiChat,
                             onTap: () {
                               ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                             },
@@ -1476,7 +1476,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           if (!isDesktop)
                             _ActionIconButton(
                               icon: LucideIcons.house,
-                              tooltip: 'Домой',
+                              tooltip: l10n.home,
                               onTap: () async {
                                 await ref.read(workspaceProvider.notifier).closeWorkspace();
                                 if (context.mounted) {
@@ -2367,7 +2367,7 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
 
     if (hasPendingAction) {
       final action = pendingActions.first;
-      final isRu = Localizations.localeOf(context).languageCode == 'ru';
+      final l10n = AppLocalizations.of(context)!;
       
       final hunks = DiffService.calculateHunks(file.originalContent, file.controller.text);
       int additions = 0;
@@ -2408,7 +2408,7 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            isRu ? 'Ожидающий Diff' : 'Pending Diff',
+                            l10n.pendingDiff,
                             style: GoogleFonts.inter(
                               color: Colors.white,
                               fontSize: 11,
@@ -2439,7 +2439,7 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Center(
                           child: Text(
-                            isRu ? 'Нет изменений' : 'No changes',
+                            l10n.noChanges,
                             style: GoogleFonts.inter(color: Colors.white38, fontSize: 10),
                           ),
                         ),
@@ -2452,10 +2452,10 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                             children: List.generate(hunks.length, (hIdx) {
                               final hunk = hunks[hIdx];
                               String typeLabel = hunk.type == DiffType.added
-                                  ? (isRu ? 'добавлено' : 'added')
+                                  ? l10n.added
                                   : hunk.type == DiffType.removed
-                                      ? (isRu ? 'удалено' : 'removed')
-                                      : (isRu ? 'изменено' : 'modified');
+                                      ? l10n.removed
+                                      : l10n.modified;
                               Color typeColor = hunk.type == DiffType.added
                                   ? Colors.greenAccent
                                   : hunk.type == DiffType.removed
@@ -2489,7 +2489,7 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                                         ref.read(editorProvider.notifier).applyHunkAction(file.path, hIdx, true);
                                       },
                                       child: Text(
-                                        isRu ? 'Принять' : 'Keep',
+                                        l10n.keep,
                                         style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
                                       ),
                                     ),
@@ -2505,7 +2505,7 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                                         ref.read(editorProvider.notifier).applyHunkAction(file.path, hIdx, false);
                                       },
                                       child: Text(
-                                        isRu ? 'Отмена' : 'Reject',
+                                        l10n.reject,
                                         style: const TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
                                       ),
                                     ),
@@ -2540,7 +2540,7 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                               ref.read(editorProvider.notifier).acceptProposedChanges(file.path, action);
                             },
                             child: Text(
-                              isRu ? 'Принять все' : 'Keep all',
+                              l10n.keepAll,
                               style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                           ),
@@ -2562,7 +2562,7 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
                               ref.read(editorProvider.notifier).revertProposedChanges(file.path, action);
                             },
                             child: Text(
-                              isRu ? 'Отклонить все' : 'Reject all',
+                              l10n.rejectAll,
                               style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                           ),

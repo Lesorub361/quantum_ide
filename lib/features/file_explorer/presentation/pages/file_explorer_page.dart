@@ -88,7 +88,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
           } catch (e) {
             if (mounted) {
               messenger.showSnackBar(
-                SnackBar(content: Text('Ошибка импорта: $e')),
+                SnackBar(content: Text(AppLocalizations.of(context)!.importError(e.toString()))),
               );
             }
           }
@@ -97,7 +97,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         ref.read(fileExplorerProvider.notifier).scanDirectory(currentPath);
         if (mounted) {
           messenger.showSnackBar(
-            const SnackBar(content: Text('Файлы успешно импортированы')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.filesImportedSuccessfully)),
           );
         }
       },
@@ -226,9 +226,9 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                     children: [
                       const Icon(LucideIcons.cloud_upload, size: 48, color: Colors.cyanAccent),
                       const SizedBox(height: 16),
-                      const Text(
-                        'Перетащите файлы сюда для импорта',
-                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                      Text(
+                        AppLocalizations.of(context)!.dragFilesHereToImport,
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -388,13 +388,13 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         },
       ),
       title: Text(
-        'Выбрано: ${_selectedPaths.length}',
+        AppLocalizations.of(context)!.selectedCount(_selectedPaths.length),
         style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
       ),
       actions: [
         IconButton(
           icon: const Icon(LucideIcons.check, size: 18, color: Colors.cyanAccent),
-          tooltip: 'Выбрать все',
+          tooltip: AppLocalizations.of(context)!.selectAllTooltip,
           onPressed: () {
             setState(() {
               if (_selectedPaths.length == allNodes.length) {
@@ -408,14 +408,14 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         ),
         IconButton(
           icon: const Icon(LucideIcons.copy, size: 18, color: Colors.white70),
-          tooltip: 'Копировать',
+          tooltip: AppLocalizations.of(context)!.copyTooltip,
           onPressed: () {
             ref.read(fileClipboardProvider.notifier).state = ClipboardData(
               paths: _selectedPaths.toList(),
               isCut: false,
             );
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Скопировано объектов: ${_selectedPaths.length}')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.copiedCount(_selectedPaths.length))),
             );
             setState(() {
               _isSelectMode = false;
@@ -425,14 +425,14 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         ),
         IconButton(
           icon: const Icon(LucideIcons.scissors, size: 18, color: Colors.white70),
-          tooltip: 'Вырезать',
+          tooltip: AppLocalizations.of(context)!.cutTooltip,
           onPressed: () {
             ref.read(fileClipboardProvider.notifier).state = ClipboardData(
               paths: _selectedPaths.toList(),
               isCut: true,
             );
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Вырезано объектов: ${_selectedPaths.length}')),
+              SnackBar(content: Text(AppLocalizations.of(context)!.cutCount(_selectedPaths.length))),
             );
             setState(() {
               _isSelectMode = false;
@@ -442,12 +442,12 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         ),
         IconButton(
           icon: const Icon(LucideIcons.file_archive, size: 18, color: Colors.amberAccent),
-          tooltip: 'Сжать в ZIP',
+          tooltip: AppLocalizations.of(context)!.zipTooltip,
           onPressed: () => _showCompressDialog(context, ref, _selectedPaths.toList()),
         ),
         IconButton(
           icon: const Icon(LucideIcons.trash_2, size: 18, color: Colors.redAccent),
-          tooltip: 'Удалить',
+          tooltip: AppLocalizations.of(context)!.deleteTooltip,
           onPressed: () => _showBatchDeleteConfirm(context, ref, _selectedPaths.toList()),
         ),
         const SizedBox(width: 8),
@@ -490,7 +490,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                     const Icon(LucideIcons.folder, size: 12, color: Colors.blueAccent),
                     const SizedBox(width: 4),
                     Text(
-                      '$folderCount папок',
+                      AppLocalizations.of(context)!.foldersCount(folderCount),
                       style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
                     ),
                   ],
@@ -500,7 +500,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                     const Icon(LucideIcons.file, size: 12, color: Colors.tealAccent),
                     const SizedBox(width: 4),
                     Text(
-                      '$fileCount файлов',
+                      AppLocalizations.of(context)!.filesCount(fileCount),
                       style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
                     ),
                   ],
@@ -955,7 +955,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
 
   Widget _buildItemActions(BuildContext context, WidgetRef ref, FileNode node) {
     final isZip = node.name.toLowerCase().endsWith('.zip');
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     return PopupMenuButton<String>(
       icon: const Icon(LucideIcons.ellipsis_vertical, size: 18, color: Colors.white24),
@@ -975,42 +975,42 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
           _handleAiAsk(node);
         } else if (value == 'ai_explain') {
           _handleAiAsk(node, presetQuery: node.isDirectory
-              ? 'Объясни назначение и структуру этой папки.'
-              : 'Подробно объясни назначение и логику работы этого файла.');
+              ? l10n.explainFolderPreset
+              : l10n.explainFilePreset);
         } else if (value == 'ai_docs') {
           _handleAiAsk(node, presetQuery: node.isDirectory
-              ? 'Добавь документацию, docstrings и подробные комментарии к коду во всех файлах этой папки.'
-              : 'Добавь понятную документацию, docstrings и подробные комментарии к коду в этом файле.');
+              ? l10n.addDocFolderPreset
+              : l10n.addDocFilePreset);
         } else if (value == 'ai_tests') {
           _handleAiAsk(node, presetQuery: node.isDirectory
-              ? 'Напиши unit-тесты для файлов в этой папке.'
-              : 'Напиши комплексные unit-тесты для кода в этом файле.');
+              ? l10n.generateTestsFolderPreset
+              : l10n.generateTestsFilePreset);
         } else if (value == 'ai_optimize') {
           _handleAiAsk(node, presetQuery: node.isDirectory
-              ? 'Проанализируй код в этой папке и предложи оптимизацию производительности и читаемости.'
-              : 'Проанализируй код в этом файле и предложи варианты оптимизации производительности, читаемости и архитектуры.');
+              ? l10n.optimizeFolderPreset
+              : l10n.optimizeFilePreset);
         }
       },
       itemBuilder: (context) => [
         PopupMenuItem(
           value: 'ai_ask',
-          child: Row(children: [const Icon(LucideIcons.sparkles, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(isRu ? 'Спросить ИИ' : 'Ask AI', style: const TextStyle(color: Colors.cyanAccent))]),
+          child: Row(children: [const Icon(LucideIcons.sparkles, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.askAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
         ),
         PopupMenuItem(
           value: 'ai_explain',
-          child: Row(children: [const Icon(LucideIcons.book_open, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(isRu ? 'ИИ: Объяснить' : 'AI: Explain', style: const TextStyle(color: Colors.cyanAccent))]),
+          child: Row(children: [const Icon(LucideIcons.book_open, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.explainAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
         ),
         PopupMenuItem(
           value: 'ai_docs',
-          child: Row(children: [const Icon(LucideIcons.file_text, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(isRu ? 'ИИ: Документация' : 'AI: Document', style: const TextStyle(color: Colors.cyanAccent))]),
+          child: Row(children: [const Icon(LucideIcons.file_text, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.documentAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
         ),
         PopupMenuItem(
           value: 'ai_tests',
-          child: Row(children: [const Icon(LucideIcons.shield_check, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(isRu ? 'ИИ: Создать тесты' : 'AI: Generate Tests', style: const TextStyle(color: Colors.cyanAccent))]),
+          child: Row(children: [const Icon(LucideIcons.shield_check, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.testAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
         ),
         PopupMenuItem(
           value: 'ai_optimize',
-          child: Row(children: [const Icon(LucideIcons.zap, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(isRu ? 'ИИ: Оптимизировать' : 'AI: Optimize', style: const TextStyle(color: Colors.cyanAccent))]),
+          child: Row(children: [const Icon(LucideIcons.zap, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.optimizeAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
         ),
         const PopupMenuDivider(height: 1),
         PopupMenuItem(
@@ -1048,7 +1048,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
             foregroundColor: Colors.black,
             onPressed: () => _handlePaste(context, ref, clipboard),
             icon: const Icon(LucideIcons.clipboard_paste),
-            label: Text('Вставить (${clipboard.paths.length})'),
+            label: Text(AppLocalizations.of(context)!.pasteCount(clipboard.paths.length)),
           ),
           const SizedBox(height: 12),
         ],
@@ -1227,28 +1227,28 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1D27),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Сжать в ZIP', style: TextStyle(color: Colors.white)),
+        title: Text(AppLocalizations.of(context)!.zipTooltip, style: const TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Имя архива',
-            hintStyle: TextStyle(color: Colors.white24),
+          decoration: InputDecoration(
+            hintText: AppLocalizations.of(context)!.archiveNameHint,
+            hintStyle: const TextStyle(color: Colors.white24),
             suffixText: '.zip',
-            suffixStyle: TextStyle(color: Colors.white54),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF6C63FF))),
+            suffixStyle: const TextStyle(color: Colors.white54),
+            enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF6C63FF))),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white38)),
+            child: Text(AppLocalizations.of(context)!.cancel, style: const TextStyle(color: Colors.white38)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Сжать', style: TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold)),
+            child: Text(AppLocalizations.of(context)!.compressAction, style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -1271,7 +1271,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         if (context.mounted) {
           Navigator.pop(context); // close progress
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Архив успешно создан!')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.archiveCreatedSuccessfully)),
           );
           setState(() {
             _isSelectMode = false;
@@ -1282,7 +1282,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         if (context.mounted) {
           Navigator.pop(context); // close progress
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка сжатия: $e')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.compressionError(e.toString()))),
           );
         }
       }
@@ -1302,14 +1302,14 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       if (context.mounted) {
         Navigator.pop(context); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Архив успешно распакован!')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.archiveExtractedSuccessfully)),
         );
       }
     } catch (e) {
       if (context.mounted) {
         Navigator.pop(context); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка распаковки: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.extractionError(e.toString()))),
         );
       }
     }
@@ -1321,25 +1321,25 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1D27),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(LucideIcons.trash_2, color: Colors.redAccent),
-            SizedBox(width: 10),
-            Text('Удалить выбранное?', style: TextStyle(color: Colors.white)),
+            const Icon(LucideIcons.trash_2, color: Colors.redAccent),
+            const SizedBox(width: 10),
+            Text(AppLocalizations.of(context)!.deleteSelectedTitle, style: const TextStyle(color: Colors.white)),
           ],
         ),
         content: Text(
-          'Вы уверены, что хотите удалить ${paths.length} элементов?',
+          AppLocalizations.of(context)!.deleteSelectedConfirmation(paths.length),
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white38)),
+            child: Text(AppLocalizations.of(context)!.cancel, style: const TextStyle(color: Colors.white38)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Удалить', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            child: Text(AppLocalizations.of(context)!.delete, style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -1354,13 +1354,13 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         });
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Выбранные элементы удалены!')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.selectedElementsDeleted)),
           );
         }
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка удаления: $e')),
+            SnackBar(content: Text(AppLocalizations.of(context)!.deleteError(e.toString()))),
           );
         }
       }
@@ -1410,7 +1410,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       if (context.mounted) {
         Navigator.pop(context); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Файлы успешно вставлены!')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.filesPastedSuccessfully)),
         );
       }
       
@@ -1419,7 +1419,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
       if (context.mounted) {
         Navigator.pop(context); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка вставки: $e')),
+          SnackBar(content: Text(AppLocalizations.of(context)!.pasteError(e.toString()))),
         );
       }
     }
@@ -1538,26 +1538,26 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
 
     final prompt = node.isDirectory
         ? """
-Я работаю в папке: `${node.path}`.
-Список файлов и подпапок в ней:
-${node.children.map((c) => (c.isDirectory ? '[Папка] ' : '[Файл] ') + c.name).join('\n')}
+I'm working in the folder: `${node.path}`.
+Files and subfolders in this folder:
+${node.children.map((c) => (c.isDirectory ? '[Folder] ' : '[File] ') + c.name).join('\n')}
 
-Запрос пользователя:
+User request:
 $instruction
 
-Пожалуйста, выполни этот запрос. Если требуется изменить или создать файлы/папки, или запустить команду в терминале, используй формат действий <actions>.
+Please perform this request. If you need to modify or create files/folders, or run a terminal command, use the <actions> action format.
 """
         : """
-Я работаю над файлом: `${node.path}`.
-Его текущее содержимое:
+I'm working on the file: `${node.path}`.
+Its current content:
 ```
 $content
 ```
 
-Запрос пользователя:
+User request:
 $instruction
 
-Пожалуйста, выполни этот запрос. Если требуется изменить файл, создать новый, удалить или запустить команду в терминале, используй формат действий <actions>.
+Please perform this request. If you need to modify the file, create a new one, delete, or run a terminal command, use the <actions> action format.
 """;
 
     ref.read(aiProvider.notifier).askAI(prompt);

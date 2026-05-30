@@ -38,7 +38,7 @@ extension LocalAiEngineExtension on LocalAiEngine {
   String get displayName {
     switch (this) {
       case LocalAiEngine.llamaServer:
-        return 'llama-server (встроенный)';
+        return 'llama-server (built-in)';
       case LocalAiEngine.ollama:
         return 'Ollama';
       case LocalAiEngine.lmStudio:
@@ -165,9 +165,9 @@ class AiProviders {
 
   static const localEdge = AiProviderConfig(
     id: 'local_edge',
-    displayName: 'Local AI (Локальный ИИ)',
+    displayName: 'Local AI',
     logoEmoji: '🔮',
-    apiKeyHint: 'не требуется',
+    apiKeyHint: 'not required',
     baseUrl: 'http://localhost:8080/v1',
     defaultModels: ['qwen2.5-coder-1.5b-instruct'],
     supportsLocalModels: true,

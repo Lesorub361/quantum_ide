@@ -283,7 +283,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       _buildSidebarItem(
                         icon: LucideIcons.settings,
-                        label: 'Настройки',
+                        label: AppLocalizations.of(context)!.settings,
                         color: theme.colorScheme.onSurfaceVariant,
                         onTap: () => context.push('/settings'),
                       ),
@@ -361,12 +361,12 @@ class _HomePageState extends ConsumerState<HomePage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Добро пожаловать!',
+                                AppLocalizations.of(context)!.welcomeTitle,
                                 style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'Выберите проект для работы или создайте новый',
+                                AppLocalizations.of(context)!.welcomeSubtitle,
                                 style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
                               ),
                             ],
@@ -380,7 +380,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       const SizedBox(height: 24),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
                         Text(
-                          'Последний активный проект',
+                          AppLocalizations.of(context)!.lastActiveProject,
                           style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant),
                         ),
                         const SizedBox(height: 12),
@@ -556,7 +556,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         const Spacer(),
                         IconButton(
                           icon: const Icon(LucideIcons.play, size: 14, color: Colors.greenAccent),
-                          tooltip: 'Запустить',
+                          tooltip: AppLocalizations.of(context)!.runTooltip,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           onPressed: () {
@@ -567,7 +567,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(LucideIcons.ellipsis_vertical, size: 14),
-                          tooltip: 'Действия',
+                          tooltip: AppLocalizations.of(context)!.actionsTooltip,
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           onPressed: () => _showProjectActions(context, ref, project),
@@ -665,12 +665,12 @@ class _HomePageState extends ConsumerState<HomePage> {
       actions: [
         _buildAppActionButton(
           icon: LucideIcons.package,
-          tooltip: 'Пакеты',
+          tooltip: AppLocalizations.of(context)!.packagesTooltip,
           onTap: () => context.push('/packages'),
         ),
         _buildAppActionButton(
           icon: LucideIcons.settings,
-          tooltip: 'Настройки',
+          tooltip: AppLocalizations.of(context)!.settings,
           onTap: () => context.push('/settings'),
         ),
         const SizedBox(width: 8),
@@ -1782,7 +1782,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       children: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Отмена'),
+                          child: Text(AppLocalizations.of(context)!.cancel),
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton(

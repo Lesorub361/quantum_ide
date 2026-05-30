@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:quantum_ide/core/services/wasm_plugin_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class WasmPluginsPanel extends ConsumerStatefulWidget {
   const WasmPluginsPanel({super.key});
@@ -20,7 +21,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
     final state = ref.watch(wasmPluginServiceProvider);
     final service = ref.read(wasmPluginServiceProvider.notifier);
     final theme = Theme.of(context);
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     return Container(
       color: const Color(0xFF0D0F14).withValues(alpha: 0.7),
@@ -40,7 +41,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isRu ? 'WASM Плагины' : 'WASM Plugins',
+                    l10n.wasmPlugins,
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
@@ -51,8 +52,8 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
                 ),
                 IconButton(
                   icon: const Icon(LucideIcons.refresh_cw, size: 14, color: Colors.white60),
-                  tooltip: isRu ? 'Сбросить плагины' : 'Reset Plugins',
-                  onPressed: () => _confirmReset(context, service),
+                  tooltip: l10n.resetPlugins,
+                  onPressed: () => _confirmReset(context, service, l10n),
                 ),
               ],
             ),
@@ -74,7 +75,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
               ),
               icon: const Icon(LucideIcons.plus, size: 14),
               label: Text(
-                isRu ? 'Установить .wasm' : 'Install .wasm',
+                l10n.installWasm,
                 style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
               ),
             ),
@@ -83,13 +84,13 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
           // Plugins list
           Expanded(
             child: state.plugins.isEmpty
-                ? _buildEmptyState(isRu)
+                ? _buildEmptyState(l10n)
                 : ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     itemCount: state.plugins.length,
                     itemBuilder: (context, index) {
                       final plugin = state.plugins[index];
-                      return _buildPluginCard(plugin, service, theme, isRu);
+                      return _buildPluginCard(plugin, service, theme, l10n);
                     },
                   ),
           ),
@@ -98,7 +99,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
     );
   }
 
-  Widget _buildEmptyState(bool isRu) {
+  Widget _buildEmptyState(AppLocalizations l10n) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -106,7 +107,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
           Icon(LucideIcons.toy_brick, size: 40, color: Colors.white.withValues(alpha: 0.15)),
           const SizedBox(height: 12),
           Text(
-            isRu ? 'Нет установленных плагинов' : 'No plugins installed',
+            l10n.noPluginsInstalled,
             style: GoogleFonts.inter(color: Colors.white38, fontSize: 13),
           ),
         ],
@@ -114,7 +115,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
     );
   }
 
-  Widget _buildPluginCard(WasmPlugin plugin, WasmPluginService service, ThemeData theme, bool isRu) {
+  Widget _buildPluginCard(WasmPlugin plugin, WasmPluginService service, ThemeData theme, AppLocalizations l10n) {
     final isLogsExpanded = _expandedLogs[plugin.id] ?? false;
 
     return Container(
@@ -163,7 +164,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
-                isRu ? 'Доступные действия:' : 'Available Actions:',
+                l10n.availableActions,
                 style: GoogleFonts.inter(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold),
               ),
             ),
@@ -206,7 +207,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
                     color: Colors.white70,
                   ),
                   label: Text(
-                    isRu ? 'Терминал логов' : 'Logs Terminal',
+                    l10n.logsTerminal,
                     style: GoogleFonts.inter(color: Colors.white70, fontSize: 10.5),
                   ),
                   style: TextButton.styleFrom(
@@ -219,13 +220,13 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
                     if (isLogsExpanded)
                       IconButton(
                         icon: const Icon(LucideIcons.trash_2, size: 13, color: Colors.white54),
-                        tooltip: isRu ? 'Очистить логи' : 'Clear Logs',
+                        tooltip: l10n.clearLogs,
                         onPressed: () => service.clearLogs(plugin.id),
                       ),
                     if (plugin.id != 'text_transformer_demo')
                       IconButton(
                         icon: const Icon(LucideIcons.x, size: 13, color: Colors.redAccent),
-                        tooltip: isRu ? 'Удалить плагин' : 'Delete Plugin',
+                        tooltip: l10n.deletePlugin,
                         onPressed: () => service.deletePlugin(plugin.id),
                       ),
                   ],
@@ -249,7 +250,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
               child: plugin.logs.isEmpty
                   ? Center(
                       child: Text(
-                        isRu ? 'Лонгборд логов пуст' : 'No logs captured yet',
+                        l10n.noLogsCaptured,
                         style: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 9.5),
                       ),
                     )
@@ -278,23 +279,20 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
     );
   }
 
-  void _confirmReset(BuildContext context, WasmPluginService service) {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+  void _confirmReset(BuildContext context, WasmPluginService service, AppLocalizations l10n) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF13151D),
-        title: Text(isRu ? 'Сбросить плагины?' : 'Reset Plugins?', style: const TextStyle(color: Colors.white)),
+        title: Text(l10n.resetPluginsTitle, style: const TextStyle(color: Colors.white)),
         content: Text(
-          isRu
-              ? 'Это удалит все пользовательские плагины и восстановит настройки по умолчанию. Продолжить?'
-              : 'This will remove all installed custom plugins and restore default plugins. Continue?',
+          l10n.resetPluginsConfirmation,
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text(isRu ? 'Отмена' : 'Cancel'),
+            child: Text(l10n.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white),
@@ -302,7 +300,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
               service.resetToDefaults();
               Navigator.pop(context);
             },
-            child: Text(isRu ? 'Сбросить' : 'Reset'),
+            child: Text(l10n.resetAction),
           ),
         ],
       ),
@@ -367,7 +365,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     return Dialog(
       backgroundColor: const Color(0xFF13151D),
@@ -381,7 +379,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isRu ? 'Установка WASM Плагина' : 'Install WASM Plugin',
+                l10n.installWasmPluginTitle,
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
               ),
               const SizedBox(height: 16),
@@ -417,7 +415,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                _fileName ?? (isRu ? 'Выбрать .wasm файл' : 'Select .wasm file'),
+                                _fileName ?? l10n.selectWasmFile,
                                 style: GoogleFonts.inter(
                                   color: _filePath != null ? Colors.white : Colors.white60,
                                   fontSize: 11.5,
@@ -435,13 +433,13 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                         controller: _nameController,
                         style: const TextStyle(color: Colors.white, fontSize: 13),
                         decoration: InputDecoration(
-                          labelText: isRu ? 'Название плагина' : 'Plugin Name',
+                          labelText: l10n.pluginName,
                           labelStyle: const TextStyle(color: Colors.white60, fontSize: 12),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           isDense: true,
                         ),
                         validator: (val) => val == null || val.isEmpty
-                            ? (isRu ? 'Введите название' : 'Name is required')
+                            ? l10n.nameRequired
                             : null,
                       ),
                       const SizedBox(height: 12),
@@ -452,13 +450,13 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                         maxLines: 2,
                         style: const TextStyle(color: Colors.white, fontSize: 13),
                         decoration: InputDecoration(
-                          labelText: isRu ? 'Описание' : 'Description',
+                          labelText: l10n.pluginDescription,
                           labelStyle: const TextStyle(color: Colors.white60, fontSize: 12),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                           isDense: true,
                         ),
                         validator: (val) => val == null || val.isEmpty
-                            ? (isRu ? 'Введите описание' : 'Description is required')
+                            ? l10n.descriptionRequired
                             : null,
                       ),
                       const SizedBox(height: 16),
@@ -468,14 +466,14 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            isRu ? 'Действия плагина' : 'Exposed Actions',
+                            l10n.exposedActions,
                             style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 12.5, color: Colors.white70),
                           ),
                           TextButton.icon(
                             onPressed: _addAction,
                             icon: const Icon(LucideIcons.plus, size: 12, color: Colors.cyanAccent),
                             label: Text(
-                              isRu ? 'Добавить' : 'Add',
+                              l10n.add,
                               style: const TextStyle(color: Colors.cyanAccent, fontSize: 11),
                             ),
                           ),
@@ -557,7 +555,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text(isRu ? 'Отмена' : 'Cancel'),
+                    child: Text(l10n.cancel),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
@@ -571,7 +569,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                       if (_filePath == null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(isRu ? 'Выберите .wasm файл' : 'Please pick a .wasm file first'),
+                            content: Text(l10n.pickWasmFileFirst),
                             backgroundColor: Colors.redAccent,
                           ),
                         );
@@ -590,7 +588,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                             Navigator.pop(context);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(isRu ? 'Плагин успешно установлен' : 'Plugin installed successfully'),
+                                content: Text(l10n.pluginInstalledSuccessfully),
                                 backgroundColor: theme.colorScheme.primary,
                               ),
                             );
@@ -599,7 +597,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(isRu ? 'Ошибка установки: $e' : 'Failed to install: $e'),
+                                content: Text(l10n.failedToInstall(e.toString())),
                                 backgroundColor: Colors.redAccent,
                               ),
                             );
@@ -607,7 +605,7 @@ class _WasmInstallDialogState extends ConsumerState<WasmInstallDialog> {
                         }
                       }
                     },
-                    child: Text(isRu ? 'Установить' : 'Install'),
+                    child: Text(l10n.installAction),
                   ),
                 ],
               ),

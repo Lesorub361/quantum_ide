@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 
 // Representing the parsed file segments
@@ -93,7 +94,7 @@ List<MergeChunk> parseMergeConflicts(String fileContent) {
         ourContent: cleanOur,
         baseContent: cleanBase,
         theirContent: cleanTheir,
-        branchName: branchName.isNotEmpty ? branchName : 'Входящая ветка',
+        branchName: branchName,
       ));
     } else {
       currentText.writeln(lines[i]);
@@ -211,10 +212,11 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
   }
 
   Future<void> _saveAndResolveFile() async {
+    final l10n = AppLocalizations.of(context)!;
     if (!_isAllResolved) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Пожалуйста, разрешите все конфликты перед сохранением!'),
+        SnackBar(
+          content: Text(l10n.resolveConflictsBeforeSaving),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -256,9 +258,10 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
       await gitNotifier.refreshStatus();
 
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Файл успешно сохранен и добавлен в индекс Git'),
+          SnackBar(
+            content: Text(l10n.fileSavedAndStaged),
             backgroundColor: Colors.green,
           ),
         );
@@ -266,9 +269,10 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
       }
     } catch (e) {
       if (mounted) {
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка при сохранении: $e'),
+            content: Text(l10n.saveError(e.toString())),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -282,17 +286,18 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: const Color(0xFF07090E),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
-        child: _buildHeader(),
+        child: _buildHeader(l10n),
       ),
-      body: _buildBody(),
+      body: _buildBody(l10n),
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(AppLocalizations l10n) {
     return GlassContainer(
       blur: 20,
       opacity: 0.04,
@@ -365,7 +370,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
                 ElevatedButton.icon(
                   onPressed: _isAllResolved ? _saveAndResolveFile : null,
                   icon: const Icon(LucideIcons.save, size: 14),
-                  label: const Text('Принять слияние'),
+                  label: Text(l10n.acceptMerge),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.greenAccent.withValues(alpha: 0.2),
                     foregroundColor: Colors.greenAccent,
@@ -389,7 +394,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(AppLocalizations l10n) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
     }
@@ -404,7 +409,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
               const Icon(LucideIcons.circle_alert, size: 48, color: Colors.redAccent),
               const SizedBox(height: 16),
               Text(
-                'Ошибка загрузки конфликтного файла',
+                l10n.errorLoadingConflictFile,
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
@@ -429,12 +434,12 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
               const Icon(LucideIcons.circle_check, size: 48, color: Colors.greenAccent),
               const SizedBox(height: 16),
               Text(
-                'Конфликты не найдены',
+                l10n.conflictsNotFound,
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
-                'В данном файле отсутствуют стандартные маркеры конфликтов Git.',
+                l10n.noConflictMarkersFound,
                 style: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
                 textAlign: TextAlign.center,
               ),
@@ -442,7 +447,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
               ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(),
                 style: ElevatedButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.1)),
-                child: const Text('Назад к Git', style: TextStyle(color: Colors.white)),
+                child: Text(l10n.backToGit, style: const TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -459,7 +464,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
           if (chunk is TextChunk) {
             return _buildTextChunk(chunk);
           } else if (chunk is ConflictChunk) {
-            return _buildConflictChunk(index, chunk);
+            return _buildConflictChunk(index, chunk, l10n);
           }
           return const SizedBox.shrink();
         },
@@ -489,7 +494,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
     );
   }
 
-  Widget _buildConflictChunk(int index, ConflictChunk chunk) {
+  Widget _buildConflictChunk(int index, ConflictChunk chunk, AppLocalizations l10n) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
@@ -513,19 +518,19 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Conflict header
-          _buildConflictChunkHeader(index, chunk),
+          _buildConflictChunkHeader(index, chunk, l10n),
 
           // Left/Right options split view
-          _buildSideBySideOptions(index, chunk),
+          _buildSideBySideOptions(index, chunk, l10n),
 
           // Central Editable Resolve Area
-          _buildResolveArea(index, chunk),
+          _buildResolveArea(index, chunk, l10n),
         ],
       ),
     );
   }
 
-  Widget _buildConflictChunkHeader(int index, ConflictChunk chunk) {
+  Widget _buildConflictChunkHeader(int index, ConflictChunk chunk, AppLocalizations l10n) {
     final statusColor = chunk.isResolved ? Colors.greenAccent : Colors.amberAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -550,7 +555,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
           ),
           const SizedBox(width: 12),
           Text(
-            'Конфликтный блок',
+            l10n.conflictBlock,
             style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
           ),
           const Spacer(),
@@ -559,7 +564,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
               onPressed: () => _resetChunk(index),
               icon: const Icon(LucideIcons.undo_2, size: 12, color: Colors.amberAccent),
               label: Text(
-                'Сбросить',
+                l10n.resetAction,
                 style: GoogleFonts.inter(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.w600),
               ),
               style: TextButton.styleFrom(
@@ -574,24 +579,26 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
     );
   }
 
-  Widget _buildSideBySideOptions(int index, ConflictChunk chunk) {
+  Widget _buildSideBySideOptions(int index, ConflictChunk chunk, AppLocalizations l10n) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final useVertical = constraints.maxWidth < 600;
         final children = [
           _buildOptionPanel(
-            title: 'Текущие изменения (Ours / HEAD)',
+            title: l10n.currentChangesOurs,
             content: chunk.ourContent,
             badgeColor: Colors.blueAccent,
             badgeText: 'OURS',
             onAccept: () => _resolveChunk(index, chunk.ourContent),
+            l10n: l10n,
           ),
           _buildOptionPanel(
-            title: 'Входящие изменения (${chunk.branchName})',
+            title: l10n.incomingChanges(chunk.branchName.isNotEmpty ? chunk.branchName : l10n.incomingBranch),
             content: chunk.theirContent,
             badgeColor: Colors.purpleAccent,
             badgeText: 'THEIRS',
             onAccept: () => _resolveChunk(index, chunk.theirContent),
+            l10n: l10n,
           ),
         ];
 
@@ -626,6 +633,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
     required Color badgeColor,
     required String badgeText,
     required VoidCallback onAccept,
+    required AppLocalizations l10n,
   }) {
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -668,7 +676,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
             child: content.isEmpty
                 ? Center(
                     child: Text(
-                      '(Пусто)',
+                      l10n.emptyLabel,
                       style: GoogleFonts.jetBrainsMono(color: Colors.white12, fontSize: 11, fontStyle: FontStyle.italic),
                     ),
                   )
@@ -693,7 +701,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 padding: const EdgeInsets.symmetric(vertical: 8),
               ),
-              child: Text('Использовать эту версию', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
+              child: Text(l10n.useThisVersion, style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600)),
             ),
           ),
         ],
@@ -701,7 +709,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
     );
   }
 
-  Widget _buildResolveArea(int index, ConflictChunk chunk) {
+  Widget _buildResolveArea(int index, ConflictChunk chunk, AppLocalizations l10n) {
     final statusColor = chunk.isResolved ? Colors.greenAccent : Colors.amberAccent;
     return Container(
       padding: const EdgeInsets.all(16),
@@ -716,7 +724,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
           Row(
             children: [
               Text(
-                'Результат слияния (Редактируемый)',
+                l10n.mergeResultEditable,
                 style: GoogleFonts.inter(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 8),
@@ -732,7 +740,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
             maxLines: null,
             keyboardType: TextInputType.multiline,
             decoration: InputDecoration(
-              hintText: 'Выберите одну из версий выше или напишите свой вариант разрешения конфликта...',
+              hintText: l10n.chooseVersionOrWriteHint,
               hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
               filled: true,
               fillColor: const Color(0xFF0D111E),
@@ -770,7 +778,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
           if (!chunk.isResolved) ...[
             const SizedBox(height: 8),
             Text(
-              '* Чтобы пометить этот блок как разрешенный, введите или выберите текст.',
+              l10n.markAsResolvedHint,
               style: GoogleFonts.inter(color: Colors.amberAccent.withValues(alpha: 0.8), fontSize: 10),
             ),
           ],

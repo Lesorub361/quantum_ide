@@ -64,6 +64,17 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     ref.read(serverRunningProvider.notifier).state = val;
   }
 
+  void _toggleServer() {
+    _setServerRunning(!_serverIsRunning);
+  }
+
+  void _openInBrowser() async {
+    final url = Uri.parse(_urlController.text);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
   String _currentInput = '';
   final ValueNotifier<List<String>?> _suggestionsNotifier = ValueNotifier(null);
   int _selectedSuggestionIndex = 0;
@@ -388,7 +399,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           Clipboard.setData(ClipboardData(text: selectedText));
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: const Text('Скопировано в буфер обмена'),
+                              content: Text(AppLocalizations.of(context)!.copiedToClipboard),
                               duration: const Duration(seconds: 1),
                               behavior: SnackBarBehavior.floating,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -644,6 +655,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildGitView() {
+    final l10n = AppLocalizations.of(context)!;
     final gitState = ref.watch(gitProvider);
     final gitNotifier = ref.read(gitProvider.notifier);
 
@@ -676,12 +688,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Репозиторий не найден',
+                  l10n.repositoryNotFound,
                   style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Инициализируйте локальный Git-репозиторий для отслеживания изменений файлов проекта.',
+                  l10n.initGitRepoDescription,
                   style: GoogleFonts.inter(color: Colors.white38, fontSize: 12, height: 1.4),
                   textAlign: TextAlign.center,
                 ),
@@ -689,7 +701,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 ElevatedButton.icon(
                   onPressed: () => gitNotifier.init(),
                   icon: const Icon(LucideIcons.git_fork, size: 14),
-                  label: const Text('Инициализировать Git'),
+                  label: Text(l10n.initGitAction),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.amberAccent.withValues(alpha: 0.15),
                     foregroundColor: Colors.amberAccent,
@@ -730,19 +742,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           ),
           const Divider(color: Colors.white10),
           if (status.conflictedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader('КОНФЛИКТЫ', status.conflictedFiles.length),
+            _buildGitSectionHeader(l10n.gitConflicted, status.conflictedFiles.length),
             ...status.conflictedFiles.map((f) => _buildGitFileItem(f, isStaged: false, isConflicted: true)),
           ],
           if (status.stagedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader('ИНДЕКСИРОВАНО', status.stagedFiles.length),
+            _buildGitSectionHeader(l10n.gitStaged, status.stagedFiles.length),
             ...status.stagedFiles.map((f) => _buildGitFileItem(f, isStaged: true)),
           ],
           if (status.modifiedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader('ИЗМЕНЕНО', status.modifiedFiles.length),
+            _buildGitSectionHeader(l10n.gitModified, status.modifiedFiles.length),
             ...status.modifiedFiles.map((f) => _buildGitFileItem(f, isStaged: false)),
           ],
           if (status.untrackedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader('НЕОТСЛЕЖИВАЕМОЕ', status.untrackedFiles.length),
+            _buildGitSectionHeader(l10n.gitUntracked, status.untrackedFiles.length),
             ...status.untrackedFiles.map((f) => _buildGitFileItem(f, isStaged: false, isUntracked: true)),
           ],
           const SizedBox(height: 20),
@@ -758,7 +770,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 children: [
                   TextField(
                     decoration: InputDecoration(
-                      hintText: 'Сообщение коммита...',
+                      hintText: l10n.commitMessageHint,
                       hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
                       filled: true,
                       fillColor: Colors.black.withValues(alpha: 0.2),
@@ -861,6 +873,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildGitFileItem(String path, {required bool isStaged, bool isUntracked = false, bool isConflicted = false}) {
+    final l10n = AppLocalizations.of(context)!;
     final notifier = ref.read(gitProvider.notifier);
     Color statusColor = isConflicted 
         ? Colors.redAccent 
@@ -945,7 +958,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           size: 14, 
                           color: Colors.redAccent,
                         ),
-                        tooltip: 'Разрешить конфликт',
+                        tooltip: l10n.resolveConflictTooltip,
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
@@ -963,7 +976,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           size: 14, 
                           color: Colors.white54,
                         ),
-                        tooltip: isStaged ? 'Убрать из индекса' : 'Добавить в индекс',
+                        tooltip: isStaged ? l10n.unstageAction : l10n.stageAction,
                         onPressed: () => isStaged ? notifier.unstageFile(path) : notifier.stageFile(path),
                       ),
                   ],
@@ -977,6 +990,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildRunView({Key? key}) {
+    final l10n = AppLocalizations.of(context)!;
     final dedicatedState = ref.watch(dedicatedTerminalProvider);
     final session = dedicatedState.sessions[DedicatedTerminalType.run];
     final workspaceState = ref.watch(workspaceProvider);
@@ -999,89 +1013,89 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     switch (projectType) {
       case ProjectType.flutter:
-        title = 'Flutter Проект';
+        title = l10n.flutterProject;
         if (Platform.isAndroid) {
           actions.addAll([
-            _buildActionButton('Запуск', LucideIcons.play, Colors.greenAccent, 
+            _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
                 () => _runDedicatedCommand(DedicatedTerminalType.run, 'flutter run -d web-server --web-port 8080')),
             _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
                 () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'r')),
-            _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
                 () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'q')),
           ]);
         } else {
           actions.addAll([
-            _buildActionButton('Запуск (ПК)', LucideIcons.laptop, Colors.cyanAccent, 
+            _buildActionButton(l10n.runPC, LucideIcons.laptop, Colors.cyanAccent, 
                 () => _runDedicatedCommand(DedicatedTerminalType.run, 'flutter run -d linux')),
-            _buildActionButton('Запуск (Тел.)', LucideIcons.smartphone, Colors.greenAccent, 
+            _buildActionButton(l10n.runMob, LucideIcons.smartphone, Colors.greenAccent, 
                 () => _runDedicatedCommand(DedicatedTerminalType.run, 'flutter run -d android')),
             _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
                 () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'r')),
-            _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
                 () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'q')),
           ]);
         }
         break;
       case ProjectType.python:
-        title = 'Python Проект';
+        title = l10n.pythonProject;
         actions.addAll([
-          _buildActionButton('Запуск', LucideIcons.play, Colors.greenAccent, 
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'python3 main.py || python3 app.py || (py_file=\$(find . -maxdepth 2 -name "*.py" | head -n 1); if [ -n "\$py_file" ]; then python3 "\$py_file"; else echo "No python file found. Please create main.py"; fi)')),
-          _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
         ]);
         break;
       case ProjectType.nodejs:
-        title = 'Node.js Проект';
+        title = l10n.nodejsProject;
         actions.addAll([
-          _buildActionButton('Запуск', LucideIcons.play, Colors.greenAccent, 
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'npm start || node index.js || node server.js || node app.js || (js_file=\$(find . -maxdepth 2 -name "*.js" ! -path "*/node_modules/*" | head -n 1); if [ -n "\$js_file" ]; then node "\$js_file"; else echo "No JS file found. Please create index.js or package.json"; fi)')),
-          _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
         ]);
         break;
       case ProjectType.dart:
-        title = 'Dart Проект';
+        title = l10n.dartProject;
         actions.addAll([
-          _buildActionButton('Запуск', LucideIcons.play, Colors.greenAccent, 
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'dart run || dart bin/main.dart || dart main.dart || (dart_file=\$(find . -maxdepth 2 -name "*.dart" | head -n 1); if [ -n "\$dart_file" ]; then dart "\$dart_file"; else echo "No Dart file found. Please create bin/main.dart"; fi)')),
-          _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
         ]);
         break;
       case ProjectType.web:
-        title = 'Web Проект';
+        title = l10n.webProject;
         actions.addAll([
-          _buildActionButton('Старт Сервера', LucideIcons.play, Colors.greenAccent, 
+          _buildActionButton(l10n.startServer, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080')),
-          _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
         ]);
         break;
       case ProjectType.androidJava:
       case ProjectType.androidKotlin:
-        title = 'Android Проект';
+        title = l10n.androidProject;
         actions.addAll([
-          _buildActionButton('Сборка APK', LucideIcons.box, Colors.greenAccent, 
+          _buildActionButton(l10n.buildAPK, LucideIcons.box, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x gradlew && ./gradlew assembleDebug')),
-          _buildActionButton('Установка', LucideIcons.play, Colors.greenAccent, 
+          _buildActionButton(l10n.install, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x gradlew && ./gradlew installDebug')),
-          _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
         ]);
         break;
       case ProjectType.shell:
       case ProjectType.other:
-        title = 'Проект';
+        title = l10n.genericProject;
         actions.addAll([
-          _buildActionButton('Запуск', LucideIcons.play, Colors.greenAccent, 
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'bash main.sh || bash run.sh || ./run.sh || ./main.sh || (sh_file=\$(find . -maxdepth 2 -name "*.sh" | head -n 1); if [ -n "\$sh_file" ]; then bash "\$sh_file"; else echo "No run script (.sh) found."; fi)')),
-          _buildActionButton('Стоп', LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
         ]);
         break;
@@ -1089,7 +1103,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     // Always add Copy button at the end
     actions.add(
-      _buildActionButton('Копировать', LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.run))
+      _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.run))
     );
 
     return Column(
@@ -1148,6 +1162,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildBuildLogsView({Key? key}) {
+    final l10n = AppLocalizations.of(context)!;
     final dedicatedState = ref.watch(dedicatedTerminalProvider);
     final session = dedicatedState.sessions[DedicatedTerminalType.build];
 
@@ -1161,9 +1176,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           ),
           child: Row(
             children: [
-              _buildSubTabButton(0, 'Консоль', LucideIcons.terminal),
+              _buildSubTabButton(0, l10n.console, LucideIcons.terminal),
               const SizedBox(width: 8),
-              _buildSubTabButton(1, 'Подпись APK', LucideIcons.pen_tool),
+              _buildSubTabButton(1, l10n.signApk, LucideIcons.pen_tool),
             ],
           ),
         ),
@@ -1171,21 +1186,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           child: _buildSubTab == 0
               ? Column(
                   children: [
-                    _buildActionHeader('Сборка', [
+                    _buildActionHeader(l10n.build, [
                       if (Platform.isAndroid) ...[
                         _buildActionButton('APK', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build apk --release --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk')),
                       ] else ...[
-                        _buildActionButton('Сборка (ПК)', LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build linux --release')),
-                        _buildActionButton('Сборка (APK)', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build apk --release --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk')),
+                        _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build linux --release')),
+                        _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build apk --release --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk')),
                       ],
                       _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get')),
                       _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean')),
-                      _buildActionButton('Копировать', LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.build)),
+                      _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.build)),
                     ]),
                     Expanded(
                       child: session != null 
                         ? _buildTerminalWidget(session)
-                        : Center(child: Text(AppLocalizations.of(context)!.buildLogs, style: const TextStyle(color: Colors.white38))),
+                        : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),
                     ),
                   ],
                 )
@@ -1196,20 +1211,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildAppLogsView({Key? key}) {
+    final l10n = AppLocalizations.of(context)!;
     final dedicatedState = ref.watch(dedicatedTerminalProvider);
     final session = dedicatedState.sessions[DedicatedTerminalType.appLogs];
 
     return Column(
       children: [
-        _buildActionHeader(AppLocalizations.of(context)!.appLogs, [
+        _buildActionHeader(l10n.appLogs, [
           _buildActionButton('Logs', LucideIcons.list, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'flutter logs')),
-          _buildActionButton('Копировать', LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.appLogs)),
-          _buildActionButton(AppLocalizations.of(context)!.setupSdk, LucideIcons.settings, Colors.purpleAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'kill -9 \$(pgrep -x "apt|apt-get|dpkg|dpkg-deb" 2>/dev/null) 2>/dev/null ; rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend 2>/dev/null ; dpkg --configure -a 2>/dev/null ; apt update && apt install -y debianutils libz1 libexpat1 openjdk-21-jdk wget unzip libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 libc6 aapt adb zipalign apksigner clang lld cmake ninja-build pkg-config libgtk-3-dev && git config --global --add safe.directory \'*\' && flutter config --android-sdk /root/android-sdk && (which which >/dev/null || (echo "#!/bin/sh" > /usr/bin/which && echo "command -v \$1" >> /usr/bin/which && chmod +x /usr/bin/which))')),
+          _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.appLogs)),
+          _buildActionButton(l10n.setupSdk, LucideIcons.settings, Colors.purpleAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'kill -9 \$(pgrep -x "apt|apt-get|dpkg|dpkg-deb" 2>/dev/null) 2>/dev/null ; rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend 2>/dev/null ; dpkg --configure -a 2>/dev/null ; apt update && apt install -y debianutils libz1 libexpat1 openjdk-21-jdk wget unzip libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 libc6 aapt adb zipalign apksigner clang lld cmake ninja-build pkg-config libgtk-3-dev && git config --global --add safe.directory \'*\' && flutter config --android-sdk /root/android-sdk && (which which >/dev/null || (echo "#!/bin/sh" > /usr/bin/which && echo "command -v \$1" >> /usr/bin/which && chmod +x /usr/bin/which))')),
         ]),
         Expanded(
           child: session != null 
             ? _buildTerminalWidget(session)
-            : Center(child: Text(AppLocalizations.of(context)!.appLogs, style: const TextStyle(color: Colors.white38))),
+            : Center(child: Text(l10n.appLogs, style: const TextStyle(color: Colors.white38))),
         ),
       ],
     );
@@ -1316,7 +1332,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       await Clipboard.setData(ClipboardData(text: text));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Вывод скопирован в буфер обмена'), duration: Duration(seconds: 1)),
+          SnackBar(content: Text(AppLocalizations.of(context)!.copiedToClipboard), duration: const Duration(seconds: 1)),
         );
       }
     }
@@ -1437,7 +1453,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   onPressed: () => notifier.restartSession(index),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                                  tooltip: sessions[index].isExited ? 'Запустить' : 'Перезапустить',
+                                  tooltip: sessions[index].isExited 
+                                      ? AppLocalizations.of(context)!.start 
+                                      : AppLocalizations.of(context)!.restartTerminalTooltip,
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(
@@ -1445,7 +1463,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   onPressed: () => notifier.closeSession(index),
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                                  tooltip: 'Удалить',
+                                  tooltip: AppLocalizations.of(context)!.delete,
                                 ),
                               ],
                             ) : null,
@@ -1560,7 +1578,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   color: Colors.white.withValues(alpha: 0.02),
                                   width: double.infinity,
                                   child: Text(
-                                    'ПАНЕЛЬ 1: ${sessions[notifier.currentIndex].title}',
+                                    '${AppLocalizations.of(context)!.panel1}: ${sessions[notifier.currentIndex].title}',
                                     style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
                                   ),
                                 ),
@@ -1579,7 +1597,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   child: Row(
                                     children: [
                                       Text(
-                                        'ПАНЕЛЬ 2: ${sessions[(notifier.currentIndex + 1) % sessions.length].title}',
+                                        '${AppLocalizations.of(context)!.panel2}: ${sessions[(notifier.currentIndex + 1) % sessions.length].title}',
                                         style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent.withValues(alpha: 0.7), fontWeight: FontWeight.bold),
                                       ),
                                       const Spacer(),
@@ -1828,8 +1846,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         allDiagnostics[filePath] = diags;
       }
     });
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
-    
     final totalErrors = allDiagnostics.values.fold<int>(0, (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.error).length);
     final totalWarnings = allDiagnostics.values.fold<int>(0, (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.warning).length);
     final hasErrors = totalErrors > 0 || totalWarnings > 0;
@@ -1839,11 +1855,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     String prompt;
     if (hasErrors) {
       final buffer = StringBuffer();
-      if (isRu) {
-        buffer.writeln('У меня в проекте обнаружены следующие ошибки компиляции/анализа. Пожалуйста, исправь их:\n');
-      } else {
-        buffer.writeln('I have the following compilation/analysis errors in my project. Please fix them:\n');
-      }
+      buffer.writeln('I have the following compilation/analysis errors in my project. Please fix them:\n');
       
       allDiagnostics.forEach((filePath, diags) {
         if (diags.isNotEmpty) {
@@ -1853,24 +1865,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           for (final d in diags) {
             if (d.severity == CodeDiagnosticSeverity.error || d.severity == CodeDiagnosticSeverity.warning) {
               final severityStr = d.severity == CodeDiagnosticSeverity.error ? 'ERROR' : 'WARNING';
-              buffer.writeln('- $relPath (строка ${d.range.index + 1}, колонка ${d.range.start + 1}): [$severityStr] ${d.message}');
+              buffer.writeln('- $relPath (line ${d.range.index + 1}, column ${d.range.start + 1}): [$severityStr] ${d.message}');
             }
           }
         }
       });
       
-      if (isRu) {
-        buffer.writeln('\nПроанализируй эти ошибки, найди соответствующие файлы, исправь их с помощью блока действий <actions>, после чего запусти проверку проекта с помощью команды `$checkCommand` типа действия "command" в фоновом режиме, чтобы убедиться, что ошибки ушли.');
-      } else {
-        buffer.writeln('\nAnalyze these errors, find the corresponding files, fix them using the <actions> block, and then run a project check using the command `$checkCommand` (action type "command") in the background to verify that errors are resolved.');
-      }
+      buffer.writeln('\nAnalyze these errors, find the corresponding files, fix them using the <actions> block, and then run a project check using the command `$checkCommand` (action type "command") in the background to verify that errors are resolved.');
       prompt = buffer.toString();
     } else {
-      if (isRu) {
-        prompt = 'Запусти команду проверки этого проекта в фоновом режиме: `$checkCommand`. Дождись результатов, проанализируй вывод на наличие ошибок, исправь все найденные ошибки с помощью блока действий <actions>, и после этого снова запусти проверку, чтобы подтвердить исправление.';
-      } else {
-        prompt = 'Run the check command for this project in the background: `$checkCommand`. Wait for the results, analyze the output for errors, fix all found errors using the <actions> block, and run the check again to confirm the fix.';
-      }
+      prompt = 'Run the check command for this project in the background: `$checkCommand`. Wait for the results, analyze the output for errors, fix all found errors using the <actions> block, and run the check again to confirm the fix.';
     }
 
     // Open right AI chat panel
@@ -2115,7 +2119,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 subtitle: Padding(
                   padding: const EdgeInsets.only(top: 4.0),
                   child: Text(
-                    'Строка: ${d.range.index + 1}, Колонка: ${d.range.start + 1}',
+                    AppLocalizations.of(context)!.lineColumn(d.range.index + 1, d.range.start + 1),
                     style: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 10),
                   ),
                 ),
@@ -2124,7 +2128,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 },
                 trailing: IconButton(
                   icon: const Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 16),
-                  tooltip: 'Исправить с AI',
+                  tooltip: AppLocalizations.of(context)!.fixWithAi,
                   onPressed: () => _handleAiFix(path, d),
                 ),
               ),
@@ -2139,9 +2143,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     // Open right AI chat panel
     ref.read(rightChatPanelOpenProvider.notifier).state = true;
     
-    // Check if locale is Russian
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
-
     // Prepare prompt
     String content = '';
     final openFiles = ref.read(editorProvider).openFiles;
@@ -2156,37 +2157,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       try {
         content = await File(path).readAsString();
       } catch (e) {
-        content = isRu ? '[Не удалось прочитать файл]' : '[Failed to read file]';
+        content = '[Failed to read file]';
       }
     }
 
-    final prompt = isRu ? """
-Я работаю над проектом. У меня возникла ошибка в файле: $path
-Ошибка: ${diagnostic.message}
-Строка: ${diagnostic.range.index + 1}, Колонка: ${diagnostic.range.start + 1}
-
-Содержимое файла:
-```
-$content
-```
-
-Пожалуйста, проанализируй ошибку и предложи исправление. 
-Пожалуйста, примени исправление к этому файлу, используя формат действий <actions>. 
-Тебе обязательно нужно вернуть исправленную версию файла внутри тегов <actions> так, чтобы пользователь мог нажать "Применить" и сразу исправить ошибку.
-Пример:
-<actions>
-[
-  {
-    "type": "edit",
-    "path": "$path",
-    "content": "полный исправленный код файла",
-    "description": "исправление ошибки: ${diagnostic.message}"
-  }
-]
-</actions>
-
-Также опиши, что именно было не так.
-""" : """
+    final prompt = """
 I am working on a project. I got an error in file: $path
 Error: ${diagnostic.message}
 Line: ${diagnostic.range.index + 1}, Column: ${diagnostic.range.start + 1}
@@ -2268,30 +2243,25 @@ Also explain what exactly went wrong and how you fixed it.
               if (_serverIsRunning)
                 IconButton(
                   icon: const Icon(LucideIcons.rotate_cw, size: 16, color: Colors.greenAccent),
-                  tooltip: 'Обновить предпросмотр',
+                  tooltip: AppLocalizations.of(context)!.refreshPreview,
                   onPressed: () => _webViewController?.reload(),
                 ),
               // Toggle Power (Start/Stop) Button
               IconButton(
                 icon: Icon(
-                  _serverIsRunning ? LucideIcons.power : LucideIcons.play,
-                  size: 16,
-                  color: _serverIsRunning ? Colors.redAccent : Colors.cyanAccent,
+                  _serverIsRunning ? LucideIcons.square : LucideIcons.play,
+                  size: 14,
+                  color: _serverIsRunning ? Colors.redAccent : Colors.greenAccent,
                 ),
-                tooltip: _serverIsRunning ? 'Остановить веб-сервер' : 'Запустить веб-сервер',
-                onPressed: () {
-                  _setServerRunning(!_serverIsRunning);
-                },
+                tooltip: _serverIsRunning 
+                    ? AppLocalizations.of(context)!.stopWebServer 
+                    : AppLocalizations.of(context)!.startWebServer,
+                onPressed: _toggleServer,
               ),
               IconButton(
-                icon: const Icon(LucideIcons.external_link, size: 16, color: Colors.blueAccent),
-                tooltip: 'Открыть во внешнем браузере',
-                onPressed: () async {
-                   final url = WebUri(_urlController.text);
-                   if (await canLaunchUrl(url)) {
-                     await launchUrl(url, mode: LaunchMode.externalApplication);
-                   }
-                },
+                icon: const Icon(LucideIcons.external_link, size: 14, color: Colors.cyanAccent),
+                tooltip: AppLocalizations.of(context)!.openInExternalBrowser,
+                onPressed: _openInBrowser,
               ),
             ],
           ),
@@ -2342,20 +2312,20 @@ Also explain what exactly went wrong and how you fixed it.
                           ),
                           const SizedBox(height: 20),
                           Text(
-                            'Локальный веб-сервер',
-                            style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                            AppLocalizations.of(context)!.localWebServer,
+                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           Text(
-                            'Запустите веб-сервер, чтобы просматривать результаты сборки вашего проекта прямо внутри IDE.',
-                            style: GoogleFonts.inter(color: Colors.white38, fontSize: 12, height: 1.4),
+                            AppLocalizations.of(context)!.webServerDesc,
                             textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 12),
                           ElevatedButton.icon(
-                            onPressed: () => _setServerRunning(true),
+                            onPressed: _toggleServer,
                             icon: const Icon(LucideIcons.play, size: 14),
-                            label: const Text('Запустить веб-сервер'),
+                            label: Text(AppLocalizations.of(context)!.startWebServer),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
                               foregroundColor: Colors.blueAccent,
@@ -2396,33 +2366,33 @@ Also explain what exactly went wrong and how you fixed it.
         side: BorderSide(color: Colors.white.withValues(alpha: 0.1))
       ),
       items: [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'copy_all',
           child: Row(
             children: [
-              Icon(LucideIcons.files, size: 16, color: Colors.cyanAccent),
-              SizedBox(width: 12),
-              Text('Копировать всё', style: TextStyle(color: Colors.white, fontSize: 13)),
+              const Icon(LucideIcons.files, size: 14, color: Colors.white54),
+              const SizedBox(width: 10),
+              Text(AppLocalizations.of(context)!.copyAll, style: const TextStyle(color: Colors.white, fontSize: 13)),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'paste',
           child: Row(
             children: [
-              Icon(LucideIcons.clipboard_paste, size: 16, color: Colors.purpleAccent),
-              SizedBox(width: 12),
-              Text('Вставить', style: TextStyle(color: Colors.white, fontSize: 13)),
+              const Icon(LucideIcons.clipboard_paste, size: 14, color: Colors.white54),
+              const SizedBox(width: 10),
+              Text(AppLocalizations.of(context)!.paste, style: const TextStyle(color: Colors.white, fontSize: 13)),
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'clear',
           child: Row(
             children: [
-              Icon(LucideIcons.trash_2, size: 16, color: Colors.redAccent),
-              SizedBox(width: 12),
-              Text('Очистить терминал', style: TextStyle(color: Colors.white, fontSize: 13)),
+              const Icon(LucideIcons.trash_2, size: 14, color: Colors.white54),
+              const SizedBox(width: 10),
+              Text(AppLocalizations.of(context)!.clearTerminal, style: const TextStyle(color: Colors.white, fontSize: 13)),
             ],
           ),
         ),
@@ -2478,16 +2448,16 @@ Also explain what exactly went wrong and how you fixed it.
               const Icon(LucideIcons.toy_brick, size: 14, color: Colors.cyanAccent),
               const SizedBox(width: 8),
               Text(
-                'Пакеты и окружение',
+                AppLocalizations.of(context)!.packagesAndEnv,
                 style: GoogleFonts.inter(
-                  color: Colors.white70,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white.withValues(alpha: 0.8),
                 ),
               ),
               const Spacer(),
               Text(
-                'Установлено: ${packages.where((p) => p.isInstalled).length}/${packages.length}',
+                AppLocalizations.of(context)!.packagesInstalledCount(packages.where((p) => p.isInstalled).length, packages.length),
                 style: GoogleFonts.inter(
                   color: Colors.white38,
                   fontSize: 10,
@@ -2552,7 +2522,7 @@ Also explain what exactly went wrong and how you fixed it.
                             ref.read(packageServiceProvider.notifier).installPackage(pkg);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Обновление пакета ${pkg.name}...'),
+                                content: Text(AppLocalizations.of(context)!.updatingPackage(pkg.name)),
                               ),
                             );
                           },
@@ -2563,7 +2533,7 @@ Also explain what exactly went wrong and how you fixed it.
                             ref.read(packageServiceProvider.notifier).installPackage(pkg);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('Установка пакета ${pkg.name}...'),
+                                content: Text(AppLocalizations.of(context)!.installingPackage(pkg.name)),
                               ),
                             );
                           },
@@ -2579,7 +2549,7 @@ Also explain what exactly went wrong and how you fixed it.
                             ),
                           ),
                           child: Text(
-                            'Установить',
+                            AppLocalizations.of(context)!.install,
                             style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
@@ -2875,8 +2845,51 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
     super.dispose();
   }
 
+  Widget _buildMessageActionDetails(AIAction action) {
+    return SelectionArea(
+      child: Builder(builder: (context) {
+        final workspacePath = ref.watch(workspaceProvider).currentPath;
+        IconData iconData;
+        Color iconColor;
+        String text;
+        
+        if (action.type == 'command') {
+          iconData = LucideIcons.terminal;
+          iconColor = Colors.white54;
+          text = AppLocalizations.of(context)!.ranAction(action.content);
+        } else {
+          final fileName = action.path.split('/').last;
+          iconColor = action.type == 'create' 
+              ? Colors.greenAccent 
+              : (action.type == 'delete' ? Colors.redAccent : Colors.blueAccent);
+          
+          iconData = action.type == 'create' 
+              ? LucideIcons.file_plus 
+              : (action.type == 'delete' ? LucideIcons.file_x : LucideIcons.pencil);
+          
+          final relDir = workspacePath != null && action.path.startsWith(workspacePath)
+              ? p.dirname(p.relative(action.path, from: workspacePath))
+              : '';
+          
+          final dirSuffix = relDir.isNotEmpty && relDir != '.' ? ' ${AppLocalizations.of(context)!.inFolder(relDir)}' : '';
+          final typeStr = action.type == 'create' 
+              ? AppLocalizations.of(context)!.created 
+              : (action.type == 'delete' ? AppLocalizations.of(context)!.deleted : AppLocalizations.of(context)!.edited);
+          text = '$typeStr $fileName$dirSuffix';
+        }
+        
+        return Row(
+          children: [
+            Icon(iconData, size: 11, color: iconColor),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: GoogleFonts.inter(fontSize: 11, color: Colors.white70))),
+          ],
+        );
+      }),
+    );
+  }
+
   Widget _buildStepSummary(ChatMessage message) {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
     final workspacePath = ref.read(workspaceProvider).currentPath;
     final executed = message.executedActions ?? [];
     
@@ -2907,115 +2920,9 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: List.generate(executed.length, (index) {
                 final action = executed[index];
-                final isLast = index == executed.length - 1;
-                
-                Widget icon;
-                String text = '';
-                Color iconColor;
-                
-                if (action.type == 'command') {
-                  icon = const Icon(LucideIcons.terminal, size: 11, color: Colors.white54);
-                  iconColor = Colors.white54;
-                  text = isRu ? 'Выполнено: ${action.content}' : 'Ran: ${action.content}';
-                } else {
-                  final fileName = action.path.split('/').last;
-                  iconColor = action.type == 'create' 
-                      ? Colors.greenAccent 
-                      : (action.type == 'delete' ? Colors.redAccent : Colors.blueAccent);
-                  
-                  icon = Icon(
-                    action.type == 'create' 
-                        ? LucideIcons.file_plus 
-                        : (action.type == 'delete' ? LucideIcons.file_x : LucideIcons.pencil),
-                    size: 11,
-                    color: iconColor,
-                  );
-                  
-                  final relDir = workspacePath != null && action.path.startsWith(workspacePath)
-                      ? p.dirname(p.relative(action.path, from: workspacePath))
-                      : '';
-                  
-                  final dirSuffix = relDir.isNotEmpty && relDir != '.' ? ' в $relDir' : '';
-                  text = '${action.type == 'create' ? (isRu ? 'Создан' : 'Created') : action.type == 'delete' ? (isRu ? 'Удален' : 'Deleted') : (isRu ? 'Изменен' : 'Edited')} $fileName$dirSuffix';
-                }
-
-                return IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Timeline indicator line
-                      Column(
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(top: 2),
-                            width: 16,
-                            height: 16,
-                            decoration: BoxDecoration(
-                              color: iconColor.withValues(alpha: 0.12),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: iconColor.withValues(alpha: 0.4), width: 1),
-                            ),
-                            child: Center(child: icon),
-                          ),
-                          if (!isLast)
-                            Expanded(
-                              child: Container(
-                                width: 1,
-                                color: Colors.white12,
-                                margin: const EdgeInsets.symmetric(vertical: 2),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0, top: 2.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              GestureDetector(
-                                onTap: () {
-                                  if (action.type != 'command') {
-                                    ref.read(editorProvider.notifier).openFile(action.path);
-                                  }
-                                },
-                                child: Text(
-                                  text,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    color: action.type == 'command' ? Colors.white54 : Colors.white,
-                                    fontWeight: action.type == 'command' ? FontWeight.normal : FontWeight.w600,
-                                    decoration: action.type == 'command' ? null : TextDecoration.underline,
-                                    decorationColor: Colors.white30,
-                                  ),
-                                ),
-                              ),
-                              if (action.type != 'command' && ((action.additions ?? 0) > 0 || (action.deletions ?? 0) > 0))
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2.0),
-                                  child: Row(
-                                    children: [
-                                      if ((action.additions ?? 0) > 0)
-                                        Text(
-                                          '+${action.additions}',
-                                          style: GoogleFonts.jetBrainsMono(color: Colors.greenAccent, fontSize: 9, fontWeight: FontWeight.bold),
-                                        ),
-                                      if ((action.additions ?? 0) > 0 && (action.deletions ?? 0) > 0) const SizedBox(width: 4),
-                                      if ((action.deletions ?? 0) > 0)
-                                        Text(
-                                          '-${action.deletions}',
-                                          style: GoogleFonts.jetBrainsMono(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: _buildMessageActionDetails(action),
                 );
               }),
             ),
@@ -3063,14 +2970,12 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                           Text(
                             message.taskName != null && message.taskName!.isNotEmpty
                                 ? (message.taskName!.length > 40 ? '${message.taskName!.substring(0, 40)}...' : message.taskName!)
-                                : (isRu ? 'Выполнение задачи' : 'Task Execution'),
+                                : AppLocalizations.of(context)!.taskExecution,
                             style: GoogleFonts.inter(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
                           ),
                           if (message.stepNumber != null)
                             Text(
-                              isRu 
-                                  ? 'Шаг ${message.stepNumber}/${message.totalSteps ?? 12}' 
-                                  : 'Step ${message.stepNumber}/${message.totalSteps ?? 12}',
+                              AppLocalizations.of(context)!.stepNumber(message.stepNumber!, message.totalSteps ?? 12),
                               style: GoogleFonts.inter(color: Colors.white38, fontSize: 9.5),
                             ),
                         ],
@@ -3089,10 +2994,8 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                   children: [
                     Text(
                       editCount > 0 
-                          ? (isRu 
-                              ? 'Изменено файлов: $editCount (+$additions -$deletions)' 
-                              : 'Changed $editCount files (+$additions -$deletions)')
-                          : (isRu ? 'Команд выполнено: $commandCount' : 'Executed $commandCount commands'),
+                          ? AppLocalizations.of(context)!.filesChangedCount(editCount, additions, deletions)
+                          : AppLocalizations.of(context)!.commandsExecutedCount(commandCount),
                       style: GoogleFonts.inter(color: Colors.white60, fontSize: 10),
                     ),
                     if (editCount > 0)
@@ -3108,13 +3011,13 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                             ),
                             icon: const Icon(LucideIcons.check, size: 10, color: Colors.greenAccent),
                             label: Text(
-                              isRu ? 'Принять' : 'Keep',
+                              AppLocalizations.of(context)!.keep,
                               style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text(isRu ? 'Изменения успешно сохранены' : 'Changes accepted and stashed'),
+                                  content: Text(AppLocalizations.of(context)!.changesAccepted),
                                   backgroundColor: const Color(0xFF1E2230),
                                 ),
                               );
@@ -3130,7 +3033,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                             ),
                             icon: const Icon(LucideIcons.undo_2, size: 10, color: Colors.redAccent),
                             label: Text(
-                              isRu ? 'Отменить' : 'Undo',
+                              AppLocalizations.of(context)!.undo,
                               style: const TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                             onPressed: () async {
@@ -3156,7 +3059,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                               if (mounted) {
                                 messenger.showSnackBar(
                                   SnackBar(
-                                    content: Text(isRu ? 'Отменено изменений: $undone' : 'Undid $undone file changes'),
+                                    content: Text(AppLocalizations.of(context)!.undoneChanges(undone)),
                                     backgroundColor: Colors.redAccent.withValues(alpha: 0.8),
                                   ),
                                 );
@@ -3237,7 +3140,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                               if (mounted) {
                                 messenger.showSnackBar(
                                   SnackBar(
-                                    content: Text(isRu ? 'Отменено изменение файла $fileName' : 'Discarded changes in $fileName'),
+                                    content: Text(AppLocalizations.of(context)!.discardedFileChanges(fileName)),
                                   ),
                                 );
                               }
@@ -3296,10 +3199,9 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (index == widget.aiState.messages.length) {
-          final isRu = Localizations.localeOf(context).languageCode == 'ru';
           final role = widget.aiState.activeAgentRole ?? 'Agent';
           final status = widget.aiState.currentStatusMessage ?? 
-              (isRu ? 'Вычисление...' : 'Thinking...');
+              AppLocalizations.of(context)!.thinking;
           
           Color roleColor;
           String roleText;
@@ -3308,22 +3210,22 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
           switch (role.toLowerCase()) {
             case 'planner':
               roleColor = Colors.cyanAccent;
-              roleText = isRu ? 'ПЛАНИРОВЩИК' : 'PLANNER';
+              roleText = AppLocalizations.of(context)!.planner;
               roleIcon = LucideIcons.compass;
               break;
             case 'coder':
               roleColor = Colors.purpleAccent;
-              roleText = isRu ? 'КОДЕР' : 'CODER';
+              roleText = AppLocalizations.of(context)!.coder;
               roleIcon = LucideIcons.code;
               break;
             case 'validator':
               roleColor = Colors.orangeAccent;
-              roleText = isRu ? 'ВАЛИДАТОР' : 'VALIDATOR';
+              roleText = AppLocalizations.of(context)!.validator;
               roleIcon = LucideIcons.shield_check;
               break;
             default:
               roleColor = Colors.blueAccent;
-              roleText = isRu ? 'ИИ-АГЕНТ' : 'AI-AGENT';
+              roleText = AppLocalizations.of(context)!.aiAgentRole;
               roleIcon = LucideIcons.bot;
           }
 
@@ -3472,7 +3374,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                                         });
                                       },
                                       child: Text(
-                                        Localizations.localeOf(context).languageCode == 'ru' ? 'Отмена' : 'Cancel',
+                                        AppLocalizations.of(context)!.cancel,
                                         style: const TextStyle(color: Colors.white38, fontSize: 11),
                                       ),
                                     ),
@@ -3501,7 +3403,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                                         });
                                       },
                                       child: Text(
-                                        Localizations.localeOf(context).languageCode == 'ru' ? 'Отправить' : 'Resubmit',
+                                        AppLocalizations.of(context)!.resubmit,
                                         style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                       ),
                                     ),
@@ -3527,8 +3429,10 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                       isUser 
                           ? l10n.you 
                           : (isSystem 
-                              ? (Localizations.localeOf(context).languageCode == 'ru' ? 'Система' : 'System') 
-                              : ref.read(aiServiceProvider).settings.currentProvider.displayName),
+                              ? AppLocalizations.of(context)!.system 
+                              : (ref.read(aiServiceProvider).settings.currentProvider.id == 'local_edge'
+                                  ? l10n.localAiDisplayName
+                                  : ref.read(aiServiceProvider).settings.currentProvider.displayName)),
                       style: GoogleFonts.inter(color: Colors.white24, fontSize: 10),
                     ),
                     if (isUser && !widget.aiState.isLoading && _editingMessageIndex == null) ...[
@@ -3546,9 +3450,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                     if (!widget.aiState.isLoading && index < widget.aiState.messages.length - 1) ...[
                       const SizedBox(width: 8),
                       Tooltip(
-                        message: Localizations.localeOf(context).languageCode == 'ru'
-                            ? 'Откатить историю и код к этому шагу'
-                            : 'Rollback history and code to this step',
+                        message: AppLocalizations.of(context)!.rollbackHistoryToStep,
                         child: InkWell(
                           onTap: () async {
                             final confirm = await showDialog<bool>(
@@ -3557,27 +3459,25 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                                 backgroundColor: const Color(0xFF1E2230),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                 title: Text(
-                                  Localizations.localeOf(context).languageCode == 'ru' ? 'Подтверждение отката' : 'Confirm Rollback',
+                                  AppLocalizations.of(context)!.confirmRollback,
                                   style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                                 ),
                                 content: Text(
-                                  Localizations.localeOf(context).languageCode == 'ru'
-                                      ? 'Все изменения кода, сделанные после этого сообщения, будут отменены, а последующие сообщения удалены. Продолжить?'
-                                      : 'All code changes made after this message will be reverted, and subsequent messages will be deleted. Continue?',
+                                  AppLocalizations.of(context)!.rollbackConfirmationText,
                                   style: const TextStyle(color: Colors.white70, fontSize: 11),
                                 ),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(context, false),
                                     child: Text(
-                                      Localizations.localeOf(context).languageCode == 'ru' ? 'Отмена' : 'Cancel',
+                                      AppLocalizations.of(context)!.cancel,
                                       style: const TextStyle(color: Colors.white38, fontSize: 11),
                                     ),
                                   ),
                                   TextButton(
                                     onPressed: () => Navigator.pop(context, true),
                                     child: Text(
-                                      Localizations.localeOf(context).languageCode == 'ru' ? 'Да, откатить' : 'Yes, rollback',
+                                      AppLocalizations.of(context)!.yesRollback,
                                       style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
                                     ),
                                   ),
@@ -3610,7 +3510,6 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
   }
 
   Widget _buildMessageActionsCard(List<AIAction> actions, bool isLastMessage) {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
     final l10n = AppLocalizations.of(context)!;
     
     // Check if any of these actions are still pending in the global proposedActions state
@@ -3658,9 +3557,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    isRu 
-                        ? '${pendingActions.length} ${pendingActions.length == 1 ? "файл с изменениями" : pendingActions.length < 5 ? "файла с изменениями" : "файлов с изменениями"}' 
-                        : '${pendingActions.length} file${pendingActions.length == 1 ? "" : "s"} with changes',
+                    '${l10n.filesCount(pendingActions.length)} ${l10n.withChanges}',
                     style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
                   ),
                   Row(
@@ -3713,7 +3610,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                   const Icon(LucideIcons.circle_check, size: 12, color: Colors.greenAccent),
                   const SizedBox(width: 6),
                   Text(
-                    isRu ? 'Изменения применены' : 'Changes applied',
+                    l10n.changesApplied,
                     style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 ],
@@ -3870,7 +3767,6 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
   }
 
   Widget _buildCodeBlock(String code, String language, BuildContext context) {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       width: double.infinity,
@@ -3905,7 +3801,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                     Clipboard.setData(ClipboardData(text: code));
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(isRu ? 'Код скопирован в буфер' : 'Code copied to clipboard'),
+                        content: Text(AppLocalizations.of(context)!.codeCopied),
                         duration: const Duration(seconds: 1),
                         backgroundColor: const Color(0xFF1E2230),
                       ),
@@ -3917,7 +3813,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                       const Icon(LucideIcons.copy, size: 12, color: Colors.white38),
                       const SizedBox(width: 4),
                       Text(
-                        isRu ? 'Копировать' : 'Copy',
+                        AppLocalizations.of(context)!.copy,
                         style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
                       ),
                     ],
@@ -4055,7 +3951,6 @@ class _AIActionFileItemState extends ConsumerState<AIActionFileItem> {
         typeIcon = LucideIcons.sparkles;
     }
 
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
     const permissionService = AiPermissionService();
     
     // Evaluate risk and path scoping
@@ -4067,20 +3962,20 @@ class _AIActionFileItemState extends ConsumerState<AIActionFileItem> {
     
     if (!inScope) {
       riskColor = Colors.redAccent;
-      riskLabel = isRu ? 'Вне проекта!' : 'Out of scope!';
+      riskLabel = AppLocalizations.of(context)!.outOfScope;
     } else {
       switch (risk) {
         case AiRiskLevel.low:
           riskColor = Colors.greenAccent;
-          riskLabel = isRu ? 'Низкий' : 'Low';
+          riskLabel = AppLocalizations.of(context)!.low;
           break;
         case AiRiskLevel.medium:
           riskColor = Colors.purpleAccent;
-          riskLabel = isRu ? 'Средний' : 'Medium';
+          riskLabel = AppLocalizations.of(context)!.medium;
           break;
         case AiRiskLevel.high:
           riskColor = Colors.orangeAccent;
-          riskLabel = isRu ? 'Высокий' : 'High';
+          riskLabel = AppLocalizations.of(context)!.high;
           break;
       }
     }
@@ -4202,7 +4097,7 @@ class _AIActionFileItemState extends ConsumerState<AIActionFileItem> {
                         border: Border.all(color: const Color(0xFF4EC994).withValues(alpha: 0.4)),
                       ),
                       child: Text(
-                        isRu ? 'Принять' : 'Keep',
+                        AppLocalizations.of(context)!.keep,
                         style: GoogleFonts.inter(color: const Color(0xFF4EC994), fontSize: 11, fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -4220,7 +4115,7 @@ class _AIActionFileItemState extends ConsumerState<AIActionFileItem> {
                         border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.4)),
                       ),
                       child: Text(
-                        isRu ? 'Отклонить' : 'Reject',
+                        AppLocalizations.of(context)!.reject,
                         style: GoogleFonts.inter(color: const Color(0xFFFF6B6B), fontSize: 11, fontWeight: FontWeight.w600),
                       ),
                     ),
@@ -4237,7 +4132,7 @@ class _AIActionFileItemState extends ConsumerState<AIActionFileItem> {
                           children: [
                             const Icon(LucideIcons.eye, size: 10, color: Colors.white38),
                             const SizedBox(width: 3),
-                            Text(isRu ? 'Просмотр' : 'View', style: GoogleFonts.inter(fontSize: 10, color: Colors.white38)),
+                            Text(AppLocalizations.of(context)!.viewAction, style: GoogleFonts.inter(fontSize: 10, color: Colors.white38)),
                           ],
                         ),
                       ),
@@ -4250,7 +4145,7 @@ class _AIActionFileItemState extends ConsumerState<AIActionFileItem> {
                       const Icon(LucideIcons.circle_check, size: 10, color: Color(0xFF4EC994)),
                       const SizedBox(width: 3),
                       Text(
-                        isRu ? 'Применено' : 'Applied',
+                        AppLocalizations.of(context)!.applied,
                         style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF4EC994), fontWeight: FontWeight.w500),
                       ),
                     ],

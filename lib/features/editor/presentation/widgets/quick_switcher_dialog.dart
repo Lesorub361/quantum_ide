@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
@@ -169,7 +170,7 @@ class _QuickSwitcherDialogState extends ConsumerState<QuickSwitcherDialog> {
   @override
   Widget build(BuildContext context) {
     final workspaceRoot = ref.watch(workspaceProvider).currentPath ?? '';
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     return KeyboardListener(
       focusNode: _keyboardFocus,
@@ -220,10 +221,8 @@ class _QuickSwitcherDialogState extends ConsumerState<QuickSwitcherDialog> {
                           )
                         : null,
                     hintText: _mode == SwitcherMode.files
-                        ? (isRu
-                            ? 'Поиск файлов... (введите "#" для символов)'
-                            : 'Search files... (type "#" for symbols)')
-                        : (isRu ? 'Поиск символов в коде...' : 'Search symbols...'),
+                        ? l10n.searchFilesHint
+                        : l10n.searchSymbolsHint,
                     hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
                     filled: true,
                     fillColor: Colors.black26,
@@ -248,8 +247,8 @@ class _QuickSwitcherDialogState extends ConsumerState<QuickSwitcherDialog> {
                   children: [
                     Text(
                       _mode == SwitcherMode.files
-                          ? (isRu ? 'РЕЖИМ: ФАЙЛЫ' : 'MODE: FILES')
-                          : (isRu ? 'РЕЖИМ: СИМВОЛЫ' : 'MODE: SYMBOLS'),
+                          ? l10n.modeFiles
+                          : l10n.modeSymbols,
                       style: GoogleFonts.inter(
                         fontSize: 8.5,
                         fontWeight: FontWeight.w800,
@@ -259,7 +258,7 @@ class _QuickSwitcherDialogState extends ConsumerState<QuickSwitcherDialog> {
                     ),
                     const Spacer(),
                     Text(
-                      isRu ? 'Найдено: ${_results.length}' : 'Results: ${_results.length}',
+                      l10n.resultsCount(_results.length),
                       style: GoogleFonts.inter(fontSize: 8.5, color: Colors.white30),
                     ),
                   ],
@@ -272,7 +271,7 @@ class _QuickSwitcherDialogState extends ConsumerState<QuickSwitcherDialog> {
                 child: _results.isEmpty
                     ? Center(
                         child: Text(
-                          isRu ? 'Ничего не найдено' : 'No results found',
+                          l10n.noResults,
                           style: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
                         ),
                       )

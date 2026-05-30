@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class LocaleNotifier extends StateNotifier<Locale> {
   LocaleNotifier() : super(const Locale('en')) {
@@ -35,3 +36,9 @@ class LocaleNotifier extends StateNotifier<Locale> {
 final localeProvider = StateNotifierProvider<LocaleNotifier, Locale>((ref) {
   return LocaleNotifier();
 });
+
+final localizationsProvider = Provider<AppLocalizations>((ref) {
+  final locale = ref.watch(localeProvider);
+  return lookupAppLocalizations(locale);
+});
+

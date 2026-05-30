@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class SidebarWebPreviewPanel extends ConsumerStatefulWidget {
   const SidebarWebPreviewPanel({super.key});
@@ -40,7 +41,7 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
 
   @override
   Widget build(BuildContext context) {
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     return Column(
       children: [
@@ -92,7 +93,7 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
               if (_serverIsRunning)
                 IconButton(
                   icon: const Icon(LucideIcons.rotate_cw, size: 14, color: Colors.greenAccent),
-                  tooltip: isRu ? 'Обновить предпросмотр' : 'Reload Preview',
+                  tooltip: l10n.refreshPreview,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _webViewController?.reload(),
@@ -106,8 +107,8 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
                   color: _serverIsRunning ? Colors.redAccent : Colors.cyanAccent,
                 ),
                 tooltip: _serverIsRunning 
-                    ? (isRu ? 'Остановить веб-сервер' : 'Stop Web Server') 
-                    : (isRu ? 'Запустить веб-сервер' : 'Start Web Server'),
+                    ? l10n.stopWebServer 
+                    : l10n.startWebServer,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: () {
@@ -118,7 +119,7 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
               // Open in External Browser
               IconButton(
                 icon: const Icon(LucideIcons.external_link, size: 14, color: Colors.blueAccent),
-                tooltip: isRu ? 'Открыть во внешнем браузере' : 'Open in External Browser',
+                tooltip: l10n.openInExternalBrowser,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 onPressed: () async {
@@ -154,12 +155,12 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
                       Icon(LucideIcons.server_off, size: 36, color: Colors.white.withValues(alpha: 0.15)),
                       const SizedBox(height: 12),
                       Text(
-                        isRu ? 'Веб-превью остановлено' : 'Web Preview Stopped',
+                        l10n.webPreviewStopped,
                         style: GoogleFonts.inter(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        isRu ? 'Запустите сервер и нажмите кнопку Play.' : 'Start server and click Play button.',
+                        l10n.webPreviewStartInstructions,
                         style: GoogleFonts.inter(color: Colors.white24, fontSize: 10),
                       ),
                     ],

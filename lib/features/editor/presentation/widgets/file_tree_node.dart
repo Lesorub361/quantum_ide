@@ -19,6 +19,7 @@ import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_e
 import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 enum FileSortMode { name, size, date }
 
@@ -635,31 +636,32 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     final selectedPaths = ref.read(selectedPathsProvider);
     final hasSelection = selectedPaths.isNotEmpty;
     final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
+    final l10n = AppLocalizations.of(context)!;
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xff1e1e24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(LucideIcons.trash_2, color: Colors.redAccent),
-            SizedBox(width: 10),
-            Text('Подтвердите удаление', style: TextStyle(color: Colors.white)),
+            const Icon(LucideIcons.trash_2, color: Colors.redAccent),
+            const SizedBox(width: 10),
+            Text(l10n.confirmDelete, style: const TextStyle(color: Colors.white)),
           ],
         ),
         content: Text(
-          'Вы действительно хотите удалить ${pathsToProcess.length} объектов?',
+          l10n.confirmDeleteMultiple(pathsToProcess.length),
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена', style: TextStyle(color: Colors.grey)),
+            child: Text(l10n.cancel, style: const TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Удалить', style: TextStyle(color: Colors.redAccent)),
+            child: Text(l10n.delete, style: const TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
@@ -713,6 +715,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   }
 
   void _extractZip(BuildContext context, WidgetRef ref, String path) async {
+    final l10n = AppLocalizations.of(context)!;
     try {
       showDialog(
         context: context,
@@ -725,7 +728,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       if (context.mounted) {
         Navigator.pop(context); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Архив успешно распакован!')),
+          SnackBar(content: Text(l10n.archiveExtracted)),
         );
         _loadChildren();
         widget.onRefreshParent();
@@ -734,41 +737,42 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       if (context.mounted) {
         Navigator.pop(context); // close progress dialog
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка распаковки: $e')),
+          SnackBar(content: Text(l10n.executionError(e.toString()))),
         );
       }
     }
   }
 
   void _showCompressDialog(BuildContext context, WidgetRef ref, List<String> paths) async {
+    final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: 'archive');
     final zipName = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1D27),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Сжать в ZIP', style: TextStyle(color: Colors.white)),
+        title: Text(l10n.compressToZip, style: const TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            hintText: 'Имя архива',
-            hintStyle: TextStyle(color: Colors.white24),
+          decoration: InputDecoration(
+            hintText: l10n.nameFileHint,
+            hintStyle: const TextStyle(color: Colors.white24),
             suffixText: '.zip',
-            suffixStyle: TextStyle(color: Colors.white54),
-            enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-            focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF6C63FF))),
+            suffixStyle: const TextStyle(color: Colors.white54),
+            enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+            focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF6C63FF))),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white38)),
+            child: Text(l10n.cancel, style: const TextStyle(color: Colors.white38)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Сжать', style: TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold)),
+            child: Text(l10n.compressToZip.split(' ').first, style: const TextStyle(color: Color(0xFF6C63FF), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -791,7 +795,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         if (context.mounted) {
           Navigator.pop(context); // close progress
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Архив успешно создан!')),
+            SnackBar(content: Text(l10n.archiveCreated)),
           );
           ref.read(selectedPathsProvider.notifier).state = {};
           _loadChildren();
@@ -801,7 +805,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         if (context.mounted) {
           Navigator.pop(context); // close progress
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка сжатия: $e')),
+            SnackBar(content: Text(l10n.executionError(e.toString()))),
           );
         }
       }
@@ -810,7 +814,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
 
   void _handleAiAsk(BuildContext context, WidgetRef ref, {String? presetQuery}) async {
     final controller = TextEditingController();
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
     String? instruction = presetQuery;
     instruction ??= await showDialog<String>(
       context: context,
@@ -822,7 +826,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
               const Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 20),
               const SizedBox(width: 8),
               Text(
-                isRu ? 'Запрос к ИИ' : 'Ask AI',
+                l10n.askAi,
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ],
@@ -833,8 +837,8 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
             children: [
               Text(
                 widget.isDirectory
-                    ? (isRu ? 'Папка: ${widget.name}' : 'Folder: ${widget.name}')
-                    : (isRu ? 'Файл: ${widget.name}' : 'File: ${widget.name}'),
+                    ? l10n.folderLabel(widget.name)
+                    : l10n.fileLabel(widget.name),
                 style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontSize: 11),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -848,8 +852,8 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
                   hintText: widget.isDirectory
-                      ? (isRu ? 'Что сделать с этой папкой?' : 'What should AI do with this folder?')
-                      : (isRu ? 'Что сделать с этим файлом?' : 'What should AI do with this file?'),
+                      ? l10n.whatShouldAiDoFolder
+                      : l10n.whatShouldAiDoFile,
                   hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
                   filled: true,
                   fillColor: Colors.black26,
@@ -874,7 +878,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
-                isRu ? 'Отмена' : 'Cancel',
+                l10n.cancel,
                 style: GoogleFonts.inter(color: Colors.white38, fontSize: 13),
               ),
             ),
@@ -888,7 +892,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
               child: Text(
-                isRu ? 'Отправить' : 'Send',
+                l10n.send,
                 style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
               ),
             ),
@@ -909,23 +913,23 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
 
     final prompt = widget.isDirectory
         ? """
-Я работаю в папке: `${widget.path}`.
-Запрос пользователя:
+I am working in directory: `${widget.path}`.
+User request:
 $instruction
 
-Пожалуйста, выполни этот запрос. Если требуется изменить или создать файлы/папки, или запустить команду в терминале, используй формат действий <actions>.
+Please fulfill this request. If you need to modify or create files/folders, or run a command in the terminal, use the actions format <actions>.
 """
         : """
-Я работаю над файлом: `${widget.path}`.
-Его текущее содержимое:
+I am working on file: `${widget.path}`.
+Its current content:
 ```
 $content
 ```
 
-Запрос пользователя:
+User request:
 $instruction
 
-Пожалуйста, выполни этот запрос. Если требуется изменить файл, создать новый, удалить или запустить команду в терминале, используй формат действий <actions>.
+Please fulfill this request. If you need to modify the file, create a new one, delete, or run a command in the terminal, use the actions format <actions>.
 """;
 
     ref.read(aiProvider.notifier).askAI(prompt);
@@ -936,7 +940,7 @@ $instruction
     final selectedPaths = ref.read(selectedPathsProvider);
     final hasSelection = selectedPaths.isNotEmpty;
     final clipboard = ref.read(fileClipboardProvider);
-    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context)!;
 
     showModalBottomSheet(
       context: context,
@@ -956,7 +960,7 @@ $instruction
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     child: Text(
-                      hasSelection ? 'Выбрано объектов: ${selectedPaths.length}' : widget.name,
+                      hasSelection ? l10n.selectedObjectsCount(selectedPaths.length) : widget.name,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -969,8 +973,8 @@ $instruction
                   if (!hasSelection) ...[
                     _buildBottomSheetItem(
                       icon: LucideIcons.sparkles,
-                      title: isRu ? 'Спросить ИИ' : 'Ask AI',
-                      subtitle: isRu ? 'Интерактивный диалог с ИИ-ассистентом' : 'Interactive chat with AI assistant',
+                      title: l10n.askAi,
+                      subtitle: l10n.askAiDesc,
                       color: Colors.cyanAccent,
                       onTap: () {
                         Navigator.pop(context);
@@ -979,204 +983,204 @@ $instruction
                     ),
                     _buildBottomSheetItem(
                       icon: LucideIcons.book_open,
-                      title: isRu ? 'ИИ: Объяснить структуру' : 'AI: Explain structure',
-                      subtitle: isRu ? 'Детальное описание кода или папки' : 'Detailed summary of code or folders',
+                      title: l10n.explainStructure,
+                      subtitle: l10n.explainStructureDesc,
                       color: Colors.cyanAccent,
                       onTap: () {
                         Navigator.pop(context);
                         _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? 'Объясни назначение и структуру этой папки.'
-                            : 'Подробно объясни назначение и логику работы этого файла.');
+                            ? l10n.explainFolderPreset
+                            : l10n.explainFilePreset);
                       },
                     ),
                     _buildBottomSheetItem(
                       icon: LucideIcons.file_text,
-                      title: isRu ? 'ИИ: Добавить документацию' : 'AI: Add documentation',
-                      subtitle: isRu ? 'Сгенерировать docstrings и комментарии' : 'Generate docstrings and comments',
+                      title: l10n.addDoc,
+                      subtitle: l10n.addDocDesc,
                       color: Colors.cyanAccent,
                       onTap: () {
                         Navigator.pop(context);
                         _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? 'Добавь документацию, docstrings и подробные комментарии к коду во всех файлах этой папки.'
-                            : 'Добавь понятную документацию, docstrings и подробные комментарии к коду в этом файле.');
+                            ? l10n.addDocFolderPreset
+                            : l10n.addDocFilePreset);
                       },
                     ),
                     _buildBottomSheetItem(
                       icon: LucideIcons.shield_check,
-                      title: isRu ? 'ИИ: Создать тесты' : 'AI: Generate Tests',
-                      subtitle: isRu ? 'Написать unit-тесты для кода' : 'Write unit tests for the code',
+                      title: l10n.generateTests,
+                      subtitle: l10n.generateTestsDesc,
                       color: Colors.cyanAccent,
                       onTap: () {
                         Navigator.pop(context);
                         _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? 'Напиши unit-тесты для файлов в этой папке.'
-                            : 'Напиши комплексные unit-тесты для кода в этом файле.');
+                            ? l10n.generateTestsFolderPreset
+                            : l10n.generateTestsFilePreset);
                       },
                     ),
                     _buildBottomSheetItem(
                       icon: LucideIcons.zap,
-                      title: isRu ? 'ИИ: Оптимизировать' : 'AI: Optimize',
-                      subtitle: isRu ? 'Предложить улучшения производительности' : 'Suggest performance improvements',
+                      title: l10n.optimizeCode,
+                      subtitle: l10n.optimizeCodeDesc,
                       color: Colors.cyanAccent,
                       onTap: () {
                         Navigator.pop(context);
                         _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? 'Проанализируй код в этой папке и предложи оптимизацию производительности и читаемости.'
-                            : 'Проанализируй код в этом файле и предложи варианты оптимизации производительности, читаемости и архитектуры.');
+                            ? l10n.optimizeFolderPreset
+                            : l10n.optimizeFilePreset);
                       },
                     ),
                     const Divider(color: Colors.white10),
                   ],
                   if (widget.isDirectory && !hasSelection) ...[
-                  _buildBottomSheetItem(
-                    icon: LucideIcons.file_plus,
-                    title: 'Новый файл',
-                    subtitle: 'Создать файл в этой папке',
-                    color: Colors.blueAccent,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _inlineController = TextEditingController();
-                        _isCreatingFile = true;
-                        _isCreatingFolder = false;
-                        _inlineFocusNode.requestFocus();
-                      });
-                    },
-                  ),
-                  _buildBottomSheetItem(
-                    icon: LucideIcons.folder_plus,
-                    title: 'Новая папка',
-                    subtitle: 'Создать подпапку',
-                    color: Colors.orangeAccent,
-                    onTap: () {
-                      Navigator.pop(context);
-                      setState(() {
-                        _inlineController = TextEditingController();
-                        _isCreatingFolder = true;
-                        _isCreatingFile = false;
-                        _inlineFocusNode.requestFocus();
-                      });
-                    },
-                  ),
-                  const Divider(color: Colors.white10),
-                ],
-                if (!widget.isDirectory && !hasSelection) ...[
-                  (() {
-                    final isBookmarked = ref.watch(bookmarksProvider).contains(widget.path);
-                    return _buildBottomSheetItem(
-                      icon: LucideIcons.star,
-                      title: isBookmarked ? 'Удалить из закладок' : 'Добавить в закладки',
-                      subtitle: isBookmarked ? 'Убрать файл из быстрого доступа' : 'Закрепить файл для быстрого доступа',
-                      color: isBookmarked ? Colors.redAccent : Colors.amberAccent,
+                    _buildBottomSheetItem(
+                      icon: LucideIcons.file_plus,
+                      title: l10n.newFile,
+                      subtitle: l10n.newFileDesc,
+                      color: Colors.blueAccent,
                       onTap: () {
                         Navigator.pop(context);
-                        ref.read(bookmarksProvider.notifier).toggleBookmark(widget.path);
+                        setState(() {
+                          _inlineController = TextEditingController();
+                          _isCreatingFile = true;
+                          _isCreatingFolder = false;
+                          _inlineFocusNode.requestFocus();
+                        });
                       },
-                    );
-                  }()),
-                  const Divider(color: Colors.white10),
-                ],
-                _buildBottomSheetItem(
-                  icon: LucideIcons.copy,
-                  title: 'Копировать',
-                  subtitle: 'Добавить в буфер обмена',
-                  color: Colors.white70,
-                  onTap: () {
-                    Navigator.pop(context);
-                    final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
-                    ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToProcess, isCut: false);
-                  },
-                ),
-                _buildBottomSheetItem(
-                  icon: LucideIcons.scissors,
-                  title: 'Вырезать',
-                  subtitle: 'Переместить файлы',
-                  color: Colors.white70,
-                  onTap: () {
-                    Navigator.pop(context);
-                    final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
-                    ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToProcess, isCut: true);
-                  },
-                ),
-                if (clipboard != null && widget.isDirectory && !hasSelection)
+                    ),
+                    _buildBottomSheetItem(
+                      icon: LucideIcons.folder_plus,
+                      title: l10n.newFolder,
+                      subtitle: l10n.newFolderDesc,
+                      color: Colors.orangeAccent,
+                      onTap: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _inlineController = TextEditingController();
+                          _isCreatingFolder = true;
+                          _isCreatingFile = false;
+                          _inlineFocusNode.requestFocus();
+                        });
+                      },
+                    ),
+                    const Divider(color: Colors.white10),
+                  ],
+                  if (!widget.isDirectory && !hasSelection) ...[
+                    (() {
+                      final isBookmarked = ref.watch(bookmarksProvider).contains(widget.path);
+                      return _buildBottomSheetItem(
+                        icon: LucideIcons.star,
+                        title: isBookmarked ? l10n.removeFromBookmarks : l10n.addToBookmarks,
+                        subtitle: isBookmarked ? l10n.removeFromBookmarksDesc : l10n.addToBookmarksDesc,
+                        color: isBookmarked ? Colors.redAccent : Colors.amberAccent,
+                        onTap: () {
+                          Navigator.pop(context);
+                          ref.read(bookmarksProvider.notifier).toggleBookmark(widget.path);
+                        },
+                      );
+                    }()),
+                    const Divider(color: Colors.white10),
+                  ],
                   _buildBottomSheetItem(
-                    icon: LucideIcons.clipboard_paste,
-                    title: 'Вставить',
-                    subtitle: 'Вставить скопированные объекты',
-                    color: Colors.greenAccent,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _handlePaste();
-                    },
-                  ),
-                if (!hasSelection)
-                  _buildBottomSheetItem(
-                    icon: LucideIcons.pencil,
-                    title: 'Переименовать',
-                    subtitle: 'Изменить имя элемента',
+                    icon: LucideIcons.copy,
+                    title: l10n.copy,
+                    subtitle: l10n.copyDesc,
                     color: Colors.white70,
                     onTap: () {
                       Navigator.pop(context);
-                      setState(() {
-                        _inlineController = TextEditingController(text: widget.name);
-                        _isRenaming = true;
-                        _inlineFocusNode.requestFocus();
-                      });
+                      final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
+                      ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToProcess, isCut: false);
                     },
                   ),
-                if (!hasSelection) ...[
-                  if (widget.name.toLowerCase().endsWith('.zip'))
+                  _buildBottomSheetItem(
+                    icon: LucideIcons.scissors,
+                    title: l10n.cut,
+                    subtitle: l10n.cutDesc,
+                    color: Colors.white70,
+                    onTap: () {
+                      Navigator.pop(context);
+                      final pathsToProcess = hasSelection ? selectedPaths.toList() : [widget.path];
+                      ref.read(fileClipboardProvider.notifier).state = ClipboardData(paths: pathsToProcess, isCut: true);
+                    },
+                  ),
+                  if (clipboard != null && widget.isDirectory && !hasSelection)
                     _buildBottomSheetItem(
-                      icon: LucideIcons.file_archive,
-                      title: 'Распаковать ZIP',
-                      subtitle: 'Извлечь файлы из архива',
+                      icon: LucideIcons.clipboard_paste,
+                      title: l10n.paste,
+                      subtitle: l10n.pasteDesc,
                       color: Colors.greenAccent,
                       onTap: () {
                         Navigator.pop(context);
-                        _extractZip(context, ref, widget.path);
+                        _handlePaste();
                       },
-                    )
-                  else
+                    ),
+                  if (!hasSelection)
+                    _buildBottomSheetItem(
+                      icon: LucideIcons.pencil,
+                      title: l10n.rename,
+                      subtitle: l10n.renameDesc,
+                      color: Colors.white70,
+                      onTap: () {
+                        Navigator.pop(context);
+                        setState(() {
+                          _inlineController = TextEditingController(text: widget.name);
+                          _isRenaming = true;
+                          _inlineFocusNode.requestFocus();
+                        });
+                      },
+                    ),
+                  if (!hasSelection) ...[
+                    if (widget.name.toLowerCase().endsWith('.zip'))
+                      _buildBottomSheetItem(
+                        icon: LucideIcons.file_archive,
+                        title: l10n.extractZip,
+                        subtitle: l10n.extractZipDesc,
+                        color: Colors.greenAccent,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _extractZip(context, ref, widget.path);
+                        },
+                      )
+                    else
+                      _buildBottomSheetItem(
+                        icon: LucideIcons.file_archive,
+                        title: l10n.compressZip,
+                        subtitle: l10n.compressZipDesc,
+                        color: Colors.amberAccent,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _showCompressDialog(context, ref, [widget.path]);
+                        },
+                      ),
+                  ],
+                  if (hasSelection)
                     _buildBottomSheetItem(
                       icon: LucideIcons.file_archive,
-                      title: 'Сжать в ZIP',
-                      subtitle: 'Создать ZIP архив',
+                      title: l10n.compressSelectedZip,
+                      subtitle: l10n.compressSelectedZipDesc,
                       color: Colors.amberAccent,
                       onTap: () {
                         Navigator.pop(context);
-                        _showCompressDialog(context, ref, [widget.path]);
+                        _showCompressDialog(context, ref, selectedPaths.toList());
                       },
                     ),
-                ],
-                if (hasSelection)
                   _buildBottomSheetItem(
-                    icon: LucideIcons.file_archive,
-                    title: 'Сжать выбранные в ZIP',
-                    subtitle: 'Создать архив из выбранных объектов',
-                    color: Colors.amberAccent,
+                    icon: LucideIcons.trash_2,
+                    title: hasSelection ? l10n.deleteSelected : l10n.delete,
+                    subtitle: l10n.deleteDesc,
+                    color: Colors.redAccent,
                     onTap: () {
                       Navigator.pop(context);
-                      _showCompressDialog(context, ref, selectedPaths.toList());
+                      _confirmDelete(context, ref);
                     },
                   ),
-                _buildBottomSheetItem(
-                  icon: LucideIcons.trash_2,
-                  title: hasSelection ? 'Удалить выбранные' : 'Удалить',
-                  subtitle: 'Безвозвратное удаление',
-                  color: Colors.redAccent,
-                  onTap: () {
-                    Navigator.pop(context);
-                    _confirmDelete(context, ref);
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   Widget _buildBottomSheetItem({
     required IconData icon,
@@ -1298,7 +1302,9 @@ $instruction
                       autofocus: true,
                       style: const TextStyle(fontSize: 13, color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: isDir ? 'имя_папки' : 'имя_файла.txt',
+                        hintText: isDir
+                            ? AppLocalizations.of(context)!.nameFolderHint
+                            : AppLocalizations.of(context)!.nameFileHint,
                         hintStyle: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.3)),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                         isDense: true,
@@ -1534,16 +1540,18 @@ $instruction
             try {
               await ref.read(fileExplorerProvider.notifier).moveEntity(draggedPath, widget.path);
               if (mounted) {
+                final l10n = AppLocalizations.of(context)!;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Элемент успешно перемещен')),
+                  SnackBar(content: Text(l10n.itemMoved)),
                 );
                 _loadChildren();
                 widget.onRefreshParent();
               }
             } catch (e) {
               if (mounted) {
+                final l10n = AppLocalizations.of(context)!;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Ошибка перемещения: $e')),
+                  SnackBar(content: Text(l10n.moveError(e.toString()))),
                 );
               }
             }
@@ -1611,7 +1619,7 @@ $instruction
                 bottom: 3.0,
               ),
               child: Text(
-                'пусто',
+                AppLocalizations.of(context)!.empty,
                 style: TextStyle(
                   fontSize: 10,
                   color: Colors.white.withValues(alpha: 0.15),

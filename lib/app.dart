@@ -38,6 +38,7 @@ class QuantumApp extends ConsumerWidget {
         Locale('ru'),
         Locale('es'),
         Locale('fr'),
+        Locale('zh'),
       ],
     );
   }
