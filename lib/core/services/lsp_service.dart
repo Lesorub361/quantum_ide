@@ -173,7 +173,7 @@ class LspService {
       }
 
       Process process;
-      if (initHostPath.isNotEmpty && File(initHostPath).existsSync()) {
+      if ((Platform.isAndroid || Platform.isIOS) && initHostPath.isNotEmpty && File(initHostPath).existsSync()) {
         debugPrint('LSP: Starting $key server via init-host at $initHostPath for $guestActivePath');
         process = await Process.start('sh', [initHostPath, filesDirPath, guestActivePath, ...commandArgs]);
       } else {
@@ -182,6 +182,9 @@ class LspService {
       }
 
       _processes[key] = process;
+      process.stdin.done.catchError((err) {
+        debugPrint('LSP [$key] stdin error: $err');
+      });
 
       process.stdout.transform(utf8.decoder).listen((data) => _handleOutputForServer(key, data));
       process.stderr.transform(utf8.decoder).listen((error) {
@@ -322,7 +325,12 @@ class LspService {
 
     final process = _processes[key];
     if (process != null) {
-      process.stdin.write('Content-Length: ${message.length}\r\n\r\n$message');
+      try {
+        process.stdin.write('Content-Length: ${message.length}\r\n\r\n$message');
+      } catch (e) {
+        debugPrint('LSP [$key]: Failed to write request to stdin: $e');
+        completer.complete(null);
+      }
     } else {
       completer.complete(null);
     }
@@ -337,7 +345,11 @@ class LspService {
     });
 
     final process = _processes[key];
-    process?.stdin.write('Content-Length: ${message.length}\r\n\r\n$message');
+    try {
+      process?.stdin.write('Content-Length: ${message.length}\r\n\r\n$message');
+    } catch (e) {
+      debugPrint('LSP [$key]: Failed to write notification to stdin: $e');
+    }
   }
 
   String _getLanguageId(String key) {
