@@ -105,7 +105,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       final dir = Directory(workspaceRoot);
 
       if (!await dir.exists()) {
-        state = state.copyWith(isIndexing: false, error: 'Директория проекта не найдена');
+        state = state.copyWith(isIndexing: false, error: 'Project directory not found');
         return;
       }
 
@@ -126,7 +126,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
 
       state = state.copyWith(isIndexing: false, symbols: allSymbols, files: allFiles);
     } catch (e) {
-      state = state.copyWith(isIndexing: false, error: 'Ошибка индексации: $e');
+      state = state.copyWith(isIndexing: false, error: 'Indexing error: $e');
     }
   }
 

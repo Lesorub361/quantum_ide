@@ -50,7 +50,7 @@ Below is the directory structure of the application source code (`lib/`):
 *   **`lib/shared/`**: Global widgets:
     *   `layout/`: Dynamic screen split manager (`foldable_split_manager.dart`).
     *   `widgets/`: Glass containers, breadcrumbs, status bars, and layout scaffolding.
-*   **`lib/l10n/`**: Localization resources (RU/EN/ES/FR).
+*   **`lib/l10n/`**: Localization resources (RU/EN/ES/FR/ZH).
 
 ---
 
@@ -66,7 +66,7 @@ Below is the directory structure of the application source code (`lib/`):
 - **Mobile Build Tools & Diagnostics**: Automated ARM64 Linux toolchain setup (NDK, SDK symlinking, AAPT2 patcher), Java JDK 17 setup, background `dart analyze` processing, project-wide problems panel, APK building and signing.
 - **Web Preview**: Built-in chromium-based WebView previewing, console log forwarder, local server listener.
 - **Premium Design System**: Glassmorphism (blur filters), smooth micro-animations, customizable project accent colors, Outfit and JetBrains Mono typography, custom Lucide icons.
-- **Localization**: Multi-language support including English, Russian, Spanish, and French, with an in-app language selection dialog.
+- **Localization**: Multi-language support including English, Russian, Spanish, French, and Chinese, with an in-app language selection dialog.
 
 ---
 

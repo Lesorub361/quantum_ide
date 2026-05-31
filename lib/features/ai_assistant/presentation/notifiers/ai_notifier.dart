@@ -848,7 +848,7 @@ class AINotifier extends StateNotifier<AIState> {
         lines.add('$relPath:$line:$col  ERROR  ${diag.message}');
       }
     }
-    return lines.isEmpty ? '(нет ошибок)' : lines.join('\n');
+    return lines.isEmpty ? '(no errors)' : lines.join('\n');
   }
 
   Future<String> applyAction(AIAction action, {bool runInBackground = true}) async {

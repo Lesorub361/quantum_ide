@@ -2629,4 +2629,93 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get webPreviewStartInstructions =>
       'Запустите сервер и нажмите кнопку Play.';
+
+  @override
+  String get modelDescQwen1_5b =>
+      'Оптимизированная модель для кодинга. Очень быстрая, подходит для любых устройств.';
+
+  @override
+  String get modelDescQwen7b =>
+      'Мощная модель для сложных задач кодирования. Требует производительное устройство.';
+
+  @override
+  String get modelDescLlama1b =>
+      'Легковесная языковая модель от Meta. Высокая скорость работы.';
+
+  @override
+  String get modelDescLlama3b =>
+      'Сбалансированная модель от Meta. Хорошее понимание контекста.';
+
+  @override
+  String get modelDescOllamaQwen1_5b =>
+      'Легковесная и быстрая модель для кодинга от Alibaba.';
+
+  @override
+  String get modelDescOllamaQwen7b =>
+      'Мощная модель для широкого спектра задач программирования.';
+
+  @override
+  String get modelDescOllamaLlama1b =>
+      'Компактная модель от Meta, отлично подходит для легких задач.';
+
+  @override
+  String get modelDescOllamaLlama3b =>
+      'Сбалансированная модель от Meta для общих задач и диалогов.';
+
+  @override
+  String get modelDescOllamaDeepseek1_3b =>
+      'Специализированная кодинг-модель от DeepSeek.';
+
+  @override
+  String get modelDescOllamaDeepseek6_7b =>
+      'Высокоэффективная кодинг-модель от DeepSeek.';
+
+  @override
+  String get modelDescOllamaMistral7b =>
+      'Универсальная модель общего назначения с хорошим пониманием кода.';
+
+  @override
+  String get modelDescOllamaGemma2b =>
+      'Эффективная и точная компактная модель от Google.';
+
+  @override
+  String get modelDescOllamaGemma9b =>
+      'Мощная языковая модель общего назначения от Google.';
+
+  @override
+  String collabSessionCreated(int port) {
+    return 'Сессия создана на порту $port.';
+  }
+
+  @override
+  String collabSessionCreateError(String error) {
+    return 'Ошибка при создании сессии: $error';
+  }
+
+  @override
+  String collabUserDisconnected(String name) {
+    return 'Пользователь $name отключился.';
+  }
+
+  @override
+  String collabConnectError(String url, String error) {
+    return 'Ошибка при подключении к $url: $error';
+  }
+
+  @override
+  String get collabConnectionLost => 'Подключение к сессии потеряно.';
+
+  @override
+  String collabUserJoined(String name) {
+    return 'Пользователь $name присоединился.';
+  }
+
+  @override
+  String get collabJoinedAsGuest =>
+      'Вы подключились к сессии в качестве гостя.';
+
+  @override
+  String collabUserLeft(String name) {
+    return 'Пользователь $name покинул сессию.';
+  }
 }

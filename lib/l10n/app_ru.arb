@@ -1311,7 +1311,59 @@
   "searchQueryEmpty": "Ошибка: Запрос для поиска пуст.",
   "workspaceNotFound": "Ошибка: Рабочая область не найдена.",
   "webPreviewStopped": "Веб-превью остановлено",
-  "webPreviewStartInstructions": "Запустите сервер и нажмите кнопку Play."
+  "webPreviewStartInstructions": "Запустите сервер и нажмите кнопку Play.",
+  "modelDescQwen1_5b": "Оптимизированная модель для кодинга. Очень быстрая, подходит для любых устройств.",
+  "modelDescQwen7b": "Мощная модель для сложных задач кодирования. Требует производительное устройство.",
+  "modelDescLlama1b": "Легковесная языковая модель от Meta. Высокая скорость работы.",
+  "modelDescLlama3b": "Сбалансированная модель от Meta. Хорошее понимание контекста.",
+  "modelDescOllamaQwen1_5b": "Легковесная и быстрая модель для кодинга от Alibaba.",
+  "modelDescOllamaQwen7b": "Мощная модель для широкого спектра задач программирования.",
+  "modelDescOllamaLlama1b": "Компактная модель от Meta, отлично подходит для легких задач.",
+  "modelDescOllamaLlama3b": "Сбалансированная модель от Meta для общих задач и диалогов.",
+  "modelDescOllamaDeepseek1_3b": "Специализированная кодинг-модель от DeepSeek.",
+  "modelDescOllamaDeepseek6_7b": "Высокоэффективная кодинг-модель от DeepSeek.",
+  "modelDescOllamaMistral7b": "Универсальная модель общего назначения с хорошим пониманием кода.",
+  "modelDescOllamaGemma2b": "Эффективная и точная компактная модель от Google.",
+  "modelDescOllamaGemma9b": "Мощная языковая модель общего назначения от Google.",
+  "collabSessionCreated": "Сессия создана на порту {port}.",
+  "@collabSessionCreated": {
+    "placeholders": {
+      "port": { "type": "int" }
+    }
+  },
+  "collabSessionCreateError": "Ошибка при создании сессии: {error}",
+  "@collabSessionCreateError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "collabUserDisconnected": "Пользователь {name} отключился.",
+  "@collabUserDisconnected": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabConnectError": "Ошибка при подключении к {url}: {error}",
+  "@collabConnectError": {
+    "placeholders": {
+      "url": { "type": "String" },
+      "error": { "type": "String" }
+    }
+  },
+  "collabConnectionLost": "Подключение к сессии потеряно.",
+  "collabUserJoined": "Пользователь {name} присоединился.",
+  "@collabUserJoined": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabJoinedAsGuest": "Вы подключились к сессии в качестве гостя.",
+  "collabUserLeft": "Пользователь {name} покинул сессию.",
+  "@collabUserLeft": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  }
 }
 
 

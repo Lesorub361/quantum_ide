@@ -153,13 +153,13 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
       final workspace = ref.read(workspaceProvider);
       final workspacePath = workspace.currentPath;
       if (workspacePath == null) {
-        throw Exception('Путь к рабочему пространству не найден');
+        throw Exception('Workspace path not found');
       }
 
       final localFilePath = p.join(workspacePath, widget.relativePath);
       final file = File(localFilePath);
       if (!await file.exists()) {
-        throw Exception('Файл не найден: $localFilePath');
+        throw Exception('File not found: $localFilePath');
       }
 
       final content = await file.readAsString();
@@ -229,7 +229,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
       final workspace = ref.read(workspaceProvider);
       final workspacePath = workspace.currentPath;
       if (workspacePath == null) {
-        throw Exception('Рабочее пространство не установлено');
+        throw Exception('Workspace not set');
       }
 
       final localFilePath = p.join(workspacePath, widget.relativePath);

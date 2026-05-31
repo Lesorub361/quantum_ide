@@ -1474,7 +1474,59 @@
   "searchQueryEmpty": "Error: Search query is empty.",
   "workspaceNotFound": "Error: Workspace not found.",
   "webPreviewStopped": "Web Preview Stopped",
-  "webPreviewStartInstructions": "Start server and click Play button."
+  "webPreviewStartInstructions": "Start server and click Play button.",
+  "modelDescQwen1_5b": "Optimized model for coding. Very fast, suitable for all devices.",
+  "modelDescQwen7b": "Powerful model for complex coding tasks. Requires a high-performance device.",
+  "modelDescLlama1b": "Lightweight language model from Meta. High operational speed.",
+  "modelDescLlama3b": "Balanced model from Meta. Good context understanding.",
+  "modelDescOllamaQwen1_5b": "Lightweight and fast coding model from Alibaba.",
+  "modelDescOllamaQwen7b": "Powerful model for a wide range of programming tasks.",
+  "modelDescOllamaLlama1b": "Compact model from Meta, great for light tasks.",
+  "modelDescOllamaLlama3b": "Balanced model from Meta for general tasks and dialogues.",
+  "modelDescOllamaDeepseek1_3b": "Specialized coding model from DeepSeek.",
+  "modelDescOllamaDeepseek6_7b": "Highly efficient coding model from DeepSeek.",
+  "modelDescOllamaMistral7b": "Versatile general-purpose model with good understanding of code.",
+  "modelDescOllamaGemma2b": "Efficient and accurate compact model from Google.",
+  "modelDescOllamaGemma9b": "Powerful general-purpose language model from Google.",
+  "collabSessionCreated": "Session created on port {port}.",
+  "@collabSessionCreated": {
+    "placeholders": {
+      "port": { "type": "int" }
+    }
+  },
+  "collabSessionCreateError": "Error creating session: {error}",
+  "@collabSessionCreateError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "collabUserDisconnected": "User {name} disconnected.",
+  "@collabUserDisconnected": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabConnectError": "Error connecting to {url}: {error}",
+  "@collabConnectError": {
+    "placeholders": {
+      "url": { "type": "String" },
+      "error": { "type": "String" }
+    }
+  },
+  "collabConnectionLost": "Connection to session lost.",
+  "collabUserJoined": "User {name} joined.",
+  "@collabUserJoined": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabJoinedAsGuest": "You joined the session as a guest.",
+  "collabUserLeft": "User {name} left the session.",
+  "@collabUserLeft": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  }
 }
 
 

@@ -779,5 +779,57 @@
   "searchQueryEmpty": "错误：搜索查询为空。",
   "workspaceNotFound": "错误：未找到工作区。",
   "webPreviewStopped": "网页预览已停止",
-  "webPreviewStartInstructions": "启动服务器并点击 Play 按钮。"
+  "webPreviewStartInstructions": "启动服务器并点击 Play 按钮。",
+  "modelDescQwen1_5b": "专为编码优化的模型。非常快速，适合所有设备。",
+  "modelDescQwen7b": "适用于复杂编码任务的强大模型。需要高性能设备。",
+  "modelDescLlama1b": "来自 Meta 的轻量级语言模型。运行速度快。",
+  "modelDescLlama3b": "来自 Meta 的均衡模型。良好的上下文理解能力。",
+  "modelDescOllamaQwen1_5b": "来自阿里巴巴的轻量快速编码模型。",
+  "modelDescOllamaQwen7b": "适用于广泛编程任务的强大模型。",
+  "modelDescOllamaLlama1b": "来自 Meta 的紧凑型模型，非常适合轻量级任务。",
+  "modelDescOllamaLlama3b": "来自 Meta 的均衡模型，适用于通用任务和对话。",
+  "modelDescOllamaDeepseek1_3b": "来自 DeepSeek 的专业编码模型。",
+  "modelDescOllamaDeepseek6_7b": "来自 DeepSeek 的高效编码模型。",
+  "modelDescOllamaMistral7b": "对代码有良好理解的通用模型。",
+  "modelDescOllamaGemma2b": "来自 Google 的高效精准紧凑型模型。",
+  "modelDescOllamaGemma9b": "来自 Google 的强大通用语言模型。",
+  "collabSessionCreated": "会话已在端口 {port} 创建。",
+  "@collabSessionCreated": {
+    "placeholders": {
+      "port": { "type": "int" }
+    }
+  },
+  "collabSessionCreateError": "创建会话时出错：{error}",
+  "@collabSessionCreateError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "collabUserDisconnected": "用户 {name} 已断开连接。",
+  "@collabUserDisconnected": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabConnectError": "连接到 {url} 时出错：{error}",
+  "@collabConnectError": {
+    "placeholders": {
+      "url": { "type": "String" },
+      "error": { "type": "String" }
+    }
+  },
+  "collabConnectionLost": "与会话的连接已丢失。",
+  "collabUserJoined": "用户 {name} 已加入。",
+  "@collabUserJoined": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabJoinedAsGuest": "您已作为访客加入会话。",
+  "collabUserLeft": "用户 {name} 已离开会话。",
+  "@collabUserLeft": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  }
 }

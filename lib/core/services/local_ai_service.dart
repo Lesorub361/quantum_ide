@@ -36,7 +36,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'qwen_1.5b',
     name: 'Qwen 2.5 Coder 1.5B',
-    description: 'Оптимизированная модель для кодинга. Очень быстрая, подходит для любых устройств.',
+    description: 'Optimized model for coding. Very fast, suitable for all devices.',
     filename: 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
     sizeGb: 1.16,
     ramRequiredGb: 2.5,
@@ -46,7 +46,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'qwen_7b',
     name: 'Qwen 2.5 Coder 7B',
-    description: 'Мощная модель для сложных задач кодирования. Требует производительное устройство.',
+    description: 'Powerful model for complex coding tasks. Requires a high-performance device.',
     filename: 'qwen2.5-coder-7b-instruct-q4_k_m.gguf',
     sizeGb: 4.68,
     ramRequiredGb: 8.0,
@@ -56,7 +56,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'llama_1b',
     name: 'Llama 3.2 1B',
-    description: 'Легковесная языковая модель от Meta. Высокая скорость работы.',
+    description: 'Lightweight language model from Meta. High operational speed.',
     filename: 'llama-3.2-1b-instruct-q4_k_m.gguf',
     sizeGb: 0.81,
     ramRequiredGb: 1.8,
@@ -66,7 +66,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'llama_3b',
     name: 'Llama 3.2 3B',
-    description: 'Сбалансированная модель от Meta. Хорошее понимание контекста.',
+    description: 'Balanced model from Meta. Good context understanding.',
     filename: 'llama-3.2-3b-instruct-q4_k_m.gguf',
     sizeGb: 2.02,
     ramRequiredGb: 4.0,
@@ -78,7 +78,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_qwen_1.5b',
     name: 'Qwen 2.5 Coder 1.5B (Ollama)',
-    description: 'Легковесная и быстрая модель для кодинга от Alibaba.',
+    description: 'Lightweight and fast coding model from Alibaba.',
     filename: 'qwen2.5-coder:1.5b',
     sizeGb: 0.9,
     ramRequiredGb: 2.5,
@@ -88,7 +88,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_qwen_7b',
     name: 'Qwen 2.5 Coder 7B (Ollama)',
-    description: 'Мощная модель для широкого спектра задач программирования.',
+    description: 'Powerful model for a wide range of programming tasks.',
     filename: 'qwen2.5-coder:7b',
     sizeGb: 4.7,
     ramRequiredGb: 8.0,
@@ -98,7 +98,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_llama_1b',
     name: 'Llama 3.2 1B (Ollama)',
-    description: 'Компактная модель от Meta, отлично подходит для легких задач.',
+    description: 'Compact model from Meta, great for light tasks.',
     filename: 'llama3.2:1b',
     sizeGb: 1.3,
     ramRequiredGb: 2.0,
@@ -108,7 +108,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_llama_3b',
     name: 'Llama 3.2 3B (Ollama)',
-    description: 'Сбалансированная модель от Meta для общих задач и диалогов.',
+    description: 'Balanced model from Meta for general tasks and dialogues.',
     filename: 'llama3.2:3b',
     sizeGb: 2.0,
     ramRequiredGb: 4.0,
@@ -118,7 +118,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_deepseek_1.3b',
     name: 'DeepSeek Coder 1.3B (Ollama)',
-    description: 'Специализированная кодинг-модель от DeepSeek.',
+    description: 'Specialized coding model from DeepSeek.',
     filename: 'deepseek-coder:1.3b',
     sizeGb: 0.8,
     ramRequiredGb: 2.2,
@@ -128,7 +128,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_deepseek_6.7b',
     name: 'DeepSeek Coder 6.7B (Ollama)',
-    description: 'Высокоэффективная кодинг-модель от DeepSeek.',
+    description: 'Highly efficient coding model from DeepSeek.',
     filename: 'deepseek-coder:6.7b',
     sizeGb: 3.8,
     ramRequiredGb: 7.5,
@@ -138,7 +138,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_mistral_7b',
     name: 'Mistral 7B (Ollama)',
-    description: 'Универсальная модель общего назначения с хорошим пониманием кода.',
+    description: 'Versatile general-purpose model with good understanding of code.',
     filename: 'mistral:7b',
     sizeGb: 4.1,
     ramRequiredGb: 8.0,
@@ -148,7 +148,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_gemma_2b',
     name: 'Gemma 2 2B (Ollama)',
-    description: 'Эффективная и точная компактная модель от Google.',
+    description: 'Efficient and accurate compact model from Google.',
     filename: 'gemma2:2b',
     sizeGb: 1.6,
     ramRequiredGb: 3.0,
@@ -158,7 +158,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_gemma_9b',
     name: 'Gemma 2 9B (Ollama)',
-    description: 'Мощная языковая модель общего назначения от Google.',
+    description: 'Powerful general-purpose language model from Google.',
     filename: 'gemma2:9b',
     sizeGb: 5.5,
     ramRequiredGb: 10.0,
@@ -407,7 +407,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     _downloadCancelToken = CancelToken();
 
     try {
-      _appendLogs('[Local AI] Начало скачивания модели ${model.name}...\n');
+      _appendLogs('[Local AI] Start downloading model ${model.name}...\n');
       await _dio.download(
         model.url,
         tempPath,
@@ -430,14 +430,14 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       await prefs.setString('ai_selected_local_model_filename', model.filename);
       await _ref.read(aiServiceProvider).setModel(model.filename);
 
-      _appendLogs('[Local AI] Модель ${model.name} успешно загружена.\n');
+      _appendLogs('[Local AI] Model ${model.name} downloaded successfully.\n');
       await checkStatus();
     } catch (e) {
       if (CancelToken.isCancel(e as DioException)) {
-        _appendLogs('[Local AI] Скачивание модели отменено пользователем.\n');
+        _appendLogs('[Local AI] Model download cancelled by user.\n');
       } else {
-        _appendLogs('[Local AI] Ошибка скачивания: $e\n');
-        state = state.copyWith(error: 'Ошибка скачивания: $e');
+        _appendLogs('[Local AI] Download error: $e\n');
+        state = state.copyWith(error: 'Download error: $e');
       }
       try {
         final tempFile = File(tempPath);
@@ -465,7 +465,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     _downloadCancelToken = CancelToken();
 
     try {
-      _appendLogs('[Ollama] Запуск скачивания модели ${model.filename}...\n');
+      _appendLogs('[Ollama] Starting model download for ${model.filename}...\n');
       
       final response = await _dio.post(
         '$baseUrl/api/pull',
@@ -498,9 +498,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
               
               if (status != null) {
                 if (status == 'pulling manifest') {
-                  _appendLogs('[Ollama] Скачивание манифеста...\n');
+                  _appendLogs('[Ollama] Pulling manifest...\n');
                 } else if (status.toString().startsWith('verifying')) {
-                  _appendLogs('[Ollama] Верификация контрольной суммы...\n');
+                  _appendLogs('[Ollama] Verifying checksum...\n');
                 }
               }
               
@@ -514,7 +514,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         }
       }
 
-      _appendLogs('[Ollama] Модель ${model.name} успешно загружена.\n');
+      _appendLogs('[Ollama] Model ${model.name} downloaded successfully.\n');
       
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('ai_selected_local_model_filename', model.filename);
@@ -523,10 +523,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       await checkStatus();
     } catch (e) {
       if (CancelToken.isCancel(e as DioException)) {
-        _appendLogs('[Ollama] Скачивание отменено пользователем.\n');
+        _appendLogs('[Ollama] Download cancelled by user.\n');
       } else {
-        _appendLogs('[Ollama] Ошибка скачивания модели: $e\n');
-        state = state.copyWith(error: 'Ошибка скачивания: $e');
+        _appendLogs('[Ollama] Model download error: $e\n');
+        state = state.copyWith(error: 'Download error: $e');
       }
     } finally {
       _downloadCancelToken = null;
@@ -575,23 +575,23 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         state = state.copyWith(selectedModelFilename: fallback);
       }
 
-      _appendLogs('[Local AI] Модель ${model.name} успешно удалена.\n');
+      _appendLogs('[Local AI] Model ${model.name} deleted successfully.\n');
     } catch (e) {
-      state = state.copyWith(error: 'Ошибка удаления: $e');
-      _appendLogs('[Local AI] Ошибка удаления модели: $e\n');
+      state = state.copyWith(error: 'Delete error: $e');
+      _appendLogs('[Local AI] Model deletion error: $e\n');
     }
   }
 
   Future<void> _deleteOllamaModel(LocalModelInfo model) async {
     final baseUrl = _getOllamaBaseUrl();
     try {
-      _appendLogs('[Ollama] Удаление модели ${model.filename}...\n');
+      _appendLogs('[Ollama] Deleting model ${model.filename}...\n');
       await _dio.delete(
         '$baseUrl/api/delete',
         data: jsonEncode({'name': model.filename}),
       );
       
-      _appendLogs('[Ollama] Модель ${model.name} успешно удалена.\n');
+      _appendLogs('[Ollama] Model ${model.name} deleted successfully.\n');
       await checkStatus();
 
       if (state.selectedModelFilename == model.filename) {
@@ -609,8 +609,8 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         state = state.copyWith(selectedModelFilename: fallback);
       }
     } catch (e) {
-      state = state.copyWith(error: 'Ошибка удаления: $e');
-      _appendLogs('[Ollama] Ошибка удаления модели: $e\n');
+      state = state.copyWith(error: 'Delete error: $e');
+      _appendLogs('[Ollama] Model deletion error: $e\n');
     }
   }
 
@@ -622,14 +622,14 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     await prefs.setString('ai_selected_local_model_filename', model.filename);
     await _ref.read(aiServiceProvider).setModel(model.filename);
     state = state.copyWith(selectedModelFilename: model.filename);
-    _appendLogs('[Local AI] Выбрана активная модель: ${model.name}\n');
+    _appendLogs('[Local AI] Selected active model: ${model.name}\n');
   }
 
   Future<void> installBinary() async {
     if (state.isBinaryInstalling) return;
 
     state = state.copyWith(isBinaryInstalling: true, error: null);
-    _appendLogs('[Local AI] Начало установки llama-server...\n');
+    _appendLogs('[Local AI] Starting installation of llama-server...\n');
 
     // Use || true after apt to ignore its non-zero exit codes (CLI warnings)
     // wget with --tries=3 for robustness; no -q so we capture output in logs
@@ -655,17 +655,17 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
     try {
       final output = await _runtime.runCommand(installCmd);
-      _appendLogs('[Local AI] Вывод установки:\n$output\n');
+      _appendLogs('[Local AI] Installation output:\n$output\n');
 
       await checkStatus();
       if (state.isBinaryInstalled) {
-        _appendLogs('[Local AI] llama-server успешно установлен!\n');
+        _appendLogs('[Local AI] llama-server installed successfully!\n');
       } else {
-        throw Exception('Бинарный файл не найден после установки. Проверьте вывод выше.');
+        throw Exception('Binary file not found after installation. Check the output above.');
       }
     } catch (e) {
-      state = state.copyWith(error: 'Ошибка установки llama-server: $e');
-      _appendLogs('[Local AI] Ошибка установки llama-server: $e\n');
+      state = state.copyWith(error: 'Error installing llama-server: $e');
+      _appendLogs('[Local AI] Error installing llama-server: $e\n');
     } finally {
       state = state.copyWith(isBinaryInstalling: false);
     }

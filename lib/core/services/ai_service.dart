@@ -270,7 +270,7 @@ class AIService {
       }
     }
 
-    throw lastException ?? Exception('Не удалось подключиться к API');
+    throw lastException ?? Exception('Failed to connect to API');
   }
 
   // ─── Загрузка доступных моделей ──────────────────────────────────────────
@@ -384,7 +384,7 @@ class AIService {
       }
     }
 
-    throw lastException ?? Exception('Не удалось загрузить модели Google');
+    throw lastException ?? Exception('Failed to load Google models');
   }
 
   Future<List<String>> _fetchOpenAiCompatModels(String pid) async {
@@ -613,21 +613,21 @@ class AIService {
       case 'anthropic':
         return await _anthropicCompletion(prompt);
       default:
-        return 'Провайдер не поддерживается.';
+        return 'Provider not supported.';
     }
   }
 
   Future<String> _geminiCompletion(String prompt) async {
     if (_geminiModel == null) {
-      return 'Ошибка: Установите Gemini API ключ в настройках.';
+      return 'Error: Set Gemini API key in settings.';
     }
     try {
       final response = await _geminiModel!.generateContent([
         Content.text(prompt),
       ]);
-      return response.text ?? 'Нет ответа от AI';
+      return response.text ?? 'No response from AI';
     } catch (e) {
-      return 'Ошибка: $e';
+      return 'Error: $e';
     }
   }
 
@@ -635,7 +635,7 @@ class AIService {
     final pid = _settings.selectedProviderId;
     final key = _settings.apiKeys[pid] ?? '';
     if (key.isEmpty && pid != 'local_edge') {
-      return 'Ошибка: Установите API ключ в настройках.';
+      return 'Error: Set API key in settings.';
     }
     try {
       final resp = await _executeOpenAiCompatRequest(
@@ -651,14 +651,14 @@ class AIService {
       );
       return resp.data['choices'][0]['message']['content'] as String;
     } catch (e) {
-      return 'Ошибка: $e';
+      return 'Error: $e';
     }
   }
 
   Future<String> _anthropicCompletion(String prompt) async {
     final key = _settings.apiKeys['anthropic'] ?? '';
     if (key.isEmpty) {
-      return 'Ошибка: Установите Anthropic API ключ в настройках.';
+      return 'Error: Set Anthropic API key in settings.';
     }
     try {
       final resp = await _dio.post(
@@ -680,7 +680,7 @@ class AIService {
       );
       return resp.data['content'][0]['text'] as String;
     } catch (e) {
-      return 'Ошибка Anthropic: $e';
+      return 'Anthropic Error: $e';
     }
   }
 
@@ -697,7 +697,7 @@ class AIService {
       );
       return resp.data['response'] as String;
     } catch (e) {
-      return 'Ошибка Ollama (убедитесь что Ollama запущена): $e';
+      return 'Ollama Error (ensure Ollama is running): $e';
     }
   }
 
@@ -759,7 +759,7 @@ class AIService {
     List<Map<String, String>> history, {
     String? systemInstruction,
   }) async {
-    if (_geminiModel == null) return 'Ошибка: Установите Gemini API ключ.';
+    if (_geminiModel == null) return 'Error: Set Gemini API key.';
     try {
       var model = _geminiModel!;
       if (systemInstruction != null) {
@@ -789,9 +789,9 @@ class AIService {
           .toList();
       final session = model.startChat(history: geminiHistory);
       final resp = await session.sendMessage(Content.text(message));
-      return resp.text ?? 'Нет ответа';
+      return resp.text ?? 'No response';
     } catch (e) {
-      return 'Ошибка: $e';
+      return 'Error: $e';
     }
   }
 
@@ -819,7 +819,7 @@ class AIService {
       );
       return resp.data['choices'][0]['message']['content'] as String;
     } catch (e) {
-      return 'Ошибка: $e';
+      return 'Error: $e';
     }
   }
 
@@ -829,7 +829,7 @@ class AIService {
     String? systemInstruction,
   }) async {
     final key = _settings.apiKeys['anthropic'] ?? '';
-    if (key.isEmpty) return 'Ошибка: Установите Anthropic API ключ.';
+    if (key.isEmpty) return 'Error: Set Anthropic API key.';
     try {
       final messages = [
         ...history.map((m) => {'role': m['role'], 'content': m['content']}),
@@ -856,7 +856,7 @@ class AIService {
       );
       return resp.data['content'][0]['text'] as String;
     } catch (e) {
-      return 'Ошибка Anthropic: $e';
+      return 'Anthropic Error: $e';
     }
   }
 
@@ -883,7 +883,7 @@ class AIService {
       );
       return resp.data['message']['content'] as String;
     } catch (e) {
-      return 'Ошибка Ollama: $e';
+      return 'Ollama Error: $e';
     }
   }
 }

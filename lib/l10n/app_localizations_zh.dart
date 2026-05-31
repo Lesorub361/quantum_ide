@@ -2569,4 +2569,79 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get webPreviewStartInstructions => '启动服务器并点击 Play 按钮。';
+
+  @override
+  String get modelDescQwen1_5b => '专为编码优化的模型。非常快速，适合所有设备。';
+
+  @override
+  String get modelDescQwen7b => '适用于复杂编码任务的强大模型。需要高性能设备。';
+
+  @override
+  String get modelDescLlama1b => '来自 Meta 的轻量级语言模型。运行速度快。';
+
+  @override
+  String get modelDescLlama3b => '来自 Meta 的均衡模型。良好的上下文理解能力。';
+
+  @override
+  String get modelDescOllamaQwen1_5b => '来自阿里巴巴的轻量快速编码模型。';
+
+  @override
+  String get modelDescOllamaQwen7b => '适用于广泛编程任务的强大模型。';
+
+  @override
+  String get modelDescOllamaLlama1b => '来自 Meta 的紧凑型模型，非常适合轻量级任务。';
+
+  @override
+  String get modelDescOllamaLlama3b => '来自 Meta 的均衡模型，适用于通用任务和对话。';
+
+  @override
+  String get modelDescOllamaDeepseek1_3b => '来自 DeepSeek 的专业编码模型。';
+
+  @override
+  String get modelDescOllamaDeepseek6_7b => '来自 DeepSeek 的高效编码模型。';
+
+  @override
+  String get modelDescOllamaMistral7b => '对代码有良好理解的通用模型。';
+
+  @override
+  String get modelDescOllamaGemma2b => '来自 Google 的高效精准紧凑型模型。';
+
+  @override
+  String get modelDescOllamaGemma9b => '来自 Google 的强大通用语言模型。';
+
+  @override
+  String collabSessionCreated(int port) {
+    return '会话已在端口 $port 创建。';
+  }
+
+  @override
+  String collabSessionCreateError(String error) {
+    return '创建会话时出错：$error';
+  }
+
+  @override
+  String collabUserDisconnected(String name) {
+    return '用户 $name 已断开连接。';
+  }
+
+  @override
+  String collabConnectError(String url, String error) {
+    return '连接到 $url 时出错：$error';
+  }
+
+  @override
+  String get collabConnectionLost => '与会话的连接已丢失。';
+
+  @override
+  String collabUserJoined(String name) {
+    return '用户 $name 已加入。';
+  }
+
+  @override
+  String get collabJoinedAsGuest => '您已作为访客加入会话。';
+
+  @override
+  String collabUserLeft(String name) {
+    return '用户 $name 已离开会话。';
+  }
 }

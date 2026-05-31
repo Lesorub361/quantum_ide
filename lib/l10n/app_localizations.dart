@@ -4687,6 +4687,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Start server and click Play button.'**
   String get webPreviewStartInstructions;
+
+  /// No description provided for @modelDescQwen1_5b.
+  ///
+  /// In en, this message translates to:
+  /// **'Optimized model for coding. Very fast, suitable for all devices.'**
+  String get modelDescQwen1_5b;
+
+  /// No description provided for @modelDescQwen7b.
+  ///
+  /// In en, this message translates to:
+  /// **'Powerful model for complex coding tasks. Requires a high-performance device.'**
+  String get modelDescQwen7b;
+
+  /// No description provided for @modelDescLlama1b.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightweight language model from Meta. High operational speed.'**
+  String get modelDescLlama1b;
+
+  /// No description provided for @modelDescLlama3b.
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced model from Meta. Good context understanding.'**
+  String get modelDescLlama3b;
+
+  /// No description provided for @modelDescOllamaQwen1_5b.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightweight and fast coding model from Alibaba.'**
+  String get modelDescOllamaQwen1_5b;
+
+  /// No description provided for @modelDescOllamaQwen7b.
+  ///
+  /// In en, this message translates to:
+  /// **'Powerful model for a wide range of programming tasks.'**
+  String get modelDescOllamaQwen7b;
+
+  /// No description provided for @modelDescOllamaLlama1b.
+  ///
+  /// In en, this message translates to:
+  /// **'Compact model from Meta, great for light tasks.'**
+  String get modelDescOllamaLlama1b;
+
+  /// No description provided for @modelDescOllamaLlama3b.
+  ///
+  /// In en, this message translates to:
+  /// **'Balanced model from Meta for general tasks and dialogues.'**
+  String get modelDescOllamaLlama3b;
+
+  /// No description provided for @modelDescOllamaDeepseek1_3b.
+  ///
+  /// In en, this message translates to:
+  /// **'Specialized coding model from DeepSeek.'**
+  String get modelDescOllamaDeepseek1_3b;
+
+  /// No description provided for @modelDescOllamaDeepseek6_7b.
+  ///
+  /// In en, this message translates to:
+  /// **'Highly efficient coding model from DeepSeek.'**
+  String get modelDescOllamaDeepseek6_7b;
+
+  /// No description provided for @modelDescOllamaMistral7b.
+  ///
+  /// In en, this message translates to:
+  /// **'Versatile general-purpose model with good understanding of code.'**
+  String get modelDescOllamaMistral7b;
+
+  /// No description provided for @modelDescOllamaGemma2b.
+  ///
+  /// In en, this message translates to:
+  /// **'Efficient and accurate compact model from Google.'**
+  String get modelDescOllamaGemma2b;
+
+  /// No description provided for @modelDescOllamaGemma9b.
+  ///
+  /// In en, this message translates to:
+  /// **'Powerful general-purpose language model from Google.'**
+  String get modelDescOllamaGemma9b;
+
+  /// No description provided for @collabSessionCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Session created on port {port}.'**
+  String collabSessionCreated(int port);
+
+  /// No description provided for @collabSessionCreateError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error creating session: {error}'**
+  String collabSessionCreateError(String error);
+
+  /// No description provided for @collabUserDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'User {name} disconnected.'**
+  String collabUserDisconnected(String name);
+
+  /// No description provided for @collabConnectError.
+  ///
+  /// In en, this message translates to:
+  /// **'Error connecting to {url}: {error}'**
+  String collabConnectError(String url, String error);
+
+  /// No description provided for @collabConnectionLost.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection to session lost.'**
+  String get collabConnectionLost;
+
+  /// No description provided for @collabUserJoined.
+  ///
+  /// In en, this message translates to:
+  /// **'User {name} joined.'**
+  String collabUserJoined(String name);
+
+  /// No description provided for @collabJoinedAsGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'You joined the session as a guest.'**
+  String get collabJoinedAsGuest;
+
+  /// No description provided for @collabUserLeft.
+  ///
+  /// In en, this message translates to:
+  /// **'User {name} left the session.'**
+  String collabUserLeft(String name);
 }
 
 class _AppLocalizationsDelegate

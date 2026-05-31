@@ -81,6 +81,8 @@ class CollabChatMessage {
   final String senderName;
   final Color senderColor;
   final String text;
+  final String? translationKey;
+  final List<String>? translationArgs;
   final DateTime timestamp;
 
   CollabChatMessage({
@@ -88,6 +90,8 @@ class CollabChatMessage {
     required this.senderName,
     required this.senderColor,
     required this.text,
+    this.translationKey,
+    this.translationArgs,
     required this.timestamp,
   });
 }
@@ -271,10 +275,10 @@ class CollaborationService extends StateNotifier<CollaborationState> {
         }
       });
       
-      _addSystemChat('Сессия создана на порту $port.');
+      _addSystemChat('Session created on port $port.', translationKey: 'collabSessionCreated', translationArgs: [port.toString()]);
     } catch (e) {
       debugPrint('Error starting HTTP server: $e');
-      _addSystemChat('Ошибка при создании сессии: $e');
+      _addSystemChat('Error creating session: $e', translationKey: 'collabSessionCreateError', translationArgs: [e.toString()]);
       await stopAll();
     }
   }
@@ -306,7 +310,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
     state = state.copyWith(users: updatedUsers);
     
     if (user != null) {
-      _addSystemChat('Пользователь ${user.name} отключился.');
+      _addSystemChat('User ${user.name} disconnected.', translationKey: 'collabUserDisconnected', translationArgs: [user.name]);
       _sendBroadcast({
         'type': 'user_left',
         'userId': clientId,
@@ -360,13 +364,13 @@ class CollaborationService extends StateNotifier<CollaborationState> {
 
     } catch (e) {
       debugPrint('Error joining session: $e');
-      _addSystemChat('Ошибка при подключении к $wsUrl: $e');
+      _addSystemChat('Error connecting to $wsUrl: $e', translationKey: 'collabConnectError', translationArgs: [wsUrl, e.toString()]);
       await stopAll();
     }
   }
 
   void _handleClientDisconnected() {
-    _addSystemChat('Подключение к сессии потеряно.');
+    _addSystemChat('Connection to session lost.', translationKey: 'collabConnectionLost');
     stopAll();
   }
 
@@ -572,7 +576,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
           }
         });
 
-        _addSystemChat('Пользователь $name присоединился.');
+        _addSystemChat('User $name joined.', translationKey: 'collabUserJoined', translationArgs: [name]);
         break;
 
       case 'request_file_sync':
@@ -695,7 +699,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
           myId: assignedId,
           users: joinedUsers,
         );
-        _addSystemChat('Вы подключились к сессии в качестве гостя.');
+        _addSystemChat('You joined the session as a guest.', translationKey: 'collabJoinedAsGuest');
         cursorRepaintNotifier.triggerRepaint();
         break;
 
@@ -717,7 +721,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
         updatedUsers[id] = newUser;
         state = state.copyWith(users: updatedUsers);
         
-        _addSystemChat('Пользователь $name присоединился.');
+        _addSystemChat('User $name joined.', translationKey: 'collabUserJoined', translationArgs: [name]);
         cursorRepaintNotifier.triggerRepaint();
         break;
 
@@ -730,7 +734,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
         state = state.copyWith(users: updatedUsers);
         
         if (user != null) {
-          _addSystemChat('Пользователь ${user.name} покинул сессию.');
+          _addSystemChat('User ${user.name} left the session.', translationKey: 'collabUserLeft', translationArgs: [user.name]);
         }
         cursorRepaintNotifier.triggerRepaint();
         break;
@@ -927,12 +931,18 @@ class CollaborationService extends StateNotifier<CollaborationState> {
   }
 
   // Helper system chat logger
-  void _addSystemChat(String text) {
+  void _addSystemChat(
+    String text, {
+    String? translationKey,
+    List<String>? translationArgs,
+  }) {
     final systemMsg = CollabChatMessage(
       senderId: 'system',
       senderName: 'System',
       senderColor: Colors.grey,
       text: text,
+      translationKey: translationKey,
+      translationArgs: translationArgs,
       timestamp: DateTime.now(),
     );
     state = state.copyWith(chatMessages: [...state.chatMessages, systemMsg]);

@@ -855,7 +855,59 @@
   "searchQueryEmpty": "Error: La consulta de búsqueda está vacía.",
   "workspaceNotFound": "Error: No se encontró el espacio de trabajo.",
   "webPreviewStopped": "Vista previa web detenida",
-  "webPreviewStartInstructions": "Inicie el servidor y haga clic en el botón de reproducción."
+  "webPreviewStartInstructions": "Inicie el servidor y haga clic en el botón de reproducción.",
+  "modelDescQwen1_5b": "Modelo optimizado para codificación. Muy rápido, adecuado para todos los dispositivos.",
+  "modelDescQwen7b": "Modelo potente para tareas complejas de codificación. Requiere un dispositivo de alto rendimiento.",
+  "modelDescLlama1b": "Modelo de lenguaje ligero de Meta. Alta velocidad de operación.",
+  "modelDescLlama3b": "Modelo equilibrado de Meta. Buena comprensión del contexto.",
+  "modelDescOllamaQwen1_5b": "Modelo de codificación ligero y rápido de Alibaba.",
+  "modelDescOllamaQwen7b": "Modelo potente para una amplia gama de tareas de programación.",
+  "modelDescOllamaLlama1b": "Modelo compacto de Meta, ideal para tareas ligeras.",
+  "modelDescOllamaLlama3b": "Modelo equilibrado de Meta para tareas generales y diálogos.",
+  "modelDescOllamaDeepseek1_3b": "Modelo de codificación especializado de DeepSeek.",
+  "modelDescOllamaDeepseek6_7b": "Modelo de codificación altamente eficiente de DeepSeek.",
+  "modelDescOllamaMistral7b": "Modelo versátil de propósito general con buena comprensión del código.",
+  "modelDescOllamaGemma2b": "Modelo compacto eficiente y preciso de Google.",
+  "modelDescOllamaGemma9b": "Modelo potente de lenguaje de propósito general de Google.",
+  "collabSessionCreated": "Sesión creada en el puerto {port}.",
+  "@collabSessionCreated": {
+    "placeholders": {
+      "port": { "type": "int" }
+    }
+  },
+  "collabSessionCreateError": "Error al crear la sesión: {error}",
+  "@collabSessionCreateError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "collabUserDisconnected": "El usuario {name} se ha desconectado.",
+  "@collabUserDisconnected": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabConnectError": "Error al conectar a {url}: {error}",
+  "@collabConnectError": {
+    "placeholders": {
+      "url": { "type": "String" },
+      "error": { "type": "String" }
+    }
+  },
+  "collabConnectionLost": "Se ha perdido la conexión con la sesión.",
+  "collabUserJoined": "El usuario {name} se ha unido.",
+  "@collabUserJoined": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabJoinedAsGuest": "Te has unido a la sesión como invitado.",
+  "collabUserLeft": "El usuario {name} ha abandonado la sesión.",
+  "@collabUserLeft": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  }
 }
 
 

@@ -2639,4 +2639,92 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get webPreviewStartInstructions =>
       'Inicie el servidor y haga clic en el botón de reproducción.';
+
+  @override
+  String get modelDescQwen1_5b =>
+      'Modelo optimizado para codificación. Muy rápido, adecuado para todos los dispositivos.';
+
+  @override
+  String get modelDescQwen7b =>
+      'Modelo potente para tareas complejas de codificación. Requiere un dispositivo de alto rendimiento.';
+
+  @override
+  String get modelDescLlama1b =>
+      'Modelo de lenguaje ligero de Meta. Alta velocidad de operación.';
+
+  @override
+  String get modelDescLlama3b =>
+      'Modelo equilibrado de Meta. Buena comprensión del contexto.';
+
+  @override
+  String get modelDescOllamaQwen1_5b =>
+      'Modelo de codificación ligero y rápido de Alibaba.';
+
+  @override
+  String get modelDescOllamaQwen7b =>
+      'Modelo potente para una amplia gama de tareas de programación.';
+
+  @override
+  String get modelDescOllamaLlama1b =>
+      'Modelo compacto de Meta, ideal para tareas ligeras.';
+
+  @override
+  String get modelDescOllamaLlama3b =>
+      'Modelo equilibrado de Meta para tareas generales y diálogos.';
+
+  @override
+  String get modelDescOllamaDeepseek1_3b =>
+      'Modelo de codificación especializado de DeepSeek.';
+
+  @override
+  String get modelDescOllamaDeepseek6_7b =>
+      'Modelo de codificación altamente eficiente de DeepSeek.';
+
+  @override
+  String get modelDescOllamaMistral7b =>
+      'Modelo versátil de propósito general con buena comprensión del código.';
+
+  @override
+  String get modelDescOllamaGemma2b =>
+      'Modelo compacto eficiente y preciso de Google.';
+
+  @override
+  String get modelDescOllamaGemma9b =>
+      'Modelo potente de lenguaje de propósito general de Google.';
+
+  @override
+  String collabSessionCreated(int port) {
+    return 'Sesión creada en el puerto $port.';
+  }
+
+  @override
+  String collabSessionCreateError(String error) {
+    return 'Error al crear la sesión: $error';
+  }
+
+  @override
+  String collabUserDisconnected(String name) {
+    return 'El usuario $name se ha desconectado.';
+  }
+
+  @override
+  String collabConnectError(String url, String error) {
+    return 'Error al conectar a $url: $error';
+  }
+
+  @override
+  String get collabConnectionLost => 'Se ha perdido la conexión con la sesión.';
+
+  @override
+  String collabUserJoined(String name) {
+    return 'El usuario $name se ha unido.';
+  }
+
+  @override
+  String get collabJoinedAsGuest => 'Te has unido a la sesión como invitado.';
+
+  @override
+  String collabUserLeft(String name) {
+    return 'El usuario $name ha abandonado la sesión.';
+  }
 }

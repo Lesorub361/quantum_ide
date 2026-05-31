@@ -71,6 +71,40 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
     super.dispose();
   }
 
+  String _getModelDescription(BuildContext context, String modelId) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (modelId) {
+      case 'qwen_1.5b':
+        return l10n.modelDescQwen1_5b;
+      case 'qwen_7b':
+        return l10n.modelDescQwen7b;
+      case 'llama_1b':
+        return l10n.modelDescLlama1b;
+      case 'llama_3b':
+        return l10n.modelDescLlama3b;
+      case 'ollama_qwen_1.5b':
+        return l10n.modelDescOllamaQwen1_5b;
+      case 'ollama_qwen_7b':
+        return l10n.modelDescOllamaQwen7b;
+      case 'ollama_llama_1b':
+        return l10n.modelDescOllamaLlama1b;
+      case 'ollama_llama_3b':
+        return l10n.modelDescOllamaLlama3b;
+      case 'ollama_deepseek_1.3b':
+        return l10n.modelDescOllamaDeepseek1_3b;
+      case 'ollama_deepseek_6.7b':
+        return l10n.modelDescOllamaDeepseek6_7b;
+      case 'ollama_mistral_7b':
+        return l10n.modelDescOllamaMistral7b;
+      case 'ollama_gemma_2b':
+        return l10n.modelDescOllamaGemma2b;
+      case 'ollama_gemma_9b':
+        return l10n.modelDescOllamaGemma9b;
+      default:
+        return '';
+    }
+  }
+
   Future<void> _fetchModels(String pid) async {
     final svc = ref.read(aiServiceProvider);
 
@@ -1690,7 +1724,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        model.description,
+                        _getModelDescription(context, model.id),
                         style: GoogleFonts.inter(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
                       ),
                     ],

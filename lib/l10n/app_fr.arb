@@ -855,7 +855,59 @@
   "searchQueryEmpty": "Erreur: La requête de recherche est vide.",
   "workspaceNotFound": "Erreur: Espace de travail introuvable.",
   "webPreviewStopped": "Aperçu Web arrêté",
-  "webPreviewStartInstructions": "Démarrez le serveur et cliquez sur le bouton de lecture."
+  "webPreviewStartInstructions": "Démarrez le serveur et cliquez sur le bouton de lecture.",
+  "modelDescQwen1_5b": "Modèle optimisé pour le codage. Très rapide, adapté à tous les appareils.",
+  "modelDescQwen7b": "Modèle puissant pour les tâches de codage complexes. Nécessite un appareil performant.",
+  "modelDescLlama1b": "Modèle de langage léger de Meta. Vitesse d'exécution élevée.",
+  "modelDescLlama3b": "Modèle équilibré de Meta. Bonne compréhension du contexte.",
+  "modelDescOllamaQwen1_5b": "Modèle de codage léger et rapide d'Alibaba.",
+  "modelDescOllamaQwen7b": "Modèle puissant pour un large éventail de tâches de programmation.",
+  "modelDescOllamaLlama1b": "Modèle compact de Meta, idéal pour les tâches légères.",
+  "modelDescOllamaLlama3b": "Modèle équilibré de Meta pour les tâches générales et les dialogues.",
+  "modelDescOllamaDeepseek1_3b": "Modèle de codage spécialisé de DeepSeek.",
+  "modelDescOllamaDeepseek6_7b": "Modèle de codage hautement efficace de DeepSeek.",
+  "modelDescOllamaMistral7b": "Modèle polyvalent d'usage général avec une bonne compréhension du code.",
+  "modelDescOllamaGemma2b": "Modèle compact efficace et précis de Google.",
+  "modelDescOllamaGemma9b": "Modèle de langage puissant d'usage général de Google.",
+  "collabSessionCreated": "Session créée sur le port {port}.",
+  "@collabSessionCreated": {
+    "placeholders": {
+      "port": { "type": "int" }
+    }
+  },
+  "collabSessionCreateError": "Erreur lors de la création de la session : {error}",
+  "@collabSessionCreateError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "collabUserDisconnected": "L'utilisateur {name} s'est déconnecté.",
+  "@collabUserDisconnected": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabConnectError": "Erreur de connexion à {url} : {error}",
+  "@collabConnectError": {
+    "placeholders": {
+      "url": { "type": "String" },
+      "error": { "type": "String" }
+    }
+  },
+  "collabConnectionLost": "Connexion à la session perdue.",
+  "collabUserJoined": "L'utilisateur {name} a rejoint la session.",
+  "@collabUserJoined": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "collabJoinedAsGuest": "Vous avez rejoint la session en tant qu'invité.",
+  "collabUserLeft": "L'utilisateur {name} a quitté la session.",
+  "@collabUserLeft": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  }
 }
 
 

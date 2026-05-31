@@ -51,6 +51,32 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
     super.dispose();
   }
 
+  String _getLocalizedSystemMessage(BuildContext context, CollabChatMessage msg) {
+    if (msg.translationKey == null) return msg.text;
+    final l10n = AppLocalizations.of(context)!;
+    final args = msg.translationArgs ?? [];
+    switch (msg.translationKey) {
+      case 'collabSessionCreated':
+        return l10n.collabSessionCreated(args.isNotEmpty ? int.tryParse(args[0]) ?? 9090 : 9090);
+      case 'collabSessionCreateError':
+        return l10n.collabSessionCreateError(args.isNotEmpty ? args[0] : '');
+      case 'collabUserDisconnected':
+        return l10n.collabUserDisconnected(args.isNotEmpty ? args[0] : '');
+      case 'collabConnectError':
+        return l10n.collabConnectError(args.isNotEmpty ? args[0] : '', args.length > 1 ? args[1] : '');
+      case 'collabConnectionLost':
+        return l10n.collabConnectionLost;
+      case 'collabUserJoined':
+        return l10n.collabUserJoined(args.isNotEmpty ? args[0] : '');
+      case 'collabJoinedAsGuest':
+        return l10n.collabJoinedAsGuest;
+      case 'collabUserLeft':
+        return l10n.collabUserLeft(args.isNotEmpty ? args[0] : '');
+      default:
+        return msg.text;
+    }
+  }
+
   void _scrollToBottom() {
     if (_chatScrollController.hasClients) {
       Future.delayed(const Duration(milliseconds: 100), () {
@@ -537,7 +563,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      msg.text,
+                      _getLocalizedSystemMessage(context, msg),
                       style: GoogleFonts.inter(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic),
                       textAlign: TextAlign.center,
                     ),

@@ -2627,4 +2627,92 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get webPreviewStartInstructions =>
       'Start server and click Play button.';
+
+  @override
+  String get modelDescQwen1_5b =>
+      'Optimized model for coding. Very fast, suitable for all devices.';
+
+  @override
+  String get modelDescQwen7b =>
+      'Powerful model for complex coding tasks. Requires a high-performance device.';
+
+  @override
+  String get modelDescLlama1b =>
+      'Lightweight language model from Meta. High operational speed.';
+
+  @override
+  String get modelDescLlama3b =>
+      'Balanced model from Meta. Good context understanding.';
+
+  @override
+  String get modelDescOllamaQwen1_5b =>
+      'Lightweight and fast coding model from Alibaba.';
+
+  @override
+  String get modelDescOllamaQwen7b =>
+      'Powerful model for a wide range of programming tasks.';
+
+  @override
+  String get modelDescOllamaLlama1b =>
+      'Compact model from Meta, great for light tasks.';
+
+  @override
+  String get modelDescOllamaLlama3b =>
+      'Balanced model from Meta for general tasks and dialogues.';
+
+  @override
+  String get modelDescOllamaDeepseek1_3b =>
+      'Specialized coding model from DeepSeek.';
+
+  @override
+  String get modelDescOllamaDeepseek6_7b =>
+      'Highly efficient coding model from DeepSeek.';
+
+  @override
+  String get modelDescOllamaMistral7b =>
+      'Versatile general-purpose model with good understanding of code.';
+
+  @override
+  String get modelDescOllamaGemma2b =>
+      'Efficient and accurate compact model from Google.';
+
+  @override
+  String get modelDescOllamaGemma9b =>
+      'Powerful general-purpose language model from Google.';
+
+  @override
+  String collabSessionCreated(int port) {
+    return 'Session created on port $port.';
+  }
+
+  @override
+  String collabSessionCreateError(String error) {
+    return 'Error creating session: $error';
+  }
+
+  @override
+  String collabUserDisconnected(String name) {
+    return 'User $name disconnected.';
+  }
+
+  @override
+  String collabConnectError(String url, String error) {
+    return 'Error connecting to $url: $error';
+  }
+
+  @override
+  String get collabConnectionLost => 'Connection to session lost.';
+
+  @override
+  String collabUserJoined(String name) {
+    return 'User $name joined.';
+  }
+
+  @override
+  String get collabJoinedAsGuest => 'You joined the session as a guest.';
+
+  @override
+  String collabUserLeft(String name) {
+    return 'User $name left the session.';
+  }
 }
