@@ -21,6 +21,7 @@ import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:dio/dio.dart';
 import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
+import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
 
 
 enum AiApprovalMode { manual, semiAutonomous, fullAutonomous }
@@ -32,12 +33,14 @@ class AIState {
   final int totalTokens;
   final List<AIAction> proposedActions;
   final AiApprovalMode approvalMode;
+  final AiInteractionMode interactionMode;
   final String? activeAgentRole; // 'Planner', 'Coder', 'Validator', or null
   /// Пути файлов, которые агент прочитал (для отображения в проводнике)
   final List<String> agentReadFiles;
   final String? currentStatusMessage;
   final List<ChatSession> sessions;
   final String? currentSessionId;
+  final String? sessionGoal;
 
   AIState({
     this.isLoading = false,
@@ -45,12 +48,14 @@ class AIState {
     this.error,
     this.totalTokens = 0,
     this.proposedActions = const [],
-    this.approvalMode = AiApprovalMode.semiAutonomous,
+    this.approvalMode = AiApprovalMode.manual,
+    this.interactionMode = AiInteractionMode.chat,
     this.activeAgentRole,
     this.agentReadFiles = const [],
     this.currentStatusMessage,
     this.sessions = const [],
     this.currentSessionId,
+    this.sessionGoal,
   });
 
   bool get isAutopilot => approvalMode != AiApprovalMode.manual;
@@ -62,12 +67,14 @@ class AIState {
     int? totalTokens,
     List<AIAction>? proposedActions,
     AiApprovalMode? approvalMode,
+    AiInteractionMode? interactionMode,
     String? activeAgentRole,
     bool? isAutopilot,
     List<String>? agentReadFiles,
     String? currentStatusMessage,
     List<ChatSession>? sessions,
     String? currentSessionId,
+    String? sessionGoal,
   }) {
     return AIState(
       isLoading: isLoading ?? this.isLoading,
@@ -77,13 +84,15 @@ class AIState {
       proposedActions: proposedActions ?? this.proposedActions,
       approvalMode: approvalMode ?? 
           (isAutopilot != null 
-              ? (isAutopilot ? AiApprovalMode.semiAutonomous : AiApprovalMode.manual) 
-              : this.approvalMode),
+               ? (isAutopilot ? AiApprovalMode.semiAutonomous : AiApprovalMode.manual) 
+               : this.approvalMode),
+      interactionMode: interactionMode ?? this.interactionMode,
       activeAgentRole: activeAgentRole ?? this.activeAgentRole,
       agentReadFiles: agentReadFiles ?? this.agentReadFiles,
       currentStatusMessage: currentStatusMessage ?? this.currentStatusMessage,
       sessions: sessions ?? this.sessions,
       currentSessionId: currentSessionId ?? this.currentSessionId,
+      sessionGoal: sessionGoal ?? this.sessionGoal,
     );
   }
 }
@@ -339,39 +348,87 @@ class AINotifier extends StateNotifier<AIState> {
 
   void toggleAutopilot() {
     if (state.approvalMode == AiApprovalMode.manual) {
-      state = state.copyWith(approvalMode: AiApprovalMode.semiAutonomous);
+      state = state.copyWith(
+        approvalMode: AiApprovalMode.semiAutonomous,
+        interactionMode: AiInteractionMode.autopilot,
+      );
     } else {
-      state = state.copyWith(approvalMode: AiApprovalMode.manual);
+      state = state.copyWith(
+        approvalMode: AiApprovalMode.manual,
+        interactionMode: AiInteractionMode.chat,
+      );
     }
   }
 
   void setApprovalMode(AiApprovalMode mode) {
-    state = state.copyWith(approvalMode: mode);
+    state = state.copyWith(
+      approvalMode: mode,
+      interactionMode: mode == AiApprovalMode.manual 
+          ? (state.interactionMode == AiInteractionMode.autopilot ? AiInteractionMode.chat : state.interactionMode)
+          : AiInteractionMode.autopilot,
+    );
+  }
+
+  void setInteractionMode(AiInteractionMode mode) {
+    AiApprovalMode approval;
+    switch (mode) {
+      case AiInteractionMode.chat:
+      case AiInteractionMode.refactor:
+        approval = AiApprovalMode.manual;
+        break;
+      case AiInteractionMode.autopilot:
+        approval = AiApprovalMode.semiAutonomous;
+        break;
+    }
+    state = state.copyWith(
+      interactionMode: mode,
+      approvalMode: approval,
+    );
   }
 
   void stopAutopilot() {
     state = state.copyWith(isLoading: false, activeAgentRole: null);
   }
 
-  Future<void> askAI(String prompt) async {
+  Future<void> askAI(String prompt, {String? imageBase64}) async {
     final l10n = _ref.read(localizationsProvider);
+
+    if (prompt.trim() == '/dream') {
+      await _executeDream();
+      return;
+    }
+    
+    if (prompt.trim().startsWith('/goal ')) {
+      final goal = prompt.trim().substring(6).trim();
+      state = state.copyWith(sessionGoal: goal);
+      // We will proceed to pass this goal to the LLM to start Autopilot
+    }
     
     final userMessage = ChatMessage(
       role: MessageRole.user,
       content: prompt,
       timestamp: DateTime.now(),
+      imageBase64: imageBase64,
     );
 
     final userTokens = _estimateTokens(prompt);
+
+    final isAutopilot = state.interactionMode == AiInteractionMode.autopilot;
 
     state = state.copyWith(
       isLoading: true,
       error: null,
       totalTokens: state.totalTokens + userTokens,
-      activeAgentRole: 'Planner', // Start with Planner
-      currentStatusMessage: l10n.analyzingTaskAndPlanning,
+      activeAgentRole: isAutopilot ? 'Planner' : null,
+      currentStatusMessage: isAutopilot ? l10n.analyzingTaskAndPlanning : null,
     );
     _updateMessagesAndSync([...state.messages, userMessage]);
+
+    final workspacePath = _ref.read(workspaceProvider).currentPath;
+    if (state.totalTokens > 30000 && state.messages.length > 20) {
+      // Run compression asynchronously
+      _compressOldMessages(workspacePath);
+    }
 
     int currentStep = 0;
     const maxSteps = 10;
@@ -453,12 +510,15 @@ class AINotifier extends StateNotifier<AIState> {
           File(p.join(workspacePath, '.quantumrules')),
           File(p.join(workspacePath, '.agentrules')),
           File(p.join(workspacePath, '.cursorrules')),
+          File(p.join(workspacePath, '.quantum', 'memory.md')),
+          File(p.join(workspacePath, '.quantum', 'checkpoint.md')),
+          File(p.join(workspacePath, '.quantum', 'tasks.md')),
         ];
         for (final f in rulesFiles) {
           if (f.existsSync()) {
             try {
-              rulesContent = f.readAsStringSync();
-              break;
+              final content = f.readAsStringSync();
+              rulesContent += '\n\n=== ${p.basename(f.path)} ===\n$content';
             } catch (e) {
               debugPrint('Failed to read rules file ${f.path}: $e');
             }
@@ -471,6 +531,7 @@ class AINotifier extends StateNotifier<AIState> {
           mcpTools: mcpTools,
           internetAccess: internetAccess,
           rulesContent: rulesContent,
+          interactionMode: state.interactionMode,
         );
 
         // Prepare conversation history
@@ -489,6 +550,7 @@ class AINotifier extends StateNotifier<AIState> {
           nextPrompt,
           history,
           systemInstruction: systemInstruction,
+          imageBase64: imageBase64,
         );
         final responseTokens = _estimateTokens(responseText);
 
@@ -513,21 +575,36 @@ class AINotifier extends StateNotifier<AIState> {
         );
         _updateMessagesAndSync([...state.messages, assistantMessage]);
 
-        // Sub-Agent State Machine processing
+        if (!isAutopilot) {
+          state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+          break;
+        }
+
+        // Sub-Agent State Machine processing (Autopilot only)
+        if (state.activeAgentRole == 'Judge') {
+          if (cleanContent.trim().toUpperCase().startsWith('YES')) {
+            state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null, sessionGoal: null);
+            _updateMessagesAndSync([
+              ...state.messages,
+              ChatMessage(role: MessageRole.system, content: 'Goal achieved! The Judge approved the completion.', timestamp: DateTime.now())
+            ]);
+            break;
+          } else {
+            state = state.copyWith(
+              activeAgentRole: 'Coder',
+              currentStatusMessage: 'Goal not met. Resuming work based on Judge feedback...',
+            );
+            nextPrompt = 'Judge feedback: $cleanContent\n\nPlease implement the missing requirements.';
+            continue;
+          }
+        }
+
         if (state.activeAgentRole == 'Planner') {
           // Move from Planner to Coder once the plan is made
           state = state.copyWith(
             activeAgentRole: 'Coder',
             currentStatusMessage: l10n.generatingCodeChanges,
           );
-          _updateMessagesAndSync([
-            ...state.messages,
-            ChatMessage(
-              role: MessageRole.system,
-              content: l10n.executionPlanConstructed,
-              timestamp: DateTime.now(),
-            )
-          ]);
           nextPrompt = "Plan accepted. Please implement the changes according to the proposed plan and output the actions.";
           await Future.delayed(const Duration(milliseconds: 500));
           continue;
@@ -543,10 +620,6 @@ class AINotifier extends StateNotifier<AIState> {
             );
             nextPrompt = "Please verify the implementation. Are there any compilation or analyzer errors?";
             continue;
-          } else {
-            // Done
-            state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
-            break;
           }
         }
 
@@ -951,6 +1024,7 @@ class AINotifier extends StateNotifier<AIState> {
           
           await file.parent.create(recursive: true);
           await file.writeAsString(action.content);
+          _refreshFileExplorer(action.path);
           removeAction(action);
           return l10n.fileSuccessfullyWritten(action.path);
         case 'delete':
@@ -961,6 +1035,7 @@ class AINotifier extends StateNotifier<AIState> {
             }
             await file.delete(recursive: true);
           }
+          _refreshFileExplorer(action.path);
           removeAction(action);
           return l10n.fileSuccessfullyDeleted(action.path);
         case 'command':
@@ -1146,19 +1221,16 @@ class AINotifier extends StateNotifier<AIState> {
   Future<void> executeActionManually(AIAction action) async {
     removeAction(action);
     final l10n = _ref.read(localizationsProvider);
-    final relPath = _ref.read(workspaceProvider).currentPath != null && action.path.startsWith(_ref.read(workspaceProvider).currentPath!)
-        ? p.relative(action.path, from: _ref.read(workspaceProvider).currentPath!)
+    final workspacePath = _ref.read(workspaceProvider).currentPath ?? '';
+    final relPath = workspacePath.isNotEmpty && action.path.startsWith(workspacePath)
+        ? p.relative(action.path, from: workspacePath)
         : action.path;
-    _updateMessagesAndSync([
-      ...state.messages,
-      ChatMessage(
-        role: MessageRole.system,
-        content: action.type == 'command'
-            ? l10n.runningCommandLabel(action.content)
-            : l10n.applyingChangeLabel(relPath),
-        timestamp: DateTime.now(),
-      ),
-    ]);
+        
+    final actionDesc = action.type == 'command'
+        ? l10n.runningCommandLabel(action.content)
+        : action.type == 'mcp'
+            ? 'MCP Server ${action.server}: ${action.tool}'
+            : l10n.applyingChangeLabel(relPath);
 
     _currentStepBackups.clear();
     final result = await applyAction(action, runInBackground: true);
@@ -1171,6 +1243,10 @@ class AINotifier extends StateNotifier<AIState> {
         role: MessageRole.system,
         content: result,
         timestamp: DateTime.now(),
+        taskName: actionDesc,
+        executedActions: [action],
+        actionResults: { action.path.isNotEmpty ? action.path : action.content : result },
+        isStepSummary: true,
         fileBackups: backupsToSave,
       ),
     ]);
@@ -1186,47 +1262,176 @@ class AINotifier extends StateNotifier<AIState> {
     String commandResult = '';
     String lastCommand = '';
     final l10n = _ref.read(localizationsProvider);
+    final workspacePath = _ref.read(workspaceProvider).currentPath ?? '';
+    
+    final resultsMap = <String, String>{};
+    final executedActions = <AIAction>[];
+    final allBackups = <String, String?>{};
     
     for (final action in actionsCopy) {
       removeAction(action);
-      final relPath = _ref.read(workspaceProvider).currentPath != null && action.path.startsWith(_ref.read(workspaceProvider).currentPath!)
-          ? p.relative(action.path, from: _ref.read(workspaceProvider).currentPath!)
-          : action.path;
-      _updateMessagesAndSync([
-        ...state.messages,
-        ChatMessage(
-          role: MessageRole.system,
-          content: action.type == 'command'
-              ? l10n.runningCommandLabel(action.content)
-              : l10n.applyingChangeLabel(relPath),
-          timestamp: DateTime.now(),
-        ),
-      ]);
-
       _currentStepBackups.clear();
       final result = await applyAction(action, runInBackground: true);
-      final backupsToSave = Map<String, String?>.from(_currentStepBackups);
-      _currentStepBackups.clear();
-
-      _updateMessagesAndSync([
-        ...state.messages,
-        ChatMessage(
-          role: MessageRole.system,
-          content: result,
-          timestamp: DateTime.now(),
-          fileBackups: backupsToSave,
-        ),
-      ]);
+      allBackups.addAll(_currentStepBackups);
+      
+      resultsMap[action.path.isNotEmpty ? action.path : action.content] = result;
+      executedActions.add(action);
 
       if (action.type == 'command') {
         commandResult = result;
         lastCommand = action.content;
       }
     }
+    _currentStepBackups.clear();
 
-    if (lastCommand.isNotEmpty) {
-      final analysisPrompt = 'Results of running command "$lastCommand":\n$commandResult\n\nAnalyze the result. If errors occurred, fix them.';
+    final actionsListText = executedActions
+        .map((a) {
+          if (a.type == 'mcp') return "- MCP: ${a.server} -> ${a.tool}";
+          return "- ${a.type.toUpperCase()}: ${a.path.isNotEmpty ? p.relative(a.path, from: workspacePath) : a.content}";
+        })
+        .join('\n');
+    final feedbackContent = l10n.autopilotStepSummary(1, actionsListText, resultsMap.values.join('\n'));
+
+    _updateMessagesAndSync([
+      ...state.messages,
+      ChatMessage(
+        role: MessageRole.system,
+        content: feedbackContent,
+        timestamp: DateTime.now(),
+        taskName: 'Manual Action Batch',
+        executedActions: executedActions,
+        actionResults: resultsMap,
+        isStepSummary: true,
+        fileBackups: allBackups,
+      ),
+    ]);
+
+    if (commandResult.isNotEmpty && lastCommand.isNotEmpty) {
+      final analysisPrompt = 'Result of running command "$lastCommand":\n$commandResult\n\nAnalyze the result. If errors occurred, fix them.';
       await askAI(analysisPrompt);
+    }
+  }
+
+  void _refreshFileExplorer(String filePath) {
+    final workspacePath = _ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null) return;
+    
+    final parentDir = p.dirname(filePath);
+    if (parentDir == workspacePath || parentDir.startsWith(workspacePath)) {
+      _ref.read(fileExplorerProvider.notifier).scanDirectory(parentDir);
+    }
+    
+    if (filePath.startsWith(workspacePath)) {
+      _ref.read(fileExplorerProvider.notifier).scanDirectory(workspacePath);
+    }
+  }
+
+  Future<void> _compressOldMessages(String? workspacePath) async {
+    if (workspacePath == null) return;
+    
+    // We leave the last 10 messages. The rest are compressed.
+    if (state.messages.length <= 10) return;
+
+    final messagesToCompress = state.messages.sublist(0, state.messages.length - 10);
+    final history = messagesToCompress
+        .map((m) => '${m.role == MessageRole.user ? "User" : "Agent"}: ${m.content}')
+        .join('\n\n');
+
+    try {
+      final prompt = '''
+The following is an older part of our conversation history. Please summarize it concisely, keeping any important technical context, decisions, and tasks.
+
+HISTORY:
+$history
+''';
+      final summary = await _aiService.sendChatMessage(prompt, []);
+
+      final checkpointFile = File(p.join(workspacePath, '.quantum', 'checkpoint.md'));
+      if (!checkpointFile.parent.existsSync()) {
+        checkpointFile.parent.createSync(recursive: true);
+      }
+      
+      String existing = '';
+      if (checkpointFile.existsSync()) {
+        existing = checkpointFile.readAsStringSync() + '\n\n';
+      }
+      checkpointFile.writeAsStringSync(existing + '## Checkpoint - \${DateTime.now().toIso8601String()}\n' + summary);
+
+      // Remove compressed messages from state
+      final remainingMessages = state.messages.sublist(state.messages.length - 10);
+      state = state.copyWith(
+        messages: remainingMessages,
+        totalTokens: state.totalTokens ~/ 2, // rough estimation
+      );
+    } catch (e) {
+      debugPrint('Context compression failed: \$e');
+    }
+  }
+
+  Future<void> _executeDream() async {
+    final workspacePath = _ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null) return;
+
+    state = state.copyWith(
+      isLoading: true,
+      currentStatusMessage: 'Dreaming: Extracting knowledge to memory...',
+    );
+
+    _updateMessagesAndSync([
+      ...state.messages,
+      ChatMessage(
+        role: MessageRole.user,
+        content: '/dream',
+        timestamp: DateTime.now(),
+      )
+    ]);
+
+    try {
+      final history = state.messages
+          .map((m) => '${m.role == MessageRole.user ? "User" : "Agent"}: ${m.content}')
+          .join('\n\n');
+
+      final prompt = '''
+Review the recent session history below and extract all important architectural decisions, new rules, project structures, or general project knowledge that should be remembered for future sessions.
+Format this as a concise Markdown document. Do not include introductory text.
+
+HISTORY:
+$history
+''';
+
+      final responseText = await _aiService.sendChatMessage(prompt, []);
+      
+      final memoryFile = File(p.join(workspacePath, '.quantum', 'memory.md'));
+      if (!memoryFile.parent.existsSync()) {
+        memoryFile.parent.createSync(recursive: true);
+      }
+      
+      String existingMemory = '';
+      if (memoryFile.existsSync()) {
+        existingMemory = memoryFile.readAsStringSync() + '\n\n';
+      }
+      
+      memoryFile.writeAsStringSync(existingMemory + '## Dream Entry - ${DateTime.now().toIso8601String()}\n' + responseText);
+
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Dream complete! Knowledge distilled and saved to `.quantum/memory.md`.',
+          timestamp: DateTime.now(),
+        )
+      ]);
+    } catch (e) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Dream failed: $e',
+          timestamp: DateTime.now(),
+        )
+      ]);
+    } finally {
+      state = state.copyWith(isLoading: false, currentStatusMessage: null);
     }
   }
 

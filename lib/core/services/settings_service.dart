@@ -23,6 +23,7 @@ class SettingsState {
   final double glassmorphismOpacity;
   final double glassmorphismBlur;
   final String hotkeysJson;
+  final bool sdCardSync;
   final bool isInitialized;
 
   SettingsState({
@@ -32,7 +33,7 @@ class SettingsState {
     this.aiAutoCompletion = true,
     this.wordWrap = false,
     this.lineNumbers = true,
-    this.minimap = true,
+    this.minimap = false,
     this.autoSave = true,
     this.terminalFontSize = 13.0,
     this.terminalTheme = 'ubuntu',
@@ -46,6 +47,7 @@ class SettingsState {
     this.glassmorphismOpacity = 0.15,
     this.glassmorphismBlur = 16.0,
     this.hotkeysJson = '{}',
+    this.sdCardSync = false,
     this.isInitialized = false,
   });
 
@@ -71,6 +73,7 @@ class SettingsState {
     double? glassmorphismOpacity,
     double? glassmorphismBlur,
     String? hotkeysJson,
+    bool? sdCardSync,
     bool? isInitialized,
   }) {
     return SettingsState(
@@ -94,6 +97,7 @@ class SettingsState {
       glassmorphismOpacity: glassmorphismOpacity ?? this.glassmorphismOpacity,
       glassmorphismBlur: glassmorphismBlur ?? this.glassmorphismBlur,
       hotkeysJson: hotkeysJson ?? this.hotkeysJson,
+      sdCardSync: sdCardSync ?? this.sdCardSync,
       isInitialized: isInitialized ?? this.isInitialized,
     );
   }
@@ -124,6 +128,7 @@ class SettingsService extends StateNotifier<SettingsState> {
   static const _keyGlassmorphismOpacity = 'settings_glassmorphism_opacity';
   static const _keyGlassmorphismBlur = 'settings_glassmorphism_blur';
   static const _keyHotkeys = 'settings_hotkeys';
+  static const _keySdCardSync = 'settings_sd_card_sync';
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -134,7 +139,7 @@ class SettingsService extends StateNotifier<SettingsState> {
       aiAutoCompletion: prefs.getBool(_keyAiAutoCompletion) ?? true,
       wordWrap: prefs.getBool(_keyWordWrap) ?? false,
       lineNumbers: prefs.getBool(_keyLineNumbers) ?? true,
-      minimap: prefs.getBool(_keyMinimap) ?? true,
+      minimap: prefs.getBool(_keyMinimap) ?? false,
       autoSave: prefs.getBool(_keyAutoSave) ?? true,
       terminalFontSize: prefs.getDouble(_keyTerminalFontSize) ?? 13.0,
       terminalTheme: prefs.getString(_keyTerminalTheme) ?? 'ubuntu',
@@ -150,6 +155,7 @@ class SettingsService extends StateNotifier<SettingsState> {
       glassmorphismOpacity: prefs.getDouble(_keyGlassmorphismOpacity) ?? 0.15,
       glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? 16.0,
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
+      sdCardSync: prefs.getBool(_keySdCardSync) ?? false,
       isInitialized: true,
     );
   }
@@ -281,6 +287,12 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(hotkeysJson: json);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyHotkeys, json);
+  }
+
+  Future<void> setSdCardSync(bool v) async {
+    state = state.copyWith(sdCardSync: v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keySdCardSync, v);
   }
 }
 

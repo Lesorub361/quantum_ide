@@ -37,28 +37,27 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
   @override
   Widget build(BuildContext context) {
     final row1 = [
-      VirtualKey(label: 'ESC', value: '\x1b'),
-      VirtualKey(label: 'TAB', value: '\t', icon: LucideIcons.arrow_right_to_line),
       VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true),
       VirtualKey(label: 'ALT', value: 'ALT', isToggle: true),
+      VirtualKey(label: 'TAB', value: '\t'),
       VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up),
       VirtualKey(label: '↓', value: '\x1b[B', icon: LucideIcons.arrow_down),
-      VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left),
-      VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right),
     ];
 
     final row2 = [
+      VirtualKey(label: 'ESC', value: '\x1b'),
+      VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true),
+      VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left),
+      VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right),
       VirtualKey(label: '/', value: '/'),
-      VirtualKey(label: '|', value: '|'),
+    ];
+
+    final row3 = [
+      VirtualKey(label: '~', value: '~'),
+      VirtualKey(label: '-', value: '-'),
       VirtualKey(label: '_', value: '_'),
-      VirtualKey(label: '\$', value: '\$'),
-      VirtualKey(label: 'Ctrl+C', value: 'ctrl+c'),
-      VirtualKey(label: 'Ctrl+L', value: 'ctrl+l'),
-      VirtualKey(label: 'Paste', value: 'paste', icon: LucideIcons.clipboard_paste),
-      // HOME = \x1b[H, END = \x1b[F (standard ANSI, works in bash/vim/zsh)
-      VirtualKey(label: 'HOME', value: '\x1b[H'),
-      VirtualKey(label: 'END', value: '\x1b[F'),
-      VirtualKey(label: '⌫', value: '\x7f', icon: LucideIcons.delete),
+      VirtualKey(label: '|', value: '|'),
+      VirtualKey(label: '>', value: '>'),
     ];
 
     return Container(
@@ -76,6 +75,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
             _buildKeyRow(row1),
             const SizedBox(height: 4),
             _buildKeyRow(row2),
+            const SizedBox(height: 4),
+            _buildKeyRow(row3),
           ],
         ),
       ),

@@ -1,14 +1,17 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm/xterm.dart' as xt;
+import 'package:image_picker/image_picker.dart';
 
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/ai_settings_dialog.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/mcp_servers_dialog.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/ai_chat_messages.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
@@ -16,9 +19,8 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_panel_content.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
-import 'package:quantum_ide/shared/widgets/glass_container.dart';
+
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/models/chat_message.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
@@ -40,15 +42,38 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   final TextEditingController _aiChatController = TextEditingController();
   bool _attachActiveFile = false;
   bool _isResizingHovered = false;
+  String? _selectedImagePath;
+  String? _selectedImageBase64;
 
   @override
   void dispose() {
     _aiChatController.dispose();
-    // Synchronize global open provider state when panel is disposed (like when closing Drawer manually)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(rightChatPanelOpenProvider.notifier).state = false;
-    });
     super.dispose();
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+    if (file != null) {
+      final bytes = await file.readAsBytes();
+      final base64String = base64Encode(bytes);
+      setState(() {
+        _selectedImagePath = file.path;
+        _selectedImageBase64 = base64String;
+      });
+    }
+  }
+
+  void _clearImage() {
+    setState(() {
+      _selectedImagePath = null;
+      _selectedImageBase64 = null;
+    });
   }
 
   @override
@@ -58,7 +83,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     final selectedAgent = ref.watch(selectedAgentProvider);
     final packages = ref.watch(packageServiceProvider);
     final editorState = ref.watch(editorProvider);
-    final rightWidth = widget.isInline ? ref.watch(rightPanelWidthProvider) : 340.0;
+    final isMobile = MediaQuery.of(context).size.width < 800;
+    final rightWidth = widget.isInline 
+        ? ref.watch(rightPanelWidthProvider) 
+        : (isMobile ? double.infinity : 340.0);
     final l10n = AppLocalizations.of(context)!;
 
 
@@ -94,10 +122,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   icon: const Icon(LucideIcons.history, size: 14, color: Colors.cyanAccent),
                   onPressed: () => _showChatHistoryDialog(context, ref),
                   tooltip: l10n.chatHistory,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
                 // New Chat Button
                 IconButton(
                   icon: const Icon(LucideIcons.plus, size: 14, color: Colors.cyanAccent),
@@ -105,21 +133,35 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     ref.read(aiProvider.notifier).startNewSession();
                   },
                   tooltip: l10n.newChat,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                ),
+                const SizedBox(width: 4),
+                // Settings Button
+                IconButton(
+                  icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.cyanAccent),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => const AISettingsDialog(),
+                    );
+                  },
+                  tooltip: l10n.settings,
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                 ),
                 const SizedBox(width: 8),
                 // Options menu
                 _buildOptionsMenu(context, ref),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
                 // Close button
                 IconButton(
                   icon: const Icon(LucideIcons.x, size: 14, color: Colors.white60),
                   onPressed: () {
                     ref.read(rightChatPanelOpenProvider.notifier).state = false;
                   },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                 ),
               ],
             ),
@@ -133,14 +175,6 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Provider/Model Selection Card
-                      _buildProviderModelCard(context, ref),
-
-                      // Status row: Autopilot & Badges
-                      _buildStatusRow(context, ref, aiState),
-
-                      const SizedBox(height: 4),
-
                       // Mode Selector Tab (Chat vs Agents)
                       Container(
                         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -160,7 +194,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       // Messages / Agents Content
                       Expanded(
                         child: mode == AIPanelMode.chat
-                            ? AIChatMessages(aiState: aiState)
+                            ? Column(
+                                children: [
+                                  _buildStatusRow(context, ref, aiState),
+                                  Expanded(child: AIChatMessages(aiState: aiState)),
+                                ],
+                              )
                             : _buildAIAgentsList(packages),
                       ),
 
@@ -168,7 +207,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       if (mode == AIPanelMode.chat) ...[
                         if (aiState.proposedActions.isNotEmpty)
                           _buildProposedActionsStickyPanel(aiState),
-                        _buildAIChatInput(context, ref),
+                        _buildAIChatInput(context, ref, aiState),
                       ],
                     ],
                   ),
@@ -215,16 +254,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       );
     }
 
-    return GlassContainer(
-      blur: 30,
-      opacity: 0.15,
-      borderRadius: const BorderRadius.only(topLeft: Radius.circular(24), bottomLeft: Radius.circular(24)),
-      border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
-      child: Drawer(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        child: content,
-      ),
+    return Container(
+      width: rightWidth,
+      color: const Color(0xFF0D0F14),
+      child: content,
     );
   }
 
@@ -284,62 +317,66 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildProviderModelCard(BuildContext context, WidgetRef ref) {
-    final aiSvc = ref.watch(aiServiceProvider);
-    final provider = AiProviders.byId(aiSvc.selectedProviderId);
-    final l10n = AppLocalizations.of(context)!;
-
-    return InkWell(
-      onTap: () {
-        showDialog(
-          context: context,
-          builder: (context) => const AISettingsDialog(),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        child: Row(
-          children: [
-            Text(provider.logoEmoji, style: const TextStyle(fontSize: 13)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    provider.id == 'local_edge' ? l10n.localAiDisplayName : provider.displayName,
-                    style: GoogleFonts.inter(fontSize: 9, color: Colors.white54, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    aiSvc.selectedModel,
-                    style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const Icon(LucideIcons.chevron_down, size: 12, color: Colors.cyanAccent),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildStatusRow(BuildContext context, WidgetRef ref, AIState aiState) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Autopilot Approval Mode
-          _buildAutopilotModeBadge(context, ref, aiState),
+          // Loading status & Stop button
+          Expanded(
+            child: aiState.isLoading
+                ? Row(
+                    children: [
+                      if (aiState.isAutopilot) ...[
+                        InkWell(
+                          onTap: () => ref.read(aiProvider.notifier).stopAutopilot(),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.8), width: 0.8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.square, size: 10, color: Colors.redAccent),
+                                const SizedBox(width: 4),
+                                Text(
+                                  l10n.stop,
+                                  style: GoogleFonts.inter(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ] else ...[
+                        const SizedBox(
+                          width: 8,
+                          height: 8,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: Colors.purpleAccent,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(
+                        child: Text(
+                          aiState.currentStatusMessage ?? (aiState.isAutopilot ? 'Autopilot running...' : 'Thinking...'),
+                           style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  )
+                : const SizedBox(),
+          ),
           
           // Token and System Stats Badges
           Row(
@@ -355,113 +392,91 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildAutopilotModeBadge(BuildContext context, WidgetRef ref, AIState aiState) {
+  Widget _buildInteractionModeSelector(BuildContext context, WidgetRef ref, AIState aiState) {
     final l10n = AppLocalizations.of(context)!;
-    if (aiState.isLoading && aiState.isAutopilot) {
-      return InkWell(
-        onTap: () => ref.read(aiProvider.notifier).stopAutopilot(),
-        borderRadius: BorderRadius.circular(12),
+
+    String modeLabel;
+    IconData modeIcon;
+    Color modeColor;
+    switch (aiState.interactionMode) {
+      case AiInteractionMode.chat:
+        modeLabel = l10n.modeChat;
+        modeIcon = LucideIcons.message_square;
+        modeColor = Colors.cyanAccent;
+      case AiInteractionMode.refactor:
+        modeLabel = l10n.modeRefactor;
+        modeIcon = LucideIcons.code;
+        modeColor = Colors.purpleAccent;
+      case AiInteractionMode.autopilot:
+        modeLabel = l10n.modeAutopilot;
+        modeIcon = LucideIcons.zap;
+        modeColor = Colors.orangeAccent;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+      child: GestureDetector(
+        onTap: () {
+          showModalBottomSheet(
+            context: context,
+            backgroundColor: const Color(0xFF1E2230),
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            builder: (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 36, height: 4,
+                    margin: const EdgeInsets.only(top: 10, bottom: 12),
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                  ),
+                  _buildModeOption(ctx, ref, l10n.modeChat, LucideIcons.message_square, Colors.cyanAccent, AiInteractionMode.chat, aiState.interactionMode),
+                  _buildModeOption(ctx, ref, l10n.modeRefactor, LucideIcons.code, Colors.purpleAccent, AiInteractionMode.refactor, aiState.interactionMode),
+                  _buildModeOption(ctx, ref, l10n.modeAutopilot, LucideIcons.zap, Colors.orangeAccent, AiInteractionMode.autopilot, aiState.interactionMode),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          );
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.redAccent.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.8), width: 0.8),
+            color: modeColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: modeColor.withValues(alpha: 0.2), width: 0.5),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(LucideIcons.square, size: 10, color: Colors.redAccent),
+              Icon(modeIcon, size: 12, color: modeColor),
               const SizedBox(width: 4),
               Text(
-                l10n.stop,
-                style: GoogleFonts.inter(fontSize: 9, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                modeLabel,
+                style: GoogleFonts.inter(fontSize: 10, color: modeColor, fontWeight: FontWeight.w600),
               ),
+              const SizedBox(width: 2),
+              Icon(LucideIcons.chevron_down, size: 10, color: modeColor.withValues(alpha: 0.6)),
             ],
           ),
-        ),
-      );
-    }
-
-    IconData modeIcon;
-    Color modeColor;
-    String modeLabel;
-    
-    switch (aiState.approvalMode) {
-      case AiApprovalMode.manual:
-        modeIcon = LucideIcons.user;
-        modeColor = Colors.white38;
-        modeLabel = l10n.manual;
-        break;
-      case AiApprovalMode.semiAutonomous:
-        modeIcon = LucideIcons.bot;
-        modeColor = Colors.purpleAccent;
-        modeLabel = l10n.autoSafe;
-        break;
-      case AiApprovalMode.fullAutonomous:
-        modeIcon = LucideIcons.zap;
-        modeColor = Colors.orangeAccent;
-        modeLabel = l10n.autoFull;
-        break;
-    }
-
-    return PopupMenuButton<AiApprovalMode>(
-      onSelected: (mode) {
-        ref.read(aiProvider.notifier).setApprovalMode(mode);
-      },
-      color: const Color(0xFF1E2230),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: AiApprovalMode.manual,
-          child: Row(
-            children: [
-              const Icon(LucideIcons.user, size: 12, color: Colors.white54),
-              const SizedBox(width: 8),
-              Text(l10n.manualMode, style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: AiApprovalMode.semiAutonomous,
-          child: Row(
-            children: [
-              const Icon(LucideIcons.bot, size: 12, color: Colors.purpleAccent),
-              const SizedBox(width: 8),
-              Text(l10n.safeAutopilot, style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ],
-          ),
-        ),
-        PopupMenuItem(
-          value: AiApprovalMode.fullAutonomous,
-          child: Row(
-            children: [
-              const Icon(LucideIcons.zap, size: 12, color: Colors.orangeAccent),
-              const SizedBox(width: 8),
-              Text(l10n.fullAutonomy, style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ],
-          ),
-        ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: modeColor.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: modeColor.withValues(alpha: 0.8), width: 0.8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(modeIcon, size: 10, color: modeColor),
-            const SizedBox(width: 4),
-            Text(
-              modeLabel,
-              style: GoogleFonts.inter(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          ],
         ),
       ),
+    );
+  }
+
+  Widget _buildModeOption(BuildContext ctx, WidgetRef ref, String label, IconData icon, Color color, AiInteractionMode target, AiInteractionMode current) {
+    final isSelected = current == target;
+    return ListTile(
+      dense: true,
+      leading: Icon(icon, size: 18, color: isSelected ? color : Colors.white54),
+      title: Text(label, style: GoogleFonts.inter(color: isSelected ? color : Colors.white70, fontSize: 13, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
+      trailing: isSelected ? Icon(LucideIcons.check, size: 16, color: color) : null,
+      onTap: () {
+        ref.read(aiProvider.notifier).setInteractionMode(target);
+        Navigator.pop(ctx);
+      },
     );
   }
 
@@ -480,7 +495,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           const SizedBox(width: 4),
           Text(
             '${aiState.totalTokens}',
-            style: GoogleFonts.jetBrainsMono(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+            style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -502,20 +517,20 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(LucideIcons.cpu, size: 10, color: cpuColor),
+          Icon(LucideIcons.cpu, size: 12, color: cpuColor),
           const SizedBox(width: 2),
           Text(
             '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
-            style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.white70, fontWeight: FontWeight.bold),
+            style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.bold),
           ),
           const SizedBox(width: 4),
-          Container(width: 1, height: 6, color: Colors.white12),
+          Container(width: 1, height: 8, color: Colors.white12),
           const SizedBox(width: 4),
-          Icon(LucideIcons.memory_stick, size: 10, color: ramColor),
+          Icon(LucideIcons.memory_stick, size: 12, color: ramColor),
           const SizedBox(width: 2),
           Text(
             '${(stats.ramUsage * 100).toStringAsFixed(0)}%',
-            style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.white70, fontWeight: FontWeight.bold),
+            style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -610,7 +625,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             trailing: const Icon(LucideIcons.chevron_right, color: Colors.white24, size: 14),
             onTap: () {
               ref.read(selectedAgentProvider.notifier).state = pkg.name;
-              String cmd = pkg.id == 'gemini-cli' ? 'gemini chat' : pkg.id;
+              String cmd = pkg.id == 'antigravity-cli' ? 'agy' : pkg.id;
               ref.read(editorProvider.notifier).runAgentCommand(cmd);
             },
           ),
@@ -661,7 +676,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     backgroundOpacity: 0,
                     textStyle: xt.TerminalStyle(
                       fontSize: terminalFontSize * 0.9,
-                      fontFamily: GoogleFonts.jetBrainsMono().fontFamily ?? 'monospace',
+                      fontFamily: 'jetBrainsMono',
                     ),
                     keyboardType: TextInputType.visiblePassword,
                     deleteDetection: true,
@@ -686,7 +701,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       ),
                     ),
                     onPressed: () => ref.read(editorProvider.notifier).stopAgent(),
-                    child: Text(AppLocalizations.of(context)!.stopAgent, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                    child: Text(AppLocalizations.of(context)!.stopAgent, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -892,7 +907,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildAIChatInput(BuildContext context, WidgetRef ref) {
+  Widget _buildAIChatInput(BuildContext context, WidgetRef ref, AIState aiState) {
     final l10n = AppLocalizations.of(context)!;
     final aiSvc = ref.watch(aiServiceProvider);
     final provider = AiProviders.byId(aiSvc.selectedProviderId);
@@ -908,6 +923,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          _buildQuickPrompts(context, ref),
           if (_attachActiveFile && hasActiveFile)
             GestureDetector(
               onTap: () {
@@ -938,28 +954,70 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 ),
               ),
             ),
+          if (_selectedImagePath != null)
+            GestureDetector(
+              onTap: _clearImage,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.purpleAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        File(_selectedImagePath!),
+                        width: 40,
+                        height: 40,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Image attached',
+                      style: GoogleFonts.inter(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(LucideIcons.x, size: 12, color: Colors.white60),
+                  ],
+                ),
+              ),
+            ),
           Container(
+            margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              color: Colors.white.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: TextField(
               controller: _aiChatController,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5),
               maxLines: 4,
               minLines: 1,
               decoration: InputDecoration(
                 hintText: l10n.askAiHint(provider.id == 'local_edge' ? l10n.localAiDisplayName : provider.displayName),
-                hintStyle: const TextStyle(color: Colors.white24, fontSize: 12),
+                hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 prefixIcon: hasActiveFile
                     ? IconButton(
                         icon: Icon(
                           LucideIcons.paperclip,
                           color: _attachActiveFile ? Colors.cyanAccent : Colors.white38,
-                          size: 15,
+                          size: 16,
                         ),
                         onPressed: () {
                           setState(() {
@@ -969,22 +1027,65 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                         tooltip: AppLocalizations.of(context)!.attachOpenFile,
                       )
                     : null,
-                suffixIcon: IconButton(
-                  icon: const Icon(LucideIcons.send, color: Colors.purpleAccent, size: 15),
-                  onPressed: () {
-                    final value = _aiChatController.text;
-                    if (value.isEmpty) return;
+                suffixIcon: Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Image button
+                      IconButton(
+                        icon: Icon(
+                          LucideIcons.image,
+                          color: _selectedImagePath != null ? Colors.cyanAccent : Colors.white38,
+                          size: 16,
+                        ),
+                        onPressed: _pickImage,
+                        tooltip: l10n.attachImage,
+                      ),
+                      // Send button
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Colors.purpleAccent, Colors.cyanAccent],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.purpleAccent.withValues(alpha: 0.25),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: IconButton(
+                          icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                          onPressed: () {
+                            final value = _aiChatController.text;
+                            if (value.isEmpty && _selectedImageBase64 == null) return;
 
-                    final fullPrompt = (_attachActiveFile && hasActiveFile)
-                        ? l10n.workingOnFile(currentFileName, currentCode, value)
-                        : value;
+                            final fullPrompt = (_attachActiveFile && hasActiveFile)
+                                ? l10n.workingOnFile(currentFileName, currentCode, value)
+                                : value;
 
-                    ref.read(aiProvider.notifier).askAI(fullPrompt);
-                    _aiChatController.clear();
-                    setState(() {
-                      _attachActiveFile = false;
-                    });
-                  },
+                            ref.read(aiProvider.notifier).askAI(
+                              fullPrompt,
+                              imageBase64: _selectedImageBase64,
+                            );
+                            _aiChatController.clear();
+                            setState(() {
+                              _attachActiveFile = false;
+                              _selectedImagePath = null;
+                              _selectedImageBase64 = null;
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               onSubmitted: (value) {
@@ -1001,6 +1102,11 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 });
               },
             ),
+          ),
+          // Mode selector row
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: _buildInteractionModeSelector(context, ref, aiState),
           ),
         ],
       ),
@@ -1105,5 +1211,43 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   
   String _formatDate(DateTime dt) {
     return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildQuickPrompts(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context)!;
+    final prompts = [
+      {'label': l10n.quickPromptRefactor, 'text': l10n.quickPromptRefactorText},
+      {'label': l10n.quickPromptExplain, 'text': l10n.quickPromptExplainText},
+      {'label': l10n.quickPromptFixErrors, 'text': l10n.quickPromptFixErrorsText},
+      {'label': l10n.quickPromptOptimize, 'text': l10n.quickPromptOptimizeText},
+      {'label': l10n.quickPromptWriteTests, 'text': l10n.quickPromptWriteTestsText},
+    ];
+
+    return Container(
+      height: 30,
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: prompts.length,
+        itemBuilder: (context, index) {
+          final p = prompts[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: 6.0),
+            child: ActionChip(
+              visualDensity: VisualDensity.compact,
+              backgroundColor: Colors.white.withValues(alpha: 0.05),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+              label: Text(
+                p['label']!,
+                style: GoogleFonts.inter(color: Colors.white70, fontSize: 10),
+              ),
+              onPressed: () {
+                _aiChatController.text = p['text']!;
+              },
+            ),
+          );
+        },
+      ),
+    );
   }
 }

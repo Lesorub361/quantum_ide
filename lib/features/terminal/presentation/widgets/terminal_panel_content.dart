@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
@@ -16,27 +16,29 @@ import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_ta
 import 'package:quantum_ide/features/terminal/presentation/widgets/virtual_keys.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
+
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/models/chat_message.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
-import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/ai_permission_service.dart';
-import 'package:quantum_ide/core/services/git_service.dart';
+
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import 'package:quantum_ide/l10n/app_localizations.dart';
-import 'package:lottie/lottie.dart';
+
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
-import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
+
+
+import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 
 class TerminalPanelContent extends ConsumerStatefulWidget {
   final bool onlyTerminal;
@@ -50,30 +52,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   final Set<String> _activeModifiers = {};
   bool _isSidebarOpen = false;
   bool _isTerminalSplit = false;
-  final TextEditingController _urlController = TextEditingController(text: "http://localhost:8080");
-  final TextEditingController _aiChatController = TextEditingController();
-  InAppWebViewController? _webViewController;
-  bool _serverIsRunning = false;
   int _buildSubTab = 0;
-
-
-  void _setServerRunning(bool val) {
-    setState(() {
-      _serverIsRunning = val;
-    });
-    ref.read(serverRunningProvider.notifier).state = val;
-  }
-
-  void _toggleServer() {
-    _setServerRunning(!_serverIsRunning);
-  }
-
-  void _openInBrowser() async {
-    final url = Uri.parse(_urlController.text);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
-  }
 
   String _currentInput = '';
   final ValueNotifier<List<String>?> _suggestionsNotifier = ValueNotifier(null);
@@ -93,8 +72,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   @override
   void dispose() {
-    _urlController.dispose();
-    _aiChatController.dispose();
     _suggestionsNotifier.dispose();
     _hideSelectionToolbar();
     _lastSelectionSession?.xtermViewController.removeListener(_onSelectionChanged);
@@ -299,6 +276,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     session.xtermTerminal.onOutput = (data) {
       final hadCtrl = _activeModifiers.contains('CTRL');
       final hadAlt = _activeModifiers.contains('ALT');
+      final hadShift = _activeModifiers.contains('SHIFT');
       
       String sequence = '';
       if (hadCtrl) {
@@ -314,6 +292,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         }
       } else if (hadAlt) {
         sequence = '\x1b$data';
+      } else if (hadShift) {
+        sequence = data.toUpperCase();
       } else {
         sequence = data;
       }
@@ -323,10 +303,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _handleInputForAutocomplete(session, sequence);
       }
 
-      if (hadCtrl || hadAlt) {
+      if (hadCtrl || hadAlt || hadShift) {
         setState(() {
           _activeModifiers.remove('CTRL');
           _activeModifiers.remove('ALT');
+          _activeModifiers.remove('SHIFT');
         });
       }
     };
@@ -509,11 +490,36 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   void _onKeyTap(String value, TerminalSession session) async {
     final term = session.xtermTerminal;
     if (value == 'ctrl') {
-      setState(() => _activeModifiers.contains('CTRL') ? _activeModifiers.remove('CTRL') : _activeModifiers.add('CTRL'));
+      setState(() {
+        if (_activeModifiers.contains('CTRL')) {
+          _activeModifiers.remove('CTRL');
+        } else {
+          _activeModifiers.clear();
+          _activeModifiers.add('CTRL');
+        }
+      });
       return;
     }
     if (value == 'ALT') {
-      setState(() => _activeModifiers.contains('ALT') ? _activeModifiers.remove('ALT') : _activeModifiers.add('ALT'));
+      setState(() {
+        if (_activeModifiers.contains('ALT')) {
+          _activeModifiers.remove('ALT');
+        } else {
+          _activeModifiers.clear();
+          _activeModifiers.add('ALT');
+        }
+      });
+      return;
+    }
+    if (value == 'SHIFT') {
+      setState(() {
+        if (_activeModifiers.contains('SHIFT')) {
+          _activeModifiers.remove('SHIFT');
+        } else {
+          _activeModifiers.clear();
+          _activeModifiers.add('SHIFT');
+        }
+      });
       return;
     }
     if (value == 'paste') {
@@ -545,8 +551,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     final hadCtrl = _activeModifiers.contains('CTRL');
     final hadAlt = _activeModifiers.contains('ALT');
+    final hadShift = _activeModifiers.contains('SHIFT');
     if (hadCtrl) _activeModifiers.remove('CTRL');
     if (hadAlt) _activeModifiers.remove('ALT');
+    if (hadShift) _activeModifiers.remove('SHIFT');
 
     if (value == '\t') {
       final suggestions = _suggestionsNotifier.value;
@@ -554,17 +562,17 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _acceptSuggestion(session, suggestions[_selectedSuggestionIndex]);
         return;
       }
-      term.keyInput(xt.TerminalKey.tab, ctrl: hadCtrl, alt: hadAlt);
+      term.keyInput(xt.TerminalKey.tab, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b') {
-      term.keyInput(xt.TerminalKey.escape, ctrl: hadCtrl, alt: hadAlt);
+      term.keyInput(xt.TerminalKey.escape, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b[A') {
-      term.keyInput(xt.TerminalKey.arrowUp, ctrl: hadCtrl, alt: hadAlt);
+      term.keyInput(xt.TerminalKey.arrowUp, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b[B') {
-      term.keyInput(xt.TerminalKey.arrowDown, ctrl: hadCtrl, alt: hadAlt);
+      term.keyInput(xt.TerminalKey.arrowDown, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b[D') {
-      term.keyInput(xt.TerminalKey.arrowLeft, ctrl: hadCtrl, alt: hadAlt);
+      term.keyInput(xt.TerminalKey.arrowLeft, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b[C') {
-      term.keyInput(xt.TerminalKey.arrowRight, ctrl: hadCtrl, alt: hadAlt);
+      term.keyInput(xt.TerminalKey.arrowRight, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b[H') {
       // HOME — send directly to PTY
       session.pty.write(Uint8List.fromList(utf8.encode('\x1b[H')));
@@ -611,7 +619,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   ? _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'))
                   : _buildBody(panelState, sessions, notifier, editorState),
             ),
-            if (widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal || panelState.selectedTab == PanelTab.console)
+            if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
+                !(Platform.isLinux || Platform.isWindows || Platform.isMacOS || MediaQuery.of(context).size.width > 800))
               _buildVirtualKeys(sessions, notifier),
           ],
         ),
@@ -633,24 +642,18 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     switch (tab) {
       case PanelTab.terminal:
         return _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'));
-      case PanelTab.console:
-        return _buildTerminalView(sessions, notifier, key: const ValueKey('console'));
       case PanelTab.run:
         return _buildRunView(key: const ValueKey('run'));
       case PanelTab.buildLogs:
         return _buildBuildLogsView(key: const ValueKey('buildLogs'));
       case PanelTab.appLogs:
         return _buildAppLogsView(key: const ValueKey('appLogs'));
-      case PanelTab.aiAgent:
-        return const SizedBox.shrink();
-      case PanelTab.servers:
-        return _buildServersView(key: const ValueKey('servers'));
-      case PanelTab.packages:
-        return _buildPackagesTabContent(key: const ValueKey('packages'));
       case PanelTab.problems:
         return _buildProblemsView(editorState);
       case PanelTab.git:
         return _buildGitView();
+      case PanelTab.debug:
+        return const DebuggerPanel(key: ValueKey('debug'));
     }
   }
 
@@ -1339,7 +1342,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
 
-  Widget _buildZoomButton(IconData icon, VoidCallback onTap) {
+  Widget _buildZoomButton(IconData icon, VoidCallback onTap, {Color? color}) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1351,7 +1354,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             color: Colors.white.withValues(alpha: 0.05),
             borderRadius: BorderRadius.circular(4),
           ),
-          child: Icon(icon, size: 12, color: Colors.white38),
+          child: Icon(icon, size: 12, color: color ?? Colors.white38),
         ),
       ),
     );
@@ -1487,56 +1490,93 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 ),
                 child: Row(
                   children: [
-                    InkWell(
-                      onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
-                      child: Icon(
-                        _isSidebarOpen ? LucideIcons.panel_left_close : LucideIcons.panel_left_open, 
-                        size: 16, 
-                        color: Colors.white38
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        InkWell(
+                          onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: Icon(
+                              LucideIcons.menu,
+                              size: 16,
+                              color: _isSidebarOpen ? Colors.cyanAccent : Colors.white54,
+                            ),
+                          ),
+                        ),
+                        if (sessions.isNotEmpty)
+                          Positioned(
+                            right: -2,
+                            top: -2,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: Colors.purpleAccent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                              child: Text(
+                                '${sessions.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      currentSession.title,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const Icon(LucideIcons.folder, size: 12, color: Colors.cyanAccent),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 3,
+                      height: 3,
+                      decoration: const BoxDecoration(
+                        color: Colors.white24,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         ref.watch(workspaceProvider).currentPath?.split('/').last ?? 'root',
                         style: GoogleFonts.jetBrainsMono(
-                          color: Colors.white38, 
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500
+                          color: Colors.white38,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Icon(LucideIcons.chevron_right, size: 10, color: Colors.white10),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        'bash',
-                        style: GoogleFonts.jetBrainsMono(
-                          color: Colors.cyanAccent.withValues(alpha: 0.5), 
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold
-                        ),
-                        overflow: TextOverflow.clip,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _buildZoomButton(LucideIcons.minus, () {
+                    _buildZoomButton(LucideIcons.zoom_out, () {
                       final size = ref.read(settingsProvider).terminalFontSize;
                       ref.read(settingsProvider.notifier).setTerminalFontSize((size - 1).clamp(8.0, 24.0));
                     }),
                     const SizedBox(width: 4),
                     Text(
                       '${ref.watch(settingsProvider).terminalFontSize.toInt()}',
-                      style: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.jetBrainsMono(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(width: 4),
-                    _buildZoomButton(LucideIcons.plus, () {
+                    _buildZoomButton(LucideIcons.zoom_in, () {
                       final size = ref.read(settingsProvider).terminalFontSize;
                       ref.read(settingsProvider.notifier).setTerminalFontSize((size + 1).clamp(8.0, 24.0));
                     }),
+                    const SizedBox(width: 8),
+                    _buildZoomButton(LucideIcons.plus, () {
+                      notifier.createNewSession();
+                    }, color: Colors.cyanAccent),
                     const SizedBox(width: 8),
                     _buildZoomButton(_isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2, () {
                       setState(() {
@@ -1558,7 +1598,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                             color: Colors.white24, 
                             fontSize: 9, 
                             fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5
                           )),
                         ),
                       ),
@@ -1644,14 +1683,34 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       session.xtermTerminal.onOutput = (data) {
         final hadCtrl = _activeModifiers.contains('CTRL');
         final hadAlt = _activeModifiers.contains('ALT');
-        String sequence = hadCtrl ? (data.length == 1 ? String.fromCharCode(data.toUpperCase().codeUnitAt(0) - 64) : data) : (hadAlt ? '\x1b$data' : data);
+        final hadShift = _activeModifiers.contains('SHIFT');
+        String sequence = '';
+        if (hadCtrl) {
+          if (data.length == 1) {
+            int code = data.toUpperCase().codeUnitAt(0);
+            if (code >= 65 && code <= 90) {
+              sequence = String.fromCharCode(code - 64);
+            } else {
+              sequence = data;
+            }
+          } else {
+            sequence = data;
+          }
+        } else if (hadAlt) {
+          sequence = '\x1b$data';
+        } else if (hadShift) {
+          sequence = data.toUpperCase();
+        } else {
+          sequence = data;
+        }
         if (sequence.isNotEmpty) {
           session.pty.write(Uint8List.fromList(utf8.encode(sequence)));
         }
-        if (hadCtrl || hadAlt) {
+        if (hadCtrl || hadAlt || hadShift) {
           setState(() {
             _activeModifiers.remove('CTRL');
             _activeModifiers.remove('ALT');
+            _activeModifiers.remove('SHIFT');
           });
         }
       };
@@ -1670,24 +1729,22 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: SelectionContainer.disabled(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onLongPressStart: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
-                    child: xt.TerminalView(
-                      session.xtermTerminal,
-                      controller: session.xtermViewController,
-                      autofocus: true,
-                      padding: const EdgeInsets.all(12),
-                      theme: theme,
-                      backgroundOpacity: 0,
-                      textStyle: xt.TerminalStyle(
-                        fontSize: terminalFontSize,
-                        fontFamily: GoogleFonts.jetBrainsMono().fontFamily ?? 'monospace',
-                      ),
-                      keyboardType: TextInputType.visiblePassword,
-                      deleteDetection: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onLongPressStart: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
+                  child: xt.TerminalView(
+                    session.xtermTerminal,
+                    controller: session.xtermViewController,
+                    autofocus: true,
+                    padding: const EdgeInsets.all(12),
+                    theme: theme,
+                    backgroundOpacity: 0,
+                    textStyle: xt.TerminalStyle(
+                      fontSize: terminalFontSize,
+                      fontFamily: 'jetBrainsMono',
                     ),
+                    keyboardType: TextInputType.visiblePassword,
+                    deleteDetection: true,
                   ),
                 ),
               ),
@@ -2192,159 +2249,6 @@ Also explain what exactly went wrong and how you fixed it.
     ref.read(aiProvider.notifier).askAI(prompt);
   }
 
-  Widget _buildServersView({Key? key}) {
-    return Column(
-      key: key,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.02),
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-          ),
-          child: Row(
-            children: [
-              // Address Bar with Glass Look
-              Expanded(
-                child: Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.03),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.globe, size: 14, color: Colors.white38),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: _urlController,
-                          style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 12),
-                          decoration: const InputDecoration(
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onSubmitted: (_) {
-                            if (_serverIsRunning) {
-                              _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(_urlController.text)));
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // Reload Button
-              if (_serverIsRunning)
-                IconButton(
-                  icon: const Icon(LucideIcons.rotate_cw, size: 16, color: Colors.greenAccent),
-                  tooltip: AppLocalizations.of(context)!.refreshPreview,
-                  onPressed: () => _webViewController?.reload(),
-                ),
-              // Toggle Power (Start/Stop) Button
-              IconButton(
-                icon: Icon(
-                  _serverIsRunning ? LucideIcons.square : LucideIcons.play,
-                  size: 14,
-                  color: _serverIsRunning ? Colors.redAccent : Colors.greenAccent,
-                ),
-                tooltip: _serverIsRunning 
-                    ? AppLocalizations.of(context)!.stopWebServer 
-                    : AppLocalizations.of(context)!.startWebServer,
-                onPressed: _toggleServer,
-              ),
-              IconButton(
-                icon: const Icon(LucideIcons.external_link, size: 14, color: Colors.cyanAccent),
-                tooltip: AppLocalizations.of(context)!.openInExternalBrowser,
-                onPressed: _openInBrowser,
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _serverIsRunning
-              ? InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(_urlController.text)),
-                  initialSettings: InAppWebViewSettings(
-                    transparentBackground: true,
-                    javaScriptEnabled: true,
-                  ),
-                  onWebViewCreated: (controller) => _webViewController = controller,
-                  onReceivedError: (controller, request, error) {
-                    Future.delayed(const Duration(seconds: 2), () {
-                      _webViewController?.reload();
-                    });
-                  },
-                )
-              : Center(
-                  child: SingleChildScrollView(
-                    child: Container(
-                      margin: const EdgeInsets.all(24),
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.01),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.2),
-                            blurRadius: 20,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.blueAccent.withValues(alpha: 0.05),
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.15)),
-                            ),
-                            child: const Icon(LucideIcons.globe, color: Colors.blueAccent, size: 38),
-                          ),
-                          const SizedBox(height: 20),
-                          Text(
-                            AppLocalizations.of(context)!.localWebServer,
-                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 13),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            AppLocalizations.of(context)!.webServerDesc,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton.icon(
-                            onPressed: _toggleServer,
-                            icon: const Icon(LucideIcons.play, size: 14),
-                            label: Text(AppLocalizations.of(context)!.startWebServer),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
-                              foregroundColor: Colors.blueAccent,
-                              elevation: 0,
-                              side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.3)),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-        ),
-      ],
-    );
-  }
-
   void _showTerminalContextMenu(BuildContext context, Offset position, TerminalSession session) async {
     HapticFeedback.mediumImpact();
     
@@ -2431,141 +2335,6 @@ Also explain what exactly went wrong and how you fixed it.
     );
   }
 
-  Widget _buildPackagesTabContent({Key? key}) {
-    final packages = ref.watch(packageServiceProvider);
-    
-    return Column(
-      key: key,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.1),
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-          ),
-          child: Row(
-            children: [
-              const Icon(LucideIcons.toy_brick, size: 14, color: Colors.cyanAccent),
-              const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context)!.packagesAndEnv,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
-              ),
-              const Spacer(),
-              Text(
-                AppLocalizations.of(context)!.packagesInstalledCount(packages.where((p) => p.isInstalled).length, packages.length),
-                style: GoogleFonts.inter(
-                  color: Colors.white38,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            itemCount: packages.length,
-            itemBuilder: (context, index) {
-              final pkg = packages[index];
-              return Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.02),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
-                ),
-                child: ListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  leading: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.cyanAccent.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(pkg.icon, color: Colors.cyanAccent, size: 16),
-                  ),
-                  title: Text(
-                    pkg.name,
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  subtitle: Text(
-                    pkg.description,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      color: Colors.white38,
-                      fontSize: 11,
-                    ),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (pkg.isInstalled) ...[
-                        const Icon(LucideIcons.circle_check_big, color: Colors.greenAccent, size: 16),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(LucideIcons.refresh_cw, size: 14, color: Colors.white38),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                          onPressed: () {
-                            ref.read(packageServiceProvider.notifier).installPackage(pkg);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(AppLocalizations.of(context)!.updatingPackage(pkg.name)),
-                              ),
-                            );
-                          },
-                        ),
-                      ] else
-                        ElevatedButton(
-                          onPressed: () {
-                            ref.read(packageServiceProvider.notifier).installPackage(pkg);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(AppLocalizations.of(context)!.installingPackage(pkg.name)),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.cyanAccent.withValues(alpha: 0.1),
-                            foregroundColor: Colors.cyanAccent,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            minimumSize: const Size(60, 26),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.2)),
-                            ),
-                          ),
-                          child: Text(
-                            AppLocalizations.of(context)!.install,
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _SuggestionBox extends StatefulWidget {
@@ -2807,1037 +2576,6 @@ class _CollapsibleConsoleState extends State<CollapsibleConsole> {
   }
 }
 
-class AIChatMessages extends ConsumerStatefulWidget {
-  final AIState aiState;
-  const AIChatMessages({super.key, required this.aiState});
-
-  @override
-  ConsumerState<AIChatMessages> createState() => AIChatMessagesState();
-}
-
-class AIChatMessagesState extends ConsumerState<AIChatMessages> {
-  final ScrollController _scroll = ScrollController();
-  int? _editingMessageIndex;
-  TextEditingController? _editingController;
-
-  @override
-  void didUpdateWidget(AIChatMessages oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    // Прокрутка вниз при появлении нового сообщения или индикатора загрузки
-    if (oldWidget.aiState.messages.length != widget.aiState.messages.length ||
-        oldWidget.aiState.isLoading != widget.aiState.isLoading) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scroll.hasClients) {
-          _scroll.animateTo(
-            _scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    _editingController?.dispose();
-    super.dispose();
-  }
-
-  Widget _buildMessageActionDetails(AIAction action) {
-    return SelectionArea(
-      child: Builder(builder: (context) {
-        final workspacePath = ref.watch(workspaceProvider).currentPath;
-        IconData iconData;
-        Color iconColor;
-        String text;
-        
-        if (action.type == 'command') {
-          iconData = LucideIcons.terminal;
-          iconColor = Colors.white54;
-          text = AppLocalizations.of(context)!.ranAction(action.content);
-        } else {
-          final fileName = action.path.split('/').last;
-          iconColor = action.type == 'create' 
-              ? Colors.greenAccent 
-              : (action.type == 'delete' ? Colors.redAccent : Colors.blueAccent);
-          
-          iconData = action.type == 'create' 
-              ? LucideIcons.file_plus 
-              : (action.type == 'delete' ? LucideIcons.file_x : LucideIcons.pencil);
-          
-          final relDir = workspacePath != null && action.path.startsWith(workspacePath)
-              ? p.dirname(p.relative(action.path, from: workspacePath))
-              : '';
-          
-          final dirSuffix = relDir.isNotEmpty && relDir != '.' ? ' ${AppLocalizations.of(context)!.inFolder(relDir)}' : '';
-          final typeStr = action.type == 'create' 
-              ? AppLocalizations.of(context)!.created 
-              : (action.type == 'delete' ? AppLocalizations.of(context)!.deleted : AppLocalizations.of(context)!.edited);
-          text = '$typeStr $fileName$dirSuffix';
-        }
-        
-        return Row(
-          children: [
-            Icon(iconData, size: 11, color: iconColor),
-            const SizedBox(width: 8),
-            Expanded(child: Text(text, style: GoogleFonts.inter(fontSize: 11, color: Colors.white70))),
-          ],
-        );
-      }),
-    );
-  }
-
-  Widget _buildStepSummary(ChatMessage message) {
-    final workspacePath = ref.read(workspaceProvider).currentPath;
-    final executed = message.executedActions ?? [];
-    
-    // Count stats
-    int editCount = 0;
-    int additions = 0;
-    int deletions = 0;
-    int commandCount = 0;
-    
-    for (final action in executed) {
-      if (action.type == 'command') {
-        commandCount++;
-      } else {
-        editCount++;
-        additions += action.additions ?? 0;
-        deletions += action.deletions ?? 0;
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 1. Timeline Events
-        if (executed.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(left: 4.0, bottom: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: List.generate(executed.length, (index) {
-                final action = executed[index];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: _buildMessageActionDetails(action),
-                );
-              }),
-            ),
-          ),
-        
-        // 2. Structured Task Card
-        Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E2230),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Card Header
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: Colors.greenAccent.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Center(
-                        child: Icon(LucideIcons.circle_check, size: 12, color: Colors.greenAccent),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            message.taskName != null && message.taskName!.isNotEmpty
-                                ? (message.taskName!.length > 40 ? '${message.taskName!.substring(0, 40)}...' : message.taskName!)
-                                : AppLocalizations.of(context)!.taskExecution,
-                            style: GoogleFonts.inter(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                          ),
-                          if (message.stepNumber != null)
-                            Text(
-                              AppLocalizations.of(context)!.stepNumber(message.stepNumber!, message.totalSteps ?? 12),
-                              style: GoogleFonts.inter(color: Colors.white38, fontSize: 9.5),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(color: Colors.white10, height: 1),
-              
-              // Summary stats row & Keep / Undo buttons
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      editCount > 0 
-                          ? AppLocalizations.of(context)!.filesChangedCount(editCount, additions, deletions)
-                          : AppLocalizations.of(context)!.commandsExecutedCount(commandCount),
-                      style: GoogleFonts.inter(color: Colors.white60, fontSize: 10),
-                    ),
-                    if (editCount > 0)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Keep Button
-                          TextButton.icon(
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            icon: const Icon(LucideIcons.check, size: 10, color: Colors.greenAccent),
-                            label: Text(
-                              AppLocalizations.of(context)!.keep,
-                              style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(AppLocalizations.of(context)!.changesAccepted),
-                                  backgroundColor: const Color(0xFF1E2230),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          // Undo Button
-                          TextButton.icon(
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            icon: const Icon(LucideIcons.undo_2, size: 10, color: Colors.redAccent),
-                            label: Text(
-                              AppLocalizations.of(context)!.undo,
-                              style: const TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                            onPressed: () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              final gitSvc = ref.read(gitServiceProvider);
-                              final editor = ref.read(editorProvider.notifier);
-                              int undone = 0;
-                              for (final action in executed) {
-                                if (action.type == 'edit' || action.type == 'create') {
-                                  final relPath = workspacePath != null && action.path.startsWith(workspacePath)
-                                      ? p.relative(action.path, from: workspacePath)
-                                      : action.path;
-                                  await gitSvc.discardChanges(relPath);
-                                  
-                                  // Reload in editor if open
-                                  final isOpen = ref.read(editorProvider).openFiles.any((f) => f.path == action.path);
-                                  if (isOpen) {
-                                    await editor.openFile(action.path);
-                                  }
-                                  undone++;
-                                }
-                              }
-                              if (mounted) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(AppLocalizations.of(context)!.undoneChanges(undone)),
-                                    backgroundColor: Colors.redAccent.withValues(alpha: 0.8),
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
-
-              // File list inside the card (optional dropdown style or visible)
-              if (editCount > 0) ...[
-                const Divider(color: Colors.white10, height: 1),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: executed.where((a) => a.type != 'command').length,
-                  itemBuilder: (context, idx) {
-                    final editActions = executed.where((a) => a.type != 'command').toList();
-                    final action = editActions[idx];
-                    final fileName = action.path.split('/').last;
-                    final displayPath = workspacePath != null && action.path.startsWith(workspacePath)
-                        ? p.relative(action.path, from: workspacePath)
-                        : action.path;
-                    final dirPath = displayPath.contains('/')
-                        ? displayPath.substring(0, displayPath.lastIndexOf('/'))
-                        : '';
-
-                    return ListTile(
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      leading: const Icon(LucideIcons.file_code, size: 13, color: Colors.white54),
-                      title: Row(
-                        children: [
-                          Text(fileName, style: GoogleFonts.inter(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
-                          if (dirPath.isNotEmpty) ...[
-                            const SizedBox(width: 4),
-                            Expanded(child: Text('in $dirPath', style: GoogleFonts.inter(color: Colors.white30, fontSize: 9), overflow: TextOverflow.ellipsis)),
-                          ],
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if ((action.additions ?? 0) > 0)
-                            Text(
-                              '+${action.additions}',
-                              style: GoogleFonts.jetBrainsMono(color: Colors.greenAccent, fontSize: 9, fontWeight: FontWeight.bold),
-                            ),
-                          if ((action.additions ?? 0) > 0 && (action.deletions ?? 0) > 0) const SizedBox(width: 4),
-                          if ((action.deletions ?? 0) > 0)
-                            Text(
-                              '-${action.deletions}',
-                              style: GoogleFonts.jetBrainsMono(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold),
-                            ),
-                          const SizedBox(width: 8),
-                          // Individual file Undo/Discard icon
-                          IconButton(
-                            icon: const Icon(LucideIcons.undo_2, size: 10, color: Colors.white38),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () async {
-                              final messenger = ScaffoldMessenger.of(context);
-                              final gitSvc = ref.read(gitServiceProvider);
-                              final relPath = workspacePath != null && action.path.startsWith(workspacePath)
-                                  ? p.relative(action.path, from: workspacePath)
-                                  : action.path;
-                              await gitSvc.discardChanges(relPath);
-                              
-                              final isOpen = ref.read(editorProvider).openFiles.any((f) => f.path == action.path);
-                              if (isOpen) {
-                                await ref.read(editorProvider.notifier).openFile(action.path);
-                              }
-                              
-                              if (mounted) {
-                                messenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text(AppLocalizations.of(context)!.discardedFileChanges(fileName)),
-                                  ),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    if (widget.aiState.messages.isEmpty) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          final hasEnoughSpace = constraints.maxHeight > 90;
-          return ClipRect(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (hasEnoughSpace) ...[
-                    Icon(LucideIcons.sparkles, size: 36, color: Colors.purpleAccent.withValues(alpha: 0.5)),
-                    const SizedBox(height: 8),
-                  ],
-                  if (constraints.maxHeight > 40)
-                    Text(
-                      l10n.askAboutCode,
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(color: Colors.white24, fontSize: 11),
-                    ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    }
-
-
-    final itemCount = widget.aiState.messages.length + (widget.aiState.isLoading ? 1 : 0);
-
-    return ListView.builder(
-      controller: _scroll,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: itemCount,
-      itemBuilder: (context, index) {
-        if (index == widget.aiState.messages.length) {
-          final role = widget.aiState.activeAgentRole ?? 'Agent';
-          final status = widget.aiState.currentStatusMessage ?? 
-              AppLocalizations.of(context)!.thinking;
-          
-          Color roleColor;
-          String roleText;
-          IconData roleIcon;
-          
-          switch (role.toLowerCase()) {
-            case 'planner':
-              roleColor = Colors.cyanAccent;
-              roleText = AppLocalizations.of(context)!.planner;
-              roleIcon = LucideIcons.compass;
-              break;
-            case 'coder':
-              roleColor = Colors.purpleAccent;
-              roleText = AppLocalizations.of(context)!.coder;
-              roleIcon = LucideIcons.code;
-              break;
-            case 'validator':
-              roleColor = Colors.orangeAccent;
-              roleText = AppLocalizations.of(context)!.validator;
-              roleIcon = LucideIcons.shield_check;
-              break;
-            default:
-              roleColor = Colors.blueAccent;
-              roleText = AppLocalizations.of(context)!.aiAgentRole;
-              roleIcon = LucideIcons.bot;
-          }
-
-          return Container(
-            margin: const EdgeInsets.only(top: 4, bottom: 12),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E2230).withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: roleColor.withValues(alpha: 0.25),
-                width: 0.8,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                )
-              ]
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Lottie.network(
-                    'https://assets5.lottiefiles.com/packages/lf20_q5pk6hy1.json',
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) => SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.8,
-                        valueColor: AlwaysStoppedAnimation<Color>(roleColor),
-                      ),
-                    ),
-                    frameBuilder: (context, child, composition) {
-                      if (composition == null) {
-                        return SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.8,
-                            valueColor: AlwaysStoppedAnimation<Color>(roleColor),
-                          ),
-                        );
-                      }
-                      return child;
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(roleIcon, size: 11, color: roleColor),
-                          const SizedBox(width: 4),
-                          Text(
-                            roleText,
-                            style: GoogleFonts.inter(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.5,
-                              color: roleColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        status,
-                        style: GoogleFonts.inter(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withValues(alpha: 0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        final message = widget.aiState.messages[index];
-        final isUser = message.role == MessageRole.user;
-        final isSystem = message.role == MessageRole.system;
-        final isLastMessage = index == widget.aiState.messages.length - 1;
-
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            crossAxisAlignment: isUser 
-                ? CrossAxisAlignment.end 
-                : (isSystem ? CrossAxisAlignment.stretch : CrossAxisAlignment.start),
-            children: [
-              if (isSystem)
-                message.isStepSummary
-                    ? _buildStepSummary(message)
-                    : CollapsibleConsole(content: message.content)
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isUser
-                        ? const Color(0xFF3B1E60).withValues(alpha: 0.45)
-                        : Colors.white.withValues(alpha: 0.02),
-                    borderRadius: isUser ? BorderRadius.circular(16) : BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isUser
-                          ? Colors.purpleAccent.withValues(alpha: 0.25)
-                          : Colors.white.withValues(alpha: 0.05),
-                      width: isUser ? 0.8 : 0.5,
-                    ),
-                  ),
-                  child: isUser
-                      ? (_editingMessageIndex == index
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                TextField(
-                                  controller: _editingController,
-                                  style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5),
-                                  maxLines: null,
-                                  decoration: const InputDecoration(
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      onPressed: () {
-                                        setState(() {
-                                          _editingMessageIndex = null;
-                                          _editingController?.dispose();
-                                          _editingController = null;
-                                        });
-                                      },
-                                      child: Text(
-                                        AppLocalizations.of(context)!.cancel,
-                                        style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.cyanAccent.withValues(alpha: 0.15),
-                                        foregroundColor: Colors.cyanAccent,
-                                        elevation: 0,
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                        minimumSize: Size.zero,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(6),
-                                          side: const BorderSide(color: Colors.cyanAccent, width: 0.5),
-                                        ),
-                                      ),
-                                      onPressed: () {
-                                        final newText = _editingController?.text.trim() ?? '';
-                                        if (newText.isNotEmpty && newText != message.content) {
-                                          ref.read(aiProvider.notifier).editUserRequest(index, newText);
-                                        }
-                                        setState(() {
-                                          _editingMessageIndex = null;
-                                          _editingController?.dispose();
-                                          _editingController = null;
-                                        });
-                                      },
-                                      child: Text(
-                                        AppLocalizations.of(context)!.resubmit,
-                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            )
-                          : SelectableText(
-                              message.content,
-                              style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.9), fontSize: 12.5, height: 1.45),
-                            ))
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: _renderMarkdown(message.content, context),
-                        ),
-                ),
-              Padding(
-                padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
-                child: Row(
-                  mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-                  children: [
-                    Text(
-                      isUser 
-                          ? l10n.you 
-                          : (isSystem 
-                              ? AppLocalizations.of(context)!.system 
-                              : (ref.read(aiServiceProvider).settings.currentProvider.id == 'local_edge'
-                                  ? l10n.localAiDisplayName
-                                  : ref.read(aiServiceProvider).settings.currentProvider.displayName)),
-                      style: GoogleFonts.inter(color: Colors.white24, fontSize: 10),
-                    ),
-                    if (isUser && !widget.aiState.isLoading && _editingMessageIndex == null) ...[
-                      const SizedBox(width: 8),
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            _editingMessageIndex = index;
-                            _editingController = TextEditingController(text: message.content);
-                          });
-                        },
-                        child: const Icon(LucideIcons.pencil, size: 10, color: Colors.cyanAccent),
-                      ),
-                    ],
-                    if (!widget.aiState.isLoading && index < widget.aiState.messages.length - 1) ...[
-                      const SizedBox(width: 8),
-                      Tooltip(
-                        message: AppLocalizations.of(context)!.rollbackHistoryToStep,
-                        child: InkWell(
-                          onTap: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                backgroundColor: const Color(0xFF1E2230),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                title: Text(
-                                  AppLocalizations.of(context)!.confirmRollback,
-                                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                                ),
-                                content: Text(
-                                  AppLocalizations.of(context)!.rollbackConfirmationText,
-                                  style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
-                                    child: Text(
-                                      AppLocalizations.of(context)!.cancel,
-                                      style: const TextStyle(color: Colors.white38, fontSize: 11),
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, true),
-                                    child: Text(
-                                      AppLocalizations.of(context)!.yesRollback,
-                                      style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirm == true) {
-                              await ref.read(aiProvider.notifier).rollbackToMessage(index);
-                            }
-                          },
-                          child: const Icon(LucideIcons.rotate_ccw, size: 10, color: Colors.redAccent),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (message.actions != null && message.actions!.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _buildMessageActionsCard(message.actions!, isLastMessage),
-              ] else if (!isUser && !isSystem && isLastMessage && widget.aiState.proposedActions.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _buildMessageActionsCard(widget.aiState.proposedActions, isLastMessage),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMessageActionsCard(List<AIAction> actions, bool isLastMessage) {
-    final l10n = AppLocalizations.of(context)!;
-    
-    // Check if any of these actions are still pending in the global proposedActions state
-    final pendingActions = actions.where((a) => widget.aiState.proposedActions.any((pa) => pa.path == a.path && pa.content == a.content)).toList();
-    final isPending = pendingActions.isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161923),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: actions.length,
-            itemBuilder: (context, index) {
-              final action = actions[index];
-              final isActionPending = widget.aiState.proposedActions.any((pa) => pa.path == action.path && pa.content == action.content);
-              return AIActionFileItem(
-                action: action,
-                isPending: isActionPending,
-                onShowDiff: () => _showDiffDialog(action),
-                onRemove: () => ref.read(aiProvider.notifier).removeAction(action),
-              );
-            },
-          ),
-          if (isPending) ...[
-            Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    '${l10n.filesCount(pendingActions.length)} ${l10n.withChanges}',
-                    style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          for (final action in List<AIAction>.from(pendingActions)) {
-                            ref.read(aiProvider.notifier).removeAction(action);
-                          }
-                        },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: Text(
-                          l10n.rejectAll,
-                          style: const TextStyle(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () async {
-                          await ref.read(aiProvider.notifier).executeActionsManually(pendingActions);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E60FF),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                        ),
-                        child: Text(
-                          l10n.acceptAll,
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.circle_check, size: 12, color: Colors.greenAccent),
-                  const SizedBox(width: 6),
-                  Text(
-                    l10n.changesApplied,
-                    style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  void _showDiffDialog(AIAction action) async {
-    final file = File(action.path);
-    String originalContent = '';
-    if (await file.exists()) {
-      originalContent = await file.readAsString();
-    }
-
-    if (!mounted) return;
-
-    final workspacePath = ref.read(workspaceProvider).currentPath;
-    final relPath = (workspacePath != null && action.path.startsWith(workspacePath))
-        ? p.relative(action.path, from: workspacePath)
-        : action.path;
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1D27),
-        title: Text(AppLocalizations.of(context)!.changesInFile(action.path.split('/').last), style: const TextStyle(color: Colors.white, fontSize: 16)),
-        content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.7,
-          child: GitDiffPage(
-            relativePath: relPath, 
-            initiallyStaged: false,
-            originalOverride: originalContent,
-            previewContent: action.content,
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(AppLocalizations.of(context)!.close)),
-          ElevatedButton(
-            onPressed: () {
-              ref.read(aiProvider.notifier).executeActionManually(action);
-              Navigator.pop(context);
-            },
-            child: Text(AppLocalizations.of(context)!.apply),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _renderMarkdown(String text, BuildContext context) {
-    final List<Widget> widgets = [];
-    final regex = RegExp(r'```([a-zA-Z0-9_\-+]*)\n([\s\S]*?)```');
-    
-    int lastIndex = 0;
-    
-    for (final match in regex.allMatches(text)) {
-      if (match.start > lastIndex) {
-        final prevText = text.substring(lastIndex, match.start).trim();
-        if (prevText.isNotEmpty) {
-          widgets.add(_buildTextSection(prevText));
-        }
-      }
-      
-      final language = match.group(1)?.trim() ?? '';
-      final code = match.group(2) ?? '';
-      widgets.add(_buildCodeBlock(code, language, context));
-      
-      lastIndex = match.end;
-    }
-    
-    if (lastIndex < text.length) {
-      final remainingText = text.substring(lastIndex).trim();
-      if (remainingText.isNotEmpty) {
-        widgets.add(_buildTextSection(remainingText));
-      }
-    }
-    
-    return widgets;
-  }
-
-  Widget _buildTextSection(String text) {
-    final lines = text.split('\n');
-    final List<Widget> lineWidgets = [];
-    
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      
-      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        lineWidgets.add(
-          Padding(
-            padding: const EdgeInsets.only(left: 8.0, bottom: 4.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 6.0, right: 6.0),
-                  child: Icon(LucideIcons.circle, size: 4, color: Colors.purpleAccent),
-                ),
-                Expanded(
-                  child: _buildInlineFormattedText(trimmed.substring(2)),
-                ),
-              ],
-            ),
-          ),
-        );
-      } else {
-        lineWidgets.add(
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6.0),
-            child: _buildInlineFormattedText(trimmed),
-          ),
-        );
-      }
-    }
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: lineWidgets,
-    );
-  }
-
-  Widget _buildInlineFormattedText(String text) {
-    final List<TextSpan> spans = [];
-    final boldRegex = RegExp(r'\*\*(.*?)\*\*');
-    int lastIndex = 0;
-    
-    for (final match in boldRegex.allMatches(text)) {
-      if (match.start > lastIndex) {
-        spans.add(TextSpan(text: text.substring(lastIndex, match.start)));
-      }
-      spans.add(TextSpan(
-        text: match.group(1),
-        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-      ));
-      lastIndex = match.end;
-    }
-    
-    if (lastIndex < text.length) {
-      spans.add(TextSpan(text: text.substring(lastIndex)));
-    }
-    
-    return SelectableText.rich(
-      TextSpan(
-        children: spans,
-        style: GoogleFonts.inter(color: Colors.white70, fontSize: 13, height: 1.5),
-      ),
-    );
-  }
-
-  Widget _buildCodeBlock(String code, String language, BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F111A),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.02),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
-              border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  language.toUpperCase(),
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    color: Colors.cyanAccent,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                InkWell(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: code));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(AppLocalizations.of(context)!.codeCopied),
-                        duration: const Duration(seconds: 1),
-                        backgroundColor: const Color(0xFF1E2230),
-                      ),
-                    );
-                  },
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(LucideIcons.copy, size: 12, color: Colors.white38),
-                      const SizedBox(width: 4),
-                      Text(
-                        AppLocalizations.of(context)!.copy,
-                        style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: SelectableText(
-              code.trim(),
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11.5,
-                color: Colors.white.withValues(alpha: 0.85),
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class AIActionFileItem extends ConsumerStatefulWidget {
   final AIAction action;

@@ -65,7 +65,10 @@ import 'package:quantum_ide/features/editor/presentation/widgets/live_share_pane
 import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_painter.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:quantum_ide/core/services/wasm_plugin_service.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/wasm_plugins_panel.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/extensions_panel.dart';
+import 'package:quantum_ide/core/services/service_providers.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/editor_minimap.dart';
+
 
 // ─── Вспомогательные функции для диалогов и меню ───────────────────────────
 
@@ -270,10 +273,11 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
   bool _isResizingHovered = false;
 
   Widget _buildActivityIcon(WidgetRef ref, int index, IconData icon, String tooltip, bool isActive, {int badgeCount = 0}) {
+    final activeColor = const Color(0xFF4CD7F6);
     final iconWidget = Icon(
       icon,
       size: 20,
-      color: isActive ? const Color(0xFFFF3C3C) : Colors.white38,
+      color: isActive ? activeColor : Colors.white38,
     );
 
     return Tooltip(
@@ -285,9 +289,10 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
           height: 48,
           alignment: Alignment.center,
           decoration: BoxDecoration(
+            color: isActive ? activeColor.withValues(alpha: 0.1) : Colors.transparent,
             border: Border(
               left: BorderSide(
-                color: isActive ? const Color(0xFFFF3C3C) : Colors.transparent, // Mandy Red
+                color: isActive ? activeColor : Colors.transparent,
                 width: 2.5,
               ),
             ),
@@ -307,14 +312,14 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(
-                          minWidth: 12,
-                          minHeight: 12,
+                          minWidth: 14,
+                          minHeight: 14,
                         ),
                         child: Text(
                           '$badgeCount',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 7,
+                            fontSize: 9,
                             fontWeight: FontWeight.bold,
                           ),
                           textAlign: TextAlign.center,
@@ -335,6 +340,7 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
     final workspacePath = ref.watch(workspaceProvider).currentPath ?? '';
     final selectedTab = ref.watch(drawerTabProvider);
     final editorState = ref.watch(editorProvider);
+    final panelState = ref.watch(panelProvider);
 
     // Count workspace diagnostics problems
     int totalProblems = 0;
@@ -358,26 +364,50 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
         color: const Color(0xFF090B0F),
         border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)),
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0),
-            _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1),
-            _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2),
-            _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3),
-            _buildActivityIcon(ref, 4, LucideIcons.circle_alert, AppLocalizations.of(context)!.problems, selectedTab == 4, badgeCount: totalProblems),
-            _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount),
-            _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6),
-            _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7),
-            _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8),
-            _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9),
-            _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10),
-            _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11),
-          ],
-        ),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0),
+                  _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1),
+                  _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2),
+                  _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3),
+                  _buildActivityIcon(ref, 4, LucideIcons.circle_alert, AppLocalizations.of(context)!.problems, selectedTab == 4, badgeCount: totalProblems),
+                  _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount),
+                  _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6),
+                  _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7),
+                  _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8),
+                  _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9),
+                  _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10),
+                  _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11),
+                ],
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: Colors.white10),
+          const SizedBox(height: 4),
+          Tooltip(
+            message: AppLocalizations.of(context)!.settings,
+            child: InkWell(
+              onTap: () {
+                context.push('/settings');
+              },
+              child: Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                child: const Icon(LucideIcons.settings, size: 20, color: Colors.white38),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
       ),
     );
+
 
     Widget activePanel;
     switch (selectedTab) {
@@ -412,149 +442,207 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
         activePanel = const LiveSharePanel();
         break;
       case 11:
-        activePanel = const WasmPluginsPanel();
+        activePanel = const ExtensionsPanel();
         break;
       case 0:
       default:
-        activePanel = Column(
+        activePanel = Stack(
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Column(
-                children: [
-                  Row(
+            Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Column(
                     children: [
-                      ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [Colors.blue, Colors.cyan],
-                        ).createShader(bounds),
-                        child: const Icon(LucideIcons.folder, color: Colors.white, size: 18),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(AppLocalizations.of(context)!.explorer, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                      ),
-                    ],
-                  ),
-                  if (workspacePath.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.03),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      Row(
                         children: [
-                          _DrawerActionIcon(
-                            icon: LucideIcons.wrench,
-                            tooltip: AppLocalizations.of(context)!.environment,
-                            onPressed: () => _showEnvironmentBottomSheet(context, ref),
+                          ShaderMask(
+                            shaderCallback: (bounds) => const LinearGradient(
+                              colors: [Colors.blue, Colors.cyan],
+                            ).createShader(bounds),
+                            child: const Icon(LucideIcons.folder, color: Colors.white, size: 18),
                           ),
-                          _DrawerActionIcon(
-                            icon: LucideIcons.folder_closed,
-                            tooltip: AppLocalizations.of(context)!.collapseAll,
-                            onPressed: () {
-                              ref.read(expandedFoldersProvider.notifier).setExpanded({});
-                            },
-                          ),
-                          _DrawerActionIcon(
-                            icon: LucideIcons.arrow_up_down,
-                            tooltip: AppLocalizations.of(context)!.sortByDate.split(' ').first,
-                            onPressed: () => _showSortMenu(context, ref),
-                          ),
-                          _DrawerActionIcon(
-                            icon: LucideIcons.file_plus,
-                            tooltip: AppLocalizations.of(context)!.newFile,
-                            onPressed: () => _showCreateDialog(context, ref, workspacePath, false),
-                          ),
-                          _DrawerActionIcon(
-                            icon: LucideIcons.folder_plus,
-                            tooltip: AppLocalizations.of(context)!.newFolder,
-                            onPressed: () => _showCreateDialog(context, ref, workspacePath, true),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(AppLocalizations.of(context)!.explorer, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                  if (workspacePath.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    TextField(
-                      onChanged: (value) => ref.read(fileSearchQueryProvider.notifier).state = value,
-                      decoration: InputDecoration(
-                        hintText: AppLocalizations.of(context)!.searchFiles,
-                        hintStyle: const TextStyle(fontSize: 12.5),
-                        prefixIcon: const Icon(LucideIcons.search, size: 14),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
+                      if (workspacePath.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.03),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              _DrawerActionIcon(
+                                icon: LucideIcons.wrench,
+                                tooltip: AppLocalizations.of(context)!.environment,
+                                onPressed: () => _showEnvironmentBottomSheet(context, ref),
+                              ),
+                              _DrawerActionIcon(
+                                icon: LucideIcons.folder_closed,
+                                tooltip: AppLocalizations.of(context)!.collapseAll,
+                                onPressed: () {
+                                  ref.read(expandedFoldersProvider.notifier).setExpanded({});
+                                },
+                              ),
+                              _DrawerActionIcon(
+                                icon: LucideIcons.arrow_up_down,
+                                tooltip: AppLocalizations.of(context)!.sortByDate.split(' ').first,
+                                onPressed: () => _showSortMenu(context, ref),
+                              ),
+                            ],
+                          ),
                         ),
-                        fillColor: Colors.white.withValues(alpha: 0.05),
-                        filled: true,
-                      ),
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: Colors.white10, indent: 14, endIndent: 14),
-            const SizedBox(height: 6),
-            if (workspacePath.isNotEmpty)
-              Expanded(
-                child: DragTarget<String>(
-                  onWillAcceptWithDetails: (details) {
-                    final draggedPath = details.data;
-                    final parentDir = p.dirname(draggedPath);
-                    if (parentDir == workspacePath) return false;
-                    return true;
-                  },
-                  onAcceptWithDetails: (details) async {
-                    final draggedPath = details.data;
-                    try {
-                      await ref.read(fileExplorerProvider.notifier).moveEntity(draggedPath, workspacePath);
-                      if (context.mounted) {
-                        final l10n = AppLocalizations.of(context)!;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(l10n.elementMovedToRoot)),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        final l10n = AppLocalizations.of(context)!;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(l10n.moveError(e.toString()))),
-                        );
-                      }
-                    }
-                  },
-                  builder: (context, candidateData, rejectedData) {
-                    final isOver = candidateData.isNotEmpty;
-                    return Container(
-                      color: isOver ? Colors.blue.withValues(alpha: 0.05) : Colors.transparent,
-                      child: SingleChildScrollView(
-                        physics: const BouncingScrollPhysics(),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildBookmarksSection(context, ref, workspacePath),
-                            if (ref.watch(bookmarksProvider).isNotEmpty)
-                              const Divider(height: 1, color: Colors.white10, indent: 14, endIndent: 14),
-                            _FileDrawerTree(workspacePath: workspacePath),
-                          ],
+                      ],
+                      if (workspacePath.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        TextField(
+                          onChanged: (value) => ref.read(fileSearchQueryProvider.notifier).state = value,
+                          decoration: InputDecoration(
+                            hintText: AppLocalizations.of(context)!.searchFiles,
+                            hintStyle: const TextStyle(fontSize: 12.5),
+                            prefixIcon: const Icon(LucideIcons.search, size: 14),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide.none,
+                            ),
+                            fillColor: Colors.white.withValues(alpha: 0.05),
+                            filled: true,
+                          ),
+                          style: const TextStyle(fontSize: 12.5),
                         ),
-                      ),
-                    );
-                  },
+                      ],
+                    ],
+                  ),
                 ),
-              )
-            else
-              Expanded(child: Center(child: Text(AppLocalizations.of(context)!.projectNotOpened, style: const TextStyle(color: Colors.grey)))),
-            const _DrawerStatsPanel(),
+                const Divider(height: 1, color: Colors.white10, indent: 14, endIndent: 14),
+                const SizedBox(height: 6),
+                if (workspacePath.isNotEmpty)
+                  Expanded(
+                    child: DragTarget<String>(
+                      onWillAcceptWithDetails: (details) {
+                        final draggedPath = details.data;
+                        final parentDir = p.dirname(draggedPath);
+                        if (parentDir == workspacePath) return false;
+                        return true;
+                      },
+                      onAcceptWithDetails: (details) async {
+                        final draggedPath = details.data;
+                        try {
+                          await ref.read(fileExplorerProvider.notifier).moveEntity(draggedPath, workspacePath);
+                          if (context.mounted) {
+                            final l10n = AppLocalizations.of(context)!;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(l10n.elementMovedToRoot)),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            final l10n = AppLocalizations.of(context)!;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(l10n.moveError(e.toString()))),
+                            );
+                          }
+                        }
+                      },
+                      builder: (context, candidateData, rejectedData) {
+                        final isOver = candidateData.isNotEmpty;
+                        return Container(
+                          color: isOver ? Colors.blue.withValues(alpha: 0.05) : Colors.transparent,
+                          child: SingleChildScrollView(
+                            physics: const BouncingScrollPhysics(),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildBookmarksSection(context, ref, workspacePath),
+                                if (ref.watch(bookmarksProvider).isNotEmpty)
+                                  const Divider(height: 1, color: Colors.white10, indent: 14, endIndent: 14),
+                                _FileDrawerTree(workspacePath: workspacePath),
+                                const SizedBox(height: 80),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  )
+                else
+                  Expanded(child: Center(child: Text(AppLocalizations.of(context)!.projectNotOpened, style: const TextStyle(color: Colors.grey)))),
+                const _DrawerStatsPanel(),
+                const SizedBox(height: 80),
+              ],
+            ),
+            if (workspacePath.isNotEmpty)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: GlassContainer(
+                  blur: 20,
+                  opacity: 0.9,
+                  color: const Color(0xFF1E2230),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _FloatingCapsuleButton(
+                            icon: LucideIcons.file_plus,
+                            label: AppLocalizations.of(context)!.newFile.toUpperCase(),
+                            onPressed: () => _showCreateDialog(context, ref, workspacePath, false),
+                          ),
+                          const SizedBox(width: 16),
+                              _FloatingCapsuleButton(
+                                icon: LucideIcons.folder_plus,
+                                label: AppLocalizations.of(context)!.newFolder.toUpperCase(),
+                                onPressed: () => _showCreateDialog(context, ref, workspacePath, true),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        height: 24,
+                        width: 1,
+                        color: Colors.white10,
+                      ),
+                      IconButton(
+                        icon: const Icon(LucideIcons.terminal, size: 18),
+                        color: const Color(0xFF4CD7F6),
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFF03B5D3).withValues(alpha: 0.2),
+                          padding: const EdgeInsets.all(8),
+                        ),
+                        onPressed: () {
+                          final panelNotifier = ref.read(panelProvider.notifier);
+                          if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
+                            panelNotifier.closePanel();
+                          } else {
+                            panelNotifier.selectTab(PanelTab.terminal);
+                            panelNotifier.openPanel();
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         );
     }
@@ -610,12 +698,16 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
       );
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    
     return GlassContainer(
       blur: 30,
-      opacity: 0.15,
-      borderRadius: const BorderRadius.only(topRight: Radius.circular(24), bottomRight: Radius.circular(24)),
+      opacity: 0.85,
+      color: const Color(0xFF0F1117),
+      borderRadius: BorderRadius.zero,
       border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
       child: Drawer(
+        width: screenWidth,
         backgroundColor: Colors.transparent,
         elevation: 0,
         child: content,
@@ -759,8 +851,14 @@ class _DrawerStatsPanel extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('CPU', style: GoogleFonts.inter(fontSize: 10, color: Colors.white38)),
-                        Text('${(stats.cpuUsage * 100).toStringAsFixed(0)}%', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: _getLoadColor(stats.cpuUsage), fontWeight: FontWeight.bold)),
+                        Text('CPU', style: GoogleFonts.inter(fontSize: 12, color: Colors.white38)),
+                        Expanded(
+                          child: Text(
+                            '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', 
+                            textAlign: TextAlign.right,
+                            style: GoogleFonts.jetBrainsMono(fontSize: 12, color: _getLoadColor(stats.cpuUsage), fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -784,8 +882,17 @@ class _DrawerStatsPanel extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('RAM', style: GoogleFonts.inter(fontSize: 10, color: Colors.white38)),
-                        Text('${stats.ramUsedGB.toStringAsFixed(1)} / ${stats.ramTotalGB.toStringAsFixed(0)} GB', style: GoogleFonts.jetBrainsMono(fontSize: 9, color: _getLoadColor(stats.ramUsage), fontWeight: FontWeight.bold)),
+                        Text('RAM', style: GoogleFonts.inter(fontSize: 12, color: Colors.white38)),
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              '${stats.ramUsedGB.toStringAsFixed(1)} / ${stats.ramTotalGB.toStringAsFixed(0)} GB', 
+                              style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _getLoadColor(stats.ramUsage), fontWeight: FontWeight.bold)
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -849,9 +956,12 @@ class _EditorTabBar extends ConsumerWidget {
     final notifier = ref.read(editorProvider.notifier);
 
     return Container(
-      height: 30,
+      height: 38,
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.03), width: 0.5)),
+        color: Colors.black.withValues(alpha: 0.15),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
+        ),
       ),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
@@ -863,45 +973,75 @@ class _EditorTabBar extends ConsumerWidget {
           return GestureDetector(
             onTap: () => notifier.setActiveTab(index),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              duration: const Duration(milliseconds: 150),
+              margin: const EdgeInsets.only(top: 2, right: 2),
               decoration: BoxDecoration(
-                color: isActive ? Colors.white.withValues(alpha: 0.05) : Colors.transparent,
-                border: Border(
-                  bottom: BorderSide(
-                    color: isActive ? Theme.of(context).colorScheme.primary : Colors.transparent,
-                    width: 2,
-                  ),
+                color: isActive ? const Color(0xFF1E2230) : Colors.transparent,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(8),
+                ),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.03),
+                  width: 0.5,
                 ),
               ),
-              child: Row(
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  () {
-                    final iconInfo = FileIconHelper.getIconInfo(file.name, false);
-                    return Icon(
-                      iconInfo.icon,
-                      size: 12,
-                      color: isActive ? iconInfo.color : iconInfo.color.withValues(alpha: 0.5),
-                    );
-                  }(),
-                  const SizedBox(width: 6),
-                  Text(
-                    file.name + (file.isModified ? ' •' : ''), 
-                    style: GoogleFonts.inter(
-                      fontSize: 11, 
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                      color: isActive ? Colors.white : Colors.white60,
-                    )
-                  ),
-                  const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: () => notifier.closeTab(index),
-                    child: Icon(
-                      LucideIcons.x, 
-                      size: 10, 
-                      color: isActive ? Colors.white54 : Colors.white24,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        () {
+                          final iconInfo = FileIconHelper.getIconInfo(file.name, false);
+                          return Icon(
+                            iconInfo.icon,
+                            size: 12,
+                            color: isActive ? iconInfo.color : iconInfo.color.withValues(alpha: 0.5),
+                          );
+                        }(),
+                        const SizedBox(width: 6),
+                        Text(
+                          file.name + (file.isModified ? ' •' : ''), 
+                          style: GoogleFonts.inter(
+                            fontSize: 11, 
+                            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                            color: isActive ? Colors.white : Colors.white60,
+                          )
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => notifier.closeTab(index),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              LucideIcons.x, 
+                              size: 12, 
+                              color: isActive ? Colors.white54 : Colors.white24,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  if (isActive)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 1.5,
+                        decoration: const BoxDecoration(
+                          color: Colors.purpleAccent,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(8),
+                            topRight: Radius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1190,42 +1330,56 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       if (current) {
         if (!isDesktop) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _scaffoldKey.currentState?.openEndDrawer();
+            // Show bottom sheet instead of endDrawer
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) {
+                return Container(
+                  height: MediaQuery.of(context).size.height * 0.85,
+                  margin: const EdgeInsets.only(top: 24),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF0F111A),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: const RightChatPanel(isInline: false),
+                );
+              },
+            ).whenComplete(() {
+              // Ensure provider is reset if user dismissed the sheet by swiping
+              if (ref.read(rightChatPanelOpenProvider)) {
+                ref.read(rightChatPanelOpenProvider.notifier).state = false;
+              }
+            });
           });
         }
       } else {
         if (!isDesktop) {
+          // If closed programmatically, we need to pop the bottom sheet if it's open.
+          // Since showModalBottomSheet is an overlay route, popping the top route is risky.
+          // Instead, we rely on the user swiping it down, or we could track the route.
+          // Usually, closing programmatically on mobile isn't needed unless via a button inside.
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_scaffoldKey.currentState?.isEndDrawerOpen ?? false) {
-              Navigator.of(context).pop();
-            }
+             Navigator.of(context).popUntil((route) {
+               // We only pop if the current route is a bottom sheet.
+               // Simple heuristic: we just pop the current route if it's the bottom sheet.
+               return route.settings.name != null || route.isFirst; // We might need a better way to find the bottom sheet
+             });
           });
         }
       }
     });
 
     if (openFilesCount == 0 || activeFile == null) {
-      final emptyBody = Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(LucideIcons.code, size: 64, color: Colors.grey.withValues(alpha: 0.3)),
-            const SizedBox(height: 16),
-            Text(AppLocalizations.of(context)!.selectFileToStart, style: const TextStyle(color: Colors.grey)),
-            const SizedBox(height: 24),
-            if (!isDesktop)
-              Builder(
-                builder: (context) => ElevatedButton.icon(
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  icon: const Icon(LucideIcons.folder_open, size: 18),
-                  label: Text(AppLocalizations.of(context)!.openExplorer),
-                ),
-              ),
-          ],
-        ),
-      );
+      final dashboard = _buildDashboard(context, ref, isDesktop, workspacePath);
 
       return Scaffold(
+        key: _scaffoldKey,
         drawer: isDesktop ? null : const _FileDrawer(),
         appBar: AppBar(
           title: const Text('QuantumIDE'),
@@ -1242,9 +1396,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         body: isDesktop ? Row(
           children: [
             const _FileDrawer(isInline: true),
-            Expanded(child: emptyBody),
+            Expanded(child: dashboard),
           ],
-        ) : emptyBody,
+        ) : dashboard,
+        bottomNavigationBar: isDesktop ? null : null,
       );
     }
 
@@ -1254,6 +1409,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       safeActiveIndex = openFilesCount - 1;
     }
     if (safeActiveIndex < 0) safeActiveIndex = 0;
+
+    final allProjects = ref.watch(projectServiceProvider);
+    final currentProjectIndex = allProjects.indexWhere((p) => p.path == workspacePath);
+    final currentProject = currentProjectIndex != -1 ? allProjects[currentProjectIndex] : null;
 
     final diagnosticsCount = ref.watch(editorProvider.select((s) {
       int count = 0;
@@ -1317,6 +1476,15 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
                         const SingleActivator(LogicalKeyboardKey.keyT, control: true):
                             () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.symbols),
+                        const SingleActivator(LogicalKeyboardKey.keyW, control: true):
+                            () => ref.read(editorProvider.notifier).closeTab(safeActiveIndex),
+                        const SingleActivator(LogicalKeyboardKey.f5): () {
+                          if (currentProject != null) {
+                            ref.read(projectServiceProvider.notifier).runProject(currentProject);
+                            panelNotifier.selectTab(PanelTab.terminal);
+                            panelNotifier.openPanel();
+                          }
+                        },
                       },
                       child: () {
                         // Optimization for low-end devices: only build the active editor.
@@ -1344,7 +1512,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       }(),
                     ),
                   ),
-                  KeyboardAccessoryBar(controller: activeFile.controller),
+                  if (!isDesktop) KeyboardAccessoryBar(controller: activeFile.controller),
                 ],
               ),
             ),
@@ -1421,22 +1589,36 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     children: [
                       if (!isDesktop)
                         IconButton(
-                          icon: const Icon(LucideIcons.library, size: 16, color: Colors.blueAccent),
+                          icon: const Icon(LucideIcons.menu, size: 20, color: Colors.blueAccent),
                           onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                           tooltip: AppLocalizations.of(context)!.openExplorer,
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                           constraints: const BoxConstraints(),
                         )
                       else
-                        IconButton(
-                          icon: const Icon(LucideIcons.arrow_left, size: 16),
-                          onPressed: () {
-                            ref.read(workspaceProvider.notifier).closeWorkspace();
-                            context.go('/');
-                          },
-                          tooltip: AppLocalizations.of(context)!.back,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          constraints: const BoxConstraints(),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(LucideIcons.arrow_left, size: 16),
+                              onPressed: () {
+                                ref.read(workspaceProvider.notifier).closeWorkspace();
+                                context.go('/');
+                              },
+                              tooltip: AppLocalizations.of(context)!.back,
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              constraints: const BoxConstraints(),
+                            ),
+                            IconButton(
+                              icon: const Icon(LucideIcons.panel_left, size: 16),
+                              onPressed: () {
+                                ref.read(leftPanelOpenProvider.notifier).update((state) => !state);
+                              },
+                              tooltip: AppLocalizations.of(context)!.openExplorer, // Or a custom tooltip for toggle
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
                         ),
                       const Expanded(
                         child: _EditorAppBarTitle(),
@@ -1497,7 +1679,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           ),
         ),
       ),
-      endDrawer: isDesktop ? null : const RightChatPanel(isInline: false),
+      endDrawer: null,
       body: Stack(
         children: [
           Positioned(
@@ -1508,118 +1690,121 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             child: SizedBox(
               width: 1,
               height: 1,
-              child: InAppWebView(
-                initialSettings: InAppWebViewSettings(
-                  javaScriptEnabled: true,
-                  domStorageEnabled: true,
-                ),
-                initialData: InAppWebViewInitialData(
-                  data: """
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                      <title>WASM Runner</title>
-                      <script>
-                        window.plugins = window.plugins || {};
+              child: (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
+                  ? InAppWebView(
+                      initialSettings: InAppWebViewSettings(
+                        javaScriptEnabled: true,
+                        domStorageEnabled: true,
+                      ),
+                      initialData: InAppWebViewInitialData(
+                        data: """
+                          <!DOCTYPE html>
+                          <html>
+                          <head>
+                            <title>WASM Runner</title>
+                            <script>
+                              window.plugins = window.plugins || {};
 
-                        function registerLogs(pluginId, msg) {
-                          if (window.flutter_inappwebview) {
-                            window.flutter_inappwebview.callHandler('onPluginLog', { pluginId: pluginId, message: msg });
-                          }
-                        }
-
-                        window.loadWasmPlugin = async function(pluginId, base64Bytes) {
-                          try {
-                            const binaryString = atob(base64Bytes);
-                            const len = binaryString.length;
-                            const bytes = new Uint8Array(len);
-                            for (let i = 0; i < len; i++) {
-                              bytes[i] = binaryString.charCodeAt(i);
-                            }
-                            
-                            const memory = new WebAssembly.Memory({ initial: 256, maximum: 512 });
-                            
-                            const importObject = {
-                              env: {
-                                memory: memory,
-                                host_log: (ptr, length) => {
-                                  const buffer = new Uint8Array(memory.buffer, ptr, length);
-                                  const msg = new TextDecoder('utf-8').decode(buffer);
-                                  registerLogs(pluginId, msg);
+                              function registerLogs(pluginId, msg) {
+                                if (window.flutter_inappwebview) {
+                                  window.flutter_inappwebview.callHandler('onPluginLog', { pluginId: pluginId, message: msg });
                                 }
                               }
-                            };
-                            
-                            const { instance } = await WebAssembly.instantiate(bytes, importObject);
-                            
-                            window.plugins[pluginId] = {
-                              instance: instance,
-                              memory: instance.exports.memory || memory
-                            };
-                            
-                            return { success: true };
-                          } catch (e) {
-                            console.error("Failed to load WASM plugin:", e);
-                            return { success: false, error: e.toString() };
-                          }
-                        };
 
-                        window.runWasmAction = async function(pluginId, actionId, inputText) {
-                          const plugin = window.plugins[pluginId];
-                          if (!plugin) throw new Error("Plugin not loaded");
-                          
-                          const instance = plugin.instance;
-                          const memory = plugin.memory;
-                          
-                          const utf8Encoder = new TextEncoder();
-                          const inputBytes = utf8Encoder.encode(inputText);
-                          const inputLen = inputBytes.length;
-                          
-                          if (!instance.exports.alloc) {
-                            throw new Error("WASM module must export an 'alloc' function");
-                          }
-                          
-                          const inputPtr = instance.exports.alloc(inputLen);
-                          const memoryBuffer = new Uint8Array(memory.buffer);
-                          memoryBuffer.set(inputBytes, inputPtr);
-                          
-                          if (!instance.exports.run_plugin) {
-                            throw new Error("WASM module must export a 'run_plugin' function");
-                          }
-                          
-                          const resultPacked = instance.exports.run_plugin(actionId, inputPtr, inputLen);
-                          const packedBig = BigInt(resultPacked);
-                          const resultPtr = Number(packedBig >> 32n);
-                          const resultLen = Number(packedBig & 0xFFFFFFFFn);
-                          
-                          const resultBuffer = new Uint8Array(memory.buffer, resultPtr, resultLen);
-                          const outputText = new TextDecoder('utf-8').decode(resultBuffer);
-                          
-                          if (instance.exports.dealloc) {
-                            instance.exports.dealloc(inputPtr, inputLen);
-                            instance.exports.dealloc(resultPtr, resultLen);
-                          }
-                          
-                          return outputText;
-                        };
-                      </script>
-                    </head>
-                    <body>
-                      <h3>WASM Plugin Runner Sandbox</h3>
-                    </body>
-                    </html>
-                  """,
-                ),
-                onWebViewCreated: (controller) {
-                  ref.read(wasmPluginServiceProvider.notifier).setController(controller);
-                },
-              ),
+                              window.loadWasmPlugin = async function(pluginId, base64Bytes) {
+                                try {
+                                  const binaryString = atob(base64Bytes);
+                                  const len = binaryString.length;
+                                  const bytes = new Uint8Array(len);
+                                  for (let i = 0; i < len; i++) {
+                                    bytes[i] = binaryString.charCodeAt(i);
+                                  }
+                                  
+                                  const memory = new WebAssembly.Memory({ initial: 256, maximum: 512 });
+                                  
+                                  const importObject = {
+                                    env: {
+                                      memory: memory,
+                                      host_log: (ptr, length) => {
+                                        const buffer = new Uint8Array(memory.buffer, ptr, length);
+                                        const msg = new TextDecoder('utf-8').decode(buffer);
+                                        registerLogs(pluginId, msg);
+                                      }
+                                    }
+                                  };
+                                  
+                                  const { instance } = await WebAssembly.instantiate(bytes, importObject);
+                                  
+                                  window.plugins[pluginId] = {
+                                    instance: instance,
+                                    memory: instance.exports.memory || memory
+                                  };
+                                  
+                                  return { success: true };
+                                } catch (e) {
+                                  console.error("Failed to load WASM plugin:", e);
+                                  return { success: false, error: e.toString() };
+                                }
+                              };
+
+                              window.runWasmAction = async function(pluginId, actionId, inputText) {
+                                const plugin = window.plugins[pluginId];
+                                if (!plugin) throw new Error("Plugin not loaded");
+                                
+                                const instance = plugin.instance;
+                                const memory = plugin.memory;
+                                
+                                const utf8Encoder = new TextEncoder();
+                                const inputBytes = utf8Encoder.encode(inputText);
+                                const inputLen = inputBytes.length;
+                                
+                                if (!instance.exports.alloc) {
+                                  throw new Error("WASM module must export an 'alloc' function");
+                                }
+                                
+                                const inputPtr = instance.exports.alloc(inputLen);
+                                const memoryBuffer = new Uint8Array(memory.buffer);
+                                memoryBuffer.set(inputBytes, inputPtr);
+                                
+                                if (!instance.exports.run_plugin) {
+                                  throw new Error("WASM module must export a 'run_plugin' function");
+                                }
+                                
+                                const resultPacked = instance.exports.run_plugin(actionId, inputPtr, inputLen);
+                                const packedBig = BigInt(resultPacked);
+                                const resultPtr = Number(packedBig >> 32n);
+                                const resultLen = Number(packedBig & 0xFFFFFFFFn);
+                                
+                                const resultBuffer = new Uint8Array(memory.buffer, resultPtr, resultLen);
+                                const outputText = new TextDecoder('utf-8').decode(resultBuffer);
+                                
+                                if (instance.exports.dealloc) {
+                                  instance.exports.dealloc(inputPtr, inputLen);
+                                  instance.exports.dealloc(resultPtr, resultLen);
+                                }
+                                
+                                return outputText;
+                              };
+                            </script>
+                          </head>
+                          <body>
+                            <h3>WASM Plugin Runner Sandbox</h3>
+                          </body>
+                          </html>
+                        """,
+                      ),
+                      onWebViewCreated: (controller) {
+                        ref.read(wasmPluginServiceProvider.notifier).setController(controller);
+                      },
+                    )
+                  : const SizedBox.shrink(),
             ),
           ),
           Positioned.fill(
             child: isDesktop ? Row(
               children: [
-                const _FileDrawer(isInline: true),
+                if (ref.watch(leftPanelOpenProvider))
+                  const _FileDrawer(isInline: true),
                 Expanded(child: mainBody),
                 if (ref.watch(rightChatPanelOpenProvider))
                   const RightChatPanel(isInline: true),
@@ -1628,7 +1813,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           ),
         ],
       ),
-      bottomNavigationBar: const StatusBar(),
+      bottomNavigationBar: isDesktop ? const StatusBar() : const StatusBar(),
     ),
   );
   }
@@ -1676,7 +1861,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             _buildPanelHeader(context, panelState, panelNotifier, maxAllowedPanelHeight),
             Expanded(
               child: panelState.panelHeight > 60
-                  ? const TerminalPanelContent(onlyTerminal: true)
+                  ? const TerminalPanelContent(onlyTerminal: false)
                   : const SizedBox.shrink(),
             ),
           ],
@@ -1708,7 +1893,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         setState(() {
           _isDragging = false;
         });
-        // Snap: если высота меньше минимума — закрываем панель
         if (panelState.panelHeight < 75) {
           panelNotifier.closePanel();
         }
@@ -1741,24 +1925,79 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(
-                    _getTabIcon(panelState.selectedTab),
-                    size: 15,
-                    color: _getTabColor(panelState.selectedTab),
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      _getTabTitle(context, panelState.selectedTab).toUpperCase(),
-                      style: GoogleFonts.jetBrainsMono(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
+                    child: SizedBox(
+                      height: 34,
+                      child: Builder(
+                        builder: (context) {
+                          final isMobile = MediaQuery.of(context).size.width <= 800;
+                          return ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: PanelTab.values.length,
+                            physics: const BouncingScrollPhysics(),
+                            itemBuilder: (context, index) {
+                              final tab = PanelTab.values[index];
+                              final isSelected = panelState.selectedTab == tab;
+                              final tabColor = _getTabColor(tab);
+                              return Padding(
+                                padding: EdgeInsets.only(right: isMobile ? 4.0 : 6.0),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () => panelNotifier.selectTab(tab),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 150),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: isMobile ? 8 : 10,
+                                        vertical: isMobile ? 5 : 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? tabColor.withValues(alpha: 0.12)
+                                            : Colors.white.withValues(alpha: 0.02),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? tabColor.withValues(alpha: 0.35)
+                                              : Colors.white.withValues(alpha: 0.05),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _getTabIcon(tab),
+                                            size: isMobile ? 14 : 13,
+                                            color: isSelected ? tabColor : Colors.white54,
+                                          ),
+                                          if (!isMobile) ...[
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              _getTabTitle(context, tab),
+                                              style: GoogleFonts.inter(
+                                                color: isSelected ? Colors.white : Colors.white54,
+                                                fontSize: 11,
+                                                fontWeight: isSelected
+                                                    ? FontWeight.w700
+                                                    : FontWeight.normal,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
                       ),
                     ),
                   ),
-                  // Кнопки с явными ограничениями — без 48px минимума
+                  const SizedBox(width: 8),
                   SizedBox(
                     width: 28,
                     height: 28,
@@ -1805,11 +2044,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.run: return LucideIcons.play;
       case PanelTab.buildLogs: return LucideIcons.hammer;
       case PanelTab.git: return LucideIcons.git_branch;
-      case PanelTab.aiAgent: return LucideIcons.bot;
       case PanelTab.problems: return LucideIcons.circle_alert;
-      case PanelTab.servers: return LucideIcons.server;
-      case PanelTab.packages: return LucideIcons.toy_brick;
-      default: return LucideIcons.terminal;
+      case PanelTab.debug: return LucideIcons.bug;
     }
   }
 
@@ -1820,11 +2056,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.run: return Colors.greenAccent;
       case PanelTab.buildLogs: return Colors.orangeAccent;
       case PanelTab.git: return Colors.amberAccent;
-      case PanelTab.aiAgent: return Colors.purpleAccent;
       case PanelTab.problems: return Colors.redAccent;
-      case PanelTab.servers: return Colors.blueAccent;
-      case PanelTab.packages: return Colors.tealAccent;
-      default: return Colors.cyanAccent;
+      case PanelTab.debug: return Colors.orangeAccent;
     }
   }
 
@@ -1836,12 +2069,367 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.run: return l10n.run;
       case PanelTab.buildLogs: return l10n.build;
       case PanelTab.git: return 'Git';
-      case PanelTab.aiAgent: return l10n.aiAgent;
       case PanelTab.problems: return l10n.problems;
-      case PanelTab.servers: return l10n.servers;
-      case PanelTab.packages: return l10n.packages;
-      default: return l10n.tools;
+      case PanelTab.debug: return l10n.debugger;
     }
+  }
+
+  Widget _buildDashboard(BuildContext context, WidgetRef ref, bool isDesktop, String? workspacePath) {
+    final stats = ref.watch(systemStatsProvider);
+    final gitChangesCount = ref.watch(gitProvider.select((s) =>
+      (s.status?.stagedFiles.length ?? 0) +
+      (s.status?.modifiedFiles.length ?? 0) +
+      (s.status?.untrackedFiles.length ?? 0) +
+      (s.status?.conflictedFiles.length ?? 0)
+    ));
+
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Welcome header with glowing title
+              Center(
+                child: ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Colors.purpleAccent, Colors.cyanAccent],
+                  ).createShader(bounds),
+                  child: Text(
+                    'QuantumIDE',
+                    style: GoogleFonts.outfit(
+                      fontSize: 38,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  'Среда разработки нового поколения',
+                  style: GoogleFonts.inter(
+                    color: Colors.white38,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // System Stats Dashboard with Circular Gauges
+              GlassContainer(
+                blur: 20,
+                opacity: 0.05,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                child: Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'МОНИТОРИНГ СИСТЕМЫ',
+                        style: GoogleFonts.inter(
+                          color: Colors.white38,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildCircularGauge(
+                            label: 'CPU',
+                            value: '${(stats.cpuUsage * 100).toStringAsFixed(1)}%',
+                            progress: stats.cpuUsage,
+                            color: Colors.cyanAccent,
+                          ),
+                          Container(
+                            width: 1,
+                            height: 60,
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                          _buildCircularGauge(
+                            label: 'RAM',
+                            value: '${stats.ramUsedGB.toStringAsFixed(1)} GB / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
+                            progress: stats.ramUsage,
+                            color: Colors.purpleAccent,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Git Status Bento Card
+              _buildGitStatusCard(context, gitChangesCount),
+              const SizedBox(height: 16),
+
+              // Recent Projects Bento Card
+              _buildRecentProjectsCard(context),
+              const SizedBox(height: 24),
+
+              // Action grid
+              GridView.count(
+                crossAxisCount: isDesktop ? 2 : 1,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: isDesktop ? 2.5 : 3.5,
+                children: [
+                  _buildDashboardActionCard(
+                    icon: LucideIcons.folder_open,
+                    iconColor: Colors.blueAccent,
+                    title: 'Проводник',
+                    subtitle: 'Открыть файлы проекта',
+                    onTap: () {
+                      if (!isDesktop) {
+                        _scaffoldKey.currentState?.openDrawer();
+                      }
+                    },
+                  ),
+                  _buildDashboardActionCard(
+                    icon: LucideIcons.file_plus,
+                    iconColor: Colors.greenAccent,
+                    title: 'Создать файл',
+                    subtitle: 'Добавить файл в проект',
+                    onTap: () {
+                      if (workspacePath != null && workspacePath.isNotEmpty) {
+                        _showCreateDialog(context, ref, workspacePath, false);
+                      }
+                    },
+                  ),
+                  _buildDashboardActionCard(
+                    icon: LucideIcons.terminal,
+                    iconColor: Colors.orangeAccent,
+                    title: 'Терминал',
+                    subtitle: 'Командная строка и сборка',
+                    onTap: () {
+                      ref.read(panelProvider.notifier).selectTab(PanelTab.terminal);
+                      ref.read(panelProvider.notifier).openPanel();
+                    },
+                  ),
+                  _buildDashboardActionCard(
+                    icon: LucideIcons.message_square,
+                    iconColor: Colors.purpleAccent,
+                    title: 'ИИ Ассистент',
+                    subtitle: 'Чат с Gemini & Copilot',
+                    onTap: () {
+                      ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCircularGauge({
+    required String label,
+    required String value,
+    required double progress,
+    required Color color,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              width: 64,
+              height: 64,
+              child: CircularProgressIndicator(
+                value: progress,
+                strokeWidth: 5,
+                backgroundColor: Colors.white.withValues(alpha: 0.08),
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+            Text(
+              '${(progress * 100).toInt()}%',
+              style: GoogleFonts.jetBrainsMono(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: GoogleFonts.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value.split(' / ').first,
+          style: GoogleFonts.inter(color: Colors.white38, fontSize: 9),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecentProjectsCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final projects = [
+      {'name': 'Orion-OS', 'time': '3 мин назад', 'lang': 'C++'},
+      {'name': 'Quantum-Engine', 'time': '2 часа назад', 'lang': 'Dart'},
+      {'name': 'Stellar-UI', 'time': 'Вчера', 'lang': 'TypeScript'},
+    ];
+    return GlassContainer(
+      blur: 20,
+      opacity: 0.05,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'НЕДАВНИЕ ПРОЕКТЫ',
+              style: GoogleFonts.inter(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+            ),
+            const SizedBox(height: 12),
+            ...projects.map((p) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6.0),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.folder, size: 14, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      p['name']!,
+                      style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Text(
+                    p['time']!,
+                    style: GoogleFonts.inter(color: Colors.white30, fontSize: 11),
+                  ),
+                ],
+              ),
+            )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGitStatusCard(BuildContext context, int gitChangesCount) {
+    return GlassContainer(
+      blur: 20,
+      opacity: 0.05,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'GIT СТАТУС',
+                  style: GoogleFonts.inter(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                ),
+                const Icon(LucideIcons.git_branch, size: 14, color: Colors.purpleAccent),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(LucideIcons.git_fork, size: 14, color: Colors.cyanAccent),
+                const SizedBox(width: 8),
+                Text(
+                  'Ветка: main*',
+                  style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Изменено файлов: $gitChangesCount',
+              style: GoogleFonts.inter(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Widget _buildDashboardActionCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return GlassContainer(
+      blur: 10,
+      opacity: 0.04,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 18, color: iconColor),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(color: Colors.white30, fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(LucideIcons.chevron_right, size: 14, color: Colors.white24),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -2125,6 +2713,12 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
       );
     }
 
+    final performanceService = ref.read(editorPerformanceServiceProvider);
+    final applyHighlighting = performanceService.shouldApplySyntaxHighlighting(file.controller);
+    if (performanceService.isLargeFile(file.controller)) {
+      performanceService.optimizeForLargeFile(file.controller);
+    }
+
     Widget editorWidget = CodeEditor(
       controller: file.controller,
       wordWrap: settings.wordWrap,
@@ -2361,9 +2955,18 @@ class _StableEditorWidgetState extends ConsumerState<_StableEditorWidget> {
         fontSize: settings.fontSize,
         fontFamily: _getFontFamily(settings.editorFontFamily),
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        codeTheme: _highlightTheme,
+        codeTheme: applyHighlighting ? _highlightTheme : null,
       ),
     );
+
+    if (settings.minimap) {
+      editorWidget = Row(
+        children: [
+          Expanded(child: editorWidget),
+          EditorMinimap(controller: file.controller, width: 70),
+        ],
+      );
+    }
 
     if (hasPendingAction) {
       final action = pendingActions.first;
@@ -2595,8 +3198,8 @@ class _ActionIconButton extends StatelessWidget {
       icon: Icon(icon, size: 15, color: Colors.white70),
       onPressed: onTap,
       tooltip: tooltip,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      constraints: const BoxConstraints(),
+      padding: const EdgeInsets.all(8),
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
     );
   }
 }
@@ -2738,4 +3341,43 @@ class _QuantumAutocompleteView extends StatelessWidget implements PreferredSizeW
     );
   }
 }
+
+class _FloatingCapsuleButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  const _FloatingCapsuleButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 18, color: const Color(0xFF4CD7F6)),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 8,
+                color: Colors.white.withValues(alpha: 0.5),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
