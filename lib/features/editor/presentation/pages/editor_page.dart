@@ -66,6 +66,7 @@ import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_p
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:quantum_ide/core/services/wasm_plugin_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/extensions_panel.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/models_panel.dart';
 import 'package:quantum_ide/core/services/service_providers.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_minimap.dart';
 
@@ -383,6 +384,7 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
                   _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9),
                   _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10),
                   _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11),
+                  _buildActivityIcon(ref, 12, LucideIcons.cpu, 'AI Models', selectedTab == 12),
                 ],
               ),
             ),
@@ -443,6 +445,9 @@ class _FileDrawerState extends ConsumerState<_FileDrawer> {
         break;
       case 11:
         activePanel = const ExtensionsPanel();
+        break;
+      case 12:
+        activePanel = const ModelsPanel();
         break;
       case 0:
       default:
