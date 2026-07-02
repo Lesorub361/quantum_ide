@@ -1,11 +1,8 @@
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/runtime_service.dart';
-
-const _downloadChannel = MethodChannel('com.example.quantum_ide/download');
 
 enum ModelCategory { text, image, vision }
 
@@ -301,9 +298,6 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
   }
 
   Future<void> _loadDownloadedModels() async {
-    final runtime = _ref.read(runtimeServiceProvider);
-    if (!runtime.isInitialized) return;
-
     final modelsDir = await getModelsDir();
     if (modelsDir == null) return;
 
@@ -326,10 +320,14 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
   Future<String?> getModelsDir() async {
     try {
       final runtime = _ref.read(runtimeServiceProvider);
-      if (!runtime.isInitialized) return null;
-      final modelsDir = p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models');
-      await Directory(modelsDir).create(recursive: true);
-      return modelsDir;
+      if (runtime.isInitialized) {
+        final modelsDir = p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models');
+        await Directory(modelsDir).create(recursive: true);
+        return modelsDir;
+      }
+      final fallback = p.join(Directory.systemTemp.path, 'quantum_models');
+      await Directory(fallback).create(recursive: true);
+      return fallback;
     } catch (_) {
       return null;
     }
@@ -337,7 +335,19 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
 
   Future<void> downloadModel(AiCatalogModel model) async {
     final modelsDir = await getModelsDir();
-    if (modelsDir == null) return;
+    if (modelsDir == null) {
+      state = state.copyWith(
+        downloads: {
+          ...state.downloads,
+          model.filename: ModelDownloadInfo(
+            filename: model.filename,
+            status: DownloadStatus.error,
+            error: 'Models directory not available',
+          ),
+        },
+      );
+      return;
+    }
 
     final savePath = p.join(modelsDir, model.filename);
 
@@ -351,109 +361,6 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
       },
     );
 
-    try {
-      if (Platform.isAndroid) {
-        await _downloadWithNativeManager(model, modelsDir);
-      } else {
-        await _downloadWithDio(model, savePath);
-      }
-    } catch (e) {
-      state = state.copyWith(
-        downloads: {
-          ...state.downloads,
-          model.filename: ModelDownloadInfo(
-            filename: model.filename,
-            status: DownloadStatus.error,
-            error: e.toString(),
-          ),
-        },
-      );
-    }
-  }
-
-  Future<void> _downloadWithNativeManager(AiCatalogModel model, String modelsDir) async {
-    try {
-      final result = await _downloadChannel.invokeMethod('downloadModel', {
-        'url': model.url,
-        'filename': model.filename,
-        'modelsDir': modelsDir,
-      });
-
-      final downloadId = result['downloadId'] as int;
-      _nativeDownloadIds[model.filename] = downloadId;
-
-      _pollDownloadProgress(model.filename, downloadId);
-    } catch (e) {
-      rethrow;
-    }
-  }
-
-  final Map<String, int> _nativeDownloadIds = {};
-
-  void _pollDownloadProgress(String filename, int downloadId) async {
-    while (true) {
-      await Future.delayed(const Duration(seconds: 1));
-
-      try {
-        final result = await _downloadChannel.invokeMethod('getDownloadStatus', {
-          'filename': filename,
-        });
-
-        if (result == null) continue;
-
-        final status = result['status'] as int;
-        final downloaded = result['downloaded'] as int;
-        final total = result['total'] as int;
-
-        final progress = total > 0 ? downloaded / total : 0.0;
-
-        state = state.copyWith(
-          downloads: {
-            ...state.downloads,
-            filename: ModelDownloadInfo(
-              filename: filename,
-              status: DownloadStatus.downloading,
-              progress: progress,
-              downloadedBytes: downloaded,
-              totalBytes: total,
-            ),
-          },
-        );
-
-        if (status == 16) {
-          state = state.copyWith(
-            downloads: {
-              ...state.downloads,
-              filename: ModelDownloadInfo(
-                filename: filename,
-                status: DownloadStatus.completed,
-                progress: 1.0,
-              ),
-            },
-            downloadedModels: {
-              ...state.downloadedModels,
-              filename: true,
-            },
-          );
-          break;
-        } else if (status == 8 || status == 16) {
-          state = state.copyWith(
-            downloads: {
-              ...state.downloads,
-              filename: ModelDownloadInfo(
-                filename: filename,
-                status: DownloadStatus.error,
-                error: 'Download failed',
-              ),
-            },
-          );
-          break;
-        }
-      } catch (_) {}
-    }
-  }
-
-  Future<void> _downloadWithDio(AiCatalogModel model, String savePath) async {
     final cancelToken = CancelToken();
     _cancelTokens[model.filename] = cancelToken;
 
@@ -464,8 +371,8 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
         await tempFile.delete();
       }
 
-      final startTime = DateTime.now();
       int lastBytes = 0;
+      int lastTime = 0;
 
       await _dio.download(
         model.url,
@@ -473,17 +380,20 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
         cancelToken: cancelToken,
         deleteOnError: false,
         options: Options(
-          responseType: ResponseType.stream,
           followRedirects: true,
           receiveTimeout: const Duration(minutes: 30),
+          headers: {
+            'Connection': 'keep-alive',
+          },
         ),
         onReceiveProgress: (received, total) {
-          final now = DateTime.now();
-          final elapsed = now.difference(startTime).inMilliseconds;
+          final now = DateTime.now().millisecondsSinceEpoch;
           double speed = 0;
-          if (elapsed > 500) {
-            speed = (received - lastBytes) / (elapsed / 1000.0);
+          final elapsed = now - lastTime;
+          if (elapsed > 300) {
+            speed = (received - lastBytes) * 1000.0 / elapsed;
             lastBytes = received;
+            lastTime = now;
           }
 
           final progress = total > 0 ? received / total : 0.0;
@@ -524,18 +434,22 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
       );
     } catch (e) {
       _cancelTokens.remove(model.filename);
-      rethrow;
+      state = state.copyWith(
+        downloads: {
+          ...state.downloads,
+          model.filename: ModelDownloadInfo(
+            filename: model.filename,
+            status: DownloadStatus.error,
+            error: e.toString(),
+          ),
+        },
+      );
     }
   }
 
   void cancelDownload(String filename) {
-    if (Platform.isAndroid) {
-      _downloadChannel.invokeMethod('cancelDownload', {'filename': filename});
-      _nativeDownloadIds.remove(filename);
-    } else {
-      _cancelTokens[filename]?.cancel('cancelled');
-      _cancelTokens.remove(filename);
-    }
+    _cancelTokens[filename]?.cancel('cancelled');
+    _cancelTokens.remove(filename);
 
     final current = state.downloads[filename];
     if (current != null) {
