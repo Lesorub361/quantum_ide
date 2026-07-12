@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:xterm/xterm.dart' as xt;
 import 'package:open_filex/open_filex.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +16,7 @@ import 'package:quantum_ide/models/chat_message.dart';
 
 import '../../../../core/services/diff_service.dart';
 import '../../../../core/services/lsp_service.dart';
+import '../../../../core/services/settings_service.dart';
 import '../../../../core/services/analysis_service.dart';
 import '../../../../core/services/project_service.dart';
 import '../../../../core/services/workspace_service.dart';
@@ -34,6 +36,7 @@ class EditorFile {
   final List<CodeDiagnostic> diagnostics;
   final bool isModified;
   final bool isImage;
+  final bool isDiffView;
 
   EditorFile({
     required this.path,
@@ -44,6 +47,7 @@ class EditorFile {
     this.diagnostics = const [],
     this.isModified = false,
     this.isImage = false,
+    this.isDiffView = false,
   });
 
   EditorFile copyWith({
@@ -53,6 +57,7 @@ class EditorFile {
     List<CodeDiagnostic>? diagnostics,
     String? originalContent,
     bool? isImage,
+    bool? isDiffView,
   }) {
     return EditorFile(
       path: path,
@@ -63,6 +68,7 @@ class EditorFile {
       diffMarkers: diffMarkers ?? this.diffMarkers,
       diagnostics: diagnostics ?? this.diagnostics,
       isImage: isImage ?? this.isImage,
+      isDiffView: isDiffView ?? this.isDiffView,
     );
   }
 }
@@ -114,7 +120,7 @@ final editorProvider = StateNotifierProvider<EditorNotifier, EditorState>((ref) 
   return EditorNotifier(ref);
 });
 
-class EditorNotifier extends StateNotifier<EditorState> {
+class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObserver {
   final Ref ref;
   late final LspService _lspService;
   Timer? _diffTimer;
@@ -127,6 +133,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
   EditorNotifier(this.ref) : super(EditorState()) {
     _init();
+    WidgetsBinding.instance.addObserver(this);
     
     // Listen for workspace changes
     ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
@@ -177,10 +184,18 @@ class EditorNotifier extends StateNotifier<EditorState> {
   }
 
 
-  Future<void> openFile(String path, {int? line, int? column}) async {
+  Future<void> openFile(String path, {int? line, int? column, bool isDiffView = false, String? overrideOriginalContent}) async {
     final existingIndex = state.openFiles.indexWhere((f) => f.path == path);
     if (existingIndex != -1) {
-      state = state.copyWith(activeTabIndex: existingIndex);
+      final file = state.openFiles[existingIndex];
+      final updatedFile = file.copyWith(isDiffView: isDiffView);
+      final newOpenFiles = [...state.openFiles];
+      newOpenFiles[existingIndex] = updatedFile;
+
+      state = state.copyWith(
+        openFiles: newOpenFiles,
+        activeTabIndex: existingIndex,
+      );
       if (line != null && column != null) {
         final controller = state.openFiles[existingIndex].controller;
         controller.selection = CodeLineSelection.fromPosition(position: CodeLinePosition(index: line, offset: column));
@@ -191,9 +206,8 @@ class EditorNotifier extends StateNotifier<EditorState> {
       final pendingActions = aiState.proposedActions.where((a) => a.path == path && (a.type == 'edit' || a.type == 'create')).toList();
       if (pendingActions.isNotEmpty) {
         final action = pendingActions.first;
-        final file = state.openFiles[existingIndex];
-        if (file.controller.text != action.content) {
-          file.controller.text = action.content;
+        if (updatedFile.controller.text != action.content) {
+          updatedFile.controller.text = action.content;
           _updateDiff(path);
         }
       }
@@ -283,7 +297,8 @@ class EditorNotifier extends StateNotifier<EditorState> {
         path: path,
         name: path.split(Platform.pathSeparator).last,
         controller: controller,
-        originalContent: content,
+        originalContent: overrideOriginalContent ?? content,
+        isDiffView: isDiffView,
       );
 
       controller.addListener(() {
@@ -299,8 +314,10 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
       _persistWorkspaceFiles();
 
-      // Handle LSP open
-      _lspService.onFileOpened(path, content);
+      // Handle LSP open safely
+      _lspService.onFileOpened(path, content).catchError((e) {
+        debugPrint('LSP error opening file: $e');
+      });
 
       // Handle Collaboration Sync
       ref.read(collaborationProvider.notifier).initializeFileSync(path, content);
@@ -314,6 +331,16 @@ class EditorNotifier extends StateNotifier<EditorState> {
     } catch (e) {
       debugPrint('Error opening file: $e');
     }
+  }
+
+  void setDiffView(String path, bool isDiffView) {
+    final index = state.openFiles.indexWhere((f) => f.path == path);
+    if (index == -1) return;
+
+    final file = state.openFiles[index];
+    final newOpenFiles = [...state.openFiles];
+    newOpenFiles[index] = file.copyWith(isDiffView: isDiffView);
+    state = state.copyWith(openFiles: newOpenFiles);
   }
 
   void _handleContentChange(String path, {bool triggerAutoSave = true}) {
@@ -345,7 +372,9 @@ class EditorNotifier extends StateNotifier<EditorState> {
       // Re-read text at timer fire time to avoid stale closure
       final latestIdx = state.openFiles.indexWhere((f) => f.path == path);
       if (latestIdx != -1) {
-        _lspService.onFileChanged(path, state.openFiles[latestIdx].controller.text);
+        _lspService.onFileChanged(path, state.openFiles[latestIdx].controller.text).catchError((e) {
+          debugPrint('LSP error changing file: $e');
+        });
       }
       ref.read(analysisServiceProvider).triggerAnalysis();
     });
@@ -443,6 +472,31 @@ class EditorNotifier extends StateNotifier<EditorState> {
   Future<void> saveFileByPath(String path) async {
     final index = state.openFiles.indexWhere((f) => f.path == path);
     if (index == -1) return;
+
+    final settings = ref.read(settingsProvider);
+    if (settings.formatOnSave) {
+      try {
+        final edits = await _lspService.format(path);
+        if (edits.isNotEmpty) {
+          final jsonEdits = edits.map((e) => {
+            'range': {
+              'start': {
+                'line': e.range.start.line,
+                'character': e.range.start.character,
+              },
+              'end': {
+                'line': e.range.end.line,
+                'character': e.range.end.character,
+              }
+            },
+            'newText': e.newText,
+          }).toList();
+          applyLSPEdits(path, jsonEdits);
+        }
+      } catch (e) {
+        debugPrint('Error formatting before save: $e');
+      }
+    }
 
     final file = state.openFiles[index];
     final content = file.controller.text;
@@ -559,7 +613,10 @@ class EditorNotifier extends StateNotifier<EditorState> {
       final paths = prefs.getStringList(keyPaths) ?? [];
       final activeIndex = prefs.getInt(keyActive) ?? 0;
       
-      final validPaths = paths.where((p) => File(p).existsSync()).toList();
+      final validPaths = <String>[];
+      for (final p in paths) {
+        if (await File(p).exists()) validPaths.add(p);
+      }
       if (validPaths.isEmpty) return;
       
       clearWorkspace();
@@ -668,12 +725,16 @@ class EditorNotifier extends StateNotifier<EditorState> {
         originalContent: content,
       );
       
-      // Handle LSP open and diagnostics in background
+      // Handle LSP open and diagnostics in background safely
       ref.read(collaborationProvider.notifier).initializeFileSync(path, content);
       _lspService.onFileOpened(path, content).then((_) {
         _lspService.getDiagnostics(path).then((diagnostics) {
           updateDiagnostics(path, diagnostics);
+        }).catchError((e) {
+          debugPrint('LSP error getting diagnostics: $e');
         });
+      }).catchError((e) {
+        debugPrint('LSP error opening file: $e');
       });
 
       if (hasProposed) {
@@ -701,7 +762,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
   void _startWorkspaceWatcher(String workspacePath) {
     _workspaceWatcherSubscription?.cancel();
     try {
-      _workspaceWatcherSubscription = Directory(workspacePath).watch(recursive: true).listen(
+      _workspaceWatcherSubscription = Directory(workspacePath).watch().listen(
         (event) {
           _handleExternalFileChange(event.path);
         },
@@ -714,7 +775,13 @@ class EditorNotifier extends StateNotifier<EditorState> {
     }
   }
 
+  DateTime _lastExternalChange = DateTime(0);
+  
   void _handleExternalFileChange(String path) async {
+    final now = DateTime.now();
+    if (now.difference(_lastExternalChange).inMilliseconds < 500) return;
+    _lastExternalChange = now;
+
     final normalisedPath = p.normalize(path);
     final index = state.openFiles.indexWhere((f) => p.normalize(f.path) == normalisedPath);
     if (index == -1) return;
@@ -810,7 +877,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
           _agentPty?.resize(rows, cols);
         };
         
-        final decoder = const Utf8Decoder(allowMalformed: true);
+        const decoder = Utf8Decoder(allowMalformed: true);
         _agentPtySubscription = _agentPty!.output.listen(
           (data) {
             terminal.write(decoder.convert(data));
@@ -836,6 +903,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
   }
 
   void stopAgent() {
+    if (_agentPty == null && _agentPtySubscription == null) return;
     debugPrint('Stopping agent');
     _agentPtySubscription?.cancel();
     _agentPtySubscription = null;
@@ -848,6 +916,7 @@ class EditorNotifier extends StateNotifier<EditorState> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _workspaceWatcherSubscription?.cancel();
     _diffTimer?.cancel();
     for (final timer in _autoSaveTimers.values) {
@@ -858,6 +927,15 @@ class EditorNotifier extends StateNotifier<EditorState> {
       _agentPty?.kill();
     } catch (_) {}
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      for (int i = 0; i < this.state.openFiles.length; i++) {
+        saveFile(i);
+      }
+    }
   }
 
   Future<void> goToDefinition() async {
@@ -911,7 +989,24 @@ class EditorNotifier extends StateNotifier<EditorState> {
   Future<void> formatActiveFile() async {
     final path = state.activeFilePath;
     if (path == null) return;
-    await _lspService.format(path);
+    final edits = await _lspService.format(path);
+    if (edits.isEmpty) return;
+
+    final jsonEdits = edits.map((e) => {
+      'range': {
+        'start': {
+          'line': e.range.start.line,
+          'character': e.range.start.character,
+        },
+        'end': {
+          'line': e.range.end.line,
+          'character': e.range.end.character,
+        }
+      },
+      'newText': e.newText,
+    }).toList();
+
+    applyLSPEdits(path, jsonEdits);
   }
 
   void applyLSPEdits(String filePath, List<dynamic> edits) {

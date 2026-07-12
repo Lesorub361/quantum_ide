@@ -785,9 +785,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               ],
             ),
           ),
-          // File list — no height limit
+          // File list
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 220),
+            constraints: const BoxConstraints(maxHeight: 160),
             child: ListView.builder(
               shrinkWrap: true,
               itemCount: aiState.proposedActions.length,
@@ -827,8 +827,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         backgroundColor: const Color(0xFF1A1D27),
         title: Text(AppLocalizations.of(context)!.changesInFile(action.path.split('/').last), style: const TextStyle(color: Colors.white, fontSize: 14)),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.9,
-          height: MediaQuery.of(context).size.height * 0.7,
+          width: MediaQuery.of(context).size.width * 0.75,
+          height: MediaQuery.of(context).size.height * 0.5,
           child: GitDiffPage(
             relativePath: relPath, 
             initiallyStaged: false,

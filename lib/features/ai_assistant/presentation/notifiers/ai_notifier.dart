@@ -1436,22 +1436,27 @@ class AINotifier extends StateNotifier<AIState> {
         case 'edit':
         case 'create':
           final file = File(action.path);
+          String originalContent = '';
           if (await file.exists()) {
+            originalContent = await file.readAsString();
             if (!_currentStepBackups.containsKey(action.path)) {
-              _currentStepBackups[action.path] = await file.readAsString();
+              _currentStepBackups[action.path] = originalContent;
             }
           } else {
             if (!_currentStepBackups.containsKey(action.path)) {
               _currentStepBackups[action.path] = null;
             }
           }
-          // Ensure file is open in editor (loads original content)
-          await _ref.read(editorProvider.notifier).openFile(action.path);
-          // Apply AI changes to editor (calculates and shows diff)
-          _ref.read(editorProvider.notifier).updateFileContentFromAI(action.path, action.content);
-          
+          // Ensure parent dir exists
           await file.parent.create(recursive: true);
+          // Write new content to disk
           await file.writeAsString(action.content);
+          // Open in editor with diff view, passing original content for proper diff
+          await _ref.read(editorProvider.notifier).openFile(
+            action.path,
+            isDiffView: true,
+            overrideOriginalContent: originalContent,
+          );
           _refreshFileExplorer(action.path);
           removeAction(action);
           return l10n.fileSuccessfullyWritten(action.path);
