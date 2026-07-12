@@ -2718,4 +2718,176 @@ class AppLocalizationsRu extends AppLocalizations {
   String collabUserLeft(String name) {
     return 'Пользователь $name покинул сессию.';
   }
+
+  @override
+  String get webPreviewNotSupported =>
+      'Веб-просмотр не поддерживается на этой платформе';
+
+  @override
+  String get webPreviewNotSupportedDesc =>
+      'Встроенный WebView не поддерживается на этой платформе. Используйте кнопку в правом верхнем углу, чтобы открыть во внешнем браузере.';
+
+  @override
+  String get debugger => 'Отладчик';
+
+  @override
+  String get startDebugging => 'Начать отладку';
+
+  @override
+  String get stopDebugging => 'Остановить отладку';
+
+  @override
+  String get continue_ => 'Продолжить';
+
+  @override
+  String get stepOver => 'Шаг с обходом';
+
+  @override
+  String get stepIn => 'Шаг внутрь';
+
+  @override
+  String get stepOut => 'Шаг наружу';
+
+  @override
+  String get pause => 'Пауза';
+
+  @override
+  String get restart => 'Перезапуск';
+
+  @override
+  String get callStack => 'Стек вызовов';
+
+  @override
+  String get variables => 'Переменные';
+
+  @override
+  String get breakpoints => 'Точки останова';
+
+  @override
+  String get output => 'Вывод';
+
+  @override
+  String get launchConfiguration => 'Конфигурация запуска';
+
+  @override
+  String get programToDebug => 'Программа для отладки';
+
+  @override
+  String get noStackFrames => 'Нет стека вызовов';
+
+  @override
+  String get noVariables => 'Нет переменных';
+
+  @override
+  String get noOutput => 'Нет вывода';
+
+  @override
+  String get localModels => 'Локальные модели';
+
+  @override
+  String get all => 'Все';
+
+  @override
+  String get downloaded => 'Скачанные';
+
+  @override
+  String get vision => 'Видение';
+
+  @override
+  String get uncensored => 'Без цензуры';
+
+  @override
+  String get noModelsFound => 'Модели не найдены';
+
+  @override
+  String get unload => 'Выгрузить';
+
+  @override
+  String get load => 'Загрузить';
+
+  @override
+  String get attachImage => 'Прикрепить изображение';
+
+  @override
+  String get modeChat => 'Чат';
+
+  @override
+  String get modeRefactor => 'Рефактор';
+
+  @override
+  String get modeAutopilot => 'Автопилот';
+
+  @override
+  String get quickPromptRefactor => 'Рефакторинг';
+
+  @override
+  String get quickPromptRefactorText => 'Сделай рефакторинг этого кода';
+
+  @override
+  String get quickPromptExplain => 'Объясни код';
+
+  @override
+  String get quickPromptExplainText => 'Объясни, как работает этот код';
+
+  @override
+  String get quickPromptFixErrors => 'Найти ошибки';
+
+  @override
+  String get quickPromptFixErrorsText => 'Найди ошибки и исправь их';
+
+  @override
+  String get quickPromptOptimize => 'Оптимизация';
+
+  @override
+  String get quickPromptOptimizeText => 'Оптимизируй производительность';
+
+  @override
+  String get quickPromptWriteTests => 'Тесты';
+
+  @override
+  String get quickPromptWriteTestsText => 'Напиши unit-тесты для этого кода';
+
+  @override
+  String get actionReadingFile => 'Читаю файл';
+
+  @override
+  String get actionViewingFolder => 'Смотрю папку';
+
+  @override
+  String get actionSearchingCode => 'Ищу в коде';
+
+  @override
+  String get actionFindingSymbol => 'Ищу символ';
+
+  @override
+  String get actionCreatingFile => 'Создаю файл';
+
+  @override
+  String get actionEditingFile => 'Редактирую файл';
+
+  @override
+  String get actionDeletingFile => 'Удаляю файл';
+
+  @override
+  String get actionRunningCommand => 'Выполняю команду';
+
+  @override
+  String get actionWebSearch => 'Ищу в интернете';
+
+  @override
+  String get actionFetchingPage => 'Загружаю страницу';
+
+  @override
+  String get actionMcpTool => 'MCP инструмент';
+
+  @override
+  String get actionExecuting => 'Выполняю действие';
+
+  @override
+  String get sessionRestored => 'Сессия восстановлена';
+
+  @override
+  String sessionRestoredDetail(int count, int files) {
+    return 'Загружено $count сообщений из `.quantum/chat_history.json`.\nПамять агента: $files файлов в контексте.\nПродолжайте с того места, где остановились.';
+  }
 }

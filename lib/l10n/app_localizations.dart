@@ -4813,6 +4813,342 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'User {name} left the session.'**
   String collabUserLeft(String name);
+
+  /// No description provided for @webPreviewNotSupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Web preview is not supported on this platform'**
+  String get webPreviewNotSupported;
+
+  /// No description provided for @webPreviewNotSupportedDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Embedded WebView is not supported on this platform. Use the top right button to open in an external browser.'**
+  String get webPreviewNotSupportedDesc;
+
+  /// No description provided for @debugger.
+  ///
+  /// In en, this message translates to:
+  /// **'Debugger'**
+  String get debugger;
+
+  /// No description provided for @startDebugging.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Debugging'**
+  String get startDebugging;
+
+  /// No description provided for @stopDebugging.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Debugging'**
+  String get stopDebugging;
+
+  /// No description provided for @continue_.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continue_;
+
+  /// No description provided for @stepOver.
+  ///
+  /// In en, this message translates to:
+  /// **'Step Over'**
+  String get stepOver;
+
+  /// No description provided for @stepIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Step In'**
+  String get stepIn;
+
+  /// No description provided for @stepOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Step Out'**
+  String get stepOut;
+
+  /// No description provided for @pause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get pause;
+
+  /// No description provided for @restart.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart'**
+  String get restart;
+
+  /// No description provided for @callStack.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Stack'**
+  String get callStack;
+
+  /// No description provided for @variables.
+  ///
+  /// In en, this message translates to:
+  /// **'Variables'**
+  String get variables;
+
+  /// No description provided for @breakpoints.
+  ///
+  /// In en, this message translates to:
+  /// **'Breakpoints'**
+  String get breakpoints;
+
+  /// No description provided for @output.
+  ///
+  /// In en, this message translates to:
+  /// **'Output'**
+  String get output;
+
+  /// No description provided for @launchConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch Configuration'**
+  String get launchConfiguration;
+
+  /// No description provided for @programToDebug.
+  ///
+  /// In en, this message translates to:
+  /// **'Program to debug'**
+  String get programToDebug;
+
+  /// No description provided for @noStackFrames.
+  ///
+  /// In en, this message translates to:
+  /// **'No stack frames'**
+  String get noStackFrames;
+
+  /// No description provided for @noVariables.
+  ///
+  /// In en, this message translates to:
+  /// **'No variables'**
+  String get noVariables;
+
+  /// No description provided for @noOutput.
+  ///
+  /// In en, this message translates to:
+  /// **'No output'**
+  String get noOutput;
+
+  /// No description provided for @localModels.
+  ///
+  /// In en, this message translates to:
+  /// **'Local Models'**
+  String get localModels;
+
+  /// No description provided for @all.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get all;
+
+  /// No description provided for @downloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get downloaded;
+
+  /// No description provided for @vision.
+  ///
+  /// In en, this message translates to:
+  /// **'Vision'**
+  String get vision;
+
+  /// No description provided for @uncensored.
+  ///
+  /// In en, this message translates to:
+  /// **'Uncensored'**
+  String get uncensored;
+
+  /// No description provided for @noModelsFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No models found'**
+  String get noModelsFound;
+
+  /// No description provided for @unload.
+  ///
+  /// In en, this message translates to:
+  /// **'Unload'**
+  String get unload;
+
+  /// No description provided for @load.
+  ///
+  /// In en, this message translates to:
+  /// **'Load'**
+  String get load;
+
+  /// No description provided for @attachImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach Image'**
+  String get attachImage;
+
+  /// No description provided for @modeChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get modeChat;
+
+  /// No description provided for @modeRefactor.
+  ///
+  /// In en, this message translates to:
+  /// **'Refactor'**
+  String get modeRefactor;
+
+  /// No description provided for @modeAutopilot.
+  ///
+  /// In en, this message translates to:
+  /// **'Autopilot'**
+  String get modeAutopilot;
+
+  /// No description provided for @quickPromptRefactor.
+  ///
+  /// In en, this message translates to:
+  /// **'Refactor'**
+  String get quickPromptRefactor;
+
+  /// No description provided for @quickPromptRefactorText.
+  ///
+  /// In en, this message translates to:
+  /// **'Refactor this code'**
+  String get quickPromptRefactorText;
+
+  /// No description provided for @quickPromptExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'Explain'**
+  String get quickPromptExplain;
+
+  /// No description provided for @quickPromptExplainText.
+  ///
+  /// In en, this message translates to:
+  /// **'Explain how this code works'**
+  String get quickPromptExplainText;
+
+  /// No description provided for @quickPromptFixErrors.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix Errors'**
+  String get quickPromptFixErrors;
+
+  /// No description provided for @quickPromptFixErrorsText.
+  ///
+  /// In en, this message translates to:
+  /// **'Find and fix errors in this code'**
+  String get quickPromptFixErrorsText;
+
+  /// No description provided for @quickPromptOptimize.
+  ///
+  /// In en, this message translates to:
+  /// **'Optimize'**
+  String get quickPromptOptimize;
+
+  /// No description provided for @quickPromptOptimizeText.
+  ///
+  /// In en, this message translates to:
+  /// **'Optimize performance of this code'**
+  String get quickPromptOptimizeText;
+
+  /// No description provided for @quickPromptWriteTests.
+  ///
+  /// In en, this message translates to:
+  /// **'Write Tests'**
+  String get quickPromptWriteTests;
+
+  /// No description provided for @quickPromptWriteTestsText.
+  ///
+  /// In en, this message translates to:
+  /// **'Write unit tests for this code'**
+  String get quickPromptWriteTestsText;
+
+  /// No description provided for @actionReadingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading file'**
+  String get actionReadingFile;
+
+  /// No description provided for @actionViewingFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Viewing folder'**
+  String get actionViewingFolder;
+
+  /// No description provided for @actionSearchingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching code'**
+  String get actionSearchingCode;
+
+  /// No description provided for @actionFindingSymbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding symbol'**
+  String get actionFindingSymbol;
+
+  /// No description provided for @actionCreatingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating file'**
+  String get actionCreatingFile;
+
+  /// No description provided for @actionEditingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Editing file'**
+  String get actionEditingFile;
+
+  /// No description provided for @actionDeletingFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting file'**
+  String get actionDeletingFile;
+
+  /// No description provided for @actionRunningCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Running command'**
+  String get actionRunningCommand;
+
+  /// No description provided for @actionWebSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching the web'**
+  String get actionWebSearch;
+
+  /// No description provided for @actionFetchingPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching page'**
+  String get actionFetchingPage;
+
+  /// No description provided for @actionMcpTool.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP tool'**
+  String get actionMcpTool;
+
+  /// No description provided for @actionExecuting.
+  ///
+  /// In en, this message translates to:
+  /// **'Executing action'**
+  String get actionExecuting;
+
+  /// No description provided for @sessionRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Session restored'**
+  String get sessionRestored;
+
+  /// No description provided for @sessionRestoredDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Loaded {count} messages from `.quantum/chat_history.json`.\nAgent memory: {files} files in context.\nContinue where you left off.'**
+  String sessionRestoredDetail(int count, int files);
 }
 
 class _AppLocalizationsDelegate

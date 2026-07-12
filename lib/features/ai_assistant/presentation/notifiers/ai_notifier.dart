@@ -22,6 +22,58 @@ import 'package:dio/dio.dart';
 import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
+import 'package:quantum_ide/core/services/local_inference_service.dart';
+import 'package:quantum_ide/core/services/local_action_translator.dart';
+
+// ─── Top-level функция для Isolate — не должна быть методом класса ───
+/// Запускается через compute() — не блокирует UI поток.
+/// args[0] = workspacePath, args[1] = query
+List<String> _grepSearchIsolate(List<String> args) {
+  final workspacePath = args[0];
+  final query = args[1].toLowerCase();
+  final dir = Directory(workspacePath);
+  final results = <String>[];
+  int matchCount = 0;
+
+  try {
+    final entities = dir.listSync(recursive: true, followLinks: false);
+    for (final file in entities) {
+      if (file is! File) continue;
+      final path = file.path;
+      // Игнорируем бинарные и служебные директории
+      if (path.contains('/.git/') ||
+          path.contains('/.dart_tool/') ||
+          path.contains('/build/') ||
+          path.contains('/.idea/') ||
+          path.contains('/ios/Pods/') ||
+          path.endsWith('.png') ||
+          path.endsWith('.jpg') ||
+          path.endsWith('.ico') ||
+          path.endsWith('.apk') ||
+          path.endsWith('.pdf') ||
+          path.endsWith('.ttf') ||
+          path.endsWith('.otf')) {
+        continue;
+      }
+      try {
+        final fileContent = file.readAsStringSync();
+        if (fileContent.toLowerCase().contains(query)) {
+          final lines = fileContent.split('\n');
+          for (int i = 0; i < lines.length; i++) {
+            if (lines[i].toLowerCase().contains(query)) {
+              final relPath = p.relative(path, from: workspacePath);
+              results.add('$relPath:${i + 1}: ${lines[i].trim()}');
+              matchCount++;
+              if (matchCount >= 50) break;
+            }
+          }
+        }
+      } catch (_) {}
+      if (matchCount >= 50) break;
+    }
+  } catch (_) {}
+  return results;
+}
 
 
 enum AiApprovalMode { manual, semiAutonomous, fullAutonomous }
@@ -41,6 +93,8 @@ class AIState {
   final List<ChatSession> sessions;
   final String? currentSessionId;
   final String? sessionGoal;
+  final int lastPromptTokens;
+  final int lastCompletionTokens;
 
   AIState({
     this.isLoading = false,
@@ -56,6 +110,8 @@ class AIState {
     this.sessions = const [],
     this.currentSessionId,
     this.sessionGoal,
+    this.lastPromptTokens = 0,
+    this.lastCompletionTokens = 0,
   });
 
   bool get isAutopilot => approvalMode != AiApprovalMode.manual;
@@ -75,6 +131,8 @@ class AIState {
     List<ChatSession>? sessions,
     String? currentSessionId,
     String? sessionGoal,
+    int? lastPromptTokens,
+    int? lastCompletionTokens,
   }) {
     return AIState(
       isLoading: isLoading ?? this.isLoading,
@@ -93,6 +151,8 @@ class AIState {
       sessions: sessions ?? this.sessions,
       currentSessionId: currentSessionId ?? this.currentSessionId,
       sessionGoal: sessionGoal ?? this.sessionGoal,
+      lastPromptTokens: lastPromptTokens ?? this.lastPromptTokens,
+      lastCompletionTokens: lastCompletionTokens ?? this.lastCompletionTokens,
     );
   }
 }
@@ -102,6 +162,13 @@ class AINotifier extends StateNotifier<AIState> {
   final Map<String, String?> _currentStepBackups = {};
   final AiContextCompressor _contextCompressor = AiContextCompressor();
   final AiPermissionService _permissionService = const AiPermissionService();
+  // Shared Dio instance — не создаём новый на каждый запрос
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+    ),
+  );
 
   AINotifier(this._ref) : super(AIState()) {
     _ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
@@ -127,25 +194,112 @@ class AINotifier extends StateNotifier<AIState> {
 
   Future<void> _saveSessions() async {
     final workspacePath = _ref.read(workspaceProvider).currentPath;
-    if (workspacePath == null) return;
+    if (workspacePath == null) {
+      debugPrint('[AINotifier] Save skipped: workspacePath is null');
+      return;
+    }
     try {
       final dir = Directory(p.join(workspacePath, '.quantum'));
       if (!dir.existsSync()) {
         dir.createSync(recursive: true);
       }
       final file = File(p.join(dir.path, 'chat_history.json'));
-      final jsonList = state.sessions.map((s) => s.toJson()).toList();
-      await file.writeAsString(jsonEncode(jsonList));
+      // Strip heavy fields to keep file small: executedActions content can be huge
+      final trimmedSessions = state.sessions.map((s) {
+        final trimmedMessages = s.messages.map((m) {
+          final json = m.toJson();
+          // Remove executedActions content (can be entire file contents)
+          if (json['executedActions'] != null) {
+            final actions = (json['executedActions'] as List).map((a) {
+              final action = Map<String, dynamic>.from(a);
+              if (action['content'] != null && (action['content'] as String).length > 500) {
+                action['content'] = '(truncated)';
+              }
+              return action;
+            }).toList();
+            json['executedActions'] = actions;
+          }
+          // Remove large actionResults
+          if (json['actionResults'] != null) {
+            final results = Map<String, String>.from(json['actionResults']);
+            final trimmed = <String, String>{};
+            for (final entry in results.entries) {
+              trimmed[entry.key] = entry.value.length > 500
+                  ? '${entry.value.substring(0, 500)}...'
+                  : entry.value;
+            }
+            json['actionResults'] = trimmed;
+          }
+          // Remove imageBase64 (can be megabytes)
+          json.remove('imageBase64');
+          return json;
+        }).toList();
+        return {
+          'id': s.id,
+          'title': s.title,
+          'messages': trimmedMessages,
+          'createdAt': s.createdAt.toIso8601String(),
+        };
+      }).toList();
+      final jsonStr = jsonEncode(trimmedSessions);
+      await file.writeAsString(jsonStr);
+      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) with ${state.messages.length} messages to ${file.path} (${jsonStr.length} bytes)');
+      
+      await _saveMemory(workspacePath);
     } catch (e) {
-      debugPrint('Error saving chat sessions: $e');
+      debugPrint('[AINotifier] Error saving chat sessions: $e');
+    }
+  }
+
+  Future<void> _saveMemory(String workspacePath) async {
+    try {
+      final dir = Directory(p.join(workspacePath, '.quantum'));
+      if (!dir.existsSync()) return;
+      
+      final file = File(p.join(dir.path, 'memory.md'));
+      final buf = StringBuffer();
+      buf.writeln('# Session Memory');
+      buf.writeln('Last updated: ${DateTime.now().toIso8601String()}');
+      buf.writeln('');
+      
+      if (state.messages.isNotEmpty) {
+        final userMessages = state.messages.where((m) => m.role == MessageRole.user).toList();
+        if (userMessages.isNotEmpty) {
+          buf.writeln('## Recent User Requests');
+          for (final msg in userMessages.take(10)) {
+            final preview = msg.content.length > 100 ? msg.content.substring(0, 100) : msg.content;
+            buf.writeln('- $preview');
+          }
+          buf.writeln('');
+        }
+
+        if (state.agentReadFiles.isNotEmpty) {
+          buf.writeln('## Files Read by Agent');
+          for (final f in state.agentReadFiles.take(20)) {
+            final rel = p.relative(f, from: workspacePath);
+            buf.writeln('- $rel');
+          }
+          buf.writeln('');
+        }
+        
+        buf.writeln('## Session Stats');
+        buf.writeln('- Total messages: ${state.messages.length}');
+        buf.writeln('- Total tokens used: ${state.totalTokens}');
+        buf.writeln('- Files read: ${state.agentReadFiles.length}');
+      }
+      
+      await file.writeAsString(buf.toString());
+    } catch (e) {
+      debugPrint('[AINotifier] Error saving memory: $e');
     }
   }
 
   Future<void> _loadSessions(String workspacePath) async {
     try {
       final file = File(p.join(workspacePath, '.quantum', 'chat_history.json'));
+      debugPrint('[AINotifier] Loading sessions from: ${file.path}');
       if (!file.existsSync()) {
-        // Start a fresh default session
+        debugPrint('[AINotifier] No chat_history.json found, creating default session');
         final defaultSession = ChatSession(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
           title: 'New Chat',
@@ -160,8 +314,10 @@ class AINotifier extends StateNotifier<AIState> {
         return;
       }
       final jsonStr = await file.readAsString();
+      debugPrint('[AINotifier] Read ${jsonStr.length} bytes from chat_history.json');
       final List<dynamic> jsonList = jsonDecode(jsonStr);
       final sessions = jsonList.map((j) => ChatSession.fromJson(j)).toList();
+      debugPrint('[AINotifier] Loaded ${sessions.length} session(s)');
       if (sessions.isEmpty) {
         final defaultSession = ChatSession(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -178,13 +334,66 @@ class AINotifier extends StateNotifier<AIState> {
       }
       // Set the last active/created session as current
       final lastSession = sessions.last;
+      final restoredCount = lastSession.messages.length;
       state = state.copyWith(
         sessions: sessions,
         currentSessionId: lastSession.id,
         messages: lastSession.messages,
       );
+      debugPrint('[AINotifier] Restored ${restoredCount} messages in active session');
+      
+      await _restoreMemory(workspacePath);
+      
+      if (restoredCount > 0 && lastSession.messages.any((m) => m.role == MessageRole.user)) {
+        final l10n = _ref.read(localizationsProvider);
+        _updateMessagesAndSync([
+          ...state.messages,
+          ChatMessage(
+            role: MessageRole.system,
+            content: '🔄 **${l10n.sessionRestored}**\n\n'
+                '${l10n.sessionRestoredDetail(restoredCount, state.agentReadFiles.length)}',
+            timestamp: DateTime.now(),
+          )
+        ]);
+      }
     } catch (e) {
-      debugPrint('Error loading chat sessions: $e');
+      debugPrint('[AINotifier] Error loading chat sessions: $e');
+    }
+  }
+
+  Future<void> _restoreMemory(String workspacePath) async {
+    try {
+      final memoryFile = File(p.join(workspacePath, '.quantum', 'memory.md'));
+      if (!memoryFile.existsSync()) return;
+      
+      final content = await memoryFile.readAsString();
+      debugPrint('[AINotifier] Restored memory from ${memoryFile.path}');
+      
+      final readFiles = <String>[];
+      final lines = content.split('\n');
+      bool inFilesSection = false;
+      for (final line in lines) {
+        if (line.startsWith('## Files Read by Agent')) {
+          inFilesSection = true;
+          continue;
+        }
+        if (inFilesSection && line.startsWith('- ')) {
+          final relPath = line.substring(2).trim();
+          if (relPath.isNotEmpty) {
+            readFiles.add(p.join(workspacePath, relPath));
+          }
+        } else if (line.startsWith('##')) {
+          inFilesSection = false;
+        }
+      }
+      
+      if (readFiles.isNotEmpty) {
+        state = state.copyWith(
+          agentReadFiles: readFiles,
+        );
+      }
+    } catch (e) {
+      debugPrint('[AINotifier] Error restoring memory: $e');
     }
   }
 
@@ -439,7 +648,7 @@ class AINotifier extends StateNotifier<AIState> {
     Set<String> lastErrorFiles = {};
 
     try {
-      final workspacePath = _ref.read(workspaceProvider).currentPath;
+      // Используем уже считанный workspacePath, не читаем повторно (убрана переменная-тень)
       if (workspacePath == null) {
         throw Exception(l10n.projectNotOpened);
       }
@@ -507,7 +716,6 @@ class AINotifier extends StateNotifier<AIState> {
 
         String rulesContent = '';
         final rulesFiles = [
-          File(p.join(workspacePath, '.quantumrules')),
           File(p.join(workspacePath, '.agentrules')),
           File(p.join(workspacePath, '.cursorrules')),
           File(p.join(workspacePath, '.quantum', 'memory.md')),
@@ -515,9 +723,9 @@ class AINotifier extends StateNotifier<AIState> {
           File(p.join(workspacePath, '.quantum', 'tasks.md')),
         ];
         for (final f in rulesFiles) {
-          if (f.existsSync()) {
+          if (await f.exists()) {
             try {
-              final content = f.readAsStringSync();
+              final content = await f.readAsString();
               rulesContent += '\n\n=== ${p.basename(f.path)} ===\n$content';
             } catch (e) {
               debugPrint('Failed to read rules file ${f.path}: $e');
@@ -525,14 +733,67 @@ class AINotifier extends StateNotifier<AIState> {
           }
         }
 
-        final systemInstruction = AIPrompts.getSystemInstruction(
+        final isLocalAi = _aiService.selectedProviderId == 'local_edge';
+        
+        // ── Load session memory for local model ──────────────────────────────
+        // If we have a saved session memory, append it to the system instruction
+        // so the model "remembers" what it did before context was reset.
+        String sessionMemoryAddendum = '';
+        if (isLocalAi) {
+          final memory = await _ref.read(localInferenceProvider.notifier)
+              .loadSessionMemory(workspacePath);
+          if (memory != null) {
+            sessionMemoryAddendum = '\n\n## ПАМЯТЬ ПРЕДЫДУЩИХ СЕССИЙ (Предыдущая работа):\n$memory\n\n'
+                'Если пользователь напишет "продолжи" — используй эту память чтобы продолжить работу.\n';
+          }
+          
+          // ── Auto-save & reset context before it overflows ─────────────────
+          // Check if LiteRT/GGUF context is 80%+ full. If so, save memory and
+          // reset NOW — before garbage starts generating.
+          final localState = _ref.read(localInferenceProvider);
+          final totalCtx = localState.contextTokensTotal;
+          final usedCtx = localState.contextTokensUsed;
+          if (totalCtx > 0 && usedCtx > 0 && usedCtx >= (totalCtx * 0.80).toInt()) {
+            debugPrint('[AINotifier] Context $usedCtx/$totalCtx (80%+) — saving memory and resetting');
+            final historyToSave = state.messages
+                .map((m) => {
+                      'role': m.role == MessageRole.user ? 'user' : 'assistant',
+                      'content': m.content,
+                    })
+                .toList();
+            await _ref.read(localInferenceProvider.notifier).resetContext(
+              messagesToSave: historyToSave,
+              workspacePath: workspacePath,
+            );
+            _contextCompressor.reset();
+            // Notify user
+            _updateMessagesAndSync([
+              ...state.messages,
+              ChatMessage(
+                role: MessageRole.system,
+                content: '🔄 **Контекст сброшен** (80% заполнен)\n\n'
+                    'История сохранена в `.quantum/local_memory.md`.\n'
+                    'Модель помнит что делала — просто продолжай!',
+                timestamp: DateTime.now(),
+              ),
+            ]);
+          }
+        }
+        
+        String systemInstruction = AIPrompts.getSystemInstruction(
           compressedContext,
           activeComponents: activeComponents,
           mcpTools: mcpTools,
-          internetAccess: internetAccess,
+          internetAccess: internetAccess && !isLocalAi,
           rulesContent: rulesContent,
           interactionMode: state.interactionMode,
+          isLocalModel: isLocalAi,
         );
+        
+        // Append session memory to local model instruction
+        if (sessionMemoryAddendum.isNotEmpty) {
+          systemInstruction = systemInstruction + sessionMemoryAddendum;
+        }
 
         // Prepare conversation history
         final history = state.messages
@@ -546,21 +807,110 @@ class AINotifier extends StateNotifier<AIState> {
             .toList();
 
         // Get completion from AI service
-        final responseText = await _aiService.sendChatMessage(
-          nextPrompt,
-          history,
-          systemInstruction: systemInstruction,
-          imageBase64: imageBase64,
-        );
-        final responseTokens = _estimateTokens(responseText);
+        String responseText;
+        int responseTokens = 0;
+        int promptTokens = 0;
+        int completionTokens = 0;
+        
+        final localInferenceState = _ref.read(localInferenceProvider);
+        final isLocalModelLoaded = localInferenceState.status == LocalModelStatus.ready && localInferenceState.loadedModel != null;
 
-        // Parse proposed actions
-        final actions = _parseActions(responseText);
+        if (_aiService.selectedProviderId == 'local_edge' && isLocalModelLoaded) {
+           // Native inference on Android/iOS via InferenceEngine
+           responseText = await _ref.read(localInferenceProvider.notifier).generate(
+             prompt: nextPrompt,
+             history: history,
+             systemInstruction: systemInstruction,
+           );
+           responseTokens = _estimateTokens(responseText);
+        } else if (_aiService.selectedProviderId == 'local_edge' && !isLocalModelLoaded) {
+           // local_edge selected but no model loaded → check if it's desktop
+           // On desktop: llama-server might or might not be running
+           // Try the HTTP request but catch connection errors gracefully
+           try {
+             final chatResponse = await _aiService.sendChatMessage(
+               nextPrompt,
+               history,
+               systemInstruction: systemInstruction,
+               imageBase64: imageBase64,
+             );
+             responseText = chatResponse.text;
+             promptTokens = chatResponse.tokenUsage?.promptTokens ?? 0;
+             completionTokens = chatResponse.tokenUsage?.completionTokens ?? 0;
+             responseTokens = chatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
+           } catch (e) {
+             final errorStr = e.toString();
+             final isConnectionError = errorStr.contains('connection error') ||
+                 errorStr.contains('В соединении отказано') ||
+                 errorStr.contains('Connection refused') ||
+                 errorStr.contains('SocketException') ||
+                 errorStr.contains('errno = 111');
+
+             if (isConnectionError) {
+               responseText = '⚠️ **Локальный ИИ недоступен**\n\n'
+                   'Не удалось подключиться к локальному серверу.\n\n'
+                   '**На ПК (Linux/Desktop):**\n'
+                   '• Откройте боковую панель **Local Models** → нажмите **Start** чтобы запустить llama-server\n'
+                   '• Или выберите другого провайдера в настройках (Gemini, OpenAI и др.)\n\n'
+                   '**На телефоне (Android):**\n'
+                   '• Скачайте модель в панели Local Models → нажмите **Run** — сервер не нужен, ИИ работает прямо на устройстве\n\n'
+                   '_Технически: llama-server не запущен на localhost_';
+             } else {
+               rethrow;
+             }
+             responseTokens = 0;
+           }
+        } else {
+           final chatResponse = await _aiService.sendChatMessage(
+             nextPrompt,
+             history,
+             systemInstruction: systemInstruction,
+             imageBase64: imageBase64,
+           );
+           responseText = chatResponse.text;
+           promptTokens = chatResponse.tokenUsage?.promptTokens ?? 0;
+           completionTokens = chatResponse.tokenUsage?.completionTokens ?? 0;
+           responseTokens = chatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
+        }
+
+        // Parse proposed actions from <actions> blocks
+        var actions = _parseActions(responseText);
+        
+        // For local models: translate natural language into actions
+        if (isLocalAi && actions.isEmpty) {
+          actions = LocalActionTranslator.translateResponse(responseText, workspacePath);
+          if (actions.isNotEmpty) {
+            // Log that we translated actions from natural language
+            debugPrint('[LocalActionTranslator] Translated ${actions.length} action(s) from model response');
+          }
+        }
+
+        // Intercept and auto-execute web_search / web_fetch actions for live internet access
+        final webActions = actions.where((a) => a.type == 'web_search' || a.type == 'web_fetch').toList();
+        if (webActions.isNotEmpty) {
+          final webAction = webActions.first;
+          final statusMsg = webAction.type == 'web_search'
+              ? 'Поиск в интернете: "${webAction.content}"...'
+              : 'Загрузка страницы: "${webAction.path}"...';
+          state = state.copyWith(currentStatusMessage: statusMsg);
+
+          final searchResult = await applyAction(webAction, runInBackground: true);
+
+          // Feed search results back to the model as context and continue loop
+          nextPrompt = '$nextPrompt\n\n[Результаты поиска из интернета]\n$searchResult\n\nПожалуйста, сформулируй окончательный ответ пользователю на русском языке на основе этих свежих данных.';
+          
+          // Clean the actions tags from the response before continuing
+          responseText = responseText
+              .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
+              .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '');
+          
+          continue;
+        }
 
         final cleanContent = responseText
-            .replaceAll(RegExp(r'<actions>[\s\S]*?<\/actions>', caseSensitive: false), '')
-            .replaceAll(RegExp(r'<action>[\s\S]*?<\/action>', caseSensitive: false), '')
-            .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*?\}\s*\]'), '')
+            .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*(?:\]|$)'), '')
             .trim();
 
         final assistantMessage = ChatMessage(
@@ -572,12 +922,69 @@ class AINotifier extends StateNotifier<AIState> {
 
         state = state.copyWith(
           totalTokens: state.totalTokens + responseTokens,
+          lastPromptTokens: promptTokens,
+          lastCompletionTokens: completionTokens,
         );
         _updateMessagesAndSync([...state.messages, assistantMessage]);
 
         if (!isAutopilot) {
-          state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
-          break;
+          final readOnlyActions = actions.where(_isReadOnlyAction).toList();
+          final modificationActions = actions.where((a) => !_isReadOnlyAction(a)).toList();
+
+          if (modificationActions.isNotEmpty) {
+            // Modification actions (edit/create/delete/command/mcp) require user confirmation in Chat/Refactor modes
+            state = state.copyWith(
+              proposedActions: [...state.proposedActions, ...modificationActions],
+              isLoading: false,
+              activeAgentRole: null,
+              currentStatusMessage: null,
+            );
+            break;
+          } else if (readOnlyActions.isNotEmpty) {
+            // Auto-execute read-only actions to collect context
+            final results = <String>[];
+            for (final action in readOnlyActions) {
+              final res = await applyAction(action, runInBackground: true);
+              results.add(res);
+            }
+
+            final resultsMap = <String, String>{};
+            for (int i = 0; i < readOnlyActions.length; i++) {
+              final act = readOnlyActions[i];
+              resultsMap[act.path.isNotEmpty ? act.path : act.content] = results[i];
+            }
+
+            final resultsText = readOnlyActions
+                .asMap()
+                .map((idx, act) => MapEntry(idx, '[Результат действия ${act.type} для ${act.path.isNotEmpty ? act.path : act.content}]\n${results[idx]}'))
+                .values
+                .join('\n\n');
+
+            // Add step summary to messages so it becomes part of the conversation history!
+            final actionsListText = readOnlyActions
+                .map((a) => '- ${a.type.toUpperCase()}: ${a.path.isNotEmpty ? p.relative(a.path, from: workspacePath) : a.content}')
+                .join('\n');
+            final feedbackContent = l10n.autopilotStepSummary(1, actionsListText, results.join('\n'));
+
+            _updateMessagesAndSync([
+              ...state.messages,
+              ChatMessage(
+                role: MessageRole.system,
+                content: feedbackContent,
+                timestamp: DateTime.now(),
+                executedActions: readOnlyActions,
+                actionResults: resultsMap,
+                isStepSummary: true,
+              )
+            ]);
+
+            nextPrompt = '$nextPrompt\n\n$resultsText\n\nПожалуйста, продолжи выполнение запроса пользователя на основе полученных данных.';
+            continue;
+          } else {
+            // No actions proposed, or all executed. Finish chat turn.
+            state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+            break;
+          }
         }
 
         // Sub-Agent State Machine processing (Autopilot only)
@@ -605,8 +1012,8 @@ class AINotifier extends StateNotifier<AIState> {
             activeAgentRole: 'Coder',
             currentStatusMessage: l10n.generatingCodeChanges,
           );
-          nextPrompt = "Plan accepted. Please implement the changes according to the proposed plan and output the actions.";
-          await Future.delayed(const Duration(milliseconds: 500));
+          nextPrompt = 'Plan accepted. Please implement the changes according to the proposed plan and output the actions.';
+          // Убрана искусственная задержка 500мс — она не нужна, только замедляет агента
           continue;
         }
 
@@ -618,7 +1025,7 @@ class AINotifier extends StateNotifier<AIState> {
               activeAgentRole: 'Validator',
               currentStatusMessage: l10n.verifyingImplementation,
             );
-            nextPrompt = "Please verify the implementation. Are there any compilation or analyzer errors?";
+            nextPrompt = 'Please verify the implementation. Are there any compilation or analyzer errors?';
             continue;
           }
         }
@@ -655,7 +1062,7 @@ class AINotifier extends StateNotifier<AIState> {
 
         // Handle blocked operations
         if (blockedActions.isNotEmpty) {
-          final blockedText = blockedActions.map((a) => "- ${a.type.toUpperCase()}: ${a.path}").join('\n');
+          final blockedText = blockedActions.map((a) => '- ${a.type.toUpperCase()}: ${a.path}').join('\n');
           state = state.copyWith(
             isLoading: false,
             activeAgentRole: null,
@@ -705,7 +1112,7 @@ class AINotifier extends StateNotifier<AIState> {
           }
 
           final actionsListText = allowedActions
-              .map((a) => "- ${a.type.toUpperCase()}: ${a.path.isNotEmpty ? p.relative(a.path, from: workspacePath) : a.content}")
+              .map((a) => '- ${a.type.toUpperCase()}: ${a.path.isNotEmpty ? p.relative(a.path, from: workspacePath) : a.content}')
               .join('\n');
           final feedbackContent = l10n.autopilotStepSummary(currentStep, actionsListText, results.join('\n'));
 
@@ -738,7 +1145,7 @@ class AINotifier extends StateNotifier<AIState> {
           
           // Trigger compiler analysis first and await it
           await _ref.read(analysisServiceProvider).runAnalysis();
-          await Future.delayed(const Duration(milliseconds: 800));
+          // Убрана задержка 800мс — анализ уже завершён через await runAnalysis()
 
           // Re-fetch errors in Validator phase to see if there are issues
           final allDiagnostics = _ref.read(editorProvider).allDiagnostics;
@@ -790,12 +1197,12 @@ class AINotifier extends StateNotifier<AIState> {
               activeAgentRole: 'Coder',
               currentStatusMessage: l10n.fixingCompilationErrors,
             );
-            nextPrompt = "Validation found compilation errors (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n**Exact analyzer errors:**\n$errorReport\n\nFor each error:\n1. Read the file via read_file if you need context\n2. Fix only the lines with errors, avoid rewriting entire file unnecessarily";
+            nextPrompt = 'Validation found compilation errors (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n**Exact analyzer errors:**\n$errorReport\n\nFor each error:\n1. Read the file via read_file if you need context\n2. Fix only the lines with errors, avoid rewriting entire file unnecessarily';
           } else {
             consecutiveErrorFixAttempts = 0;
             lastErrorFiles = {};
             state = state.copyWith(currentStatusMessage: null);
-            nextPrompt = "All changes applied successfully. No compilation errors. Verify logic correctness or report completion.";
+            nextPrompt = 'All changes applied successfully. No compilation errors. Verify logic correctness or report completion.';
           }
         }
       }
@@ -808,7 +1215,7 @@ class AINotifier extends StateNotifier<AIState> {
     final List<AIAction> actions = [];
     final workspacePath = _ref.read(workspaceProvider).currentPath;
 
-    var regExp = RegExp(r'<actions>([\s\S]*?)<\/actions>', caseSensitive: false);
+    final regExp = RegExp(r'<actions>([\s\S]*?)<\/actions>', caseSensitive: false);
     var matches = regExp.allMatches(text);
 
     if (matches.isEmpty) {
@@ -845,7 +1252,15 @@ class AINotifier extends StateNotifier<AIState> {
           }
         }
 
-        final List<dynamic> jsonList = jsonDecode(jsonStr);
+        final decoded = jsonDecode(jsonStr);
+        final List<dynamic> jsonList;
+        if (decoded is List) {
+          jsonList = decoded;
+        } else if (decoded is Map) {
+          jsonList = [decoded];
+        } else {
+          jsonList = [];
+        }
         for (final item in jsonList) {
           final actionJson = Map<String, dynamic>.from(item);
           final rawPath = actionJson['path'] as String?;
@@ -932,6 +1347,19 @@ class AINotifier extends StateNotifier<AIState> {
         ? p.relative(action.path, from: workspacePath)
         : action.path;
 
+    final actionEmoji = _getActionEmoji(action.type);
+    final actionLabel = _getActionLabel(action.type);
+    
+    final actionStepMessage = ChatMessage(
+      role: MessageRole.system,
+      content: '$actionEmoji $actionLabel `${relPath.isNotEmpty ? relPath : action.content}`',
+      timestamp: DateTime.now(),
+      isActionStep: true,
+      actionStepType: action.type,
+      actionStepPath: relPath.isNotEmpty ? relPath : action.content,
+    );
+    _updateMessagesAndSync([...state.messages, actionStepMessage]);
+
     if (state.isLoading) {
       String statusMsg;
       switch (action.type) {
@@ -984,7 +1412,7 @@ class AINotifier extends StateNotifier<AIState> {
         case 'read_file':
           // Агент запрашивает содержимое файла перед правкой
           final targetFile = File(action.path);
-          if (!targetFile.existsSync()) {
+          if (!await targetFile.exists()) {
             return l10n.fileNotFound(action.path);
           }
           final content = await targetFile.readAsString();
@@ -1008,9 +1436,9 @@ class AINotifier extends StateNotifier<AIState> {
         case 'edit':
         case 'create':
           final file = File(action.path);
-          if (file.existsSync()) {
+          if (await file.exists()) {
             if (!_currentStepBackups.containsKey(action.path)) {
-              _currentStepBackups[action.path] = file.readAsStringSync();
+              _currentStepBackups[action.path] = await file.readAsString();
             }
           } else {
             if (!_currentStepBackups.containsKey(action.path)) {
@@ -1031,7 +1459,7 @@ class AINotifier extends StateNotifier<AIState> {
           final file = File(action.path);
           if (await file.exists()) {
             if (!_currentStepBackups.containsKey(action.path)) {
-              _currentStepBackups[action.path] = file.readAsStringSync();
+              _currentStepBackups[action.path] = await file.readAsString();
             }
             await file.delete(recursive: true);
           }
@@ -1040,6 +1468,12 @@ class AINotifier extends StateNotifier<AIState> {
           return l10n.fileSuccessfullyDeleted(action.path);
         case 'command':
           final cmdText = action.content.trim().toLowerCase();
+          
+          // Skip empty commands
+          if (cmdText.isEmpty) {
+            removeAction(action);
+            return 'Skipped empty command';
+          }
           
           // Double safety check
           final paths = _permissionService.extractPathCandidates(action.content);
@@ -1097,55 +1531,16 @@ class AINotifier extends StateNotifier<AIState> {
           if (workspacePath == null) {
             return l10n.workspaceNotFound;
           }
-          final dir = Directory(workspacePath);
-          final results = <String>[];
-          int matchCount = 0;
-          try {
-            await for (final file in dir.list(recursive: true, followLinks: false)) {
-              if (file is File) {
-                final path = file.path;
-                // Ignore standard build and cache directories to optimize speed
-                if (path.contains('/.git/') || 
-                    path.contains('/.dart_tool/') || 
-                    path.contains('/build/') || 
-                    path.contains('/.idea/') ||
-                    path.contains('/ios/Pods/')) {
-                  continue;
-                }
-                // Ignore binary formats
-                if (path.endsWith('.png') || 
-                    path.endsWith('.jpg') || 
-                    path.endsWith('.ico') || 
-                    path.endsWith('.apk') || 
-                    path.endsWith('.pdf')) {
-                  continue;
-                }
-                
-                try {
-                  final fileContent = await file.readAsString();
-                  if (fileContent.toLowerCase().contains(query.toLowerCase())) {
-                    final lines = fileContent.split('\n');
-                    for (int i = 0; i < lines.length; i++) {
-                      if (lines[i].toLowerCase().contains(query.toLowerCase())) {
-                        final relPath = p.relative(path, from: workspacePath);
-                        results.add('$relPath:${i + 1}: ${lines[i].trim()}');
-                        matchCount++;
-                        if (matchCount >= 50) break;
-                      }
-                    }
-                  }
-                } catch (_) {}
-              }
-              if (matchCount >= 50) break;
-            }
-          } catch (e) {
-            return l10n.failedToApplyActionWithError('searching: $e');
-          }
+          // Запускаем в отдельном Isolate — не замораживаем UI!
+          final results = await compute(
+            _grepSearchIsolate,
+            [workspacePath, query],
+          );
           removeAction(action);
           if (results.isEmpty) {
             return l10n.aiSearchNoMatches(query);
           }
-          return l10n.aiSearchMatchesFound(matchCount, query, results.join('\n'));
+          return l10n.aiSearchMatchesFound(results.length, query, results.join('\n'));
         case 'find_symbols':
           final query = action.content.trim();
           if (workspacePath == null) {
@@ -1286,8 +1681,8 @@ class AINotifier extends StateNotifier<AIState> {
 
     final actionsListText = executedActions
         .map((a) {
-          if (a.type == 'mcp') return "- MCP: ${a.server} -> ${a.tool}";
-          return "- ${a.type.toUpperCase()}: ${a.path.isNotEmpty ? p.relative(a.path, from: workspacePath) : a.content}";
+          if (a.type == 'mcp') return '- MCP: ${a.server} -> ${a.tool}';
+          return '- ${a.type.toUpperCase()}: ${a.path.isNotEmpty ? p.relative(a.path, from: workspacePath) : a.content}';
         })
         .join('\n');
     final feedbackContent = l10n.autopilotStepSummary(1, actionsListText, resultsMap.values.join('\n'));
@@ -1344,18 +1739,18 @@ The following is an older part of our conversation history. Please summarize it 
 HISTORY:
 $history
 ''';
-      final summary = await _aiService.sendChatMessage(prompt, []);
+      final summary = (await _aiService.sendChatMessage(prompt, [])).text;
 
       final checkpointFile = File(p.join(workspacePath, '.quantum', 'checkpoint.md'));
-      if (!checkpointFile.parent.existsSync()) {
-        checkpointFile.parent.createSync(recursive: true);
+      if (!await checkpointFile.parent.exists()) {
+        await checkpointFile.parent.create(recursive: true);
       }
       
       String existing = '';
-      if (checkpointFile.existsSync()) {
-        existing = checkpointFile.readAsStringSync() + '\n\n';
+      if (await checkpointFile.exists()) {
+        existing = '${await checkpointFile.readAsString()}\n\n';
       }
-      checkpointFile.writeAsStringSync(existing + '## Checkpoint - \${DateTime.now().toIso8601String()}\n' + summary);
+      await checkpointFile.writeAsString('$existing## Checkpoint - \${DateTime.now().toIso8601String()}\n$summary');
 
       // Remove compressed messages from state
       final remainingMessages = state.messages.sublist(state.messages.length - 10);
@@ -1399,19 +1794,19 @@ HISTORY:
 $history
 ''';
 
-      final responseText = await _aiService.sendChatMessage(prompt, []);
+      final responseText = (await _aiService.sendChatMessage(prompt, [])).text;
       
       final memoryFile = File(p.join(workspacePath, '.quantum', 'memory.md'));
-      if (!memoryFile.parent.existsSync()) {
-        memoryFile.parent.createSync(recursive: true);
+      if (!await memoryFile.parent.exists()) {
+        await memoryFile.parent.create(recursive: true);
       }
       
       String existingMemory = '';
-      if (memoryFile.existsSync()) {
-        existingMemory = memoryFile.readAsStringSync() + '\n\n';
+      if (await memoryFile.exists()) {
+        existingMemory = '${await memoryFile.readAsString()}\n\n';
       }
       
-      memoryFile.writeAsStringSync(existingMemory + '## Dream Entry - ${DateTime.now().toIso8601String()}\n' + responseText);
+      await memoryFile.writeAsString('$existingMemory## Dream Entry - ${DateTime.now().toIso8601String()}\n$responseText');
 
       _updateMessagesAndSync([
         ...state.messages,
@@ -1439,43 +1834,102 @@ $history
     state = state.copyWith(
       proposedActions: state.proposedActions.where((a) => a != action).toList(),
     );
+    try {
+      _ref.read(editorProvider.notifier).setDiffView(action.path, false);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _dio.close(force: true);
+    super.dispose();
   }
 
   Future<String> _performWebSearch(String query) async {
+    // Try lite.duckduckgo.com first (simpler, less anti-bot)
     try {
-      final dio = Dio();
-      final response = await dio.get(
-        'https://html.duckduckgo.com/html/?q=${Uri.encodeComponent(query)}',
+      final response = await _dio.get(
+        'https://lite.duckduckgo.com/lite/?q=${Uri.encodeComponent(query)}',
         options: Options(
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
           },
+          receiveTimeout: const Duration(seconds: 15),
         ),
       );
       final html = response.data.toString();
       final results = <String>[];
-      final titleMatches = RegExp(r'<a class="result__url"[^>]*>([\s\S]*?)<\/a>').allMatches(html);
-      final snippetMatches = RegExp(r'<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>').allMatches(html);
       
-      final titleList = titleMatches.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
-      final snippetList = snippetMatches.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
+      // lite.duckduckgo.com uses <a rel="nofollow" href="..."> for results
+      final linkMatches = RegExp(r'<a[^>]*rel="nofollow"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>', caseSensitive: false).allMatches(html);
+      final snippetMatches = RegExp(r'<td class="result-snippet">([\s\S]*?)<\/td>', caseSensitive: false).allMatches(html);
       
-      for (int i = 0; i < titleList.length && i < 5; i++) {
-        results.add('[${i+1}] Title: ${titleList[i]}\nSnippet: ${snippetList[i]}\n');
-      }
+      final links = linkMatches.map((m) => m.group(1)?.trim() ?? '').toList();
+      final titles = linkMatches.map((m) => m.group(2)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
+      final snippets = snippetMatches.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
       
-      if (results.isEmpty) {
-        final liteMatches = RegExp(r'<td class="result-snippet"[^>]*>([\s\S]*?)<\/td>').allMatches(html);
-        final liteTitles = RegExp(r'<a class="result-link"[^>]*>([\s\S]*?)<\/a>').allMatches(html);
-        final lTitles = liteTitles.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
-        final lSnippets = liteMatches.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
-        for (int i = 0; i < lTitles.length && i < 5; i++) {
-          results.add('[${i+1}] Title: ${lTitles[i]}\nSnippet: ${lSnippets[i]}\n');
-        }
+      for (int i = 0; i < titles.length && i < 8; i++) {
+        final snippet = i < snippets.length ? snippets[i] : '';
+        results.add('[${i+1}] ${titles[i]}\nURL: ${links[i]}\nSnippet: $snippet\n');
       }
 
       if (results.isEmpty) {
-        return 'No search results found. (Maybe DuckDuckGo anti-bot activated)';
+        // Fallback: try classic DuckDuckGo HTML
+        final classicResult = await _performWebSearchClassic(query);
+        if (classicResult.startsWith('No search results') || classicResult.startsWith('Web search failed')) {
+          return await _performWebSearchGoogle(query);
+        }
+        return classicResult;
+      }
+      return results.join('\n');
+    } catch (e) {
+      // Fallback to classic, then to Google
+      try {
+        final classicResult = await _performWebSearchClassic(query);
+        if (classicResult.startsWith('No search results') || classicResult.startsWith('Web search failed')) {
+          return await _performWebSearchGoogle(query);
+        }
+        return classicResult;
+      } catch (_) {
+        return await _performWebSearchGoogle(query);
+      }
+    }
+  }
+
+  Future<String> _performWebSearchClassic(String query) async {
+    try {
+      final response = await _dio.get(
+        'https://html.duckduckgo.com/html/?q=${Uri.encodeComponent(query)}',
+        options: Options(
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+          },
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
+      final html = response.data.toString();
+      final results = <String>[];
+      
+      final titleMatches = RegExp(r'<a class="result__a"[^>]*>([\s\S]*?)<\/a>', caseSensitive: false).allMatches(html);
+      final snippetMatches = RegExp(r'<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>', caseSensitive: false).allMatches(html);
+      final urlMatches = RegExp(r'<a class="result__url"[^>]*>([\s\S]*?)<\/a>', caseSensitive: false).allMatches(html);
+      
+      final titles = titleMatches.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
+      final snippets = snippetMatches.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
+      final urls = urlMatches.map((m) => m.group(1)?.replaceAll(RegExp(r'<[^>]*>'), '').trim() ?? '').toList();
+      
+      for (int i = 0; i < titles.length && i < 8; i++) {
+        final url = i < urls.length ? urls[i] : '';
+        final snippet = i < snippets.length ? snippets[i] : '';
+        results.add('[${i+1}] ${titles[i]}\nURL: $url\nSnippet: $snippet\n');
+      }
+
+      if (results.isEmpty) {
+        return 'No search results found.';
       }
       return results.join('\n');
     } catch (e) {
@@ -1483,10 +1937,133 @@ $history
     }
   }
 
+  Future<String> _performWebSearchGoogle(String query) async {
+    try {
+      final response = await _dio.get(
+        'https://www.google.com/search?q=${Uri.encodeComponent(query)}',
+        options: Options(
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+          },
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
+      final html = response.data.toString();
+      final results = <String>[];
+
+      // Google search mobile links: <a href="/url?q=URL..."
+      final matches = RegExp(r'<a href="/url\?q=([^&"]*)[^"]*">([\s\S]*?)<\/a>', caseSensitive: false).allMatches(html);
+      int index = 1;
+      for (final match in matches) {
+        final rawUrl = match.group(1) ?? '';
+        final titleHtml = match.group(2) ?? '';
+        
+        // Skip helper/system links
+        if (rawUrl.startsWith('https://support.google.com') ||
+            rawUrl.startsWith('https://accounts.google.com') ||
+            rawUrl.startsWith('https://maps.google.com')) {
+          continue;
+        }
+
+        final decodedUrl = Uri.decodeComponent(rawUrl);
+        final title = titleHtml.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+        
+        if (title.isNotEmpty && decodedUrl.startsWith('http')) {
+          results.add('[$index] $title\nURL: $decodedUrl\n');
+          index++;
+          if (index > 8) break;
+        }
+      }
+
+      if (results.isEmpty) {
+        return 'No search results found on Google.';
+      }
+      return results.join('\n');
+    } catch (e) {
+      return 'Google Search failed: $e';
+    }
+  }
+
+  String _getActionEmoji(String type) {
+    switch (type) {
+      case 'read_file': return '📖';
+      case 'list_dir': return '📂';
+      case 'grep_search': return '🔍';
+      case 'find_symbols': return '🔎';
+      case 'create': return '✨';
+      case 'edit': return '✏️';
+      case 'delete': return '🗑️';
+      case 'command': return '💻';
+      case 'web_search': return '🌐';
+      case 'web_fetch': return '📥';
+      case 'mcp': return '🔧';
+      default: return '⚙️';
+    }
+  }
+
+  String _getActionLabel(String type) {
+    final l10n = _ref.read(localizationsProvider);
+    switch (type) {
+      case 'read_file': return l10n.actionReadingFile;
+      case 'list_dir': return l10n.actionViewingFolder;
+      case 'grep_search': return l10n.actionSearchingCode;
+      case 'find_symbols': return l10n.actionFindingSymbol;
+      case 'create': return l10n.actionCreatingFile;
+      case 'edit': return l10n.actionEditingFile;
+      case 'delete': return l10n.actionDeletingFile;
+      case 'command': return l10n.actionRunningCommand;
+      case 'web_search': return l10n.actionWebSearch;
+      case 'web_fetch': return l10n.actionFetchingPage;
+      case 'mcp': return l10n.actionMcpTool;
+      default: return l10n.actionExecuting;
+    }
+  }
+
+  String _getActionFriendlyLogText(AIAction action, String workspacePath) {
+    final relPath = action.path.isNotEmpty && workspacePath.isNotEmpty
+        ? (action.path.startsWith(workspacePath) ? p.relative(action.path, from: workspacePath) : action.path)
+        : action.path;
+
+    switch (action.type) {
+      case 'read_file':
+        return '📁 **Чтение файла:** `$relPath`';
+      case 'list_dir':
+        return '📂 **Просмотр папки:** `$relPath`';
+      case 'grep_search':
+        return '🔍 **Поиск по тексту ("${action.content}") в:** `$relPath`';
+      case 'find_symbols':
+        return '🔎 **Поиск символа "${action.content}"**';
+      case 'create':
+        return '✨ **Создание нового файла:** `$relPath`';
+      case 'edit':
+        return '✏️ **Редактирование файла:** `$relPath`';
+      case 'delete':
+        return '🗑️ **Удаление файла:** `$relPath`';
+      case 'command':
+        return '💻 **Выполнение команды:** `${action.content}`';
+      case 'web_search':
+        return '🌐 **Поиск в интернете:** *"${action.content}"*';
+      case 'web_fetch':
+        return '📥 **Загрузка веб-страницы:** *"${action.path}"*';
+      default:
+        return '⚙️ **Выполнение действия (${action.type}):** `$relPath`';
+    }
+  }
+
+  bool _isReadOnlyAction(AIAction action) {
+    return action.type == 'read_file' ||
+        action.type == 'list_dir' ||
+        action.type == 'grep_search' ||
+        action.type == 'find_symbols' ||
+        action.type == 'web_search' ||
+        action.type == 'web_fetch';
+  }
+
   Future<String> _performWebFetch(String url) async {
     try {
-      final dio = Dio();
-      final resp = await dio.get(
+      final resp = await _dio.get(
         url,
         options: Options(
           headers: {

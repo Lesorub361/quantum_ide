@@ -182,6 +182,12 @@ class LocalAiState {
   final String selectedModelFilename;
   final bool isBinaryInstalling;
 
+  // NPU / Hardware acceleration settings
+  final int threads;
+  final int gpuLayers;
+  final bool useFlashAttn;
+  final int contextSize;
+
   LocalAiState({
     this.isModelDownloaded = false,
     this.isBinaryInstalled = false,
@@ -194,6 +200,10 @@ class LocalAiState {
     this.downloadedModels = const {},
     this.selectedModelFilename = 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
     this.isBinaryInstalling = false,
+    this.threads = 4,
+    this.gpuLayers = 0,
+    this.useFlashAttn = false,
+    this.contextSize = 4096,
   });
 
   LocalAiState copyWith({
@@ -209,6 +219,10 @@ class LocalAiState {
     Map<String, bool>? downloadedModels,
     String? selectedModelFilename,
     bool? isBinaryInstalling,
+    int? threads,
+    int? gpuLayers,
+    bool? useFlashAttn,
+    int? contextSize,
   }) {
     return LocalAiState(
       isModelDownloaded: isModelDownloaded ?? this.isModelDownloaded,
@@ -222,6 +236,10 @@ class LocalAiState {
       downloadedModels: downloadedModels ?? this.downloadedModels,
       selectedModelFilename: selectedModelFilename ?? this.selectedModelFilename,
       isBinaryInstalling: isBinaryInstalling ?? this.isBinaryInstalling,
+      threads: threads ?? this.threads,
+      gpuLayers: gpuLayers ?? this.gpuLayers,
+      useFlashAttn: useFlashAttn ?? this.useFlashAttn,
+      contextSize: contextSize ?? this.contextSize,
     );
   }
 }
@@ -289,12 +307,21 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         running = await _pingServer();
       }
 
+      final threads = prefs.getInt('ai_local_threads') ?? 4;
+      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? 0;
+      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
+      final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
+
       state = state.copyWith(
         isModelDownloaded: anyModelDownloaded,
         isBinaryInstalled: binaryExists,
         isRunning: running,
         downloadedModels: downloadedMap,
         selectedModelFilename: activeFilename,
+        threads: threads,
+        gpuLayers: gpuLayers,
+        useFlashAttn: useFlashAttn,
+        contextSize: contextSize,
       );
     } else if (engine == LocalAiEngine.ollama) {
       final baseUrl = _getOllamaBaseUrl();
@@ -340,20 +367,39 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         await prefs.setString('ai_selected_local_model_filename', activeFilename);
       }
 
+      final threads = prefs.getInt('ai_local_threads') ?? 4;
+      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? 0;
+      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
+      final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
+
       state = state.copyWith(
         isModelDownloaded: anyModelDownloaded,
         isBinaryInstalled: reachable,
         isRunning: reachable,
         downloadedModels: downloadedMap,
         selectedModelFilename: activeFilename,
+        threads: threads,
+        gpuLayers: gpuLayers,
+        useFlashAttn: useFlashAttn,
+        contextSize: contextSize,
       );
     } else {
+      final prefs = await SharedPreferences.getInstance();
+      final threads = prefs.getInt('ai_local_threads') ?? 4;
+      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? 0;
+      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
+      final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
+
       state = state.copyWith(
         isModelDownloaded: false,
         isBinaryInstalled: false,
         isRunning: false,
         downloadedModels: {},
         selectedModelFilename: '',
+        threads: threads,
+        gpuLayers: gpuLayers,
+        useFlashAttn: useFlashAttn,
+        contextSize: contextSize,
       );
     }
   }
@@ -476,7 +522,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
       final stream = response.data.stream as Stream<List<int>>;
       
-      StringBuffer buffer = StringBuffer();
+      final StringBuffer buffer = StringBuffer();
       await for (final chunk in stream) {
         final text = utf8.decode(chunk);
         buffer.write(text);
@@ -625,6 +671,29 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     _appendLogs('[Local AI] Selected active model: ${model.name}\n');
   }
 
+  Future<void> updateSettings({int? threads, int? gpuLayers, bool? useFlashAttn, int? contextSize}) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (threads != null) {
+      await prefs.setInt('ai_local_threads', threads);
+    }
+    if (gpuLayers != null) {
+      await prefs.setInt('ai_local_gpu_layers', gpuLayers);
+    }
+    if (useFlashAttn != null) {
+      await prefs.setBool('ai_local_flash_attn', useFlashAttn);
+    }
+    if (contextSize != null) {
+      await prefs.setInt('ai_local_context_size', contextSize);
+    }
+    state = state.copyWith(
+      threads: threads ?? state.threads,
+      gpuLayers: gpuLayers ?? state.gpuLayers,
+      useFlashAttn: useFlashAttn ?? state.useFlashAttn,
+      contextSize: contextSize ?? state.contextSize,
+    );
+    _appendLogs('[Local AI] Settings updated: threads=${threads ?? state.threads}, gpuLayers=${gpuLayers ?? state.gpuLayers}, useFlashAttn=${useFlashAttn ?? state.useFlashAttn}, contextSize=${contextSize ?? state.contextSize}\n');
+  }
+
   Future<void> installBinary() async {
     if (state.isBinaryInstalling) return;
 
@@ -690,8 +759,33 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final proot = _runtime.prootCommand;
       final filesDir = _runtime.filesDir;
       final activeModelFile = state.selectedModelFilename;
+      final threads = state.threads;
+      final gpuLayers = state.gpuLayers;
+      final useFlashAttn = state.useFlashAttn;
+      final contextSize = state.contextSize;
 
-      _appendLogs('[Local AI] Command: llama-server -m /root/models/$activeModelFile -c 2048 --port 8080 --host 127.0.0.1\n');
+      final serverArgs = [
+        'llama-server',
+        '-m',
+        '/root/models/$activeModelFile',
+        '-c',
+        '$contextSize',
+        '--port',
+        '8080',
+        '--host',
+        '127.0.0.1',
+        '-t',
+        '$threads',
+      ];
+      if (gpuLayers > 0) {
+        serverArgs.addAll(['-ngl', '$gpuLayers']);
+      }
+      if (useFlashAttn) {
+        serverArgs.add('-fa');
+      }
+
+      final logArgs = serverArgs.join(' ');
+      _appendLogs('[Local AI] Command: $logArgs\n');
 
       final process = await Process.start(
         'sh',
@@ -699,15 +793,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
           proot,
           filesDir,
           '/root',
-          'llama-server',
-          '-m',
-          '/root/models/$activeModelFile',
-          '-c',
-          '2048',
-          '--port',
-          '8080',
-          '--host',
-          '127.0.0.1',
+          ...serverArgs,
         ],
       );
 

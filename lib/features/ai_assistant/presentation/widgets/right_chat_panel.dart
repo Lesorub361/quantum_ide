@@ -26,6 +26,25 @@ import 'package:quantum_ide/models/chat_message.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 
+final activeAiModelProvider = StateProvider<String>((ref) {
+  final aiSvc = ref.read(aiServiceProvider);
+  return aiSvc.selectedModel;
+});
+
+final activeAiProviderIdProvider = StateProvider<String>((ref) {
+  final aiSvc = ref.read(aiServiceProvider);
+  return aiSvc.selectedProviderId;
+});
+
+final availableModelsProvider = FutureProvider.family<List<String>, String>((ref, providerId) async {
+  final aiSvc = ref.watch(aiServiceProvider);
+  try {
+    return await aiSvc.fetchAvailableModels(providerId);
+  } catch (_) {
+    return AiProviders.byId(providerId).defaultModels;
+  }
+});
+
 class RightChatPanel extends ConsumerStatefulWidget {
   final bool isInline;
 
@@ -392,95 +411,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildInteractionModeSelector(BuildContext context, WidgetRef ref, AIState aiState) {
-    final l10n = AppLocalizations.of(context)!;
-
-    String modeLabel;
-    IconData modeIcon;
-    Color modeColor;
-    switch (aiState.interactionMode) {
-      case AiInteractionMode.chat:
-        modeLabel = l10n.modeChat;
-        modeIcon = LucideIcons.message_square;
-        modeColor = Colors.cyanAccent;
-      case AiInteractionMode.refactor:
-        modeLabel = l10n.modeRefactor;
-        modeIcon = LucideIcons.code;
-        modeColor = Colors.purpleAccent;
-      case AiInteractionMode.autopilot:
-        modeLabel = l10n.modeAutopilot;
-        modeIcon = LucideIcons.zap;
-        modeColor = Colors.orangeAccent;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-      child: GestureDetector(
-        onTap: () {
-          showModalBottomSheet(
-            context: context,
-            backgroundColor: const Color(0xFF1E2230),
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            builder: (ctx) => SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 36, height: 4,
-                    margin: const EdgeInsets.only(top: 10, bottom: 12),
-                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-                  ),
-                  _buildModeOption(ctx, ref, l10n.modeChat, LucideIcons.message_square, Colors.cyanAccent, AiInteractionMode.chat, aiState.interactionMode),
-                  _buildModeOption(ctx, ref, l10n.modeRefactor, LucideIcons.code, Colors.purpleAccent, AiInteractionMode.refactor, aiState.interactionMode),
-                  _buildModeOption(ctx, ref, l10n.modeAutopilot, LucideIcons.zap, Colors.orangeAccent, AiInteractionMode.autopilot, aiState.interactionMode),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: modeColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: modeColor.withValues(alpha: 0.2), width: 0.5),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(modeIcon, size: 12, color: modeColor),
-              const SizedBox(width: 4),
-              Text(
-                modeLabel,
-                style: GoogleFonts.inter(fontSize: 10, color: modeColor, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(width: 2),
-              Icon(LucideIcons.chevron_down, size: 10, color: modeColor.withValues(alpha: 0.6)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModeOption(BuildContext ctx, WidgetRef ref, String label, IconData icon, Color color, AiInteractionMode target, AiInteractionMode current) {
-    final isSelected = current == target;
-    return ListTile(
-      dense: true,
-      leading: Icon(icon, size: 18, color: isSelected ? color : Colors.white54),
-      title: Text(label, style: GoogleFonts.inter(color: isSelected ? color : Colors.white70, fontSize: 13, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
-      trailing: isSelected ? Icon(LucideIcons.check, size: 16, color: color) : null,
-      onTap: () {
-        ref.read(aiProvider.notifier).setInteractionMode(target);
-        Navigator.pop(ctx);
-      },
-    );
-  }
-
   Widget _buildTokenBadge(AIState aiState) {
+    final prompt = aiState.lastPromptTokens;
+    final completion = aiState.lastCompletionTokens;
+    final hasRealTokens = prompt > 0 || completion > 0;
+    final displayText = hasRealTokens
+        ? '$prompt↓ $completion↑'
+        : '${aiState.totalTokens}';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -493,9 +430,14 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         children: [
           const Icon(LucideIcons.coins, size: 10, color: Colors.purpleAccent),
           const SizedBox(width: 4),
-          Text(
-            '${aiState.totalTokens}',
-            style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+          Tooltip(
+            message: hasRealTokens
+                ? 'Prompt: $prompt tokens | Completion: $completion tokens'
+                : 'Estimated: ${aiState.totalTokens} tokens',
+            child: Text(
+              displayText,
+              style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -625,7 +567,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             trailing: const Icon(LucideIcons.chevron_right, color: Colors.white24, size: 14),
             onTap: () {
               ref.read(selectedAgentProvider.notifier).state = pkg.name;
-              String cmd = pkg.id == 'antigravity-cli' ? 'agy' : pkg.id;
+              final String cmd = pkg.id == 'antigravity-cli' ? 'agy' : pkg.id;
               ref.read(editorProvider.notifier).runAgentCommand(cmd);
             },
           ),
@@ -909,206 +851,545 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
   Widget _buildAIChatInput(BuildContext context, WidgetRef ref, AIState aiState) {
     final l10n = AppLocalizations.of(context)!;
-    final aiSvc = ref.watch(aiServiceProvider);
-    final provider = AiProviders.byId(aiSvc.selectedProviderId);
     final editor = ref.watch(editorProvider);
     final hasActiveFile = editor.activeFilePath != null;
     final currentFileName = editor.activeFilePath?.split('/').last ?? '';
     final activeFile = editor.openFiles.isNotEmpty ? editor.openFiles[editor.activeTabIndex] : null;
-    final currentCode = activeFile?.controller.text ?? "";
+    final currentCode = activeFile?.controller.text ?? '';
+
+    String dynamicHint;
+    switch (aiState.interactionMode) {
+      case AiInteractionMode.chat:
+        dynamicHint = 'Спросите ИИ о коде, попросите объяснить...';
+        break;
+      case AiInteractionMode.autopilot:
+        dynamicHint = 'Опишите сложную задачу для агента...';
+        break;
+      case AiInteractionMode.refactor:
+        dynamicHint = 'Что исправить в выделенном фрагменте?';
+        break;
+    }
+
+    final isInternetEnabled = ref.watch(mcpServiceProvider.notifier).internetAccess;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildQuickPrompts(context, ref),
+          
+          // Active file attachment indicator (above input)
           if (_attachActiveFile && hasActiveFile)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _attachActiveFile = false;
-                });
-              },
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.cyanAccent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.file_code, size: 12, color: Colors.cyanAccent),
-                    const SizedBox(width: 4),
-                    Text(
-                      currentFileName,
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.cyanAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.file_code, size: 12, color: Colors.cyanAccent),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Файл прикреплен: $currentFileName',
                       style: GoogleFonts.inter(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(LucideIcons.x, size: 10, color: Colors.white60),
-                  ],
-                ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _attachActiveFile = false),
+                    child: const Icon(LucideIcons.x, size: 12, color: Colors.white60),
+                  ),
+                ],
               ),
             ),
+            
+          // Attached image indicator
           if (_selectedImagePath != null)
-            GestureDetector(
-              onTap: _clearImage,
-              child: Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: Colors.purpleAccent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(_selectedImagePath!),
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.cover,
-                      ),
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.purpleAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.file(
+                      File(_selectedImagePath!),
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.cover,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Image attached',
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Изображение прикреплено',
                       style: GoogleFonts.inter(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(LucideIcons.x, size: 12, color: Colors.white60),
-                  ],
-                ),
+                  ),
+                  GestureDetector(
+                    onTap: _clearImage,
+                    child: const Icon(LucideIcons.x, size: 12, color: Colors.white60),
+                  ),
+                ],
               ),
             ),
+
+          // Unified Premium Input Card
           Container(
-            margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              color: const Color(0xFF161B22).withValues(alpha: 0.8), // Glass panel background from Stitch
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.1), // Stitch border
+                width: 0.8,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.15),
-                  blurRadius: 10,
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 12,
                   offset: const Offset(0, 4),
                 ),
               ],
             ),
-            child: TextField(
-              controller: _aiChatController,
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5),
-              maxLines: 4,
-              minLines: 1,
-              decoration: InputDecoration(
-                hintText: l10n.askAiHint(provider.id == 'local_edge' ? l10n.localAiDisplayName : provider.displayName),
-                hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                prefixIcon: hasActiveFile
-                    ? IconButton(
-                        icon: Icon(
-                          LucideIcons.paperclip,
-                          color: _attachActiveFile ? Colors.cyanAccent : Colors.white38,
-                          size: 16,
-                        ),
-                        onPressed: () {
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Top Row: Attachments + TextField + Send
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Attachment button (Add image / Add file)
+                    PopupMenuButton<String>(
+                      tooltip: 'Прикрепить файл или фото',
+                      icon: const Icon(
+                        LucideIcons.plus, 
+                        size: 20, 
+                        color: Colors.white60,
+                      ),
+                      color: const Color(0xFF1E2230),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      onSelected: (value) {
+                        if (value == 'image') {
+                          _pickImage();
+                        } else if (value == 'file' && hasActiveFile) {
                           setState(() {
                             _attachActiveFile = !_attachActiveFile;
                           });
-                        },
-                        tooltip: AppLocalizations.of(context)!.attachOpenFile,
-                      )
-                    : null,
-                suffixIcon: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Image button
-                      IconButton(
-                        icon: Icon(
-                          LucideIcons.image,
-                          color: _selectedImagePath != null ? Colors.cyanAccent : Colors.white38,
-                          size: 16,
-                        ),
-                        onPressed: _pickImage,
-                        tooltip: l10n.attachImage,
-                      ),
-                      // Send button
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Colors.purpleAccent, Colors.cyanAccent],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.purpleAccent.withValues(alpha: 0.25),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
+                        } else if (value == 'internet') {
+                          ref.read(mcpServiceProvider.notifier).setInternetAccess(!isInternetEnabled);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        if (hasActiveFile)
+                          PopupMenuItem(
+                            value: 'file',
+                            child: Row(
+                              children: [
+                                Icon(LucideIcons.paperclip, size: 14, color: _attachActiveFile ? Colors.cyanAccent : Colors.white60),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Активный файл: $currentFileName', 
+                                    style: TextStyle(
+                                      fontSize: 11, 
+                                      color: _attachActiveFile ? Colors.cyanAccent : Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
+                        PopupMenuItem(
+                          value: 'image',
+                          child: Row(
+                            children: [
+                              Icon(LucideIcons.image, size: 14, color: _selectedImagePath != null ? Colors.purpleAccent : Colors.white60),
+                              const SizedBox(width: 8),
+                              const Text('Прикрепить фото', style: TextStyle(fontSize: 11, color: Colors.white)),
+                            ],
+                          ),
                         ),
-                        child: IconButton(
-                          icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                          onPressed: () {
-                            final value = _aiChatController.text;
-                            if (value.isEmpty && _selectedImageBase64 == null) return;
-
-                            final fullPrompt = (_attachActiveFile && hasActiveFile)
-                                ? l10n.workingOnFile(currentFileName, currentCode, value)
-                                : value;
-
-                            ref.read(aiProvider.notifier).askAI(
-                              fullPrompt,
-                              imageBase64: _selectedImageBase64,
-                            );
-                            _aiChatController.clear();
-                            setState(() {
-                              _attachActiveFile = false;
-                              _selectedImagePath = null;
-                              _selectedImageBase64 = null;
-                            });
-                          },
+                        PopupMenuItem(
+                          value: 'internet',
+                          child: Row(
+                            children: [
+                              Icon(isInternetEnabled ? LucideIcons.circle_check : LucideIcons.circle, size: 14, color: isInternetEnabled ? Colors.cyanAccent : Colors.white60),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  l10n.internetAccess, 
+                                  style: TextStyle(
+                                    fontSize: 11, 
+                                    color: isInternetEnabled ? Colors.cyanAccent : Colors.white,
+                                    fontWeight: isInternetEnabled ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 4),
+                    // Borderless Text Field
+                    Expanded(
+                      child: TextField(
+                        controller: _aiChatController,
+                        style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+                        maxLines: 4,
+                        minLines: 1,
+                        decoration: InputDecoration(
+                          hintText: dynamicHint,
+                          hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 11.5),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 4),
+                    // Send Button
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Colors.purpleAccent, Colors.cyanAccent],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.purpleAccent.withValues(alpha: 0.25),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: IconButton(
+                        icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          final value = _aiChatController.text.trim();
+                          if (value.isEmpty && _selectedImageBase64 == null) return;
+                          
+                          final fullPrompt = (_attachActiveFile && hasActiveFile)
+                              ? l10n.workingOnFile(currentFileName, currentCode, value)
+                              : value;
+
+                          ref.read(aiProvider.notifier).askAI(
+                            fullPrompt,
+                            imageBase64: _selectedImageBase64,
+                          );
+                          _aiChatController.clear();
+                          setState(() {
+                            _attachActiveFile = false;
+                            _selectedImagePath = null;
+                            _selectedImageBase64 = null;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              onSubmitted: (value) {
-                if (value.isEmpty) return;
+                
+                const SizedBox(height: 4),
+                const Divider(color: Colors.white10, height: 1),
+                const SizedBox(height: 6),
 
-                final fullPrompt = (_attachActiveFile && hasActiveFile)
-                    ? l10n.workingOnFile(currentFileName, currentCode, value)
-                    : value;
-
-                ref.read(aiProvider.notifier).askAI(fullPrompt);
-                _aiChatController.clear();
-                setState(() {
-                  _attachActiveFile = false;
-                });
-              },
+                // Bottom Row: Dropdowns (Mode, Model, Autonomy)
+                Row(
+                  children: [
+                    // 1. Bot Mode selector
+                    Expanded(
+                      child: _buildInputPillDropdown<AiInteractionMode>(
+                        context: context,
+                        label: _getModeLabel(aiState.interactionMode),
+                        icon: _getModeIcon(aiState.interactionMode),
+                        accentColor: _getModeColor(aiState.interactionMode),
+                        onSelected: (mode) {
+                          ref.read(aiProvider.notifier).setInteractionMode(mode);
+                        },
+                        items: [
+                          _buildDropdownItem(AiInteractionMode.chat, 'Чат', LucideIcons.message_square, Colors.cyanAccent),
+                          _buildDropdownItem(AiInteractionMode.autopilot, 'Агент', LucideIcons.bot, Colors.orangeAccent),
+                          _buildDropdownItem(AiInteractionMode.refactor, 'Редактор', LucideIcons.code, Colors.purpleAccent),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // 2. Model Selector
+                    Expanded(
+                      flex: 2,
+                      child: _buildModelSelectorDropdown(context, ref),
+                    ),
+                    const SizedBox(width: 6),
+                    // 3. Autonomy selector
+                    Expanded(
+                      child: _buildInputPillDropdown<AiApprovalMode>(
+                        context: context,
+                        label: _getApprovalLabel(aiState.approvalMode),
+                        icon: _getApprovalIcon(aiState.approvalMode),
+                        accentColor: _getApprovalColor(aiState.approvalMode),
+                        onSelected: (mode) {
+                          ref.read(aiProvider.notifier).setApprovalMode(mode);
+                        },
+                        items: [
+                          _buildDropdownItem(AiApprovalMode.manual, 'Ручной', LucideIcons.sliders_horizontal, Colors.greenAccent),
+                          _buildDropdownItem(AiApprovalMode.semiAutonomous, 'Полу-авто', LucideIcons.shield_check, Colors.amberAccent),
+                          _buildDropdownItem(AiApprovalMode.fullAutonomous, 'Автономно', LucideIcons.zap, Colors.redAccent),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          // Mode selector row
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: _buildInteractionModeSelector(context, ref, aiState),
+        ],
+      ),
+    );
+  }
+
+  String _getModeLabel(AiInteractionMode mode) {
+    switch (mode) {
+      case AiInteractionMode.chat: return 'Чат';
+      case AiInteractionMode.autopilot: return 'Агент';
+      case AiInteractionMode.refactor: return 'Редактор';
+    }
+  }
+
+  IconData _getModeIcon(AiInteractionMode mode) {
+    switch (mode) {
+      case AiInteractionMode.chat: return LucideIcons.message_square;
+      case AiInteractionMode.autopilot: return LucideIcons.bot;
+      case AiInteractionMode.refactor: return LucideIcons.code;
+    }
+  }
+
+  Color _getModeColor(AiInteractionMode mode) {
+    switch (mode) {
+      case AiInteractionMode.chat: return Colors.cyanAccent;
+      case AiInteractionMode.autopilot: return Colors.orangeAccent;
+      case AiInteractionMode.refactor: return Colors.purpleAccent;
+    }
+  }
+
+  String _getApprovalLabel(AiApprovalMode mode) {
+    switch (mode) {
+      case AiApprovalMode.manual: return 'Ручной';
+      case AiApprovalMode.semiAutonomous: return 'Полу-авто';
+      case AiApprovalMode.fullAutonomous: return 'Автономно';
+    }
+  }
+
+  IconData _getApprovalIcon(AiApprovalMode mode) {
+    switch (mode) {
+      case AiApprovalMode.manual: return LucideIcons.sliders_horizontal;
+      case AiApprovalMode.semiAutonomous: return LucideIcons.shield_check;
+      case AiApprovalMode.fullAutonomous: return LucideIcons.zap;
+    }
+  }
+
+  Color _getApprovalColor(AiApprovalMode mode) {
+    switch (mode) {
+      case AiApprovalMode.manual: return Colors.greenAccent;
+      case AiApprovalMode.semiAutonomous: return Colors.amberAccent;
+      case AiApprovalMode.fullAutonomous: return Colors.redAccent;
+    }
+  }
+
+  Widget _buildInputPillDropdown<T>({
+    required BuildContext context,
+    required String label,
+    required IconData icon,
+    required Color accentColor,
+    required ValueChanged<T> onSelected,
+    required List<PopupMenuEntry<T>> items,
+  }) {
+    return PopupMenuButton<T>(
+      tooltip: '',
+      color: const Color(0xFF1E2230),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onSelected: onSelected,
+      itemBuilder: (context) => items,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 11, color: accentColor),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const Icon(LucideIcons.chevron_down, size: 10, color: Colors.white30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<T> _buildDropdownItem<T>(T value, String label, IconData icon, Color color) {
+    return PopupMenuItem<T>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: GoogleFonts.inter(fontSize: 11, color: Colors.white),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildModelSelectorDropdown(BuildContext context, WidgetRef ref) {
+    final activeModel = ref.watch(activeAiModelProvider);
+    final activeProviderId = ref.watch(activeAiProviderIdProvider);
+    final aiSvc = ref.read(aiServiceProvider);
+    
+    final currentProvider = AiProviders.byId(activeProviderId);
+    
+    String displayName = activeModel;
+    if (displayName.startsWith('gemini-')) {
+      displayName = displayName.replaceAll('gemini-', 'Gemini ');
+    } else if (displayName.startsWith('gpt-')) {
+      displayName = displayName.toUpperCase();
+    } else if (displayName.startsWith('claude-')) {
+      displayName = displayName.replaceAll('claude-', 'Claude ');
+    }
+    
+    final availableModelsAsync = ref.watch(availableModelsProvider(activeProviderId));
+    final defaultModels = currentProvider.defaultModels;
+    final List<String> models = availableModelsAsync.maybeWhen(
+      data: (list) => list.isNotEmpty ? list : defaultModels,
+      orElse: () => defaultModels,
+    );
+    
+    return PopupMenuButton<String>(
+      tooltip: 'Выбрать модель',
+      color: const Color(0xFF1E2230),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onSelected: (val) async {
+        await aiSvc.setModel(val);
+        ref.read(activeAiModelProvider.notifier).state = val;
+      },
+      itemBuilder: (context) {
+        final List<PopupMenuEntry<String>> items = [];
+        
+        items.add(
+          PopupMenuItem<String>(
+            enabled: false,
+            child: Text(
+              'МОДЕЛИ: ${currentProvider.displayName.toUpperCase()}',
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                color: Colors.purpleAccent.shade100,
+              ),
+            ),
+          ),
+        );
+        
+        for (final m in models) {
+          final isSelected = m == activeModel;
+          items.add(
+            PopupMenuItem<String>(
+              value: m,
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.cpu, size: 11, color: Colors.purpleAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      m,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: isSelected ? Colors.purpleAccent.shade100 : Colors.white70,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (isSelected) ...[
+                    const SizedBox(width: 4),
+                    const Icon(LucideIcons.check, size: 12, color: Colors.purpleAccent),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }
+        
+        return items;
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.03),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(LucideIcons.cpu, size: 11, color: Colors.cyanAccent),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                displayName,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white.withValues(alpha: 0.85),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const Icon(LucideIcons.chevron_down, size: 10, color: Colors.white30),
+          ],
+        ),
       ),
     );
   }

@@ -81,7 +81,7 @@
   "aboutApp": "О приложении",
   "aboutAppSubtitle": "Quantum IDE v1.0.0",
   "selectPalette": "Выберите палитру",
-  "close": "ЗАКРЫТЬ",
+  "close": "Закрыть",
   "resetToDefault": "СБРОСИТЬ ПО УМОЛЧАНИЮ",
   "aboutDialogContent": "Мобильная IDE с поддержкой AI, созданная на Flutter.\n© 2026 Quantum IDE",
   "ubuntuDarkPurple": "Ubuntu Dark Purple",
@@ -112,7 +112,7 @@
       }
     }
   },
-  "confirmDeleteTitle": "Удалить \"{name}\"?",
+  "confirmDeleteTitle": "Подтвердите удаление",
   "@confirmDeleteTitle": {
     "placeholders": {
       "name": {
@@ -167,22 +167,32 @@
   "workingOnFile": "Я работаю над файлом: {file}. \nВот его содержимое:\n```\n{code}\n```\n\nМой вопрос: {question}",
   "@workingOnFile": {
     "placeholders": {
-      "file": { "type": "String" },
-      "code": { "type": "String" },
-      "question": { "type": "String" }
+      "file": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      },
+      "question": {
+        "type": "String"
+      }
     }
   },
   "aiAskDialogTitle": "Запрос к AI Агенту",
   "aiAskFolder": "Папка: {name}",
   "@aiAskFolder": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "aiAskFile": "Файл: {name}",
   "@aiAskFile": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "aiAskFolderHint": "Опишите задачу (например: \"создай контроллер\", \"добавь модель данных\"...) ",
@@ -193,7 +203,9 @@
   "changesInFile": "Изменения в {name}",
   "@changesInFile": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "noFilesFound": "Ничего не найдено",
@@ -201,14 +213,16 @@
   "errorOccurred": "Ошибка: {error}",
   "@errorOccurred": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "aiProvidersInfo": "Добавьте API ключи для разных AI провайдеров. Для локальных моделей (Ollama/LM Studio) ключ не требуется.",
   "activeProvider": "Активный провайдер",
   "requiresApiKeyLabel": "Требует API ключ",
   "localNoKey": "Локальный — без ключа",
-  "activeCaps": "АКТИВЕН",
+  "activeCaps": "АКТИВНА",
   "apiKeyLabel": "API Ключ",
   "keySaved": "Ключ сохранён",
   "urlSaved": "URL сохранён",
@@ -222,7 +236,9 @@
   "modelInstalled": "Модель установлена: {name}",
   "@modelInstalled": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "modelsNotFound": "Модели не найдены. Нажмите «Найти модели».",
@@ -234,7 +250,9 @@
   "providerActivated": "Провайдер {name} активирован",
   "@providerActivated": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "send": "Отправить",
@@ -244,59 +262,83 @@
   "problemsFound": "Проблем найдено: {count} ({errors} ошибок, {warnings} предупреждений)",
   "@problemsFound": {
     "placeholders": {
-      "count": { "type": "int" },
-      "errors": { "type": "int" },
-      "warnings": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "errors": {
+        "type": "int"
+      },
+      "warnings": {
+        "type": "int"
+      }
     }
   },
   "fixWithAi": "Исправить ИИ",
   "runningCommand": "Выполняю команду: {command}...",
   "@runningCommand": {
     "placeholders": {
-      "command": { "type": "String" }
+      "command": {
+        "type": "String"
+      }
     }
   },
   "applyingChange": "Применяю изменение: {path}...",
   "@applyingChange": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "fileSuccessfullyWritten": "Файл {path} успешно записан.",
   "@fileSuccessfullyWritten": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "fileSuccessfullyDeleted": "Файл {path} успешно удален.",
   "@fileSuccessfullyDeleted": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "commandExecutedResult": "Команда \"{command}\" выполнена. Результат:\n{result}",
   "@commandExecutedResult": {
     "placeholders": {
-      "command": { "type": "String" },
-      "result": { "type": "String" }
+      "command": {
+        "type": "String"
+      },
+      "result": {
+        "type": "String"
+      }
     }
   },
   "commandSentToTerminal": "Команда \"{command}\" отправлена в терминал.",
   "@commandSentToTerminal": {
     "placeholders": {
-      "command": { "type": "String" }
+      "command": {
+        "type": "String"
+      }
     }
   },
   "unknownActionType": "Неизвестный тип действия: {type}",
   "@unknownActionType": {
     "placeholders": {
-      "type": { "type": "String" }
+      "type": {
+        "type": "String"
+      }
     }
   },
   "failedToApplyAction": "Не удалось применить действие: {error}",
   "@failedToApplyAction": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "noErrorsFound": "Ошибок не обнаружено",
@@ -326,8 +368,12 @@
   "lineCol": "Стр {line}, Кол {col}",
   "@lineCol": {
     "placeholders": {
-      "line": { "type": "int" },
-      "col": { "type": "int" }
+      "line": {
+        "type": "int"
+      },
+      "col": {
+        "type": "int"
+      }
     }
   },
   "noOpenFiles": "Нет открытых файлов в редакторе",
@@ -335,14 +381,18 @@
   "parsingError": "Ошибка парсинга: {error}",
   "@parsingError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "outlineEmptyOrUnsupported": "Структура кода пуста или не поддерживается",
   "outlineHeader": "Структура: {filename}",
   "@outlineHeader": {
     "placeholders": {
-      "filename": { "type": "String" }
+      "filename": {
+        "type": "String"
+      }
     }
   },
   "projectFolderNotFound": "Папка проекта не найдена",
@@ -350,22 +400,30 @@
   "scanningError": "Ошибка сканирования: {error}",
   "@scanningError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "deleteFileConfirmTitle": "Удаление файла",
   "deleteFileConfirmMessage": "Вы уверены, что хотите безвозвратно удалить файл:\n\n{name}\nРазмер: {size}?",
   "@deleteFileConfirmMessage": {
     "placeholders": {
-      "name": { "type": "String" },
-      "size": { "type": "String" }
+      "name": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
     }
   },
   "fileDeletedSuccess": "Файл успешно удален",
   "deleteFileError": "Ошибка удаления: {error}",
   "@deleteFileError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "diskSpaceAnalysis": "Анализ дискового пространства...",
@@ -383,14 +441,20 @@
   "searchMatchesFound": "Найдено {matches} совпадений в {files} файлах",
   "@searchMatchesFound": {
     "placeholders": {
-      "matches": { "type": "int" },
-      "files": { "type": "int" }
+      "matches": {
+        "type": "int"
+      },
+      "files": {
+        "type": "int"
+      }
     }
   },
   "searchError": "Ошибка поиска: {error}",
   "@searchError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchingInProgress": "Идет поиск...",
@@ -430,19 +494,25 @@
   "signProjectScanError": "Ошибка сканирования проекта: {error}",
   "@signProjectScanError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "signKeystoreSelected": "Выбран файл через FilePicker: {path}",
   "@signKeystoreSelected": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "signFilePickError": "Ошибка выбора файла: {error}",
   "@signFilePickError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "signNoOpenProject": "Нет открытого проекта",
@@ -452,14 +522,20 @@
   "signApkProgress": "Подпись APK: {apk}...",
   "@signApkProgress": {
     "placeholders": {
-      "apk": { "type": "String" }
+      "apk": {
+        "type": "String"
+      }
     }
   },
   "signKeyFile": "Файл ключа: {key} (alias: {alias})",
   "@signKeyFile": {
     "placeholders": {
-      "key": { "type": "String" },
-      "alias": { "type": "String" }
+      "key": {
+        "type": "String"
+      },
+      "alias": {
+        "type": "String"
+      }
     }
   },
   "signRunningApksigner": "Запуск apksigner...",
@@ -469,51 +545,67 @@
   "signError": "Ошибка при подписи APK: {error}",
   "@signError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "genKeystoreFillFields": "Заполните ключевые поля генерации",
   "genKeystoreProgress": "Генерация Keystore: {name}...",
   "@genKeystoreProgress": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "genKeystoreSuccess": "Keystore успешно создан по пути: {name}",
   "@genKeystoreSuccess": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "genKeystoreFailed": "Не удалось создать файл Keystore.",
   "genKeystoreError": "Ошибка при генерации Keystore: {error}",
   "@genKeystoreError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "installApkProgress": "Запуск установки APK: {apk}",
   "@installApkProgress": {
     "placeholders": {
-      "apk": { "type": "String" }
+      "apk": {
+        "type": "String"
+      }
     }
   },
   "installApkResult": "Результат установки: {msg}",
   "@installApkResult": {
     "placeholders": {
-      "msg": { "type": "String" }
+      "msg": {
+        "type": "String"
+      }
     }
   },
   "installApkNotFound": "Файл APK не найден: {path}",
   "@installApkNotFound": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "installApkError": "Ошибка установки: {error}",
   "@installApkError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "glassmorphismEffects": "Эффекты стекла (Glassmorphism)",
@@ -535,7 +627,6 @@
   "connectedTo": "Подключен к:",
   "userName": "Ваше имя",
   "usersList": "Участники",
-  "chat": "Чат",
   "messagePlaceholder": "Введите сообщение...",
   "connectError": "Ошибка подключения",
   "invalidAddress": "Неверный адрес",
@@ -543,7 +634,7 @@
   "localIps": "Локальные IP:",
   "wasmPlugins": "Плагины WASM",
   "installPlugin": "Установить плагин (.wasm)",
-  "noPluginsInstalled": "Нет установленных плагинов WASM",
+  "noPluginsInstalled": "Нет установленных плагинов",
   "pluginEnabled": "Плагин включен",
   "pluginDisabled": "Плагин выключен",
   "runWasmAction": "Запустить WASM плагин",
@@ -775,7 +866,9 @@
   "saveError": "Ошибка при сохранении: {error}",
   "@saveError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "acceptMerge": "Принять слияние",
@@ -788,7 +881,9 @@
   "incomingChanges": "Входящие изменения ({branch})",
   "@incomingChanges": {
     "placeholders": {
-      "branch": { "type": "String" }
+      "branch": {
+        "type": "String"
+      }
     }
   },
   "useThisVersion": "Использовать эту версию",
@@ -804,7 +899,9 @@
   "editingFile": "Редактирует: {file}",
   "@editingFile": {
     "placeholders": {
-      "file": { "type": "String" }
+      "file": {
+        "type": "String"
+      }
     }
   },
   "viewingProject": "Просматривает проект",
@@ -815,8 +912,12 @@
   "lineColumn": "Строка {line}, колонка {col}",
   "@lineColumn": {
     "placeholders": {
-      "line": { "type": "int" },
-      "col": { "type": "int" }
+      "line": {
+        "type": "int"
+      },
+      "col": {
+        "type": "int"
+      }
     }
   },
   "decreaseFontSize": "Уменьшить шрифт",
@@ -832,8 +933,12 @@
   "packagesInstalledCount": "Установлено: {count}/{total}",
   "@packagesInstalledCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "total": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "flutterProject": "Flutter Проект",
@@ -852,16 +957,12 @@
   "console": "Консоль",
   "signApk": "Подпись APK",
   "buildPC": "Сборка (ПК)",
-  "buildLogs": "Логи сборки",
   "resetPlugins": "Сбросить плагины",
   "resetPluginsConfirmation": "Это удалит все пользовательские плагины и восстановит настройки по умолчанию. Продолжить?",
   "resetPluginsTitle": "Сбросить плагины?",
   "installWasm": "Установить .wasm",
-  "noPluginsInstalled": "Нет установленных плагинов",
   "availableActions": "Доступные действия:",
   "logsTerminal": "Терминал логов",
-  "clearLogs": "Очистить логи",
-  "deletePlugin": "Удалить плагин",
   "noLogsCaptured": "Лонгборд логов пуст",
   "installWasmPluginTitle": "Установка WASM Плагина",
   "selectWasmFile": "Выбрать .wasm файл",
@@ -876,14 +977,18 @@
   "failedToInstall": "Ошибка установки: {error}",
   "@failedToInstall": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "mcpServersTitle": "Модули ИИ: MCP Серверы",
   "activeServers": "Активные серверы ({count})",
   "@activeServers": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "repository": "Репозиторий",
@@ -892,35 +997,44 @@
   "addManually": "Добавить вручную",
   "addServerManually": "Добавить сервер вручную",
   "installed": "УСТАНОВЛЕН",
-  "install": "Установить",
   "packageDetail": "Пакет: {detail}",
   "@packageDetail": {
     "placeholders": {
-      "detail": { "type": "String" }
+      "detail": {
+        "type": "String"
+      }
     }
   },
   "authParam": "Параметр авторизации: {key}",
   "@authParam": {
     "placeholders": {
-      "key": { "type": "String" }
+      "key": {
+        "type": "String"
+      }
     }
   },
   "enterValueFor": "Введите значение для {key}",
   "@enterValueFor": {
     "placeholders": {
-      "key": { "type": "String" }
+      "key": {
+        "type": "String"
+      }
     }
   },
   "enterLabel": "Введите {label}",
   "@enterLabel": {
     "placeholders": {
-      "label": { "type": "String" }
+      "label": {
+        "type": "String"
+      }
     }
   },
   "installPreset": "Установка: {name}",
   "@installPreset": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "serverName": "Имя сервера",
@@ -938,15 +1052,18 @@
   "resultsCount": "Найдено: {count}",
   "@resultsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "noResults": "Ничего не найдено",
-  "confirmDeleteTitle": "Подтвердите удаление",
   "confirmDeleteMultiple": "Вы действительно хотите удалить {count} объектов?",
   "@confirmDeleteMultiple": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "archiveExtracted": "Архив успешно распакован!",
@@ -955,13 +1072,17 @@
   "folderLabel": "Папка: {name}",
   "@folderLabel": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "fileLabel": "Файл: {name}",
   "@fileLabel": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "whatShouldAiDoFolder": "Что сделать с этой папкой?",
@@ -976,9 +1097,7 @@
   "generateTestsDesc": "Написать unit-тесты для кода",
   "optimizeCode": "ИИ: Оптимизировать",
   "optimizeCodeDesc": "Предложить улучшения производительности",
-  "newFile": "Новый файл",
   "newFileDesc": "Создать файл в этой папке",
-  "newFolder": "Новая папка",
   "newFolderDesc": "Создать подпапку",
   "removeFromBookmarks": "Удалить из закладок",
   "removeFromBookmarksDesc": "Убрать файл из быстрого доступа",
@@ -1002,7 +1121,9 @@
   "moveError": "Ошибка перемещения: {error}",
   "@moveError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "image": "ИЗОБРАЖЕНИЕ",
@@ -1011,7 +1132,9 @@
   "failedToReadFile": "Ошибка чтения файла: {error}",
   "@failedToReadFile": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "aiSettings": "Настройки ИИ",
@@ -1022,17 +1145,16 @@
   "defaultHint": "По умолчанию: {url}",
   "@defaultHint": {
     "placeholders": {
-      "url": { "type": "String" }
+      "url": {
+        "type": "String"
+      }
     }
   },
   "chatWithAi": "ЧАТ С ИИ",
   "chatHistory": "История чатов",
   "newChat": "Новый чат",
-  "chat": "Чат",
-  "agents": "Агенты",
   "internetAccess": "Доступ в интернет",
   "mcpServers": "MCP Серверы",
-  "stop": "Стоп",
   "manualMode": "Ручной",
   "safeAutopilot": "Авто:Безопасный",
   "fullAutonomy": "Авто:Полный",
@@ -1040,18 +1162,17 @@
   "installGeminiCliInSettings": "Установите gemini-cli в настройках",
   "stopAgent": "ОСТАНОВИТЬ АГЕНТА",
   "withChanges": "с изменениями",
-  "rejectAll": "Отклонить все",
-  "acceptAll": "Принять все",
   "attachOpenFile": "Прикрепить открытый файл",
   "noHistoryFound": "История пуста",
   "untitled": "Без названия",
   "messagesCount": "{count} сообщений",
   "@messagesCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
-  "close": "Закрыть",
   "systemEnv": "Системное окружение",
   "fixEnvironmentArm64": "Исправить окружение (ARM64)",
   "environment": "Окружение",
@@ -1062,12 +1183,13 @@
   "selectPluginAction": "Выберите действие плагина",
   "noSelection": "Текст не выбран",
   "applyPluginToFile": "Применить действие плагина ко всему файлу?",
-  "apply": "Применить",
   "pluginExecutedSuccess": "Плагин выполнен успешно",
   "executionError": "Ошибка выполнения: {error}",
   "@executionError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "quickSearch": "Быстрый поиск (Ctrl+P)",
@@ -1082,7 +1204,9 @@
   "ranAction": "Выполнено: {content}",
   "@ranAction": {
     "placeholders": {
-      "content": { "type": "String" }
+      "content": {
+        "type": "String"
+      }
     }
   },
   "created": "Создан",
@@ -1092,35 +1216,51 @@
   "stepNumber": "Шаг {step}/{total}",
   "@stepNumber": {
     "placeholders": {
-      "step": { "type": "int" },
-      "total": { "type": "int" }
+      "step": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "filesChangedCount": "Изменено файлов: {count} (+{additions} -{deletions})",
   "@filesChangedCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "additions": { "type": "int" },
-      "deletions": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "additions": {
+        "type": "int"
+      },
+      "deletions": {
+        "type": "int"
+      }
     }
   },
   "commandsExecutedCount": "Команд выполнено: {count}",
   "@commandsExecutedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "changesAccepted": "Изменения успешно сохранены",
   "undoneChanges": "Отменено изменений: {count}",
   "@undoneChanges": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "discardedFileChanges": "Отменено изменение файла {file}",
   "@discardedFileChanges": {
     "placeholders": {
-      "file": { "type": "String" }
+      "file": {
+        "type": "String"
+      }
     }
   },
   "thinking": "Вычисление...",
@@ -1129,7 +1269,6 @@
   "validator": "ВАЛИДАТОР",
   "aiAgentRole": "ИИ-АГЕНТ",
   "resubmit": "Отправить",
-  "system": "Система",
   "rollbackHistoryToStep": "Откатить историю и код к этому шагу",
   "confirmRollback": "Подтверждение отката",
   "rollbackConfirmationText": "Все изменения кода, сделанные после этого сообщения, будут отменены, а последующие сообщения удалены. Продолжить?",
@@ -1161,7 +1300,9 @@
   "selectedObjectsCount": "Выбрано объектов: {count}",
   "@selectedObjectsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "explainFolderPreset": "Объясни назначение и структуру этой папки.",
@@ -1179,7 +1320,9 @@
   "filesCount": "{count} {count, plural, one{{count} файл} few{{count} файла} other{{count} файлов}}",
   "@filesCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "localAiEngineTitle": "ДВИЖОК ЛОКАЛЬНОГО ИИ",
@@ -1205,19 +1348,21 @@
   "runningPort8080": "Запущен (порт 8080)",
   "starting": "Запуск...",
   "stopped": "Остановлен",
-  "refresh": "Обновить",
   "start": "Старт",
-  "activeCaps": "АКТИВНА",
   "gbFormat": "{size} ГБ",
   "@gbFormat": {
     "placeholders": {
-      "size": { "type": "String" }
+      "size": {
+        "type": "String"
+      }
     }
   },
   "ramGbFormat": "~{size} ГБ ОЗУ",
   "@ramGbFormat": {
     "placeholders": {
-      "size": { "type": "String" }
+      "size": {
+        "type": "String"
+      }
     }
   },
   "select": "Выбрать",
@@ -1226,7 +1371,9 @@
   "inFolder": "в {folder}",
   "@inFolder": {
     "placeholders": {
-      "folder": { "type": "String" }
+      "folder": {
+        "type": "String"
+      }
     }
   },
   "llamaServerBuiltIn": "llama-server (встроенный)",
@@ -1256,14 +1403,18 @@
   "androidJarCorruptError": "android.jar повреждён ({api}). Нажмите «Исправить окружение» для переустановки.",
   "@androidJarCorruptError": {
     "placeholders": {
-      "api": { "type": "String" }
+      "api": {
+        "type": "String"
+      }
     }
   },
   "androidSdkPlatformsHealthy": "android-35 / android-36 — исправны",
   "checkFailed": "Проверка не удалась: {error}",
   "@checkFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "analyzingTaskAndPlanning": "Анализ задачи и планирование...",
@@ -1328,43 +1479,116 @@
   "collabSessionCreated": "Сессия создана на порту {port}.",
   "@collabSessionCreated": {
     "placeholders": {
-      "port": { "type": "int" }
+      "port": {
+        "type": "int"
+      }
     }
   },
   "collabSessionCreateError": "Ошибка при создании сессии: {error}",
   "@collabSessionCreateError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabUserDisconnected": "Пользователь {name} отключился.",
   "@collabUserDisconnected": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabConnectError": "Ошибка при подключении к {url}: {error}",
   "@collabConnectError": {
     "placeholders": {
-      "url": { "type": "String" },
-      "error": { "type": "String" }
+      "url": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabConnectionLost": "Подключение к сессии потеряно.",
   "collabUserJoined": "Пользователь {name} присоединился.",
   "@collabUserJoined": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabJoinedAsGuest": "Вы подключились к сессии в качестве гостя.",
   "collabUserLeft": "Пользователь {name} покинул сессию.",
   "@collabUserLeft": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webPreviewNotSupported": "Веб-просмотр не поддерживается на этой платформе",
+  "webPreviewNotSupportedDesc": "Встроенный WebView не поддерживается на этой платформе. Используйте кнопку в правом верхнем углу, чтобы открыть во внешнем браузере.",
+  "debugger": "Отладчик",
+  "startDebugging": "Начать отладку",
+  "stopDebugging": "Остановить отладку",
+  "continue_": "Продолжить",
+  "stepOver": "Шаг с обходом",
+  "stepIn": "Шаг внутрь",
+  "stepOut": "Шаг наружу",
+  "pause": "Пауза",
+  "restart": "Перезапуск",
+  "callStack": "Стек вызовов",
+  "variables": "Переменные",
+  "breakpoints": "Точки останова",
+  "output": "Вывод",
+  "launchConfiguration": "Конфигурация запуска",
+  "programToDebug": "Программа для отладки",
+  "noStackFrames": "Нет стека вызовов",
+  "noVariables": "Нет переменных",
+  "noOutput": "Нет вывода",
+  "localModels": "Локальные модели",
+  "all": "Все",
+  "downloaded": "Скачанные",
+  "vision": "Видение",
+  "uncensored": "Без цензуры",
+  "noModelsFound": "Модели не найдены",
+  "unload": "Выгрузить",
+  "load": "Загрузить",
+  "attachImage": "Прикрепить изображение",
+  "modeChat": "Чат",
+  "modeRefactor": "Рефактор",
+  "modeAutopilot": "Автопилот",
+  "quickPromptRefactor": "Рефакторинг",
+  "quickPromptRefactorText": "Сделай рефакторинг этого кода",
+  "quickPromptExplain": "Объясни код",
+  "quickPromptExplainText": "Объясни, как работает этот код",
+  "quickPromptFixErrors": "Найти ошибки",
+  "quickPromptFixErrorsText": "Найди ошибки и исправь их",
+  "quickPromptOptimize": "Оптимизация",
+  "quickPromptOptimizeText": "Оптимизируй производительность",
+  "quickPromptWriteTests": "Тесты",
+  "quickPromptWriteTestsText": "Напиши unit-тесты для этого кода",
+  "actionReadingFile": "Читаю файл",
+  "actionViewingFolder": "Смотрю папку",
+  "actionSearchingCode": "Ищу в коде",
+  "actionFindingSymbol": "Ищу символ",
+  "actionCreatingFile": "Создаю файл",
+  "actionEditingFile": "Редактирую файл",
+  "actionDeletingFile": "Удаляю файл",
+  "actionRunningCommand": "Выполняю команду",
+  "actionWebSearch": "Ищу в интернете",
+  "actionFetchingPage": "Загружаю страницу",
+  "actionMcpTool": "MCP инструмент",
+  "actionExecuting": "Выполняю действие",
+  "sessionRestored": "Сессия восстановлена",
+  "sessionRestoredDetail": "Загружено {count} сообщений из `.quantum/chat_history.json`.\nПамять агента: {files} файлов в контексте.\nПродолжайте с того места, где остановились.",
+  "@sessionRestoredDetail": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "files": { "type": "int" }
     }
   }
 }
-
-
-

@@ -91,7 +91,7 @@
   "patchAndroidBuildDescription": "修复 android-36 / AGP 8.7.3 / compileSdk 35",
   "buildApkDescription": "flutter build apk --debug",
   "apkBuildFixed": "已修复项目 \"{name}\" 的 Android 构建文件",
-  "confirmDeleteTitle": "删除 \"{name}\" 吗？",
+  "confirmDeleteTitle": "确认删除",
   "confirmDeleteMessage": "仅从列表中删除，还是同时删除文件？",
   "deleteFromListOnly": "仅从列表",
   "deleteFromDisk": "从磁盘中删除",
@@ -469,15 +469,12 @@
   "console": "控制台",
   "signApk": "签名 APK",
   "buildPC": "构建 (PC)",
-  "buildLogs": "构建日志",
   "resetPlugins": "重置插件",
   "resetPluginsConfirmation": "这将删除所有已安装的自定义插件并恢复默认插件。继续？",
   "resetPluginsTitle": "重置插件？",
   "installWasm": "安装 .wasm",
   "availableActions": "可用操作：",
   "logsTerminal": "日志终端",
-  "clearLogs": "清除日志",
-  "deletePlugin": "删除插件",
   "noLogsCaptured": "尚未捕获到日志",
   "installWasmPluginTitle": "安装 WASM 插件",
   "selectWasmFile": "选择 .wasm 文件",
@@ -498,7 +495,6 @@
   "addManually": "手动添加",
   "addServerManually": "手动添加服务器",
   "installed": "已安装",
-  "install": "安装",
   "packageDetail": "包: {detail}",
   "authParam": "认证参数: {key}",
   "enterValueFor": "输入 {key} 的值",
@@ -518,7 +514,6 @@
   "modeSymbols": "模式：符号",
   "resultsCount": "结果: {count}",
   "noResults": "未找到结果",
-  "confirmDeleteTitle": "确认删除",
   "confirmDeleteMultiple": "您确定要删除这 {count} 个项目吗？",
   "archiveExtracted": "归档成功解压！",
   "archiveCreated": "归档成功创建！",
@@ -537,9 +532,7 @@
   "generateTestsDesc": "编写代码的单元测试",
   "optimizeCode": "AI：优化",
   "optimizeCodeDesc": "建议性能改进",
-  "newFile": "新建文件",
   "newFileDesc": "在此文件夹中创建文件",
-  "newFolder": "新建文件夹",
   "newFolderDesc": "创建子文件夹",
   "removeFromBookmarks": "从书签中移除",
   "removeFromBookmarksDesc": "从快速访问中移除文件",
@@ -574,11 +567,8 @@
   "chatWithAi": "与 AI 聊天",
   "chatHistory": "聊天历史记录",
   "newChat": "新聊天",
-  "chat": "聊天",
-  "agents": "代理",
   "internetAccess": "互联网访问",
   "mcpServers": "MCP 服务器",
-  "stop": "停止",
   "manualMode": "手动模式",
   "safeAutopilot": "安全自动驾驶",
   "fullAutonomy": "完全自主",
@@ -586,13 +576,10 @@
   "installGeminiCliInSettings": "在设置中安装 gemini-cli",
   "stopAgent": "停止代理",
   "withChanges": "附带更改",
-  "rejectAll": "全部拒绝",
-  "acceptAll": "全部接受",
   "attachOpenFile": "附加当前打开的文件",
   "noHistoryFound": "未找到历史记录",
   "untitled": "无标题",
   "messagesCount": "{count} 条消息",
-  "close": "关闭",
   "systemEnv": "系统环境",
   "fixEnvironmentArm64": "修复环境 (ARM64)",
   "environment": "环境",
@@ -603,7 +590,6 @@
   "selectPluginAction": "选择插件操作",
   "noSelection": "无选择",
   "applyPluginToFile": "将插件操作应用到整个文件吗？",
-  "apply": "应用",
   "pluginExecutedSuccess": "插件执行成功",
   "executionError": "执行错误: {error}",
   "quickSearch": "快速搜索 (Ctrl+P)",
@@ -632,7 +618,6 @@
   "validator": "验证器",
   "aiAgentRole": "AI 代理",
   "resubmit": "重新提交",
-  "system": "系统",
   "rollbackHistoryToStep": "回滚历史和代码到该步骤",
   "confirmRollback": "确认回滚",
   "rollbackConfirmationText": "该消息之后做出的所有代码更改都将回滚，后续消息将被删除。确定要继续吗？",
@@ -698,9 +683,7 @@
   "runningPort8080": "运行中 (端口 8080)",
   "starting": "启动中...",
   "stopped": "已停止",
-  "refresh": "刷新",
   "start": "启动",
-  "activeCaps": "激活",
   "gbFormat": "{size} GB",
   "ramGbFormat": "~{size} GB 内存",
   "select": "选择",
@@ -796,40 +779,116 @@
   "collabSessionCreated": "会话已在端口 {port} 创建。",
   "@collabSessionCreated": {
     "placeholders": {
-      "port": { "type": "int" }
+      "port": {
+        "type": "int"
+      }
     }
   },
   "collabSessionCreateError": "创建会话时出错：{error}",
   "@collabSessionCreateError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabUserDisconnected": "用户 {name} 已断开连接。",
   "@collabUserDisconnected": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabConnectError": "连接到 {url} 时出错：{error}",
   "@collabConnectError": {
     "placeholders": {
-      "url": { "type": "String" },
-      "error": { "type": "String" }
+      "url": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabConnectionLost": "与会话的连接已丢失。",
   "collabUserJoined": "用户 {name} 已加入。",
   "@collabUserJoined": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabJoinedAsGuest": "您已作为访客加入会话。",
   "collabUserLeft": "用户 {name} 已离开会话。",
   "@collabUserLeft": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webPreviewNotSupported": "此平台不支持网页预览",
+  "webPreviewNotSupportedDesc": "此平台不支持嵌入式 WebView。请使用右上角的按钮在外部浏览器中打开。",
+  "all": "全部",
+  "attachImage": "附加图片",
+  "breakpoints": "断点",
+  "callStack": "调用堆栈",
+  "continue_": "继续",
+  "debugger": "调试器",
+  "downloaded": "已下载",
+  "launchConfiguration": "启动配置",
+  "load": "加载",
+  "localModels": "本地模型",
+  "noModelsFound": "未找到模型",
+  "noOutput": "无输出",
+  "noStackFrames": "无堆栈帧",
+  "noVariables": "无变量",
+  "output": "输出",
+  "pause": "暂停",
+  "programToDebug": "要调试的程序",
+  "restart": "重启",
+  "startDebugging": "开始调试",
+  "stepIn": "步入",
+  "stepOut": "步出",
+  "stepOver": "步过",
+  "stopDebugging": "停止调试",
+  "uncensored": "无审查",
+  "unload": "卸载",
+  "variables": "变量",
+  "vision": "视觉",
+  "modeChat": "Chat",
+  "modeRefactor": "Refactor",
+  "modeAutopilot": "Autopilot",
+  "quickPromptRefactor": "Refactor",
+  "quickPromptRefactorText": "Refactor this code",
+  "quickPromptExplain": "Explain",
+  "quickPromptExplainText": "Explain how this code works",
+  "quickPromptFixErrors": "Fix Errors",
+  "quickPromptFixErrorsText": "Find and fix errors in this code",
+  "quickPromptOptimize": "Optimize",
+  "quickPromptOptimizeText": "Optimize performance of this code",
+  "quickPromptWriteTests": "Write Tests",
+  "quickPromptWriteTestsText": "Write unit tests for this code",
+  "actionReadingFile": "正在读取文件",
+  "actionViewingFolder": "正在浏览文件夹",
+  "actionSearchingCode": "正在搜索代码",
+  "actionFindingSymbol": "正在查找符号",
+  "actionCreatingFile": "正在创建文件",
+  "actionEditingFile": "正在编辑文件",
+  "actionDeletingFile": "正在删除文件",
+  "actionRunningCommand": "正在执行命令",
+  "actionWebSearch": "正在搜索网页",
+  "actionFetchingPage": "正在加载页面",
+  "actionMcpTool": "MCP 工具",
+  "actionExecuting": "正在执行操作",
+  "sessionRestored": "会话已恢复",
+  "sessionRestoredDetail": "已从 `.quantum/chat_history.json` 加载 {count} 条消息。\n代理记忆：上下文中有 {files} 个文件。\n继续之前的工作。",
+  "@sessionRestoredDetail": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "files": { "type": "int" }
     }
   }
 }

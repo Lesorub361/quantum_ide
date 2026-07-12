@@ -2644,4 +2644,175 @@ class AppLocalizationsZh extends AppLocalizations {
   String collabUserLeft(String name) {
     return '用户 $name 已离开会话。';
   }
+
+  @override
+  String get webPreviewNotSupported => '此平台不支持网页预览';
+
+  @override
+  String get webPreviewNotSupportedDesc =>
+      '此平台不支持嵌入式 WebView。请使用右上角的按钮在外部浏览器中打开。';
+
+  @override
+  String get debugger => '调试器';
+
+  @override
+  String get startDebugging => '开始调试';
+
+  @override
+  String get stopDebugging => '停止调试';
+
+  @override
+  String get continue_ => '继续';
+
+  @override
+  String get stepOver => '步过';
+
+  @override
+  String get stepIn => '步入';
+
+  @override
+  String get stepOut => '步出';
+
+  @override
+  String get pause => '暂停';
+
+  @override
+  String get restart => '重启';
+
+  @override
+  String get callStack => '调用堆栈';
+
+  @override
+  String get variables => '变量';
+
+  @override
+  String get breakpoints => '断点';
+
+  @override
+  String get output => '输出';
+
+  @override
+  String get launchConfiguration => '启动配置';
+
+  @override
+  String get programToDebug => '要调试的程序';
+
+  @override
+  String get noStackFrames => '无堆栈帧';
+
+  @override
+  String get noVariables => '无变量';
+
+  @override
+  String get noOutput => '无输出';
+
+  @override
+  String get localModels => '本地模型';
+
+  @override
+  String get all => '全部';
+
+  @override
+  String get downloaded => '已下载';
+
+  @override
+  String get vision => '视觉';
+
+  @override
+  String get uncensored => '无审查';
+
+  @override
+  String get noModelsFound => '未找到模型';
+
+  @override
+  String get unload => '卸载';
+
+  @override
+  String get load => '加载';
+
+  @override
+  String get attachImage => '附加图片';
+
+  @override
+  String get modeChat => 'Chat';
+
+  @override
+  String get modeRefactor => 'Refactor';
+
+  @override
+  String get modeAutopilot => 'Autopilot';
+
+  @override
+  String get quickPromptRefactor => 'Refactor';
+
+  @override
+  String get quickPromptRefactorText => 'Refactor this code';
+
+  @override
+  String get quickPromptExplain => 'Explain';
+
+  @override
+  String get quickPromptExplainText => 'Explain how this code works';
+
+  @override
+  String get quickPromptFixErrors => 'Fix Errors';
+
+  @override
+  String get quickPromptFixErrorsText => 'Find and fix errors in this code';
+
+  @override
+  String get quickPromptOptimize => 'Optimize';
+
+  @override
+  String get quickPromptOptimizeText => 'Optimize performance of this code';
+
+  @override
+  String get quickPromptWriteTests => 'Write Tests';
+
+  @override
+  String get quickPromptWriteTestsText => 'Write unit tests for this code';
+
+  @override
+  String get actionReadingFile => '正在读取文件';
+
+  @override
+  String get actionViewingFolder => '正在浏览文件夹';
+
+  @override
+  String get actionSearchingCode => '正在搜索代码';
+
+  @override
+  String get actionFindingSymbol => '正在查找符号';
+
+  @override
+  String get actionCreatingFile => '正在创建文件';
+
+  @override
+  String get actionEditingFile => '正在编辑文件';
+
+  @override
+  String get actionDeletingFile => '正在删除文件';
+
+  @override
+  String get actionRunningCommand => '正在执行命令';
+
+  @override
+  String get actionWebSearch => '正在搜索网页';
+
+  @override
+  String get actionFetchingPage => '正在加载页面';
+
+  @override
+  String get actionMcpTool => 'MCP 工具';
+
+  @override
+  String get actionExecuting => '正在执行操作';
+
+  @override
+  String get sessionRestored => '会话已恢复';
+
+  @override
+  String sessionRestoredDetail(int count, int files) {
+    return '已从 `.quantum/chat_history.json` 加载 $count 条消息。\n代理记忆：上下文中有 $files 个文件。\n继续之前的工作。';
+  }
 }

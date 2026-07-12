@@ -53,7 +53,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String areYouSureDelete(String name) {
-    return 'Are you sure you want to delete $name?';
+    return '¿Está seguro de que desea eliminar $name?';
   }
 
   @override
@@ -75,40 +75,40 @@ class AppLocalizationsEs extends AppLocalizations {
   String get buildLogs => 'Registros de compilación';
 
   @override
-  String get appLogs => 'App Logs';
+  String get appLogs => 'Registros de la aplicación';
 
   @override
-  String get copy => 'Copy';
+  String get copy => 'Copiar';
 
   @override
   String get stop => 'Stop';
 
   @override
-  String get hotReload => 'Hot Reload';
+  String get hotReload => 'Recarga rápida';
 
   @override
-  String get clear => 'Clear';
+  String get clear => 'Limpiar';
 
   @override
-  String get runProject => 'Run Project';
+  String get runProject => 'Ejecutar proyecto';
 
   @override
   String get pubGet => 'Pub Get';
 
   @override
-  String get setupSdk => 'Setup SDK';
+  String get setupSdk => 'Configurar SDK';
 
   @override
-  String get clean => 'Clean';
+  String get clean => 'Limpiar';
 
   @override
-  String get buildApk => 'Build APK';
+  String get buildApk => 'Compilar APK';
 
   @override
-  String get welcomeMessage => 'Welcome to your premium environment.';
+  String get welcomeMessage => 'Bienvenido a su entorno premium.';
 
   @override
-  String get typeRunToStart => 'Type run to start your project.';
+  String get typeRunToStart => 'Escriba run para iniciar su proyecto.';
 
   @override
   String get settings => 'Ajustes';
@@ -132,16 +132,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get colorPalette => 'Paleta de colores';
 
   @override
-  String get customColor => 'Custom Color';
+  String get customColor => 'Color personalizado';
 
   @override
   String get accentColor => 'Color de acento';
 
   @override
-  String get projectIcon => 'Project Icon';
+  String get projectIcon => 'Icono del proyecto';
 
   @override
-  String get defaultAccent => 'Default';
+  String get defaultAccent => 'Predeterminado';
 
   @override
   String get codeEditor => 'Editor de código';
@@ -153,37 +153,37 @@ class AppLocalizationsEs extends AppLocalizations {
   String get autoCompletion => 'Autocompletado';
 
   @override
-  String get showCodeHints => 'Show code hints';
+  String get showCodeHints => 'Mostrar sugerencias de código';
 
   @override
-  String get aiAutoCompletion => 'AI Auto-completion';
+  String get aiAutoCompletion => 'Autocompletado con IA';
 
   @override
-  String get geminiCodeGeneration => 'Gemini code generation';
+  String get geminiCodeGeneration => 'Generación de código con Gemini';
 
   @override
   String get wordWrap => 'Ajuste de línea';
 
   @override
-  String get wordWrapDescription => 'Soft wrap lines in editor';
+  String get wordWrapDescription => 'Ajuste suave de líneas en el editor';
 
   @override
   String get lineNumbers => 'Números de línea';
 
   @override
-  String get showLineNumbers => 'Show line numbers';
+  String get showLineNumbers => 'Mostrar números de línea';
 
   @override
   String get minimap => 'Minimapa';
 
   @override
-  String get showMinimap => 'Show editor minimap';
+  String get showMinimap => 'Mostrar minimapa del editor';
 
   @override
   String get autoSave => 'Guardado automático';
 
   @override
-  String get autoSaveDescription => 'Save changes after 2s';
+  String get autoSaveDescription => 'Guardar cambios después de 2s';
 
   @override
   String get terminalFontSize => 'Tamaño de fuente de terminal';
@@ -198,34 +198,34 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aiProviders => 'Proveedores de IA';
 
   @override
-  String get aiProvidersSubtitle => 'Gemini, OpenAI, Ollama etc.';
+  String get aiProvidersSubtitle => 'Gemini, OpenAI, Ollama, etc.';
 
   @override
   String get ubuntuPackages => 'Paquetes Ubuntu';
 
   @override
-  String get manageCliTools => 'Manage CLI tools';
+  String get manageCliTools => 'Administrar herramientas CLI';
 
   @override
-  String get hosts => 'Hosts';
+  String get hosts => 'Servidores';
 
   @override
-  String get localRemoteHosts => 'Local/remote hosts';
+  String get localRemoteHosts => 'Servidores locales/remotos';
 
   @override
   String get system => 'System';
 
   @override
-  String get showHiddenFiles => 'Show Hidden Files';
+  String get showHiddenFiles => 'Mostrar archivos ocultos';
 
   @override
-  String get showHiddenFilesDescription => 'Show .* files';
+  String get showHiddenFilesDescription => 'Mostrar archivos .*';
 
   @override
-  String get vibration => 'Vibration';
+  String get vibration => 'Vibración';
 
   @override
-  String get hapticFeedback => 'Haptic feedback';
+  String get hapticFeedback => 'Retroalimentación háptica';
 
   @override
   String get aboutApp => 'Acerca de la aplicación';
@@ -234,7 +234,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aboutAppSubtitle => 'Quantum IDE v1.0.0';
 
   @override
-  String get selectPalette => 'Select Palette';
+  String get selectPalette => 'Seleccionar paleta';
 
   @override
   String get close => 'Close';
@@ -244,69 +244,69 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get aboutDialogContent =>
-      'AI-powered mobile IDE built with Flutter.\n© 2026 Quantum IDE';
+      'IDE móvil impulsada por IA, creada con Flutter.\n© 2026 Quantum IDE';
 
   @override
-  String get ubuntuDarkPurple => 'Ubuntu Dark Purple';
+  String get ubuntuDarkPurple => 'Ubuntu Morado Oscuro';
 
   @override
-  String get pureDark => 'Pure Dark';
+  String get pureDark => 'Oscuro puro';
 
   @override
-  String get searchProjects => 'Search projects...';
+  String get searchProjects => 'Buscar proyectos...';
 
   @override
-  String get open => 'Open';
+  String get open => 'Abrir';
 
   @override
-  String get market => 'Market';
+  String get market => 'Mercado';
 
   @override
   String projectsHeader(int count) {
-    return 'Projects ($count)';
+    return 'Proyectos ($count)';
   }
 
   @override
   String get noProjects => 'Sin proyectos';
 
   @override
-  String get nothingFound => 'Nothing found';
+  String get nothingFound => 'Nada encontrado';
 
   @override
   String get createFirstProject => 'Crear primer proyecto';
 
   @override
-  String get projectActions => 'Project Actions';
+  String get projectActions => 'Acciones del proyecto';
 
   @override
-  String get fixAndroidBuild => 'Fix Android Build (AGP + compileSdk)';
+  String get fixAndroidBuild => 'Corregir compilación Android';
 
   @override
   String get patchAndroidBuildDescription =>
-      'Patch android-36 / AGP 8.7.3 / compileSdk 35';
+      'Parche android-36 / AGP 8.7.3 / compileSdk 35';
 
   @override
   String get buildApkDescription => 'flutter build apk --debug';
 
   @override
   String apkBuildFixed(String name) {
-    return '✅ Android build files fixed for \"$name\"';
+    return 'Archivos de compilación Android corregidos';
   }
 
   @override
   String confirmDeleteTitle(String name) {
-    return 'Confirm Delete';
+    return 'Confirmar eliminación';
   }
 
   @override
   String get confirmDeleteMessage =>
-      'Delete only from the list or delete files as well?';
+      '¿Eliminar solo de la lista o también los archivos?';
 
   @override
-  String get deleteFromListOnly => 'From list';
+  String get deleteFromListOnly => 'Solo de la lista';
 
   @override
-  String get deleteFromDisk => 'From disk';
+  String get deleteFromDisk => 'Del disco';
 
   @override
   String get projectSettings => 'Ajustes del proyecto';
@@ -321,13 +321,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projectType => 'TIPO DE PROYECTO';
 
   @override
-  String get androidCompileSdkVersion => 'ANDROID compileSdk VERSION';
+  String get androidCompileSdkVersion => 'VERSIÓN ANDROID compileSdk';
 
   @override
-  String get defaultSdkVersion => 'Default: 35';
+  String get defaultSdkVersion => 'Predeterminado: 35';
 
   @override
-  String get targetPlatforms => 'TARGET DEVICES / PLATFORMS';
+  String get targetPlatforms => 'PLATAFORMAS OBJETIVO';
 
   @override
   String get saveAction => 'Guardar';
@@ -339,36 +339,37 @@ class AppLocalizationsEs extends AppLocalizations {
   String get preview => 'Previsualización';
 
   @override
-  String get fastCommands => 'QUICK COMMANDS';
+  String get fastCommands => 'COMANDOS RÁPIDOS';
 
   @override
-  String get serverAddress => 'Server Address';
+  String get serverAddress => 'Dirección del servidor';
 
   @override
   String copied(String value) {
-    return 'Copied: $value';
+    return 'Copiado: $value';
   }
 
   @override
-  String get stopServer => 'Stop';
+  String get stopServer => 'Detener';
 
   @override
-  String get command => 'COMMAND';
+  String get command => 'COMANDO';
 
   @override
-  String get serverStarted => 'Server Started';
+  String get serverStarted => 'Servidor iniciado';
 
   @override
-  String get openAddressInBrowser => 'Open this address in Android browser';
+  String get openAddressInBrowser => 'Abrir esta dirección en el navegador';
 
   @override
-  String get copyUrl => 'Copy URL';
+  String get copyUrl => 'Copiar URL';
 
   @override
-  String get openProjectToSeeCommands => 'Open a project to see run commands';
+  String get openProjectToSeeCommands =>
+      'Abra un proyecto para ver los comandos';
 
   @override
-  String get running => 'Running...';
+  String get running => 'Ejecutando...';
 
   @override
   String get chat => 'Chat';
@@ -378,66 +379,64 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String askAiHint(String provider) {
-    return 'Ask $provider...';
+    return 'Preguntar a $provider...';
   }
 
   @override
-  String get selectModel => 'Select Model';
+  String get selectModel => 'Seleccionar modelo';
 
   @override
-  String get clearHistory => 'Clear History';
+  String get clearHistory => 'Limpiar historial';
 
   @override
-  String get askAboutCode => 'Ask about the code';
+  String get askAboutCode => 'Preguntar sobre el código';
 
   @override
-  String get you => 'You';
+  String get you => 'Tú';
 
   @override
   String workingOnFile(String file, String code, String question) {
-    return 'I\'m working on the file: $file. \nHere is its content:\n```\n$code\n```\n\nMy question: $question';
+    return 'Estoy trabajando en el archivo: $file.\nAquí está su contenido:\n```\n$code\n```\n\nMi pregunta: $question';
   }
 
   @override
-  String get aiAskDialogTitle => 'AI Agent Query';
+  String get aiAskDialogTitle => 'Consulta del agente IA';
 
   @override
   String aiAskFolder(String name) {
-    return 'Folder: $name';
+    return 'Carpeta: $name';
   }
 
   @override
   String aiAskFile(String name) {
-    return 'File: $name';
+    return 'Archivo: $name';
   }
 
   @override
-  String get aiAskFolderHint =>
-      'Describe the task (e.g. \"create a controller\", \"add a data model\"...)';
+  String get aiAskFolderHint => 'Describa la tarea';
 
   @override
-  String get aiAskFileHint =>
-      'What needs to be done? (e.g. \"add email validation\", \"optimize method\"...)';
+  String get aiAskFileHint => '¿Qué necesita hacer?';
 
   @override
-  String get decline => 'Decline';
+  String get decline => 'Rechazar';
 
   @override
   String get apply => 'Apply';
 
   @override
-  String get showChanges => 'Show changes';
+  String get showChanges => 'Mostrar cambios';
 
   @override
   String changesInFile(String name) {
-    return 'Changes in $name';
+    return 'Cambios en $name';
   }
 
   @override
-  String get noFilesFound => 'No files found';
+  String get noFilesFound => 'No se encontraron archivos';
 
   @override
-  String get retry => 'Retry';
+  String get retry => 'Reintentar';
 
   @override
   String errorOccurred(String error) {
@@ -446,77 +445,77 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get aiProvidersInfo =>
-      'Add API keys for different AI providers. Local models (Ollama/LM Studio) do not require a key.';
+      'Añada claves API para diferentes proveedores de IA.';
 
   @override
-  String get activeProvider => 'Active Provider';
+  String get activeProvider => 'Proveedor activo';
 
   @override
-  String get requiresApiKeyLabel => 'Requires API Key';
+  String get requiresApiKeyLabel => 'Requiere clave API';
 
   @override
-  String get localNoKey => 'Local — no key';
+  String get localNoKey => 'Local — sin clave';
 
   @override
   String get activeCaps => 'ACTIVO';
 
   @override
-  String get apiKeyLabel => 'API Key';
+  String get apiKeyLabel => 'Clave API';
 
   @override
-  String get keySaved => 'API key saved';
+  String get keySaved => 'Clave API guardada';
 
   @override
-  String get urlSaved => 'URL saved';
+  String get urlSaved => 'URL guardada';
 
   @override
-  String get serverUrlLabel => 'Server URL';
+  String get serverUrlLabel => 'URL del servidor';
 
   @override
   String get ollamaPhoneHint =>
-      '💡 To connect from a phone, use your computer\'s IP (e.g. http://192.168.1.10:11434)';
+      'Use la IP de su computadora para conectar desde un teléfono';
 
   @override
-  String get modelLabel => 'MODEL';
+  String get modelLabel => 'MODELO';
 
   @override
-  String get searching => 'Searching...';
+  String get searching => 'Buscando...';
 
   @override
-  String get findModels => 'Find Models';
+  String get findModels => 'Buscar modelos';
 
   @override
-  String get searchModelHint => 'Search by model name...';
+  String get searchModelHint => 'Buscar por nombre del modelo...';
 
   @override
-  String get customModelHint => 'Or enter model name manually...';
+  String get customModelHint => 'O ingrese el nombre del modelo manualmente...';
 
   @override
   String modelInstalled(String name) {
-    return 'Model set to $name';
+    return 'Modelo establecido: $name';
   }
 
   @override
-  String get modelsNotFound => 'No models found. Click \"Find Models\".';
+  String get modelsNotFound => 'No se encontraron modelos.';
 
   @override
-  String get available => 'Available';
+  String get available => 'Disponible';
 
   @override
-  String get quotaLimit => 'Quota limit / high load';
+  String get quotaLimit => 'Límite de cuota';
 
   @override
-  String get unavailable => 'Unavailable';
+  String get unavailable => 'No disponible';
 
   @override
-  String get availableCaps => 'AVAILABLE';
+  String get availableCaps => 'DISPONIBLE';
 
   @override
-  String get activateProvider => 'Activate Provider';
+  String get activateProvider => 'Activar proveedor';
 
   @override
   String providerActivated(String name) {
-    return '$name activated';
+    return '$name activado';
   }
 
   @override
@@ -529,108 +528,108 @@ class AppLocalizationsEs extends AppLocalizations {
   String get rejectAll => 'Reject all';
 
   @override
-  String get projectAnalysis => 'Project Analysis';
+  String get projectAnalysis => 'Análisis del proyecto';
 
   @override
   String problemsFound(int count, int errors, int warnings) {
-    return 'Problems found: $count ($errors errors, $warnings warnings)';
+    return 'Problemas encontrados: $count';
   }
 
   @override
-  String get fixWithAi => 'Fix with AI';
+  String get fixWithAi => 'Corregir con IA';
 
   @override
   String runningCommand(String command) {
-    return 'Running command: $command...';
+    return 'Ejecutando comando: $command...';
   }
 
   @override
   String applyingChange(String path) {
-    return 'Applying change: $path...';
+    return 'Aplicando cambio: $path...';
   }
 
   @override
   String fileSuccessfullyWritten(String path) {
-    return 'File $path successfully written.';
+    return 'Archivo escrito correctamente.';
   }
 
   @override
   String fileSuccessfullyDeleted(String path) {
-    return 'File $path successfully deleted.';
+    return 'Archivo eliminado correctamente.';
   }
 
   @override
   String commandExecutedResult(String command, String result) {
-    return 'Command \"$command\" executed. Result:\n$result';
+    return 'Comando \"$command\" ejecutado.';
   }
 
   @override
   String commandSentToTerminal(String command) {
-    return 'Command \"$command\" sent to terminal.';
+    return 'Comando enviado a la terminal.';
   }
 
   @override
   String unknownActionType(String type) {
-    return 'Unknown action type: $type';
+    return 'Tipo de acción desconocido: $type';
   }
 
   @override
   String failedToApplyAction(String error) {
-    return 'Failed to apply action: $error';
+    return 'Error al aplicar la acción: $error';
   }
 
   @override
-  String get noErrorsFound => 'No errors found';
+  String get noErrorsFound => 'No se encontraron errores';
 
   @override
   String get noErrorsDescription =>
-      'Code analyzer checked your project. No issues or warnings found.';
+      'No se encontraron problemas ni advertencias.';
 
   @override
-  String get closeProject => 'Close Project';
+  String get closeProject => 'Cerrar proyecto';
 
   @override
   String get closeProjectConfirm =>
-      'Are you sure you want to close this project?';
+      '¿Está seguro de que desea cerrar este proyecto?';
 
   @override
-  String get sortByName => 'By Name';
+  String get sortByName => 'Por nombre';
 
   @override
-  String get sortBySize => 'By Size';
+  String get sortBySize => 'Por tamaño';
 
   @override
-  String get sortByDate => 'By Date';
+  String get sortByDate => 'Por fecha';
 
   @override
-  String get goToDefinition => 'Go to Definition';
+  String get goToDefinition => 'Ir a la definición';
 
   @override
-  String get documentation => 'Documentation';
+  String get documentation => 'Documentación';
 
   @override
-  String get usages => 'Usages';
+  String get usages => 'Usos';
 
   @override
-  String get cut => 'Cut';
+  String get cut => 'Cortar';
 
   @override
-  String get paste => 'Paste';
+  String get paste => 'Pegar';
 
   @override
-  String get selectAll => 'Select All';
+  String get selectAll => 'Seleccionar todo';
 
   @override
-  String get line => 'Line';
+  String get line => 'Línea';
 
   @override
-  String get column => 'Column';
+  String get column => 'Columna';
 
   @override
   String get info => 'Info';
 
   @override
-  String get ok => 'OK';
+  String get ok => 'Aceptar';
 
   @override
   String get problems => 'Problemas';
@@ -645,7 +644,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get searchFiles => 'Buscar archivos...';
 
   @override
-  String get imageLoadError => 'Error loading image';
+  String get imageLoadError => 'Error al cargar imagen';
 
   @override
   String get unsaved => 'Sin guardar';
@@ -655,298 +654,298 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String lineCol(int line, int col) {
-    return 'Ln $line, Col $col';
+    return 'Lín $line, Col $col';
   }
 
   @override
-  String get noOpenFiles => 'No open files in editor';
+  String get noOpenFiles => 'No hay archivos abiertos en el editor';
 
   @override
-  String get fileNotFoundOnDisk => 'File not found on disk';
+  String get fileNotFoundOnDisk => 'Archivo no encontrado en el disco';
 
   @override
   String parsingError(String error) {
-    return 'Parsing error: $error';
+    return 'Error de análisis: $error';
   }
 
   @override
-  String get outlineEmptyOrUnsupported => 'Outline empty or unsupported';
+  String get outlineEmptyOrUnsupported => 'Esquema vacío o no compatible';
 
   @override
   String outlineHeader(String filename) {
-    return 'Structure: $filename';
+    return 'Estructura: $filename';
   }
 
   @override
-  String get projectFolderNotFound => 'Project folder not found';
+  String get projectFolderNotFound => 'Carpeta del proyecto no encontrada';
 
   @override
-  String get rootFiles => '[Files in root]';
+  String get rootFiles => '[Archivos en raíz]';
 
   @override
   String scanningError(String error) {
-    return 'Scanning error: $error';
+    return 'Error de escaneo: $error';
   }
 
   @override
-  String get deleteFileConfirmTitle => 'Delete File';
+  String get deleteFileConfirmTitle => 'Eliminar archivo';
 
   @override
   String deleteFileConfirmMessage(String name, String size) {
-    return 'Are you sure you want to permanently delete file:\n\n$name\nSize: $size?';
+    return '¿Está seguro de que desea eliminar permanentemente este archivo?';
   }
 
   @override
-  String get fileDeletedSuccess => 'File deleted successfully';
+  String get fileDeletedSuccess => 'Archivo eliminado correctamente';
 
   @override
   String deleteFileError(String error) {
-    return 'Delete error: $error';
+    return 'Error al eliminar: $error';
   }
 
   @override
-  String get diskSpaceAnalysis => 'Disk space analysis...';
+  String get diskSpaceAnalysis => 'Análisis de espacio en disco...';
 
   @override
-  String get projectFolderEmpty => 'Project folder empty';
+  String get projectFolderEmpty => 'Carpeta del proyecto vacía';
 
   @override
-  String get projectSize => 'Project size:';
+  String get projectSize => 'Tamaño del proyecto:';
 
   @override
-  String get folderDistribution => 'Folder Distribution';
+  String get folderDistribution => 'Distribución por carpetas';
 
   @override
-  String get topHeavyFiles => 'Top 10 Heavy Files';
+  String get topHeavyFiles => 'Top 10 archivos pesados';
 
   @override
-  String get noHeavyFiles => 'No heavy files';
+  String get noHeavyFiles => 'No hay archivos pesados';
 
   @override
-  String get searchPlaceholder => 'Search contents...';
+  String get searchPlaceholder => 'Buscar contenido...';
 
   @override
-  String get searchCaseSensitive => 'Case sensitive';
+  String get searchCaseSensitive => 'Distinguir mayúsculas/minúsculas';
 
   @override
-  String get searchWholeWord => 'Whole word';
+  String get searchWholeWord => 'Palabra completa';
 
   @override
-  String get searchRegex => 'Regular expression';
+  String get searchRegex => 'Expresión regular';
 
   @override
-  String get searchInvalidRegex => 'Invalid regular expression';
+  String get searchInvalidRegex => 'Expresión regular no válida';
 
   @override
-  String get searchNoMatches => 'No matches found';
+  String get searchNoMatches => 'No se encontraron coincidencias';
 
   @override
   String searchMatchesFound(int matches, int files) {
-    return 'Found $matches matches in $files files';
+    return 'Coincidencias encontradas en archivos';
   }
 
   @override
   String searchError(String error) {
-    return 'Search error: $error';
+    return 'Error de búsqueda: $error';
   }
 
   @override
-  String get searchingInProgress => 'Searching...';
+  String get searchingInProgress => 'Buscando...';
 
   @override
-  String get searchPrompt => 'Enter query to search';
+  String get searchPrompt => 'Ingrese la consulta de búsqueda';
 
   @override
-  String get apkSigner => 'APK Signer';
+  String get apkSigner => 'Firmador de APK';
 
   @override
-  String get createKeystore => 'Create Keystore';
+  String get createKeystore => 'Crear Keystore';
 
   @override
-  String get stepSelectApk => 'Step 1: Select APK to sign';
+  String get stepSelectApk => 'Paso 1: Seleccione el APK';
 
   @override
-  String get selectApk => 'Select APK';
+  String get selectApk => 'Seleccionar APK';
 
   @override
-  String get selectCustomPath => 'Specify custom path...';
+  String get selectCustomPath => 'Especificar ruta personalizada...';
 
   @override
-  String get apkPathHint => 'Full path to APK file on device';
+  String get apkPathHint => 'Ruta completa al archivo APK';
 
   @override
-  String get stepSelectKeystore => 'Step 2: Select Keystore';
+  String get stepSelectKeystore => 'Paso 2: Seleccione el Keystore';
 
   @override
-  String get selectKeystore => 'Select Keystore';
+  String get selectKeystore => 'Seleccionar Keystore';
 
   @override
-  String get keystorePathHint => 'Full path to .jks/.keystore file';
+  String get keystorePathHint => 'Ruta completa al archivo .jks/.keystore';
 
   @override
-  String get stepSignSettings => 'Step 3: Signing settings';
+  String get stepSignSettings => 'Paso 3: Configuración de firma';
 
   @override
-  String get keystorePassword => 'Keystore password';
+  String get keystorePassword => 'Contraseña del Keystore';
 
   @override
-  String get keyAlias => 'Key Alias';
+  String get keyAlias => 'Alias de clave';
 
   @override
-  String get keyAliasPassword => 'Key Alias password';
+  String get keyAliasPassword => 'Contraseña del alias de clave';
 
   @override
-  String get outputApkName => 'Output APK filename';
+  String get outputApkName => 'Nombre del archivo APK de salida';
 
   @override
-  String get signApkButton => 'Sign APK';
+  String get signApkButton => 'Firmar APK';
 
   @override
   String get install => 'Install';
 
   @override
-  String get refreshProjectFiles => 'Refresh project files list';
+  String get refreshProjectFiles => 'Actualizar archivos del proyecto';
 
   @override
-  String get newKeystoreParams => 'New Keystore parameters';
+  String get newKeystoreParams => 'Parámetros del nuevo Keystore';
 
   @override
-  String get keystoreFilenameHint => 'Filename (e.g. release.jks)';
+  String get keystoreFilenameHint => 'Nombre de archivo (ej. release.jks)';
 
   @override
-  String get storePasswordHint => 'Keystore password (min 6 chars)';
+  String get storePasswordHint =>
+      'Contraseña del Keystore (mínimo 6 caracteres)';
 
   @override
-  String get keyAliasHint => 'Key alias (e.g. key)';
+  String get keyAliasHint => 'Alias de la clave (ej. key)';
 
   @override
-  String get developerInfoDn => 'Developer Info (DN)';
+  String get developerInfoDn => 'Información del desarrollador (DN)';
 
   @override
-  String get devNameCn => 'First and last name (CN)';
+  String get devNameCn => 'Nombre y apellidos (CN)';
 
   @override
-  String get devUnitOu => 'Organizational Unit (OU)';
+  String get devUnitOu => 'Unidad organizativa (OU)';
 
   @override
-  String get devOrgO => 'Organization (O)';
+  String get devOrgO => 'Organización (O)';
 
   @override
-  String get devCityL => 'City or Locality (L)';
+  String get devCityL => 'Ciudad o localidad (L)';
 
   @override
-  String get devStateS => 'State or Province (S)';
+  String get devStateS => 'Estado o provincia (S)';
 
   @override
-  String get devCountryC => 'Country Code (C)';
+  String get devCountryC => 'Código de país (C)';
 
   @override
-  String get genKeystoreButton => 'Generate Keystore';
+  String get genKeystoreButton => 'Generar Keystore';
 
   @override
-  String get logSignGen => 'SIGNING & GENERATION LOG';
+  String get logSignGen => 'REGISTRO DE FIRMA Y GENERACIÓN';
 
   @override
-  String get clearLog => 'Clear Log';
+  String get clearLog => 'Limpiar registro';
 
   @override
-  String get logPlaceholder =>
-      'Signing and generation log will be displayed here.';
+  String get logPlaceholder => 'El registro de firma se mostrará aquí.';
 
   @override
   String signProjectScanError(String error) {
-    return 'Project scan error: $error';
+    return 'Error de escaneo del proyecto: $error';
   }
 
   @override
   String signKeystoreSelected(String path) {
-    return 'Keystore selected: $path';
+    return 'Keystore seleccionado: $path';
   }
 
   @override
   String signFilePickError(String error) {
-    return 'File pick error: $error';
+    return 'Error al seleccionar archivo: $error';
   }
 
   @override
-  String get signNoOpenProject => 'No open project';
+  String get signNoOpenProject => 'No hay proyecto abierto';
 
   @override
-  String get signNoApkSelected => 'No APK selected';
+  String get signNoApkSelected => 'No se seleccionó APK';
 
   @override
-  String get signNoKeystoreSelected => 'No Keystore selected';
+  String get signNoKeystoreSelected => 'No se seleccionó Keystore';
 
   @override
-  String get signFillAllFields => 'Fill all signing fields';
+  String get signFillAllFields => 'Complete todos los campos de firma';
 
   @override
   String signApkProgress(String apk) {
-    return 'Signing APK: $apk...';
+    return 'Firmando APK: $apk...';
   }
 
   @override
   String signKeyFile(String key, String alias) {
-    return 'Key file: $key (alias: $alias)';
+    return 'Archivo de clave: $key (alias: $alias)';
   }
 
   @override
-  String get signRunningApksigner => 'Running apksigner...';
+  String get signRunningApksigner => 'Ejecutando apksigner...';
 
   @override
-  String get signVerifying => 'Verifying signature...';
+  String get signVerifying => 'Verificando firma...';
 
   @override
-  String get signSuccess => 'APK signed and verified successfully!';
+  String get signSuccess => '¡APK firmado correctamente!';
 
   @override
-  String get signVerifyFailed =>
-      'Signature verification failed or error occurred.';
+  String get signVerifyFailed => 'Error en la verificación de la firma.';
 
   @override
   String signError(String error) {
-    return 'Error signing APK: $error';
+    return 'Error al firmar APK: $error';
   }
 
   @override
-  String get genKeystoreFillFields => 'Fill key generation fields';
+  String get genKeystoreFillFields =>
+      'Complete los campos de generación de claves';
 
   @override
   String genKeystoreProgress(String name) {
-    return 'Generating Keystore: $name...';
+    return 'Generando Keystore: $name...';
   }
 
   @override
   String genKeystoreSuccess(String name) {
-    return 'Keystore created successfully at: $name';
+    return 'Keystore creado correctamente en: $name';
   }
 
   @override
-  String get genKeystoreFailed => 'Failed to create Keystore.';
+  String get genKeystoreFailed => 'Error al crear Keystore.';
 
   @override
   String genKeystoreError(String error) {
-    return 'Error generating Keystore: $error';
+    return 'Error al generar Keystore: $error';
   }
 
   @override
   String installApkProgress(String apk) {
-    return 'Starting APK installation: $apk';
+    return 'Iniciando instalación del APK: $apk';
   }
 
   @override
   String installApkResult(String msg) {
-    return 'Installation result: $msg';
+    return 'Resultado de la instalación: $msg';
   }
 
   @override
   String installApkNotFound(String path) {
-    return 'APK file not found: $path';
+    return 'Archivo APK no encontrado: $path';
   }
 
   @override
   String installApkError(String error) {
-    return 'Installation error: $error';
+    return 'Error de instalación: $error';
   }
 
   @override
@@ -2726,5 +2725,177 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String collabUserLeft(String name) {
     return 'El usuario $name ha abandonado la sesión.';
+  }
+
+  @override
+  String get webPreviewNotSupported =>
+      'La vista previa web no es compatible con esta plataforma';
+
+  @override
+  String get webPreviewNotSupportedDesc =>
+      'El WebView integrado no es compatible con esta plataforma. Use el botón de la esquina superior derecha para abrir en un navegador externo.';
+
+  @override
+  String get debugger => 'Depurador';
+
+  @override
+  String get startDebugging => 'Iniciar depuración';
+
+  @override
+  String get stopDebugging => 'Detener depuración';
+
+  @override
+  String get continue_ => 'Continuar';
+
+  @override
+  String get stepOver => 'Saltar';
+
+  @override
+  String get stepIn => 'Entrar';
+
+  @override
+  String get stepOut => 'Salir';
+
+  @override
+  String get pause => 'Pausa';
+
+  @override
+  String get restart => 'Reiniciar';
+
+  @override
+  String get callStack => 'Pila de llamadas';
+
+  @override
+  String get variables => 'Variables';
+
+  @override
+  String get breakpoints => 'Puntos de interrupción';
+
+  @override
+  String get output => 'Salida';
+
+  @override
+  String get launchConfiguration => 'Configuración de lanzamiento';
+
+  @override
+  String get programToDebug => 'Programa a depurar';
+
+  @override
+  String get noStackFrames => 'Sin tramas de pila';
+
+  @override
+  String get noVariables => 'Sin variables';
+
+  @override
+  String get noOutput => 'Sin salida';
+
+  @override
+  String get localModels => 'Modelos locales';
+
+  @override
+  String get all => 'Todos';
+
+  @override
+  String get downloaded => 'Descargados';
+
+  @override
+  String get vision => 'Visión';
+
+  @override
+  String get uncensored => 'Sin censura';
+
+  @override
+  String get noModelsFound => 'No se encontraron modelos';
+
+  @override
+  String get unload => 'Descargar';
+
+  @override
+  String get load => 'Cargar';
+
+  @override
+  String get attachImage => 'Adjuntar imagen';
+
+  @override
+  String get modeChat => 'Chat';
+
+  @override
+  String get modeRefactor => 'Refactor';
+
+  @override
+  String get modeAutopilot => 'Autopilot';
+
+  @override
+  String get quickPromptRefactor => 'Refactor';
+
+  @override
+  String get quickPromptRefactorText => 'Refactor this code';
+
+  @override
+  String get quickPromptExplain => 'Explain';
+
+  @override
+  String get quickPromptExplainText => 'Explain how this code works';
+
+  @override
+  String get quickPromptFixErrors => 'Fix Errors';
+
+  @override
+  String get quickPromptFixErrorsText => 'Find and fix errors in this code';
+
+  @override
+  String get quickPromptOptimize => 'Optimize';
+
+  @override
+  String get quickPromptOptimizeText => 'Optimize performance of this code';
+
+  @override
+  String get quickPromptWriteTests => 'Write Tests';
+
+  @override
+  String get quickPromptWriteTestsText => 'Write unit tests for this code';
+
+  @override
+  String get actionReadingFile => 'Leyendo archivo';
+
+  @override
+  String get actionViewingFolder => 'Explorando carpeta';
+
+  @override
+  String get actionSearchingCode => 'Buscando en código';
+
+  @override
+  String get actionFindingSymbol => 'Buscando símbolo';
+
+  @override
+  String get actionCreatingFile => 'Creando archivo';
+
+  @override
+  String get actionEditingFile => 'Editando archivo';
+
+  @override
+  String get actionDeletingFile => 'Eliminando archivo';
+
+  @override
+  String get actionRunningCommand => 'Ejecutando comando';
+
+  @override
+  String get actionWebSearch => 'Buscando en la web';
+
+  @override
+  String get actionFetchingPage => 'Cargando página';
+
+  @override
+  String get actionMcpTool => 'Herramienta MCP';
+
+  @override
+  String get actionExecuting => 'Ejecutando acción';
+
+  @override
+  String get sessionRestored => 'Sesión restaurada';
+
+  @override
+  String sessionRestoredDetail(int count, int files) {
+    return 'Cargados $count mensajes de `.quantum/chat_history.json`.\nMemoria del agente: $files archivos en contexto.\nContinúa donde lo dejaste.';
   }
 }

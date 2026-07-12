@@ -2715,4 +2715,176 @@ class AppLocalizationsEn extends AppLocalizations {
   String collabUserLeft(String name) {
     return 'User $name left the session.';
   }
+
+  @override
+  String get webPreviewNotSupported =>
+      'Web preview is not supported on this platform';
+
+  @override
+  String get webPreviewNotSupportedDesc =>
+      'Embedded WebView is not supported on this platform. Use the top right button to open in an external browser.';
+
+  @override
+  String get debugger => 'Debugger';
+
+  @override
+  String get startDebugging => 'Start Debugging';
+
+  @override
+  String get stopDebugging => 'Stop Debugging';
+
+  @override
+  String get continue_ => 'Continue';
+
+  @override
+  String get stepOver => 'Step Over';
+
+  @override
+  String get stepIn => 'Step In';
+
+  @override
+  String get stepOut => 'Step Out';
+
+  @override
+  String get pause => 'Pause';
+
+  @override
+  String get restart => 'Restart';
+
+  @override
+  String get callStack => 'Call Stack';
+
+  @override
+  String get variables => 'Variables';
+
+  @override
+  String get breakpoints => 'Breakpoints';
+
+  @override
+  String get output => 'Output';
+
+  @override
+  String get launchConfiguration => 'Launch Configuration';
+
+  @override
+  String get programToDebug => 'Program to debug';
+
+  @override
+  String get noStackFrames => 'No stack frames';
+
+  @override
+  String get noVariables => 'No variables';
+
+  @override
+  String get noOutput => 'No output';
+
+  @override
+  String get localModels => 'Local Models';
+
+  @override
+  String get all => 'All';
+
+  @override
+  String get downloaded => 'Downloaded';
+
+  @override
+  String get vision => 'Vision';
+
+  @override
+  String get uncensored => 'Uncensored';
+
+  @override
+  String get noModelsFound => 'No models found';
+
+  @override
+  String get unload => 'Unload';
+
+  @override
+  String get load => 'Load';
+
+  @override
+  String get attachImage => 'Attach Image';
+
+  @override
+  String get modeChat => 'Chat';
+
+  @override
+  String get modeRefactor => 'Refactor';
+
+  @override
+  String get modeAutopilot => 'Autopilot';
+
+  @override
+  String get quickPromptRefactor => 'Refactor';
+
+  @override
+  String get quickPromptRefactorText => 'Refactor this code';
+
+  @override
+  String get quickPromptExplain => 'Explain';
+
+  @override
+  String get quickPromptExplainText => 'Explain how this code works';
+
+  @override
+  String get quickPromptFixErrors => 'Fix Errors';
+
+  @override
+  String get quickPromptFixErrorsText => 'Find and fix errors in this code';
+
+  @override
+  String get quickPromptOptimize => 'Optimize';
+
+  @override
+  String get quickPromptOptimizeText => 'Optimize performance of this code';
+
+  @override
+  String get quickPromptWriteTests => 'Write Tests';
+
+  @override
+  String get quickPromptWriteTestsText => 'Write unit tests for this code';
+
+  @override
+  String get actionReadingFile => 'Reading file';
+
+  @override
+  String get actionViewingFolder => 'Viewing folder';
+
+  @override
+  String get actionSearchingCode => 'Searching code';
+
+  @override
+  String get actionFindingSymbol => 'Finding symbol';
+
+  @override
+  String get actionCreatingFile => 'Creating file';
+
+  @override
+  String get actionEditingFile => 'Editing file';
+
+  @override
+  String get actionDeletingFile => 'Deleting file';
+
+  @override
+  String get actionRunningCommand => 'Running command';
+
+  @override
+  String get actionWebSearch => 'Searching the web';
+
+  @override
+  String get actionFetchingPage => 'Fetching page';
+
+  @override
+  String get actionMcpTool => 'MCP tool';
+
+  @override
+  String get actionExecuting => 'Executing action';
+
+  @override
+  String get sessionRestored => 'Session restored';
+
+  @override
+  String sessionRestoredDetail(int count, int files) {
+    return 'Loaded $count messages from `.quantum/chat_history.json`.\nAgent memory: $files files in context.\nContinue where you left off.';
+  }
 }

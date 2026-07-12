@@ -1,8 +1,8 @@
 {
   "appTitle": "QuantumIDE",
   "explorer": "Explorateur",
-  "newFile": "Nouveau fichier",
-  "newFolder": "Nouveau dossier",
+  "newFile": "New File",
+  "newFolder": "New Folder",
   "refresh": "Actualiser",
   "rename": "Renommer",
   "delete": "Supprimer",
@@ -38,9 +38,9 @@
   "toolsAndAi": "Outils & IA",
   "aiProviders": "Fournisseurs d'IA",
   "ubuntuPackages": "Paquets Ubuntu",
-  "system": "Système",
+  "system": "System",
   "aboutApp": "À propos de l'application",
-  "close": "Fermer",
+  "close": "Close",
   "resetToDefault": "Réinitialiser",
   "noProjects": "Aucun projet",
   "createFirstProject": "Créer le premier projet",
@@ -79,7 +79,6 @@
   "connectedTo": "Connecté à :",
   "userName": "Votre Nom",
   "usersList": "Participants",
-  "chat": "Chat",
   "messagePlaceholder": "Tapez un message...",
   "connectError": "Erreur de connexion",
   "invalidAddress": "Adresse invalide",
@@ -87,7 +86,7 @@
   "localIps": "IPs Locales :",
   "wasmPlugins": "Extensions WASM",
   "installPlugin": "Installer l'extension (.wasm)",
-  "noPluginsInstalled": "Aucune extension WASM installée",
+  "noPluginsInstalled": "Aucun plugin WASM installé",
   "pluginEnabled": "Extension activée",
   "pluginDisabled": "Extension désactivée",
   "runWasmAction": "Exécuter l'action WASM",
@@ -95,8 +94,8 @@
   "applyToSelection": "Appliquer à la sélection",
   "applyToDocument": "Appliquer au document",
   "logs": "Journaux",
-  "clearLogs": "Effacer les journaux",
-  "deletePlugin": "Supprimer l'extension",
+  "clearLogs": "Effacer les logs",
+  "deletePlugin": "Supprimer le plugin",
   "resetToDefaults": "Réinitialiser",
   "welcomeTitle": "Bienvenue !",
   "welcomeSubtitle": "Choisissez un projet sur lequel travailler ou créez-en un nouveau",
@@ -319,7 +318,9 @@
   "saveError": "Erreur d'enregistrement : {error}",
   "@saveError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "acceptMerge": "Accepter la fusion",
@@ -332,7 +333,9 @@
   "incomingChanges": "Modifications entrantes ({branch})",
   "@incomingChanges": {
     "placeholders": {
-      "branch": { "type": "String" }
+      "branch": {
+        "type": "String"
+      }
     }
   },
   "useThisVersion": "Utiliser cette version",
@@ -348,7 +351,9 @@
   "editingFile": "Modification : {file}",
   "@editingFile": {
     "placeholders": {
-      "file": { "type": "String" }
+      "file": {
+        "type": "String"
+      }
     }
   },
   "viewingProject": "Visualisation du projet",
@@ -359,8 +364,12 @@
   "lineColumn": "Ligne {line}, Colonne {col}",
   "@lineColumn": {
     "placeholders": {
-      "line": { "type": "int" },
-      "col": { "type": "int" }
+      "line": {
+        "type": "int"
+      },
+      "col": {
+        "type": "int"
+      }
     }
   },
   "decreaseFontSize": "Diminuer la taille de la police",
@@ -376,8 +385,12 @@
   "packagesInstalledCount": "Installés : {count}/{total}",
   "@packagesInstalledCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "total": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "flutterProject": "Projet Flutter",
@@ -401,11 +414,8 @@
   "resetPluginsConfirmation": "Cela supprimera tous les plugins personnalisés installés et restaurera les plugins par défaut. Continuer ?",
   "resetPluginsTitle": "Réinitialiser les plugins ?",
   "installWasm": "Installer .wasm",
-  "noPluginsInstalled": "Aucun plugin WASM installé",
   "availableActions": "Actions disponibles :",
   "logsTerminal": "Terminal de logs",
-  "clearLogs": "Effacer les logs",
-  "deletePlugin": "Supprimer le plugin",
   "noLogsCaptured": "Aucun log capturé pour le moment",
   "installWasmPluginTitle": "Installer le plugin WASM",
   "selectWasmFile": "Sélectionner le fichier .wasm",
@@ -420,14 +430,18 @@
   "failedToInstall": "Échec de l'installation : {error}",
   "@failedToInstall": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "mcpServersTitle": "AI Modules: MCP Servers",
   "activeServers": "Active Servers ({count})",
   "@activeServers": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "repository": "Repository",
@@ -440,31 +454,41 @@
   "packageDetail": "Package: {detail}",
   "@packageDetail": {
     "placeholders": {
-      "detail": { "type": "String" }
+      "detail": {
+        "type": "String"
+      }
     }
   },
   "authParam": "Auth parameter: {key}",
   "@authParam": {
     "placeholders": {
-      "key": { "type": "String" }
+      "key": {
+        "type": "String"
+      }
     }
   },
   "enterValueFor": "Enter value for {key}",
   "@enterValueFor": {
     "placeholders": {
-      "key": { "type": "String" }
+      "key": {
+        "type": "String"
+      }
     }
   },
   "enterLabel": "Enter {label}",
   "@enterLabel": {
     "placeholders": {
-      "label": { "type": "String" }
+      "label": {
+        "type": "String"
+      }
     }
   },
   "installPreset": "Install: {name}",
   "@installPreset": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "serverName": "Server Name",
@@ -482,15 +506,19 @@
   "resultsCount": "Results: {count}",
   "@resultsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "noResults": "No results found",
-  "confirmDeleteTitle": "Confirm Delete",
+  "confirmDeleteTitle": "Confirmer la suppression",
   "confirmDeleteMultiple": "Are you sure you want to delete {count} items?",
   "@confirmDeleteMultiple": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "archiveExtracted": "Archive successfully extracted!",
@@ -499,13 +527,17 @@
   "folderLabel": "Folder: {name}",
   "@folderLabel": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "fileLabel": "File: {name}",
   "@fileLabel": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "whatShouldAiDoFolder": "What should AI do with this folder?",
@@ -520,9 +552,7 @@
   "generateTestsDesc": "Write unit tests for the code",
   "optimizeCode": "AI: Optimize",
   "optimizeCodeDesc": "Suggest performance improvements",
-  "newFile": "New File",
   "newFileDesc": "Create a file in this folder",
-  "newFolder": "New Folder",
   "newFolderDesc": "Create a subfolder",
   "removeFromBookmarks": "Remove from Bookmarks",
   "removeFromBookmarksDesc": "Remove file from quick access",
@@ -546,7 +576,9 @@
   "moveError": "Move error: {error}",
   "@moveError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "image": "IMAGE",
@@ -555,7 +587,9 @@
   "failedToReadFile": "Failed to read file: {error}",
   "@failedToReadFile": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "aiSettings": "AI Settings",
@@ -566,14 +600,14 @@
   "defaultHint": "Default: {url}",
   "@defaultHint": {
     "placeholders": {
-      "url": { "type": "String" }
+      "url": {
+        "type": "String"
+      }
     }
   },
   "chatWithAi": "CHAT WITH AI",
   "chatHistory": "Chat History",
   "newChat": "New Chat",
-  "chat": "Chat",
-  "agents": "Agents",
   "internetAccess": "Internet Access",
   "mcpServers": "MCP Servers",
   "stop": "Stop",
@@ -592,10 +626,11 @@
   "messagesCount": "{count} messages",
   "@messagesCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
-  "close": "Close",
   "systemEnv": "System Environment",
   "fixEnvironmentArm64": "Fix Environment (ARM64)",
   "environment": "Environment",
@@ -611,7 +646,9 @@
   "executionError": "Execution error: {error}",
   "@executionError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "quickSearch": "Quick Search (Ctrl+P)",
@@ -626,7 +663,9 @@
   "ranAction": "Ran: {content}",
   "@ranAction": {
     "placeholders": {
-      "content": { "type": "String" }
+      "content": {
+        "type": "String"
+      }
     }
   },
   "created": "Created",
@@ -636,35 +675,51 @@
   "stepNumber": "Step {step}/{total}",
   "@stepNumber": {
     "placeholders": {
-      "step": { "type": "int" },
-      "total": { "type": "int" }
+      "step": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "filesChangedCount": "Files changed: {count} (+{additions} -{deletions})",
   "@filesChangedCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "additions": { "type": "int" },
-      "deletions": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "additions": {
+        "type": "int"
+      },
+      "deletions": {
+        "type": "int"
+      }
     }
   },
   "commandsExecutedCount": "Executed {count} commands",
   "@commandsExecutedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "changesAccepted": "Changes accepted and stashed",
   "undoneChanges": "Undid {count} file changes",
   "@undoneChanges": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "discardedFileChanges": "Discarded changes in {file}",
   "@discardedFileChanges": {
     "placeholders": {
-      "file": { "type": "String" }
+      "file": {
+        "type": "String"
+      }
     }
   },
   "thinking": "Thinking...",
@@ -673,7 +728,6 @@
   "validator": "VALIDATOR",
   "aiAgentRole": "AI-AGENT",
   "resubmit": "Resubmit",
-  "system": "System",
   "rollbackHistoryToStep": "Rollback history and code to this step",
   "confirmRollback": "Confirm Rollback",
   "rollbackConfirmationText": "All code changes made after this message will be reverted, and subsequent messages deleted. Continue?",
@@ -705,7 +759,9 @@
   "selectedObjectsCount": "Objets sélectionnés: {count}",
   "@selectedObjectsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "explainFolderPreset": "Expliquer le but et la structure de ce dossier.",
@@ -723,7 +779,9 @@
   "filesCount": "{count} {count, plural, =1{fichier} other{fichiers}}",
   "@filesCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "localAiEngineTitle": "MOTEUR D'IA LOCALE",
@@ -749,19 +807,22 @@
   "runningPort8080": "En cours d'exécution (port 8080)",
   "starting": "Démarrage...",
   "stopped": "Arrêté",
-  "refresh": "Actualiser",
   "start": "Démarrer",
   "activeCaps": "ACTIF",
   "gbFormat": "{size} Go",
   "@gbFormat": {
     "placeholders": {
-      "size": { "type": "String" }
+      "size": {
+        "type": "String"
+      }
     }
   },
   "ramGbFormat": "~{size} Go de RAM",
   "@ramGbFormat": {
     "placeholders": {
-      "size": { "type": "String" }
+      "size": {
+        "type": "String"
+      }
     }
   },
   "select": "Sélectionner",
@@ -770,7 +831,9 @@
   "inFolder": "dans {folder}",
   "@inFolder": {
     "placeholders": {
-      "folder": { "type": "String" }
+      "folder": {
+        "type": "String"
+      }
     }
   },
   "llamaServerBuiltIn": "llama-server (intégré)",
@@ -800,14 +863,18 @@
   "androidJarCorruptError": "android.jar est corrompu ({api}). Cliquez sur \"Corriger l'environnement\" pour réinstaller.",
   "@androidJarCorruptError": {
     "placeholders": {
-      "api": { "type": "String" }
+      "api": {
+        "type": "String"
+      }
     }
   },
   "androidSdkPlatformsHealthy": "android-35 / android-36 — sains",
   "checkFailed": "Échec de la vérification : {error}",
   "@checkFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "analyzingTaskAndPlanning": "Analyse de la tâche et planification...",
@@ -872,42 +939,328 @@
   "collabSessionCreated": "Session créée sur le port {port}.",
   "@collabSessionCreated": {
     "placeholders": {
-      "port": { "type": "int" }
+      "port": {
+        "type": "int"
+      }
     }
   },
   "collabSessionCreateError": "Erreur lors de la création de la session : {error}",
   "@collabSessionCreateError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabUserDisconnected": "L'utilisateur {name} s'est déconnecté.",
   "@collabUserDisconnected": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabConnectError": "Erreur de connexion à {url} : {error}",
   "@collabConnectError": {
     "placeholders": {
-      "url": { "type": "String" },
-      "error": { "type": "String" }
+      "url": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabConnectionLost": "Connexion à la session perdue.",
   "collabUserJoined": "L'utilisateur {name} a rejoint la session.",
   "@collabUserJoined": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabJoinedAsGuest": "Vous avez rejoint la session en tant qu'invité.",
   "collabUserLeft": "L'utilisateur {name} a quitté la session.",
   "@collabUserLeft": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webPreviewNotSupported": "L'aperçu web n'est pas pris en charge sur cette plateforme",
+  "webPreviewNotSupportedDesc": "L'affichage WebView intégré n'est pas pris en charge sur cette plateforme. Utilisez le bouton en haut à droite pour l'ouvrir dans un navigateur externe.",
+  "aboutAppSubtitle": "Quantum IDE v1.0.0",
+  "aboutDialogContent": "IDE mobile propulsée par l'IA, construite avec Flutter.\n© 2026 Quantum IDE",
+  "activateProvider": "Activer le fournisseur",
+  "activeProvider": "Fournisseur actif",
+  "aiAskDialogTitle": "Requête de l'agent IA",
+  "aiAskFile": "Fichier : {name}",
+  "aiAskFileHint": "Que doit-on faire ?",
+  "aiAskFolder": "Dossier : {name}",
+  "aiAskFolderHint": "Décrivez la tâche",
+  "aiAutoCompletion": "Saisie automatique par IA",
+  "aiProvidersInfo": "Ajoutez les clés API pour différents fournisseurs d'IA.",
+  "aiProvidersSubtitle": "Gemini, OpenAI, Ollama, etc.",
+  "all": "Tous",
+  "androidCompileSdkVersion": "VERSION ANDROID compileSdk",
+  "apiKeyLabel": "Clé API",
+  "apkBuildFixed": "Fichiers de compilation Android corrigés",
+  "apkPathHint": "Chemin complet vers le fichier APK",
+  "apkSigner": "Signeur d'APK",
+  "appLogs": "Journaux de l'application",
+  "applyingChange": "Application de la modification : {path}...",
+  "areYouSureDelete": "Êtes-vous sûr de vouloir supprimer {name} ?",
+  "askAboutCode": "Poser une question sur le code",
+  "askAiHint": "Demander à {provider}...",
+  "attachImage": "Joindre une image",
+  "autoSaveDescription": "Enregistrer les modifications après 2s",
+  "available": "Disponible",
+  "availableCaps": "DISPONIBLE",
+  "breakpoints": "Points d'arrêt",
+  "buildApk": "Compiler l'APK",
+  "buildApkDescription": "flutter build apk --debug",
+  "callStack": "Pile d'appels",
+  "changesInFile": "Modifications dans {name}",
+  "clean": "Nettoyer",
+  "clear": "Effacer",
+  "clearHistory": "Effacer l'historique",
+  "clearLog": "Effacer le journal",
+  "closeProject": "Fermer le projet",
+  "column": "Colonne",
+  "command": "COMMANDE",
+  "commandExecutedResult": "Commande exécutée.",
+  "commandSentToTerminal": "Commande envoyée au terminal.",
+  "continue_": "Continuer",
+  "copied": "Copié : {value}",
+  "copyUrl": "Copier l'URL",
+  "createKeystore": "Créer un Keystore",
+  "customColor": "Couleur personnalisée",
+  "cut": "Couper",
+  "debugger": "Débogueur",
+  "defaultAccent": "Par défaut",
+  "defaultSdkVersion": "Par défaut : 35",
+  "deleteFromDisk": "Du disque",
+  "deleteFromListOnly": "De la liste uniquement",
+  "documentation": "Documentation",
+  "downloaded": "Téléchargés",
+  "fastCommands": "COMMANDES RAPIDES",
+  "fixAndroidBuild": "Corriger la compilation Android",
+  "geminiCodeGeneration": "Génération de code par Gemini",
+  "goToDefinition": "Aller à la définition",
+  "hosts": "Hôtes",
+  "hotReload": "Rechargement à chaud",
+  "imageLoadError": "Erreur lors du chargement de l'image",
+  "info": "Info",
+  "launchConfiguration": "Configuration de lancement",
+  "line": "Ligne",
+  "lineCol": "Lig {line}, Col {col}",
+  "load": "Charger",
+  "localModels": "Modèles locaux",
+  "market": "Marché",
+  "noErrorsFound": "Aucune erreur trouvée",
+  "noFilesFound": "Aucun fichier trouvé",
+  "noModelsFound": "Aucun modèle trouvé",
+  "noOutput": "Pas de sortie",
+  "noStackFrames": "Pas de pile d'appels",
+  "noVariables": "Pas de variables",
+  "nothingFound": "Rien trouvé",
+  "ok": "OK",
+  "open": "Ouvrir",
+  "output": "Sortie",
+  "paste": "Coller",
+  "pause": "Pause",
+  "programToDebug": "Programme à déboguer",
+  "projectActions": "Actions du projet",
+  "projectIcon": "Icône du projet",
+  "projectsHeader": "Projets ({count})",
+  "restart": "Redémarrer",
+  "runProject": "Exécuter le projet",
+  "running": "En cours...",
+  "searchProjects": "Rechercher des projets...",
+  "selectAll": "Tout sélectionner",
+  "selectPalette": "Sélectionner la palette",
+  "serverAddress": "Adresse du serveur",
+  "setupSdk": "Configurer le SDK",
+  "showCodeHints": "Afficher les indices de code",
+  "showHiddenFiles": "Afficher les fichiers cachés",
+  "showLineNumbers": "Afficher les numéros de ligne",
+  "showMinimap": "Afficher la minicarte de l'éditeur",
+  "sortByDate": "Par date",
+  "sortByName": "Par nom",
+  "sortBySize": "Par taille",
+  "startDebugging": "Lancer le débogage",
+  "stepIn": "Entrer",
+  "stepOut": "Sortir",
+  "stepOver": "Passer",
+  "stopDebugging": "Arrêter le débogage",
+  "targetPlatforms": "PLATEFORMES CIBLES",
+  "uncensored": "Non censuré",
+  "unload": "Décharger",
+  "usages": "Utilisations",
+  "variables": "Variables",
+  "vibration": "Vibration",
+  "vision": "Vision",
+  "welcomeMessage": "Bienvenue dans votre environnement premium.",
+  "closeProjectConfirm": "Êtes-vous sûr de vouloir fermer ce projet ?",
+  "confirmDeleteMessage": "Supprimer uniquement de la liste ou aussi les fichiers ?",
+  "copy": "Copier",
+  "customModelHint": "Ou saisissez le nom du modèle manuellement...",
+  "decline": "Refuser",
+  "deleteFileConfirmMessage": "Êtes-vous sûr de vouloir supprimer ce fichier ?",
+  "deleteFileConfirmTitle": "Supprimer le fichier",
+  "deleteFileError": "Erreur de suppression : {error}",
+  "devCityL": "Ville ou localité (L)",
+  "devCountryC": "Code pays (C)",
+  "devNameCn": "Nom et prénom (CN)",
+  "devOrgO": "Organisation (O)",
+  "devStateS": "État ou province (S)",
+  "devUnitOu": "Unité organisationnelle (OU)",
+  "developerInfoDn": "Informations développeur (DN)",
+  "diskSpaceAnalysis": "Analyse de l'espace disque...",
+  "errorOccurred": "Erreur : {error}",
+  "failedToApplyAction": "Échec de l'application de l'action : {error}",
+  "fileDeletedSuccess": "Fichier supprimé avec succès",
+  "fileNotFoundOnDisk": "Fichier non trouvé sur le disque",
+  "fileSuccessfullyDeleted": "Fichier supprimé avec succès.",
+  "fileSuccessfullyWritten": "Fichier écrit avec succès.",
+  "findModels": "Trouver des modèles",
+  "fixWithAi": "Corriger avec l'IA",
+  "folderDistribution": "Répartition par dossiers",
+  "genKeystoreButton": "Générer le Keystore",
+  "genKeystoreError": "Erreur lors de la génération du Keystore : {error}",
+  "genKeystoreFailed": "Échec de la création du Keystore.",
+  "genKeystoreFillFields": "Remplissez les champs de génération de clé",
+  "genKeystoreProgress": "Génération du Keystore : {name}...",
+  "genKeystoreSuccess": "Keystore créé avec succès à : {name}",
+  "hapticFeedback": "Retour haptique",
+  "installApkError": "Erreur d'installation : {error}",
+  "installApkNotFound": "Fichier APK non trouvé : {path}",
+  "installApkProgress": "Démarrage de l'installation de l'APK : {apk}",
+  "installApkResult": "Résultat de l'installation : {msg}",
+  "keyAlias": "Alias de clé",
+  "keyAliasHint": "Alias de la clé (ex. key)",
+  "keyAliasPassword": "Mot de passe de l'alias de clé",
+  "keySaved": "Clé API enregistrée",
+  "keystoreFilenameHint": "Nom du fichier (ex. release.jks)",
+  "keystorePassword": "Mot de passe du Keystore",
+  "keystorePathHint": "Chemin complet vers le fichier .jks/.keystore",
+  "localNoKey": "Local — pas de clé",
+  "logPlaceholder": "Le journal de signature s'affichera ici.",
+  "logSignGen": "JOURNAL DE SIGNATURE ET GÉNÉRATION",
+  "modelInstalled": "Modèle défini sur {name}",
+  "modelLabel": "MODÈLE",
+  "modelsNotFound": "Aucun modèle trouvé.",
+  "newKeystoreParams": "Paramètres du nouveau Keystore",
+  "noErrorsDescription": "Aucun problème ou avertissement trouvé.",
+  "noHeavyFiles": "Aucun fichier volumineux",
+  "noOpenFiles": "Aucun fichier ouvert dans l'éditeur",
+  "ollamaPhoneHint": "Utilisez l'IP de votre ordinateur pour vous connecter depuis un téléphone",
+  "openAddressInBrowser": "Ouvrir cette adresse dans le navigateur",
+  "openProjectToSeeCommands": "Ouvrez un projet pour voir les commandes",
+  "outlineEmptyOrUnsupported": "Structure vide ou non supportée",
+  "outlineHeader": "Structure : {filename}",
+  "outputApkName": "Nom du fichier APK de sortie",
+  "parsingError": "Erreur d'analyse : {error}",
+  "patchAndroidBuildDescription": "Correctif android-36 / AGP 8.7.3 / compileSdk 35",
+  "problemsFound": "Problèmes trouvés : {count}",
+  "projectAnalysis": "Analyse du projet",
+  "projectFolderEmpty": "Dossier du projet vide",
+  "projectFolderNotFound": "Dossier du projet non trouvé",
+  "projectSize": "Taille du projet :",
+  "pureDark": "Sombre pur",
+  "quotaLimit": "Limite de quota",
+  "refreshProjectFiles": "Actualiser les fichiers du projet",
+  "requiresApiKeyLabel": "Nécessite une clé API",
+  "retry": "Réessayer",
+  "rootFiles": "[Fichiers à la racine]",
+  "runningCommand": "Exécution de la commande : {command}...",
+  "scanningError": "Erreur de numérisation : {error}",
+  "searchCaseSensitive": "Sensible à la casse",
+  "searchError": "Erreur de recherche : {error}",
+  "searchInvalidRegex": "Expression régulière invalide",
+  "searchMatchesFound": "Correspondances trouvées dans les fichiers",
+  "searchModelHint": "Rechercher par nom de modèle...",
+  "searchNoMatches": "Aucune correspondance trouvée",
+  "searchPlaceholder": "Rechercher dans le contenu...",
+  "searchPrompt": "Entrez la requête de recherche",
+  "searchRegex": "Expression régulière",
+  "searchWholeWord": "Mot entier",
+  "searching": "Recherche...",
+  "searchingInProgress": "Recherche en cours...",
+  "selectApk": "Sélectionner l'APK",
+  "selectCustomPath": "Spécifier un chemin personnalisé...",
+  "selectKeystore": "Sélectionner le Keystore",
+  "selectModel": "Sélectionner le modèle",
+  "serverUrlLabel": "URL du serveur",
+  "showChanges": "Afficher les modifications",
+  "signApkButton": "Signer l'APK",
+  "signApkProgress": "Signature de l'APK : {apk}...",
+  "signError": "Erreur lors de la signature : {error}",
+  "signFilePickError": "Erreur de sélection du fichier : {error}",
+  "signFillAllFields": "Remplissez tous les champs de signature",
+  "signKeyFile": "Fichier de clé : {key} (alias : {alias})",
+  "signKeystoreSelected": "Keystore sélectionné : {path}",
+  "signNoApkSelected": "Aucun APK sélectionné",
+  "signNoKeystoreSelected": "Aucun Keystore sélectionné",
+  "signNoOpenProject": "Aucun projet ouvert",
+  "signProjectScanError": "Erreur de numérisation du projet : {error}",
+  "signRunningApksigner": "Exécution d'apksigner...",
+  "signSuccess": "APK signé avec succès !",
+  "signVerifyFailed": "Échec de la vérification de la signature.",
+  "signVerifying": "Vérification de la signature...",
+  "stepSelectApk": "Étape 1 : Sélectionner l'APK",
+  "stepSelectKeystore": "Étape 2 : Sélectionner le Keystore",
+  "stepSignSettings": "Étape 3 : Paramètres de signature",
+  "storePasswordHint": "Mot de passe du Keystore (minimum 6 caractères)",
+  "topHeavyFiles": "Top 10 des fichiers volumineux",
+  "ubuntuDarkPurple": "Ubuntu Violet Foncé",
+  "unavailable": "Indisponible",
+  "unknownActionType": "Type d'action inconnu : {type}",
+  "urlSaved": "URL enregistrée",
+  "wordWrapDescription": "Retour à la ligne souple dans l'éditeur",
+  "localRemoteHosts": "Hôtes locaux/distant",
+  "manageCliTools": "Gérer les outils CLI",
+  "providerActivated": "{name} activé",
+  "pubGet": "Pub Get",
+  "serverStarted": "Serveur démarré",
+  "showHiddenFilesDescription": "Afficher les fichiers .*",
+  "stopServer": "Arrêter",
+  "typeRunToStart": "Tapez run pour démarrer votre projet.",
+  "workingOnFile": "Je travaille sur le fichier : {file}.\nVoici son contenu :\n```\n{code}\n```\n\nMa question : {question}",
+  "you": "Vous",
+  "modeChat": "Chat",
+  "modeRefactor": "Refactor",
+  "modeAutopilot": "Autopilot",
+  "quickPromptRefactor": "Refactor",
+  "quickPromptRefactorText": "Refactor this code",
+  "quickPromptExplain": "Explain",
+  "quickPromptExplainText": "Explain how this code works",
+  "quickPromptFixErrors": "Fix Errors",
+  "quickPromptFixErrorsText": "Find and fix errors in this code",
+  "quickPromptOptimize": "Optimize",
+  "quickPromptOptimizeText": "Optimize performance of this code",
+  "quickPromptWriteTests": "Write Tests",
+  "quickPromptWriteTestsText": "Write unit tests for this code",
+  "actionReadingFile": "Lecture du fichier",
+  "actionViewingFolder": "Exploration du dossier",
+  "actionSearchingCode": "Recherche dans le code",
+  "actionFindingSymbol": "Recherche de symbole",
+  "actionCreatingFile": "Création du fichier",
+  "actionEditingFile": "Édition du fichier",
+  "actionDeletingFile": "Suppression du fichier",
+  "actionRunningCommand": "Exécution de la commande",
+  "actionWebSearch": "Recherche sur le web",
+  "actionFetchingPage": "Chargement de la page",
+  "actionMcpTool": "Outil MCP",
+  "actionExecuting": "Exécution de l'action",
+  "sessionRestored": "Session restaurée",
+  "sessionRestoredDetail": "{count} messages chargés depuis `.quantum/chat_history.json`.\nMémoire de l'agent : {files} fichiers en contexte.\nReprenez là où vous en étiez.",
+  "@sessionRestoredDetail": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "files": { "type": "int" }
     }
   }
 }
-
-

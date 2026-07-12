@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-// ignore: implementation_imports
-import 'package:google_generative_ai/src/model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 
@@ -45,6 +43,27 @@ class AISettings {
   }
 }
 
+// ─── Token Usage ─────────────────────────────────────────────────────────────
+
+class TokenUsage {
+  final int promptTokens;
+  final int completionTokens;
+  final int totalTokens;
+
+  const TokenUsage({
+    this.promptTokens = 0,
+    this.completionTokens = 0,
+    this.totalTokens = 0,
+  });
+}
+
+class ChatResponse {
+  final String text;
+  final TokenUsage? tokenUsage;
+
+  const ChatResponse(this.text, {this.tokenUsage});
+}
+
 // ─── AI Service ──────────────────────────────────────────────────────────────
 
 class AIService {
@@ -53,9 +72,10 @@ class AIService {
   final Dio _dio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: null,
+      receiveTimeout: const Duration(minutes: 2),
     ),
   );
+  static const int _maxRetries = 3;
 
   AISettings get settings => _settings;
   String get selectedProviderId => _settings.selectedProviderId;
@@ -126,19 +146,13 @@ class AIService {
     final key = _settings.apiKeys['google'] ?? '';
     if (_settings.selectedProviderId == 'google' && key.isNotEmpty) {
       try {
-        final originalBaseUrl = getBaseUrl('google');
-        if (originalBaseUrl != AiProviders.google.baseUrl) {
-          _geminiModel = createModelWithBaseUri(
-            model: _settings.selectedModel,
-            apiKey: key,
-            baseUri: Uri.parse(_cleanseBaseUrl(originalBaseUrl)),
-          );
-        } else {
-          _geminiModel = GenerativeModel(
-            model: _settings.selectedModel,
-            apiKey: key,
-          );
-        }
+        // For custom proxy URLs: we still use standard GenerativeModel.
+        // Custom base URL routing for Gemini proxies is handled via Dio
+        // in _executeOpenAiCompatRequest (OpenAI-compatible fallback).
+        _geminiModel = GenerativeModel(
+          model: _settings.selectedModel,
+          apiKey: key,
+        );
       } catch (_) {
         _geminiModel = null;
       }
@@ -236,41 +250,82 @@ class AIService {
 
     dynamic lastException;
     for (final endpoint in candidates) {
-      try {
-        final requestOptions = (options ?? Options()).copyWith(
-          headers: {
-            if (isGet == false) 'Content-Type': 'application/json',
-            if (key.isNotEmpty) 'Authorization': 'Bearer $key',
-            ...?options?.headers,
-          },
-        );
+      for (int attempt = 0; attempt <= _maxRetries; attempt++) {
+        try {
+          final requestOptions = (options ?? Options()).copyWith(
+            headers: {
+              if (isGet == false) 'Content-Type': 'application/json',
+              if (key.isNotEmpty) 'Authorization': 'Bearer $key',
+              ...?options?.headers,
+            },
+            receiveTimeout: pid == 'local_edge' ? Duration.zero : null,
+          );
 
-        final Response resp;
-        if (isGet) {
-          resp = await _dio.get(endpoint, options: requestOptions);
-        } else {
-          resp = await _dio.post(endpoint, data: data, options: requestOptions);
+          final Response resp;
+          if (isGet) {
+            resp = await _dio.get(endpoint, options: requestOptions);
+          } else {
+            resp = await _dio.post(endpoint, data: data, options: requestOptions);
+          }
+
+          if (resp.statusCode == 404) {
+            break; // Try next candidate
+          }
+
+          // Handle 429 (rate limit) with exponential backoff
+          if (resp.statusCode == 429 && attempt < _maxRetries) {
+            final retryAfter = resp.headers.value('retry-after');
+            final delayMs = retryAfter != null
+                ? (int.tryParse(retryAfter) ?? 1) * 1000
+                : (1 << attempt) * 1000; // 1s, 2s, 4s
+            await Future.delayed(Duration(milliseconds: delayMs));
+            continue;
+          }
+
+          // Handle 403 (forbidden) - throw with clear message
+          if (resp.statusCode == 403) {
+            throw Exception(
+              'API key is invalid or expired (HTTP 403). '
+              'Please check your API key in AI Settings.',
+            );
+          }
+
+          // Handle 5xx server errors with retry
+          if (resp.statusCode != null && resp.statusCode! >= 500 && attempt < _maxRetries) {
+            await Future.delayed(Duration(milliseconds: (1 << attempt) * 1000));
+            continue;
+          }
+
+          // If worked with /v1 fallback, auto-update base URL
+          if (endpoint.contains('/v1$pathSuffix') &&
+              !originalBaseUrl.endsWith('/v1')) {
+            final newBaseUrl = '$cleansed/v1';
+            await setBaseUrl(pid, newBaseUrl);
+          }
+
+          return resp;
+        } on DioException catch (e) {
+          lastException = e;
+          // Retry on connection errors
+          if (attempt < _maxRetries && _isRetryableError(e)) {
+            await Future.delayed(Duration(milliseconds: (1 << attempt) * 1000));
+            continue;
+          }
+          break; // Move to next candidate
+        } catch (e) {
+          lastException = e;
+          break;
         }
-
-        if (resp.statusCode == 404) {
-          continue; // Try next candidate
-        }
-
-        // Если сработал fallback с /v1, автоматически обновляем базовый URL в настройках
-        if (endpoint.contains('/v1$pathSuffix') &&
-            !originalBaseUrl.endsWith('/v1')) {
-          final newBaseUrl = '$cleansed/v1';
-          await setBaseUrl(pid, newBaseUrl);
-        }
-
-        return resp;
-      } catch (e) {
-        lastException = e;
-        continue; // Try next candidate
       }
     }
 
-    throw lastException ?? Exception('Failed to connect to API');
+    throw lastException ?? Exception('Failed to connect to API after $_maxRetries retries');
+  }
+
+  bool _isRetryableError(DioException e) {
+    return e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
+        e.type == DioExceptionType.connectionError;
   }
 
   // ─── Загрузка доступных моделей ──────────────────────────────────────────
@@ -284,6 +339,12 @@ class AIService {
       case 'deepseek':
       case 'groq':
       case 'openrouter':
+      case 'grok':
+      case 'together':
+      case 'perplexity':
+      case 'fireworks':
+      case 'kimi':
+      case 'nvidia':
         return await _fetchOpenAiCompatModels(pid);
       case 'anthropic':
         return _anthropicModels(); // API не отдаёт список
@@ -563,6 +624,10 @@ class AIService {
           pid == 'deepseek' ||
           pid == 'groq' ||
           pid == 'openrouter' ||
+          pid == 'grok' ||
+          pid == 'together' ||
+          pid == 'perplexity' ||
+          pid == 'fireworks' ||
           pid == 'lmstudio' ||
           pid == 'local_edge') {
         final key = _settings.apiKeys[pid] ?? '';
@@ -604,6 +669,12 @@ class AIService {
       case 'deepseek':
       case 'groq':
       case 'openrouter':
+      case 'grok':
+      case 'together':
+      case 'perplexity':
+      case 'fireworks':
+      case 'kimi':
+      case 'nvidia':
         return await _openAiCompatCompletion(prompt);
       case 'local_edge':
         if (_settings.selectedLocalEngine == LocalAiEngine.ollama) {
@@ -649,7 +720,7 @@ class AIService {
           'max_tokens': 4096,
         }),
       );
-      return resp.data['choices'][0]['message']['content'] as String;
+      return resp.data?['choices']?[0]?['message']?['content']?.toString() ?? 'Error: Unexpected API response format';
     } catch (e) {
       return 'Error: $e';
     }
@@ -678,7 +749,7 @@ class AIService {
           ],
         }),
       );
-      return resp.data['content'][0]['text'] as String;
+      return resp.data?['content']?[0]?['text']?.toString() ?? 'Error: Unexpected Anthropic response format';
     } catch (e) {
       return 'Anthropic Error: $e';
     }
@@ -689,13 +760,14 @@ class AIService {
     try {
       final resp = await _dio.post(
         '$base/api/generate',
+        options: Options(receiveTimeout: Duration.zero),
         data: jsonEncode({
           'model': _settings.selectedModel,
           'prompt': prompt,
           'stream': false,
         }),
       );
-      return resp.data['response'] as String;
+      return resp.data?['response']?.toString() ?? 'Error: Unexpected Ollama response format';
     } catch (e) {
       return 'Ollama Error (ensure Ollama is running): $e';
     }
@@ -709,10 +781,11 @@ class AIService {
   }
 
   /// Отправить сообщение в чат (универсальный метод)
-  Future<String> sendChatMessage(
+  Future<ChatResponse> sendChatMessage(
     String message,
     List<Map<String, String>> history, {
     String? systemInstruction,
+    String? imageBase64,
   }) async {
     switch (_settings.selectedProviderId) {
       case 'google':
@@ -720,15 +793,23 @@ class AIService {
           message,
           history,
           systemInstruction: systemInstruction,
+          imageBase64: imageBase64,
         );
       case 'openai':
       case 'deepseek':
       case 'groq':
       case 'openrouter':
+      case 'grok':
+      case 'together':
+      case 'perplexity':
+      case 'fireworks':
+      case 'kimi':
+      case 'nvidia':
         return await _openAiChatMessage(
           message,
           history,
           systemInstruction: systemInstruction,
+          imageBase64: imageBase64,
         );
       case 'local_edge':
         if (_settings.selectedLocalEngine == LocalAiEngine.ollama) {
@@ -742,63 +823,53 @@ class AIService {
           message,
           history,
           systemInstruction: systemInstruction,
+          imageBase64: imageBase64,
         );
       case 'anthropic':
         return await _anthropicChatMessage(
           message,
           history,
           systemInstruction: systemInstruction,
+          imageBase64: imageBase64,
         );
       default:
-        return await getCompletion(message);
+        final text = await getCompletion(message);
+        return ChatResponse(text);
     }
   }
 
-  Future<String> _geminiChatMessage(
+  /// Stream chat message - returns tokens one by one via onToken callback
+  Future<ChatResponse> streamChatMessage(
     String message,
     List<Map<String, String>> history, {
     String? systemInstruction,
+    void Function(String token)? onToken,
   }) async {
-    if (_geminiModel == null) return 'Error: Set Gemini API key.';
-    try {
-      var model = _geminiModel!;
-      if (systemInstruction != null) {
-        final key = _settings.apiKeys['google'] ?? '';
-        final originalBaseUrl = getBaseUrl('google');
-        if (originalBaseUrl != AiProviders.google.baseUrl) {
-          model = createModelWithBaseUri(
-            model: _settings.selectedModel,
-            apiKey: key,
-            baseUri: Uri.parse(_cleanseBaseUrl(originalBaseUrl)),
-            systemInstruction: Content.system(systemInstruction),
-          );
-        } else {
-          model = GenerativeModel(
-            model: _settings.selectedModel,
-            apiKey: key,
-            systemInstruction: Content.system(systemInstruction),
-          );
-        }
-      }
-      final geminiHistory = history
-          .map(
-            (m) => m['role'] == 'user'
-                ? Content('user', [TextPart(m['content'] ?? '')])
-                : Content.model([TextPart(m['content'] ?? '')]),
-          )
-          .toList();
-      final session = model.startChat(history: geminiHistory);
-      final resp = await session.sendMessage(Content.text(message));
-      return resp.text ?? 'No response';
-    } catch (e) {
-      return 'Error: $e';
+    final pid = _settings.selectedProviderId;
+    
+    // For OpenAI-compatible providers, use streaming
+    if (pid == 'openai' || pid == 'deepseek' || pid == 'groq' || 
+        pid == 'openrouter' || pid == 'grok' || pid == 'together' ||
+        pid == 'perplexity' || pid == 'fireworks' ||
+        pid == 'kimi' || pid == 'nvidia' ||
+        pid == 'local_edge') {
+      return await _streamOpenAICompatibleChat(
+        message,
+        history,
+        systemInstruction: systemInstruction,
+        onToken: onToken,
+      );
     }
+    
+    // For other providers, fall back to non-streaming
+    return await sendChatMessage(message, history, systemInstruction: systemInstruction);
   }
 
-  Future<String> _openAiChatMessage(
+  Future<ChatResponse> _streamOpenAICompatibleChat(
     String message,
     List<Map<String, String>> history, {
     String? systemInstruction,
+    void Function(String token)? onToken,
   }) async {
     final pid = _settings.selectedProviderId;
     try {
@@ -807,6 +878,218 @@ class AIService {
           {'role': 'system', 'content': systemInstruction},
         ...history.map((m) => {'role': m['role'], 'content': m['content']}),
         {'role': 'user', 'content': message},
+      ];
+
+      final key = _settings.apiKeys[pid] ?? '';
+      final originalBaseUrl = getBaseUrl(pid);
+      final cleansed = _cleanseBaseUrl(originalBaseUrl);
+      
+      String endpoint = '$cleansed/chat/completions';
+      if (!cleansed.endsWith('/v1')) {
+        endpoint = '$cleansed/v1/chat/completions';
+      }
+
+      // Retry logic for streaming
+      for (int attempt = 0; attempt <= _maxRetries; attempt++) {
+        try {
+          final response = await _dio.post(
+            endpoint,
+            options: Options(
+              headers: {
+                'Content-Type': 'application/json',
+                if (key.isNotEmpty) 'Authorization': 'Bearer $key',
+                'Accept': 'text/event-stream',
+              },
+              responseType: ResponseType.stream,
+              validateStatus: (s) => s != null && s < 600,
+            ),
+            data: jsonEncode({
+              'model': _settings.selectedModel,
+              'messages': messages,
+              'max_tokens': 4096,
+              'stream': true,
+            }),
+          );
+
+          // Handle error status codes before streaming
+          if (response.statusCode == 403) {
+            return ChatResponse(
+              '❌ **API key error (403 Forbidden)**\n\n'
+              'Your API key for ${AiProviders.byId(pid).displayName} is invalid or expired.\n'
+              'Please go to **AI Settings** and update your API key.',
+            );
+          }
+          if (response.statusCode == 429 && attempt < _maxRetries) {
+            final retryAfter = response.headers.value('retry-after');
+            final delayMs = retryAfter != null
+                ? (int.tryParse(retryAfter) ?? 1) * 1000
+                : (1 << attempt) * 1000;
+            await Future.delayed(Duration(milliseconds: delayMs));
+            continue;
+          }
+          if (response.statusCode != null && response.statusCode! >= 500 && attempt < _maxRetries) {
+            await Future.delayed(Duration(milliseconds: (1 << attempt) * 1000));
+            continue;
+          }
+
+          final buffer = StringBuffer();
+          final stream = response.data.stream;
+          String lineBuffer = '';
+          int promptTokens = 0;
+          int completionTokens = 0;
+
+          await for (final chunk in stream) {
+            lineBuffer += utf8.decode(chunk);
+            final lines = lineBuffer.split('\n');
+            lineBuffer = lines.removeLast(); // Keep incomplete line in buffer
+
+            for (final line in lines) {
+              final trimmed = line.trim();
+              if (trimmed.isEmpty || !trimmed.startsWith('data:')) continue;
+
+              final payload = trimmed.substring(5).trim();
+              if (payload == '[DONE]') break;
+
+              try {
+                final data = jsonDecode(payload);
+                // Parse token usage from Ollama/llama-server streaming
+                if (data.containsKey('prompt_eval_count')) {
+                  promptTokens = data['prompt_eval_count'] as int? ?? 0;
+                }
+                if (data.containsKey('eval_count')) {
+                  completionTokens = data['eval_count'] as int? ?? 0;
+                }
+                // Also handle OpenAI-style usage
+                if (data.containsKey('usage') && data['usage'] is Map) {
+                  final usage = data['usage'] as Map;
+                  promptTokens = usage['prompt_tokens'] as int? ?? promptTokens;
+                  completionTokens = usage['completion_tokens'] as int? ?? completionTokens;
+                }
+                final choice = (data['choices'] as List?)?.isNotEmpty == true
+                    ? data['choices'][0] as Map
+                    : null;
+                final delta = choice?['delta'] as Map?;
+                final token = delta?['content']?.toString();
+                if (token != null && token.isNotEmpty) {
+                  buffer.write(token);
+                  onToken?.call(token);
+                }
+              } catch (_) {}
+            }
+          }
+
+          return ChatResponse(
+            buffer.toString(),
+            tokenUsage: TokenUsage(
+              promptTokens: promptTokens,
+              completionTokens: completionTokens,
+              totalTokens: promptTokens + completionTokens,
+            ),
+          );
+        } on DioException catch (e) {
+          if (attempt < _maxRetries && _isRetryableError(e)) {
+            await Future.delayed(Duration(milliseconds: (1 << attempt) * 1000));
+            continue;
+          }
+          if (e.response?.statusCode == 429) {
+            return ChatResponse(
+              '⏳ **Rate limit exceeded (429)**\n\n'
+              'Too many requests to ${AiProviders.byId(pid).displayName}. '
+              'Please wait a moment and try again.',
+            );
+          }
+          return ChatResponse('Error: $e');
+        }
+      }
+
+      return ChatResponse('Error: Failed after $_maxRetries retries');
+    } catch (e) {
+      return ChatResponse('Error: $e');
+    }
+  }
+
+  Future<ChatResponse> _geminiChatMessage(
+    String message,
+    List<Map<String, String>> history, {
+    String? systemInstruction,
+    String? imageBase64,
+  }) async {
+    if (_geminiModel == null) return ChatResponse('Error: Set Gemini API key.');
+    try {
+      var model = _geminiModel!;
+      if (systemInstruction != null) {
+        final key = _settings.apiKeys['google'] ?? '';
+        // Use standard GenerativeModel with systemInstruction.
+        // Custom proxy URLs are handled via OpenAI-compatible Dio endpoint.
+        model = GenerativeModel(
+          model: _settings.selectedModel,
+          apiKey: key,
+          systemInstruction: Content.system(systemInstruction),
+        );
+      }
+      
+      // Build content with optional image
+      final parts = <Part>[TextPart(message)];
+      if (imageBase64 != null) {
+        parts.insert(0, DataPart('image/jpeg', base64Decode(imageBase64)));
+      }
+      
+      final geminiHistory = history
+          .map(
+            (m) => m['role'] == 'user'
+                ? Content('user', [TextPart(m['content'] ?? '')])
+                : Content.model([TextPart(m['content'] ?? '')]),
+          )
+          .toList();
+      final session = model.startChat(history: geminiHistory);
+      final resp = await session.sendMessage(Content('user', parts));
+      final text = resp.text ?? 'No response';
+      int promptTokens = 0;
+      int completionTokens = 0;
+      if (resp.usageMetadata != null) {
+        promptTokens = resp.usageMetadata?.promptTokenCount ?? 0;
+        completionTokens = resp.usageMetadata?.candidatesTokenCount ?? 0;
+      }
+      return ChatResponse(
+        text,
+        tokenUsage: TokenUsage(
+          promptTokens: promptTokens,
+          completionTokens: completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        ),
+      );
+    } catch (e) {
+      return ChatResponse('Error: $e');
+    }
+  }
+
+  Future<ChatResponse> _openAiChatMessage(
+    String message,
+    List<Map<String, String>> history, {
+    String? systemInstruction,
+    String? imageBase64,
+  }) async {
+    final pid = _settings.selectedProviderId;
+    try {
+      // Build user message with optional image
+      dynamic userContent;
+      if (imageBase64 != null) {
+        userContent = [
+          {'type': 'text', 'text': message},
+          {
+            'type': 'image_url',
+            'image_url': {'url': 'data:image/jpeg;base64,$imageBase64'}
+          },
+        ];
+      } else {
+        userContent = message;
+      }
+
+      final messages = [
+        if (systemInstruction != null)
+          {'role': 'system', 'content': systemInstruction},
+        ...history.map((m) => {'role': m['role'], 'content': m['content']}),
+        {'role': 'user', 'content': userContent},
       ];
       final resp = await _executeOpenAiCompatRequest(
         pid,
@@ -817,23 +1100,79 @@ class AIService {
           'max_tokens': 4096,
         }),
       );
-      return resp.data['choices'][0]['message']['content'] as String;
-    } catch (e) {
-      return 'Error: $e';
+      final text = resp.data?['choices']?[0]?['message']?['content']?.toString() ?? 'Error: Unexpected API response format';
+      int promptTokens = 0;
+      int completionTokens = 0;
+      if (resp.data?['usage'] is Map) {
+        final usage = resp.data['usage'] as Map;
+        promptTokens = usage['prompt_tokens'] as int? ?? 0;
+        completionTokens = usage['completion_tokens'] as int? ?? 0;
+      }
+      return ChatResponse(
+        text,
+        tokenUsage: TokenUsage(
+          promptTokens: promptTokens,
+          completionTokens: completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        ),
+      );
+    } on Exception catch (e) {
+      final errorStr = e.toString();
+      if (errorStr.contains('403')) {
+        return ChatResponse(
+          '❌ **API key error (403 Forbidden)**\n\n'
+          'Your API key for ${AiProviders.byId(pid).displayName} is invalid or expired.\n'
+          'Please go to **AI Settings** and update your API key.',
+        );
+      }
+      if (errorStr.contains('429')) {
+        return ChatResponse(
+          '⏳ **Rate limit exceeded (429)**\n\n'
+          'Too many requests to ${AiProviders.byId(pid).displayName}. '
+          'Please wait a moment and try again.',
+        );
+      }
+      if (errorStr.contains('connection') || errorStr.contains('SocketException')) {
+        return ChatResponse(
+          '🔌 **Connection error**\n\n'
+          'Could not connect to ${AiProviders.byId(pid).displayName}. '
+          'Check your internet connection and try again.',
+        );
+      }
+      return ChatResponse('Error: $e');
     }
   }
 
-  Future<String> _anthropicChatMessage(
+  Future<ChatResponse> _anthropicChatMessage(
     String message,
     List<Map<String, String>> history, {
     String? systemInstruction,
+    String? imageBase64,
   }) async {
     final key = _settings.apiKeys['anthropic'] ?? '';
-    if (key.isEmpty) return 'Error: Set Anthropic API key.';
+    if (key.isEmpty) return ChatResponse('Error: Set Anthropic API key.');
     try {
+      // Build user content with optional image
+      dynamic userContent;
+      if (imageBase64 != null) {
+        userContent = [
+          {
+            'type': 'image',
+            'source': {
+              'type': 'base64',
+              'media_type': 'image/jpeg',
+              'data': imageBase64,
+            }
+          },
+          {'type': 'text', 'text': message},
+        ];
+      } else {
+        userContent = message;
+      }
+
       final messages = [
         ...history.map((m) => {'role': m['role'], 'content': m['content']}),
-        {'role': 'user', 'content': message},
+        {'role': 'user', 'content': userContent},
       ];
       final Map<String, dynamic> payload = {
         'model': _settings.selectedModel,
@@ -854,13 +1193,28 @@ class AIService {
         ),
         data: jsonEncode(payload),
       );
-      return resp.data['content'][0]['text'] as String;
+      final text = resp.data?['content']?[0]?['text']?.toString() ?? 'Error: Unexpected Anthropic response format';
+      int promptTokens = 0;
+      int completionTokens = 0;
+      if (resp.data?['usage'] is Map) {
+        final usage = resp.data['usage'] as Map;
+        promptTokens = usage['input_tokens'] as int? ?? 0;
+        completionTokens = usage['output_tokens'] as int? ?? 0;
+      }
+      return ChatResponse(
+        text,
+        tokenUsage: TokenUsage(
+          promptTokens: promptTokens,
+          completionTokens: completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        ),
+      );
     } catch (e) {
-      return 'Anthropic Error: $e';
+      return ChatResponse('Anthropic Error: $e');
     }
   }
 
-  Future<String> _ollamaChatMessage(
+  Future<ChatResponse> _ollamaChatMessage(
     String message,
     List<Map<String, String>> history, {
     String? systemInstruction,
@@ -875,15 +1229,26 @@ class AIService {
       ];
       final resp = await _dio.post(
         '$base/api/chat',
+        options: Options(receiveTimeout: Duration.zero),
         data: jsonEncode({
           'model': _settings.selectedModel,
           'messages': messages,
           'stream': false,
         }),
       );
-      return resp.data['message']['content'] as String;
+      final text = resp.data?['message']?['content']?.toString() ?? 'Error: Unexpected Ollama response format';
+      final promptTokens = resp.data?['prompt_eval_count'] as int? ?? 0;
+      final completionTokens = resp.data?['eval_count'] as int? ?? 0;
+      return ChatResponse(
+        text,
+        tokenUsage: TokenUsage(
+          promptTokens: promptTokens,
+          completionTokens: completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        ),
+      );
     } catch (e) {
-      return 'Ollama Error: $e';
+      return ChatResponse('Ollama Error: $e');
     }
   }
 }

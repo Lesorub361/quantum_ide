@@ -26,7 +26,7 @@
   "build": "Build",
   "aiAgent": "AI Agent",
   "servers": "Servers",
-  "buildLogs": "Build Logs",
+  "buildLogs": "Build logs",
   "appLogs": "App Logs",
   "copy": "Copy",
   "stop": "Stop",
@@ -112,7 +112,7 @@
       }
     }
   },
-  "confirmDeleteTitle": "Delete \"{name}\"?",
+  "confirmDeleteTitle": "Confirm Delete",
   "@confirmDeleteTitle": {
     "placeholders": {
       "name": {
@@ -167,22 +167,32 @@
   "workingOnFile": "I'm working on the file: {file}. \nHere is its content:\n```\n{code}\n```\n\nMy question: {question}",
   "@workingOnFile": {
     "placeholders": {
-      "file": { "type": "String" },
-      "code": { "type": "String" },
-      "question": { "type": "String" }
+      "file": {
+        "type": "String"
+      },
+      "code": {
+        "type": "String"
+      },
+      "question": {
+        "type": "String"
+      }
     }
   },
   "aiAskDialogTitle": "AI Agent Query",
   "aiAskFolder": "Folder: {name}",
   "@aiAskFolder": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "aiAskFile": "File: {name}",
   "@aiAskFile": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "aiAskFolderHint": "Describe the task (e.g. \"create a controller\", \"add a data model\"...)",
@@ -193,7 +203,9 @@
   "changesInFile": "Changes in {name}",
   "@changesInFile": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "noFilesFound": "No files found",
@@ -201,7 +213,9 @@
   "errorOccurred": "Error: {error}",
   "@errorOccurred": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "aiProvidersInfo": "Add API keys for different AI providers. Local models (Ollama/LM Studio) do not require a key.",
@@ -222,7 +236,9 @@
   "modelInstalled": "Model set to {name}",
   "@modelInstalled": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "modelsNotFound": "No models found. Click \"Find Models\".",
@@ -234,69 +250,95 @@
   "providerActivated": "{name} activated",
   "@providerActivated": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "send": "Send",
-  "acceptAll": "Accept All",
-  "rejectAll": "Reject All",
+  "acceptAll": "Accept all",
+  "rejectAll": "Reject all",
   "projectAnalysis": "Project Analysis",
   "problemsFound": "Problems found: {count} ({errors} errors, {warnings} warnings)",
   "@problemsFound": {
     "placeholders": {
-      "count": { "type": "int" },
-      "errors": { "type": "int" },
-      "warnings": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "errors": {
+        "type": "int"
+      },
+      "warnings": {
+        "type": "int"
+      }
     }
   },
   "fixWithAi": "Fix with AI",
   "runningCommand": "Running command: {command}...",
   "@runningCommand": {
     "placeholders": {
-      "command": { "type": "String" }
+      "command": {
+        "type": "String"
+      }
     }
   },
   "applyingChange": "Applying change: {path}...",
   "@applyingChange": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "fileSuccessfullyWritten": "File {path} successfully written.",
   "@fileSuccessfullyWritten": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "fileSuccessfullyDeleted": "File {path} successfully deleted.",
   "@fileSuccessfullyDeleted": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "commandExecutedResult": "Command \"{command}\" executed. Result:\n{result}",
   "@commandExecutedResult": {
     "placeholders": {
-      "command": { "type": "String" },
-      "result": { "type": "String" }
+      "command": {
+        "type": "String"
+      },
+      "result": {
+        "type": "String"
+      }
     }
   },
   "commandSentToTerminal": "Command \"{command}\" sent to terminal.",
   "@commandSentToTerminal": {
     "placeholders": {
-      "command": { "type": "String" }
+      "command": {
+        "type": "String"
+      }
     }
   },
   "unknownActionType": "Unknown action type: {type}",
   "@unknownActionType": {
     "placeholders": {
-      "type": { "type": "String" }
+      "type": {
+        "type": "String"
+      }
     }
   },
   "failedToApplyAction": "Failed to apply action: {error}",
   "@failedToApplyAction": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "noErrorsFound": "No errors found",
@@ -326,8 +368,12 @@
   "lineCol": "Ln {line}, Col {col}",
   "@lineCol": {
     "placeholders": {
-      "line": { "type": "int" },
-      "col": { "type": "int" }
+      "line": {
+        "type": "int"
+      },
+      "col": {
+        "type": "int"
+      }
     }
   },
   "noOpenFiles": "No open files in editor",
@@ -335,14 +381,18 @@
   "parsingError": "Parsing error: {error}",
   "@parsingError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "outlineEmptyOrUnsupported": "Outline empty or unsupported",
   "outlineHeader": "Structure: {filename}",
   "@outlineHeader": {
     "placeholders": {
-      "filename": { "type": "String" }
+      "filename": {
+        "type": "String"
+      }
     }
   },
   "projectFolderNotFound": "Project folder not found",
@@ -350,22 +400,30 @@
   "scanningError": "Scanning error: {error}",
   "@scanningError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "deleteFileConfirmTitle": "Delete File",
   "deleteFileConfirmMessage": "Are you sure you want to permanently delete file:\n\n{name}\nSize: {size}?",
   "@deleteFileConfirmMessage": {
     "placeholders": {
-      "name": { "type": "String" },
-      "size": { "type": "String" }
+      "name": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      }
     }
   },
   "fileDeletedSuccess": "File deleted successfully",
   "deleteFileError": "Delete error: {error}",
   "@deleteFileError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "diskSpaceAnalysis": "Disk space analysis...",
@@ -383,14 +441,20 @@
   "searchMatchesFound": "Found {matches} matches in {files} files",
   "@searchMatchesFound": {
     "placeholders": {
-      "matches": { "type": "int" },
-      "files": { "type": "int" }
+      "matches": {
+        "type": "int"
+      },
+      "files": {
+        "type": "int"
+      }
     }
   },
   "searchError": "Search error: {error}",
   "@searchError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchingInProgress": "Searching...",
@@ -430,19 +494,25 @@
   "signProjectScanError": "Project scan error: {error}",
   "@signProjectScanError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "signKeystoreSelected": "Keystore selected: {path}",
   "@signKeystoreSelected": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "signFilePickError": "File pick error: {error}",
   "@signFilePickError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "signNoOpenProject": "No open project",
@@ -452,14 +522,20 @@
   "signApkProgress": "Signing APK: {apk}...",
   "@signApkProgress": {
     "placeholders": {
-      "apk": { "type": "String" }
+      "apk": {
+        "type": "String"
+      }
     }
   },
   "signKeyFile": "Key file: {key} (alias: {alias})",
   "@signKeyFile": {
     "placeholders": {
-      "key": { "type": "String" },
-      "alias": { "type": "String" }
+      "key": {
+        "type": "String"
+      },
+      "alias": {
+        "type": "String"
+      }
     }
   },
   "signRunningApksigner": "Running apksigner...",
@@ -469,51 +545,67 @@
   "signError": "Error signing APK: {error}",
   "@signError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "genKeystoreFillFields": "Fill key generation fields",
   "genKeystoreProgress": "Generating Keystore: {name}...",
   "@genKeystoreProgress": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "genKeystoreSuccess": "Keystore created successfully at: {name}",
   "@genKeystoreSuccess": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "genKeystoreFailed": "Failed to create Keystore.",
   "genKeystoreError": "Error generating Keystore: {error}",
   "@genKeystoreError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "installApkProgress": "Starting APK installation: {apk}",
   "@installApkProgress": {
     "placeholders": {
-      "apk": { "type": "String" }
+      "apk": {
+        "type": "String"
+      }
     }
   },
   "installApkResult": "Installation result: {msg}",
   "@installApkResult": {
     "placeholders": {
-      "msg": { "type": "String" }
+      "msg": {
+        "type": "String"
+      }
     }
   },
   "installApkNotFound": "APK file not found: {path}",
   "@installApkNotFound": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "installApkError": "Installation error: {error}",
   "@installApkError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "glassmorphismEffects": "Glassmorphism Effects",
@@ -535,7 +627,6 @@
   "connectedTo": "Connected to:",
   "userName": "Your Name",
   "usersList": "Participants",
-  "chat": "Chat",
   "messagePlaceholder": "Type a message...",
   "connectError": "Connection error",
   "invalidAddress": "Invalid address",
@@ -775,7 +866,9 @@
   "saveError": "Error saving: {error}",
   "@saveError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "acceptMerge": "Accept Merge",
@@ -788,7 +881,9 @@
   "incomingChanges": "Incoming changes ({branch})",
   "@incomingChanges": {
     "placeholders": {
-      "branch": { "type": "String" }
+      "branch": {
+        "type": "String"
+      }
     }
   },
   "useThisVersion": "Use this version",
@@ -804,7 +899,9 @@
   "editingFile": "Editing: {file}",
   "@editingFile": {
     "placeholders": {
-      "file": { "type": "String" }
+      "file": {
+        "type": "String"
+      }
     }
   },
   "viewingProject": "Viewing project",
@@ -815,8 +912,12 @@
   "lineColumn": "Line {line}, Column {col}",
   "@lineColumn": {
     "placeholders": {
-      "line": { "type": "int" },
-      "col": { "type": "int" }
+      "line": {
+        "type": "int"
+      },
+      "col": {
+        "type": "int"
+      }
     }
   },
   "decreaseFontSize": "Decrease Font Size",
@@ -832,8 +933,12 @@
   "packagesInstalledCount": "Installed: {count}/{total}",
   "@packagesInstalledCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "total": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "flutterProject": "Flutter Project",
@@ -852,16 +957,12 @@
   "console": "Console",
   "signApk": "Sign APK",
   "buildPC": "Build (PC)",
-  "buildLogs": "Build logs",
   "resetPlugins": "Reset Plugins",
   "resetPluginsConfirmation": "This will remove all installed custom plugins and restore default plugins. Continue?",
   "resetPluginsTitle": "Reset Plugins?",
   "installWasm": "Install .wasm",
-  "noPluginsInstalled": "No WASM plugins installed",
   "availableActions": "Available Actions:",
   "logsTerminal": "Logs Terminal",
-  "clearLogs": "Clear Logs",
-  "deletePlugin": "Delete Plugin",
   "noLogsCaptured": "No logs captured yet",
   "installWasmPluginTitle": "Install WASM Plugin",
   "selectWasmFile": "Select .wasm file",
@@ -876,14 +977,18 @@
   "failedToInstall": "Failed to install: {error}",
   "@failedToInstall": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "mcpServersTitle": "AI Modules: MCP Servers",
   "activeServers": "Active Servers ({count})",
   "@activeServers": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "repository": "Repository",
@@ -892,35 +997,44 @@
   "addManually": "Add Manually",
   "addServerManually": "Add Server Manually",
   "installed": "INSTALLED",
-  "install": "Install",
   "packageDetail": "Package: {detail}",
   "@packageDetail": {
     "placeholders": {
-      "detail": { "type": "String" }
+      "detail": {
+        "type": "String"
+      }
     }
   },
   "authParam": "Auth parameter: {key}",
   "@authParam": {
     "placeholders": {
-      "key": { "type": "String" }
+      "key": {
+        "type": "String"
+      }
     }
   },
   "enterValueFor": "Enter value for {key}",
   "@enterValueFor": {
     "placeholders": {
-      "key": { "type": "String" }
+      "key": {
+        "type": "String"
+      }
     }
   },
   "enterLabel": "Enter {label}",
   "@enterLabel": {
     "placeholders": {
-      "label": { "type": "String" }
+      "label": {
+        "type": "String"
+      }
     }
   },
   "installPreset": "Install: {name}",
   "@installPreset": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "serverName": "Server Name",
@@ -938,15 +1052,18 @@
   "resultsCount": "Results: {count}",
   "@resultsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "noResults": "No results found",
-  "confirmDeleteTitle": "Confirm Delete",
   "confirmDeleteMultiple": "Are you sure you want to delete {count} items?",
   "@confirmDeleteMultiple": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "archiveExtracted": "Archive successfully extracted!",
@@ -955,13 +1072,17 @@
   "folderLabel": "Folder: {name}",
   "@folderLabel": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "fileLabel": "File: {name}",
   "@fileLabel": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "whatShouldAiDoFolder": "What should AI do with this folder?",
@@ -976,9 +1097,7 @@
   "generateTestsDesc": "Write unit tests for the code",
   "optimizeCode": "AI: Optimize",
   "optimizeCodeDesc": "Suggest performance improvements",
-  "newFile": "New File",
   "newFileDesc": "Create a file in this folder",
-  "newFolder": "New Folder",
   "newFolderDesc": "Create a subfolder",
   "removeFromBookmarks": "Remove from Bookmarks",
   "removeFromBookmarksDesc": "Remove file from quick access",
@@ -1002,7 +1121,9 @@
   "moveError": "Move error: {error}",
   "@moveError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "image": "IMAGE",
@@ -1011,7 +1132,9 @@
   "failedToReadFile": "Failed to read file: {error}",
   "@failedToReadFile": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "aiSettings": "AI Settings",
@@ -1022,17 +1145,16 @@
   "defaultHint": "Default: {url}",
   "@defaultHint": {
     "placeholders": {
-      "url": { "type": "String" }
+      "url": {
+        "type": "String"
+      }
     }
   },
   "chatWithAi": "CHAT WITH AI",
   "chatHistory": "Chat History",
   "newChat": "New Chat",
-  "chat": "Chat",
-  "agents": "Agents",
   "internetAccess": "Internet Access",
   "mcpServers": "MCP Servers",
-  "stop": "Stop",
   "manualMode": "Manual Mode",
   "safeAutopilot": "Safe Autopilot",
   "fullAutonomy": "Full Autonomy",
@@ -1040,18 +1162,17 @@
   "installGeminiCliInSettings": "Install gemini-cli in settings",
   "stopAgent": "STOP AGENT",
   "withChanges": "with changes",
-  "rejectAll": "Reject all",
-  "acceptAll": "Accept all",
   "attachOpenFile": "Attach open file",
   "noHistoryFound": "No history found",
   "untitled": "Untitled",
   "messagesCount": "{count} messages",
   "@messagesCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
-  "close": "Close",
   "systemEnv": "System Environment",
   "fixEnvironmentArm64": "Fix Environment (ARM64)",
   "environment": "Environment",
@@ -1062,12 +1183,13 @@
   "selectPluginAction": "Select Plugin Action",
   "noSelection": "No selection",
   "applyPluginToFile": "Apply plugin action to the entire file?",
-  "apply": "Apply",
   "pluginExecutedSuccess": "Plugin executed successfully",
   "executionError": "Execution error: {error}",
   "@executionError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "quickSearch": "Quick Search (Ctrl+P)",
@@ -1082,7 +1204,9 @@
   "ranAction": "Ran: {content}",
   "@ranAction": {
     "placeholders": {
-      "content": { "type": "String" }
+      "content": {
+        "type": "String"
+      }
     }
   },
   "created": "Created",
@@ -1092,35 +1216,51 @@
   "stepNumber": "Step {step}/{total}",
   "@stepNumber": {
     "placeholders": {
-      "step": { "type": "int" },
-      "total": { "type": "int" }
+      "step": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
     }
   },
   "filesChangedCount": "Files changed: {count} (+{additions} -{deletions})",
   "@filesChangedCount": {
     "placeholders": {
-      "count": { "type": "int" },
-      "additions": { "type": "int" },
-      "deletions": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "additions": {
+        "type": "int"
+      },
+      "deletions": {
+        "type": "int"
+      }
     }
   },
   "commandsExecutedCount": "Executed {count} commands",
   "@commandsExecutedCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "changesAccepted": "Changes accepted and stashed",
   "undoneChanges": "Undid {count} file changes",
   "@undoneChanges": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "discardedFileChanges": "Discarded changes in {file}",
   "@discardedFileChanges": {
     "placeholders": {
-      "file": { "type": "String" }
+      "file": {
+        "type": "String"
+      }
     }
   },
   "thinking": "Thinking...",
@@ -1129,7 +1269,6 @@
   "validator": "VALIDATOR",
   "aiAgentRole": "AI-AGENT",
   "resubmit": "Resubmit",
-  "system": "System",
   "rollbackHistoryToStep": "Rollback history and code to this step",
   "confirmRollback": "Confirm Rollback",
   "rollbackConfirmationText": "All code changes made after this message will be reverted, and subsequent messages deleted. Continue?",
@@ -1161,7 +1300,9 @@
   "selectedObjectsCount": "Selected objects: {count}",
   "@selectedObjectsCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "explainFolderPreset": "Explain the purpose and structure of this folder.",
@@ -1179,7 +1320,9 @@
   "filesCount": "{count} {count, plural, =1{file} other{files}}",
   "@filesCount": {
     "placeholders": {
-      "count": { "type": "int" }
+      "count": {
+        "type": "int"
+      }
     }
   },
   "localAiEngineTitle": "LOCAL AI ENGINE",
@@ -1205,19 +1348,21 @@
   "runningPort8080": "Running (port 8080)",
   "starting": "Starting...",
   "stopped": "Stopped",
-  "refresh": "Refresh",
   "start": "Start",
-  "activeCaps": "ACTIVE",
   "gbFormat": "{size} GB",
   "@gbFormat": {
     "placeholders": {
-      "size": { "type": "String" }
+      "size": {
+        "type": "String"
+      }
     }
   },
   "ramGbFormat": "~{size} GB RAM",
   "@ramGbFormat": {
     "placeholders": {
-      "size": { "type": "String" }
+      "size": {
+        "type": "String"
+      }
     }
   },
   "select": "Select",
@@ -1226,7 +1371,9 @@
   "inFolder": "in {folder}",
   "@inFolder": {
     "placeholders": {
-      "folder": { "type": "String" }
+      "folder": {
+        "type": "String"
+      }
     }
   },
   "llamaServerBuiltIn": "llama-server (built-in)",
@@ -1256,21 +1403,27 @@
   "androidJarCorruptError": "android.jar is corrupt ({api}). Click \"Fix Environment\" to reinstall.",
   "@androidJarCorruptError": {
     "placeholders": {
-      "api": { "type": "String" }
+      "api": {
+        "type": "String"
+      }
     }
   },
   "androidSdkPlatformsHealthy": "android-35 / android-36 — healthy",
   "checkFailed": "Check failed: {error}",
   "@checkFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "analyzingTaskAndPlanning": "Analyzing task & planning...",
   "agentStepLimitExceeded": "🤖 Agent step limit ({limit}) exceeded. Autopilot stopped.",
   "@agentStepLimitExceeded": {
     "placeholders": {
-      "limit": { "type": "int" }
+      "limit": {
+        "type": "int"
+      }
     }
   },
   "generatingCodeChanges": "Generating code changes...",
@@ -1279,125 +1432,175 @@
   "blockedUnsafeActions": "❌ Blocked unsafe actions outside workspace scope:\n{blockedText}",
   "@blockedUnsafeActions": {
     "placeholders": {
-      "blockedText": { "type": "String" }
+      "blockedText": {
+        "type": "String"
+      }
     }
   },
   "awaitingApprovalHighRisk": "⚠️ Awaiting approval: High-risk actions detected or autopilot is restricted. Please approve them in the AI panel.",
   "autopilotStepSummary": "🤖 Autopilot (step {step}): Auto-Approval of actions:\n{actionsListText}\n\nResults:\n{results}",
   "@autopilotStepSummary": {
     "placeholders": {
-      "step": { "type": "int" },
-      "actionsListText": { "type": "String" },
-      "results": { "type": "String" }
+      "step": {
+        "type": "int"
+      },
+      "actionsListText": {
+        "type": "String"
+      },
+      "results": {
+        "type": "String"
+      }
     }
   },
   "runningStaticAnalysis": "Running project static analysis (dart analyze)...",
   "agentFailedToFixErrors": "⚠️ Agent failed to fix errors after {maxAttempts} attempts.\n\n**Remaining errors:**\n{errorReport}\n\nPlease describe the issue or fix manually.",
   "@agentFailedToFixErrors": {
     "placeholders": {
-      "maxAttempts": { "type": "int" },
-      "errorReport": { "type": "String" }
+      "maxAttempts": {
+        "type": "int"
+      },
+      "errorReport": {
+        "type": "String"
+      }
     }
   },
   "fixingCompilationErrors": "Fixing compilation errors...",
   "readingFile": "Reading file {path}...",
   "@readingFile": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "savingFile": "Saving file {path}...",
   "@savingFile": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "deletingFile": "Deleting file {path}...",
   "@deletingFile": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "runningCommandStatus": "Running command \"{command}\"...",
   "@runningCommandStatus": {
     "placeholders": {
-      "command": { "type": "String" }
+      "command": {
+        "type": "String"
+      }
     }
   },
   "searchingCode": "Searching code: \"{query}\"...",
   "@searchingCode": {
     "placeholders": {
-      "query": { "type": "String" }
+      "query": {
+        "type": "String"
+      }
     }
   },
   "listingDirectory": "Listing directory {path}...",
   "@listingDirectory": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "findingSymbols": "Finding symbols: \"{query}\"...",
   "@findingSymbols": {
     "placeholders": {
-      "query": { "type": "String" }
+      "query": {
+        "type": "String"
+      }
     }
   },
   "searchingWeb": "Searching web: \"{query}\"...",
   "@searchingWeb": {
     "placeholders": {
-      "query": { "type": "String" }
+      "query": {
+        "type": "String"
+      }
     }
   },
   "fetchingWebPage": "Fetching web page: {path}...",
   "@fetchingWebPage": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "executingAction": "Executing action...",
   "runningCommandLabel": "🤖 Running command: {command}...",
   "@runningCommandLabel": {
     "placeholders": {
-      "command": { "type": "String" }
+      "command": {
+        "type": "String"
+      }
     }
   },
   "applyingChangeLabel": "🤖 Applying change: {path}...",
   "@applyingChangeLabel": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "commandSentToTerminalLabel": "🤖 Command \"{command}\" sent to terminal.",
   "@commandSentToTerminalLabel": {
     "placeholders": {
-      "command": { "type": "String" }
+      "command": {
+        "type": "String"
+      }
     }
   },
   "runningCommandResultLabel": "Command \"{command}\" executed. Result:\n{result}",
   "@runningCommandResultLabel": {
     "placeholders": {
-      "command": { "type": "String" },
-      "result": { "type": "String" }
+      "command": {
+        "type": "String"
+      },
+      "result": {
+        "type": "String"
+      }
     }
   },
   "fileNotFound": "File not found: {path}",
   "@fileNotFound": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "fileContentsHeader": "File contents of `{path}` ({lineCount} lines):\n\n```\n{truncated}\n```",
   "@fileContentsHeader": {
     "placeholders": {
-      "path": { "type": "String" },
-      "lineCount": { "type": "int" },
-      "truncated": { "type": "String" }
+      "path": {
+        "type": "String"
+      },
+      "lineCount": {
+        "type": "int"
+      },
+      "truncated": {
+        "type": "String"
+      }
     }
   },
   "fileTruncatedSuffix": "... [truncated to 8000 chars from {lineCount} lines]",
   "@fileTruncatedSuffix": {
     "placeholders": {
-      "lineCount": { "type": "int" }
+      "lineCount": {
+        "type": "int"
+      }
     }
   },
   "safetyGuardFileOutsideWorkspace": "Error: Attempted file modification outside the project scope.",
@@ -1405,70 +1608,104 @@
   "commandBlockedUnsafe": "Security error: Command contains blocked instruction \"{blocked}\".",
   "@commandBlockedUnsafe": {
     "placeholders": {
-      "blocked": { "type": "String" }
+      "blocked": {
+        "type": "String"
+      }
     }
   },
   "aiSearchNoMatches": "No matches found for \"{query}\".",
   "@aiSearchNoMatches": {
     "placeholders": {
-      "query": { "type": "String" }
+      "query": {
+        "type": "String"
+      }
     }
   },
   "aiSearchMatchesFound": "Found {matchCount} matches for \"{query}\":\n\n{results}",
   "@aiSearchMatchesFound": {
     "placeholders": {
-      "matchCount": { "type": "int" },
-      "query": { "type": "String" },
-      "results": { "type": "String" }
+      "matchCount": {
+        "type": "int"
+      },
+      "query": {
+        "type": "String"
+      },
+      "results": {
+        "type": "String"
+      }
     }
   },
   "searchSymbolsNoMatches": "No symbols found matching \"{query}\".",
   "@searchSymbolsNoMatches": {
     "placeholders": {
-      "query": { "type": "String" }
+      "query": {
+        "type": "String"
+      }
     }
   },
   "searchSymbolsMatchesFound": "Found {count} symbols matching \"{query}\":\n\n{results}",
   "@searchSymbolsMatchesFound": {
     "placeholders": {
-      "count": { "type": "int" },
-      "query": { "type": "String" },
-      "results": { "type": "String" }
+      "count": {
+        "type": "int"
+      },
+      "query": {
+        "type": "String"
+      },
+      "results": {
+        "type": "String"
+      }
     }
   },
   "searchSymbolsItem": "- [{type}] {name} (file: {path}, line: {line})",
   "@searchSymbolsItem": {
     "placeholders": {
-      "type": { "type": "String" },
-      "name": { "type": "String" },
-      "path": { "type": "String" },
-      "line": { "type": "int" }
+      "type": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      },
+      "path": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      }
     }
   },
   "directoryNotFound": "Directory not found: {path}",
   "@directoryNotFound": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "directoryEmpty": "Directory is empty.",
   "directoryContentsHeader": "Directory contents:\n\n{items}",
   "@directoryContentsHeader": {
     "placeholders": {
-      "items": { "type": "String" }
+      "items": {
+        "type": "String"
+      }
     }
   },
   "mcpMissingParams": "Error: MCP server or tool name is not specified.",
   "unknownAction": "Unknown action type: {type}",
   "@unknownAction": {
     "placeholders": {
-      "type": { "type": "String" }
+      "type": {
+        "type": "String"
+      }
     }
   },
   "failedToApplyActionWithError": "Failed to apply action: {error}",
   "@failedToApplyActionWithError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "searchQueryEmpty": "Error: Search query is empty.",
@@ -1491,43 +1728,116 @@
   "collabSessionCreated": "Session created on port {port}.",
   "@collabSessionCreated": {
     "placeholders": {
-      "port": { "type": "int" }
+      "port": {
+        "type": "int"
+      }
     }
   },
   "collabSessionCreateError": "Error creating session: {error}",
   "@collabSessionCreateError": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabUserDisconnected": "User {name} disconnected.",
   "@collabUserDisconnected": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabConnectError": "Error connecting to {url}: {error}",
   "@collabConnectError": {
     "placeholders": {
-      "url": { "type": "String" },
-      "error": { "type": "String" }
+      "url": {
+        "type": "String"
+      },
+      "error": {
+        "type": "String"
+      }
     }
   },
   "collabConnectionLost": "Connection to session lost.",
   "collabUserJoined": "User {name} joined.",
   "@collabUserJoined": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "collabJoinedAsGuest": "You joined the session as a guest.",
   "collabUserLeft": "User {name} left the session.",
   "@collabUserLeft": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "webPreviewNotSupported": "Web preview is not supported on this platform",
+  "webPreviewNotSupportedDesc": "Embedded WebView is not supported on this platform. Use the top right button to open in an external browser.",
+  "debugger": "Debugger",
+  "startDebugging": "Start Debugging",
+  "stopDebugging": "Stop Debugging",
+  "continue_": "Continue",
+  "stepOver": "Step Over",
+  "stepIn": "Step In",
+  "stepOut": "Step Out",
+  "pause": "Pause",
+  "restart": "Restart",
+  "callStack": "Call Stack",
+  "variables": "Variables",
+  "breakpoints": "Breakpoints",
+  "output": "Output",
+  "launchConfiguration": "Launch Configuration",
+  "programToDebug": "Program to debug",
+  "noStackFrames": "No stack frames",
+  "noVariables": "No variables",
+  "noOutput": "No output",
+  "localModels": "Local Models",
+  "all": "All",
+  "downloaded": "Downloaded",
+  "vision": "Vision",
+  "uncensored": "Uncensored",
+  "noModelsFound": "No models found",
+  "unload": "Unload",
+  "load": "Load",
+  "attachImage": "Attach Image",
+  "modeChat": "Chat",
+  "modeRefactor": "Refactor",
+  "modeAutopilot": "Autopilot",
+  "quickPromptRefactor": "Refactor",
+  "quickPromptRefactorText": "Refactor this code",
+  "quickPromptExplain": "Explain",
+  "quickPromptExplainText": "Explain how this code works",
+  "quickPromptFixErrors": "Fix Errors",
+  "quickPromptFixErrorsText": "Find and fix errors in this code",
+  "quickPromptOptimize": "Optimize",
+  "quickPromptOptimizeText": "Optimize performance of this code",
+  "quickPromptWriteTests": "Write Tests",
+  "quickPromptWriteTestsText": "Write unit tests for this code",
+  "actionReadingFile": "Reading file",
+  "actionViewingFolder": "Viewing folder",
+  "actionSearchingCode": "Searching code",
+  "actionFindingSymbol": "Finding symbol",
+  "actionCreatingFile": "Creating file",
+  "actionEditingFile": "Editing file",
+  "actionDeletingFile": "Deleting file",
+  "actionRunningCommand": "Running command",
+  "actionWebSearch": "Searching the web",
+  "actionFetchingPage": "Fetching page",
+  "actionMcpTool": "MCP tool",
+  "actionExecuting": "Executing action",
+  "sessionRestored": "Session restored",
+  "sessionRestoredDetail": "Loaded {count} messages from `.quantum/chat_history.json`.\nAgent memory: {files} files in context.\nContinue where you left off.",
+  "@sessionRestoredDetail": {
+    "placeholders": {
+      "count": { "type": "int" },
+      "files": { "type": "int" }
     }
   }
 }
-
-
-
