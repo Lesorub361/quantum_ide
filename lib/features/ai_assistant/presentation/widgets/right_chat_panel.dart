@@ -20,6 +20,7 @@ import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
+import 'package:quantum_ide/core/services/local_inference_service.dart';
 
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/models/chat_message.dart';
@@ -1112,6 +1113,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 const Divider(color: Colors.white10, height: 1),
                 const SizedBox(height: 6),
 
+                // Provider & Status Row
+                _buildProviderRow(context, ref, aiState),
+                const SizedBox(height: 4),
                 // Bottom Row: Dropdowns (Mode, Model, Autonomy)
                 Row(
                   children: [
@@ -1279,12 +1283,125 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
+  Widget _buildProviderRow(BuildContext context, WidgetRef ref, AIState aiState) {
+    final activeProviderId = ref.watch(activeAiProviderIdProvider);
+    final currentProvider = AiProviders.byId(activeProviderId);
+    final localInferenceState = ref.watch(localInferenceProvider);
+    final isLocalEdge = activeProviderId == 'local_edge';
+    
+    final statusColor = isLocalEdge
+        ? (localInferenceState.status == LocalModelStatus.ready
+            ? Colors.greenAccent
+            : (localInferenceState.status == LocalModelStatus.loading
+                ? Colors.amberAccent
+                : Colors.white30))
+        : Colors.cyanAccent;
+    
+    final statusText = isLocalEdge
+        ? (localInferenceState.status == LocalModelStatus.ready
+            ? '${localInferenceState.loadedModel?.name ?? "Ready"}'
+            : (localInferenceState.status == LocalModelStatus.loading
+                ? 'Loading...'
+                : 'Stopped'))
+        : currentProvider.displayName;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.8),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: statusColor,
+              boxShadow: [BoxShadow(color: statusColor, blurRadius: 4, spreadRadius: 1)],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(currentProvider.logoEmoji.runes.first > 0x10000 ? LucideIcons.cpu : LucideIcons.cpu, size: 11, color: statusColor),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              statusText,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: statusColor,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // Provider switcher
+          PopupMenuButton<String>(
+            tooltip: '',
+            color: const Color(0xFF1E2230),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onSelected: (providerId) async {
+              final aiSvc = ref.read(aiServiceProvider);
+              await aiSvc.setProvider(providerId);
+              ref.read(activeAiProviderIdProvider.notifier).state = providerId;
+              final model = aiSvc.selectedModel;
+              ref.read(activeAiModelProvider.notifier).state = model;
+            },
+            itemBuilder: (context) {
+              final items = <PopupMenuEntry<String>>[];
+              for (final p in AiProviders.all) {
+                final isSelected = p.id == activeProviderId;
+                items.add(PopupMenuItem<String>(
+                  value: p.id,
+                  child: Row(
+                    children: [
+                      Icon(isSelected ? LucideIcons.circle_check : LucideIcons.circle, size: 11, color: isSelected ? Colors.cyanAccent : Colors.white30),
+                      const SizedBox(width: 8),
+                      Text(p.displayName, style: GoogleFonts.inter(fontSize: 11, color: Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                    ],
+                  ),
+                ));
+              }
+              return items;
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    currentProvider.displayName,
+                    style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: statusColor),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(LucideIcons.chevron_down, size: 9, color: statusColor),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildModelSelectorDropdown(BuildContext context, WidgetRef ref) {
     final activeModel = ref.watch(activeAiModelProvider);
     final activeProviderId = ref.watch(activeAiProviderIdProvider);
     final aiSvc = ref.read(aiServiceProvider);
+    final localInferenceState = ref.watch(localInferenceProvider);
     
     final currentProvider = AiProviders.byId(activeProviderId);
+    final isLocalEdge = activeProviderId == 'local_edge';
     
     String displayName = activeModel;
     if (displayName.startsWith('gemini-')) {
@@ -1294,58 +1411,113 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     } else if (displayName.startsWith('claude-')) {
       displayName = displayName.replaceAll('claude-', 'Claude ');
     }
-    
+
+    // Build combined model list: cloud models + native inference models
     final availableModelsAsync = ref.watch(availableModelsProvider(activeProviderId));
     final defaultModels = currentProvider.defaultModels;
-    final List<String> models = availableModelsAsync.maybeWhen(
+    final List<String> cloudModels = availableModelsAsync.maybeWhen(
       data: (list) => list.isNotEmpty ? list : defaultModels,
       orElse: () => defaultModels,
     );
+    
+    final List<String> nativeModels = [];
+    if (isLocalEdge) {
+      for (final m in localInferenceState.availableModels) {
+        nativeModels.add(m.filename);
+      }
+    }
+    
+    final hasNative = nativeModels.isNotEmpty;
+    final isNativeActive = isLocalEdge && localInferenceState.loadedModel != null && localInferenceState.status == LocalModelStatus.ready;
     
     return PopupMenuButton<String>(
       tooltip: 'Выбрать модель',
       color: const Color(0xFF1E2230),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       onSelected: (val) async {
+        final aiSvc = ref.read(aiServiceProvider);
         await aiSvc.setModel(val);
         ref.read(activeAiModelProvider.notifier).state = val;
+        
+        // If selecting a native model, load it
+        if (isLocalEdge && nativeModels.contains(val)) {
+          final model = localInferenceState.availableModels.firstWhere((x) => x.filename == val);
+          final isDownloaded = localInferenceState.downloadedFiles.contains(model.filename);
+          if (!isDownloaded) {
+            await ref.read(localInferenceProvider.notifier).downloadModel(model);
+          } else {
+            await ref.read(localInferenceProvider.notifier).loadModel(model);
+          }
+        }
       },
       itemBuilder: (context) {
         final List<PopupMenuEntry<String>> items = [];
         
-        items.add(
-          PopupMenuItem<String>(
+        // Native inference models section
+        if (hasNative) {
+          items.add(PopupMenuItem<String>(
+            enabled: false,
+            child: Row(
+              children: [
+                Icon(LucideIcons.smartphone, size: 10, color: Colors.greenAccent.shade100),
+                const SizedBox(width: 6),
+                Text(
+                  'НА ТЕЛЕФОНЕ',
+                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.greenAccent.shade100),
+                ),
+              ],
+            ),
+          ));
+          
+          for (final m in nativeModels) {
+            final modelInfo = localInferenceState.availableModels.firstWhere((x) => x.filename == m);
+            final isLoaded = localInferenceState.loadedModel?.filename == m && isNativeActive;
+            items.add(PopupMenuItem<String>(
+              value: m,
+              child: Row(
+                children: [
+                  Icon(isLoaded ? LucideIcons.circle_check : LucideIcons.circle, size: 11, color: isLoaded ? Colors.greenAccent : Colors.white30),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(modelInfo.name, style: GoogleFonts.inter(fontSize: 11, color: isLoaded ? Colors.greenAccent.shade100 : Colors.white70, fontWeight: isLoaded ? FontWeight.bold : FontWeight.normal)),
+                        Text('${modelInfo.size} · ${modelInfo.description}', style: GoogleFonts.inter(fontSize: 8, color: Colors.white30), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ));
+          }
+          
+          if (cloudModels.isNotEmpty) {
+            items.add(const PopupMenuDivider(height: 8));
+          }
+        }
+        
+        // Cloud/server models section
+        if (cloudModels.isNotEmpty) {
+          items.add(PopupMenuItem<String>(
             enabled: false,
             child: Text(
               'МОДЕЛИ: ${currentProvider.displayName.toUpperCase()}',
-              style: GoogleFonts.inter(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                color: Colors.purpleAccent.shade100,
-              ),
+              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.purpleAccent.shade100),
             ),
-          ),
-        );
-        
-        for (final m in models) {
-          final isSelected = m == activeModel;
-          items.add(
-            PopupMenuItem<String>(
+          ));
+          
+          for (final m in cloudModels) {
+            final isSelected = m == activeModel && !isNativeActive;
+            items.add(PopupMenuItem<String>(
               value: m,
               child: Row(
                 children: [
                   const Icon(LucideIcons.cpu, size: 11, color: Colors.purpleAccent),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      m,
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: isSelected ? Colors.purpleAccent.shade100 : Colors.white70,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    child: Text(m, style: GoogleFonts.inter(fontSize: 11, color: isSelected ? Colors.purpleAccent.shade100 : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis),
                   ),
                   if (isSelected) ...[
                     const SizedBox(width: 4),
@@ -1353,8 +1525,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   ],
                 ],
               ),
-            ),
-          );
+            ));
+          }
         }
         
         return items;
@@ -1362,17 +1534,17 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
+          color: isNativeActive ? Colors.greenAccent.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.03),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
+            color: isNativeActive ? Colors.greenAccent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.08),
             width: 0.8,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(LucideIcons.cpu, size: 11, color: Colors.cyanAccent),
+            Icon(isNativeActive ? LucideIcons.smartphone : LucideIcons.cpu, size: 11, color: isNativeActive ? Colors.greenAccent : Colors.cyanAccent),
             const SizedBox(width: 4),
             Expanded(
               child: Text(
