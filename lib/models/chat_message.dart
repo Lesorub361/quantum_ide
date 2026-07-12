@@ -60,6 +60,7 @@ class ChatMessage {
   final List<AIAction>? actions;
   final String? imageBase64;
   final String? imagePath;
+  String? sessionId;
   
   // Structured metadata fields
   final String? taskName;

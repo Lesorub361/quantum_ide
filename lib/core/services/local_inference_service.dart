@@ -95,6 +95,10 @@ class LocalInferenceState {
   final int contextTokensTotal;
   // Streaming text buffer for UI
   final String streamingText;
+  // Device info
+  final String deviceTier;
+  final int deviceRamMb;
+  final bool isTensorSoC;
 
   LocalInferenceState({
     this.status = LocalModelStatus.idle,
@@ -116,6 +120,9 @@ class LocalInferenceState {
     this.contextTokensUsed = 0,
     this.contextTokensTotal = 0,
     this.streamingText = '',
+    this.deviceTier = 'mid',
+    this.deviceRamMb = 0,
+    this.isTensorSoC = false,
   });
 
   LocalInferenceState copyWith({
@@ -138,6 +145,9 @@ class LocalInferenceState {
     int? contextTokensUsed,
     int? contextTokensTotal,
     String? streamingText,
+    String? deviceTier,
+    int? deviceRamMb,
+    bool? isTensorSoC,
   }) {
     return LocalInferenceState(
       status: status ?? this.status,
@@ -159,6 +169,9 @@ class LocalInferenceState {
       contextTokensUsed: contextTokensUsed ?? this.contextTokensUsed,
       contextTokensTotal: contextTokensTotal ?? this.contextTokensTotal,
       streamingText: streamingText ?? this.streamingText,
+      deviceTier: deviceTier ?? this.deviceTier,
+      deviceRamMb: deviceRamMb ?? this.deviceRamMb,
+      isTensorSoC: isTensorSoC ?? this.isTensorSoC,
     );
   }
 }
@@ -261,8 +274,71 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
   }
 
   Future<void> _init() async {
+    await _detectDeviceInfo();
     await _loadAvailableModels();
     await _loadDownloadedFiles();
+  }
+
+  Future<void> _detectDeviceInfo() async {
+    try {
+      int ramMb = 0;
+      bool tensor = false;
+      
+      if (!kIsWeb && Platform.isAndroid) {
+        // Use MethodChannel to get total RAM on Android
+        const channel = MethodChannel('com.example.quantum_ide/device_info');
+        try {
+          final result = await channel.invokeMethod('getDeviceInfo');
+          if (result is Map) {
+            ramMb = (result['totalMemoryMb'] as int?) ?? 0;
+            final model = (result['model'] as String?) ?? '';
+            final product = (result['product'] as String?) ?? '';
+            tensor = model.toLowerCase().contains('pixel') || 
+                     product.toLowerCase().contains('pixel');
+          }
+        } catch (_) {
+          // Fallback: assume mid-range device
+          ramMb = 4000;
+        }
+      } else if (!kIsWeb && Platform.isIOS) {
+        // iOS: estimate from device model via MethodChannel
+        const channel = MethodChannel('com.example.quantum_ide/device_info');
+        try {
+          final result = await channel.invokeMethod('getDeviceInfo');
+          if (result is Map) {
+            ramMb = (result['totalMemoryMb'] as int?) ?? 6000;
+          } else {
+            ramMb = 6000;
+          }
+        } catch (_) {
+          ramMb = 6000;
+        }
+      } else {
+        // Desktop fallback
+        ramMb = 16000;
+      }
+
+      String tier;
+      if (ramMb > 8000) {
+        tier = 'ultra';
+      } else if (ramMb > 5000) {
+        tier = 'high';
+      } else if (ramMb > 3000) {
+        tier = 'mid';
+      } else {
+        tier = 'low';
+      }
+
+      debugPrint('[LocalInference] Device: tier=$tier, RAM=${ramMb}MB, Tensor=$tensor');
+      state = state.copyWith(
+        deviceTier: tier,
+        deviceRamMb: ramMb,
+        isTensorSoC: tensor,
+      );
+    } catch (e) {
+      debugPrint('[LocalInference] Device detection failed: $e');
+      state = state.copyWith(deviceTier: 'mid', deviceRamMb: 4000);
+    }
   }
 
   Future<void> _loadAvailableModels() async {
@@ -702,7 +778,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
         result = await _engine.loadModel(
           modelPath: filePath,
           contextSize: safeContextSize,
-          deviceTier: 'high',
+          deviceTier: state.deviceTier,
           isTensorSoC: isTensorSoC,
           liteRtPerformanceMode: liteRtMode,
           forceLiteRtCpu: forceCpu,
@@ -723,7 +799,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
             result = await _engine.loadModel(
               modelPath: filePath,
               contextSize: userContextSize,
-              deviceTier: 'high',
+              deviceTier: state.deviceTier,
               isTensorSoC: isTensorSoC,
               liteRtPerformanceMode: 'cpu_safe',
               forceLiteRtCpu: true,
@@ -776,7 +852,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
           result = await _engine.loadModel(
             modelPath: filePath,
             contextSize: cpuContextSize,
-            deviceTier: 'high',
+            deviceTier: state.deviceTier,
             isTensorSoC: isTensorSoC,
             liteRtPerformanceMode: 'cpu_safe',
             forceLiteRtCpu: true,

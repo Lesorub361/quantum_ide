@@ -19,6 +19,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'ai_prompts.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
+import 'package:quantum_ide/core/services/hive_chat_service.dart';
 import 'package:dio/dio.dart';
 import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
@@ -194,9 +195,40 @@ class AINotifier extends StateNotifier<AIState> {
   }
 
   Future<void> _saveSessions() async {
+    try {
+      final hiveService = _ref.read(hiveChatServiceProvider);
+      await hiveService.init();
+      
+      // Save each session
+      for (final session in state.sessions) {
+        await hiveService.saveSession(session);
+      }
+      
+      // Save current session messages
+      final currentId = state.currentSessionId;
+      if (currentId != null) {
+        for (final msg in state.messages) {
+          msg.sessionId = currentId;
+          await hiveService.saveMessage(msg);
+        }
+      }
+      
+      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) with ${state.messages.length} messages via Hive');
+      
+      final workspacePath = _ref.read(workspaceProvider).currentPath;
+      if (workspacePath != null) {
+        await _saveMemory(workspacePath);
+      }
+    } catch (e) {
+      debugPrint('[AINotifier] Error saving via Hive, falling back to JSON: $e');
+      // Fallback to JSON
+      await _saveSessionsJson();
+    }
+  }
+
+  Future<void> _saveSessionsJson() async {
     final workspacePath = _ref.read(workspaceProvider).currentPath;
     try {
-      // Use workspace .quantum/ dir if available, otherwise fallback to app documents
       final String saveDir;
       if (workspacePath != null) {
         saveDir = p.join(workspacePath, '.quantum');
@@ -209,11 +241,9 @@ class AINotifier extends StateNotifier<AIState> {
         dir.createSync(recursive: true);
       }
       final file = File(p.join(dir.path, 'chat_history.json'));
-      // Strip heavy fields to keep file small: executedActions content can be huge
       final trimmedSessions = state.sessions.map((s) {
         final trimmedMessages = s.messages.map((m) {
           final json = m.toJson();
-          // Remove executedActions content (can be entire file contents)
           if (json['executedActions'] != null) {
             final actions = (json['executedActions'] as List).map((a) {
               final action = Map<String, dynamic>.from(a);
@@ -224,7 +254,6 @@ class AINotifier extends StateNotifier<AIState> {
             }).toList();
             json['executedActions'] = actions;
           }
-          // Remove large actionResults
           if (json['actionResults'] != null) {
             final results = Map<String, String>.from(json['actionResults']);
             final trimmed = <String, String>{};
@@ -235,7 +264,6 @@ class AINotifier extends StateNotifier<AIState> {
             }
             json['actionResults'] = trimmed;
           }
-          // Remove imageBase64 (can be megabytes)
           json.remove('imageBase64');
           return json;
         }).toList();
@@ -248,13 +276,13 @@ class AINotifier extends StateNotifier<AIState> {
       }).toList();
       final jsonStr = jsonEncode(trimmedSessions);
       await file.writeAsString(jsonStr);
-      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) with ${state.messages.length} messages to ${file.path} (${jsonStr.length} bytes)');
+      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) via JSON fallback');
       
       if (workspacePath != null) {
         await _saveMemory(workspacePath);
       }
     } catch (e) {
-      debugPrint('[AINotifier] Error saving chat sessions: $e');
+      debugPrint('[AINotifier] Error saving via JSON: $e');
     }
   }
 
@@ -303,37 +331,40 @@ class AINotifier extends StateNotifier<AIState> {
 
   Future<void> _loadSessions(String workspacePath) async {
     try {
-      // Try workspace .quantum/ first, fallback to app documents
-      var file = File(p.join(workspacePath, '.quantum', 'chat_history.json'));
-      if (!file.existsSync()) {
-        final appDir = await _getAppDataDir();
-        final fallbackFile = File(p.join(appDir, '.quantum', 'chat_history.json'));
-        if (fallbackFile.existsSync()) {
-          file = fallbackFile;
-          debugPrint('[AINotifier] Using fallback chat history from app dir');
+      final hiveService = _ref.read(hiveChatServiceProvider);
+      await hiveService.init();
+      
+      // Try to load from Hive first
+      var sessions = hiveService.getAllSessions();
+      
+      // If Hive is empty, try JSON fallback
+      if (sessions.isEmpty) {
+        debugPrint('[AINotifier] Hive empty, trying JSON fallback');
+        sessions = await hiveService.loadFromJsonFallback(workspacePath);
+        
+        // Also try app documents fallback
+        if (sessions.isEmpty) {
+          try {
+            final appDir = await _getAppDataDir();
+            sessions = await hiveService.loadFromJsonFallback(appDir);
+          } catch (_) {}
+        }
+        
+        // If we found sessions in JSON, migrate to Hive
+        if (sessions.isNotEmpty) {
+          debugPrint('[AINotifier] Migrating ${sessions.length} sessions from JSON to Hive');
+          for (final session in sessions) {
+            await hiveService.saveSession(session);
+            for (final msg in session.messages) {
+              msg.sessionId = session.id;
+              await hiveService.saveMessage(msg);
+            }
+          }
         }
       }
-      debugPrint('[AINotifier] Loading sessions from: ${file.path}');
-      if (!file.existsSync()) {
-        debugPrint('[AINotifier] No chat_history.json found, creating default session');
-        final defaultSession = ChatSession(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
-          title: 'New Chat',
-          messages: [],
-          createdAt: DateTime.now(),
-        );
-        state = state.copyWith(
-          sessions: [defaultSession],
-          currentSessionId: defaultSession.id,
-          messages: [],
-        );
-        return;
-      }
-      final jsonStr = await file.readAsString();
-      debugPrint('[AINotifier] Read ${jsonStr.length} bytes from chat_history.json');
-      final List<dynamic> jsonList = jsonDecode(jsonStr);
-      final sessions = jsonList.map((j) => ChatSession.fromJson(j)).toList();
-      debugPrint('[AINotifier] Loaded ${sessions.length} session(s)');
+      
+      debugPrint('[AINotifier] Loaded ${sessions.length} session(s) from Hive');
+      
       if (sessions.isEmpty) {
         final defaultSession = ChatSession(
           id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -348,7 +379,7 @@ class AINotifier extends StateNotifier<AIState> {
         );
         return;
       }
-      // Set the last active/created session as current
+      
       final lastSession = sessions.last;
       final restoredCount = lastSession.messages.length;
       state = state.copyWith(
@@ -356,7 +387,6 @@ class AINotifier extends StateNotifier<AIState> {
         currentSessionId: lastSession.id,
         messages: lastSession.messages,
       );
-      debugPrint('[AINotifier] Restored ${restoredCount} messages in active session');
       
       await _restoreMemory(workspacePath);
       
@@ -373,7 +403,7 @@ class AINotifier extends StateNotifier<AIState> {
         ]);
       }
     } catch (e) {
-      debugPrint('[AINotifier] Error loading chat sessions: $e');
+      debugPrint('[AINotifier] Error loading sessions: $e');
     }
   }
 

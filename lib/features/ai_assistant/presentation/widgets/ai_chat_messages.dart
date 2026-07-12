@@ -1206,13 +1206,31 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
 
   List<Widget> _renderMarkdown(String text, BuildContext context) {
     final List<Widget> widgets = [];
+    
+    // First, extract and handle <think>...</think> blocks
+    final thinkingRegex = RegExp(r'<think>([\s\S]*?)</think>', caseSensitive: false);
+    final thinkingMatches = thinkingRegex.allMatches(text).toList();
+    
+    String processedText = text;
+    int thinkingIndex = 0;
+    
+    for (final match in thinkingMatches) {
+      final thinkingContent = match.group(1)?.trim() ?? '';
+      if (thinkingContent.isNotEmpty) {
+        widgets.add(_buildThinkingBlock(thinkingContent, context, thinkingIndex));
+        thinkingIndex++;
+      }
+      processedText = processedText.replaceFirst(match.group(0)!, '');
+    }
+    
+    // Now process remaining text for code blocks
     final regex = RegExp(r'```([a-zA-Z0-9_\-+]*)\n([\s\S]*?)```');
     
     int lastIndex = 0;
     
-    for (final match in regex.allMatches(text)) {
+    for (final match in regex.allMatches(processedText)) {
       if (match.start > lastIndex) {
-        final prevText = text.substring(lastIndex, match.start).trim();
+        final prevText = processedText.substring(lastIndex, match.start).trim();
         if (prevText.isNotEmpty) {
           widgets.add(_buildTextSection(prevText, context));
         }
@@ -1225,14 +1243,18 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       lastIndex = match.end;
     }
     
-    if (lastIndex < text.length) {
-      final remainingText = text.substring(lastIndex).trim();
+    if (lastIndex < processedText.length) {
+      final remainingText = processedText.substring(lastIndex).trim();
       if (remainingText.isNotEmpty) {
         widgets.add(_buildTextSection(remainingText, context));
       }
     }
     
     return widgets;
+  }
+
+  Widget _buildThinkingBlock(String content, BuildContext context, int index) {
+    return _CollapsibleThinking(content: content, index: index);
   }
 
   Widget _buildTextSection(String text, BuildContext context) {
@@ -2149,6 +2171,80 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
           ),
         );
       },
+    );
+  }
+}
+
+class _CollapsibleThinking extends StatefulWidget {
+  final String content;
+  final int index;
+
+  const _CollapsibleThinking({
+    required this.content,
+    required this.index,
+  });
+
+  @override
+  State<_CollapsibleThinking> createState() => _CollapsibleThinkingState();
+}
+
+class _CollapsibleThinkingState extends State<_CollapsibleThinking> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.purpleAccent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.brain, size: 12, color: Colors.purpleAccent.shade100),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Thinking...',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: Colors.purpleAccent.shade100,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    _isExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down,
+                    size: 12,
+                    color: Colors.white30,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_isExpanded)
+            Container(
+              padding: const EdgeInsets.all(10),
+              color: Colors.black26,
+              child: SelectableText(
+                widget.content,
+                style: GoogleFonts.jetBrainsMono(
+                  color: Colors.white54,
+                  fontSize: 10.5,
+                  height: 1.4,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
