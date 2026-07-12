@@ -16,6 +16,7 @@ import 'package:quantum_ide/core/services/ai_context_compressor.dart';
 import 'package:quantum_ide/core/services/analysis_service.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'package:path_provider/path_provider.dart';
 import 'ai_prompts.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:dio/dio.dart';
@@ -194,12 +195,16 @@ class AINotifier extends StateNotifier<AIState> {
 
   Future<void> _saveSessions() async {
     final workspacePath = _ref.read(workspaceProvider).currentPath;
-    if (workspacePath == null) {
-      debugPrint('[AINotifier] Save skipped: workspacePath is null');
-      return;
-    }
     try {
-      final dir = Directory(p.join(workspacePath, '.quantum'));
+      // Use workspace .quantum/ dir if available, otherwise fallback to app documents
+      final String saveDir;
+      if (workspacePath != null) {
+        saveDir = p.join(workspacePath, '.quantum');
+      } else {
+        final appDir = await _getAppDataDir();
+        saveDir = p.join(appDir, '.quantum');
+      }
+      final dir = Directory(saveDir);
       if (!dir.existsSync()) {
         dir.createSync(recursive: true);
       }
@@ -245,7 +250,9 @@ class AINotifier extends StateNotifier<AIState> {
       await file.writeAsString(jsonStr);
       debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) with ${state.messages.length} messages to ${file.path} (${jsonStr.length} bytes)');
       
-      await _saveMemory(workspacePath);
+      if (workspacePath != null) {
+        await _saveMemory(workspacePath);
+      }
     } catch (e) {
       debugPrint('[AINotifier] Error saving chat sessions: $e');
     }
@@ -296,7 +303,16 @@ class AINotifier extends StateNotifier<AIState> {
 
   Future<void> _loadSessions(String workspacePath) async {
     try {
-      final file = File(p.join(workspacePath, '.quantum', 'chat_history.json'));
+      // Try workspace .quantum/ first, fallback to app documents
+      var file = File(p.join(workspacePath, '.quantum', 'chat_history.json'));
+      if (!file.existsSync()) {
+        final appDir = await _getAppDataDir();
+        final fallbackFile = File(p.join(appDir, '.quantum', 'chat_history.json'));
+        if (fallbackFile.existsSync()) {
+          file = fallbackFile;
+          debugPrint('[AINotifier] Using fallback chat history from app dir');
+        }
+      }
       debugPrint('[AINotifier] Loading sessions from: ${file.path}');
       if (!file.existsSync()) {
         debugPrint('[AINotifier] No chat_history.json found, creating default session');
@@ -1709,6 +1725,22 @@ class AINotifier extends StateNotifier<AIState> {
     if (commandResult.isNotEmpty && lastCommand.isNotEmpty) {
       final analysisPrompt = 'Result of running command "$lastCommand":\n$commandResult\n\nAnalyze the result. If errors occurred, fix them.';
       await askAI(analysisPrompt);
+    }
+  }
+
+  Future<String> _getAppDataDir() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final quantumDir = Directory(p.join(dir.path, '.quantum_ide'));
+      if (!quantumDir.existsSync()) {
+        await quantumDir.create(recursive: true);
+      }
+      return quantumDir.path;
+    } catch (e) {
+      debugPrint('[AINotifier] Fallback dir error: $e');
+      final tmp = p.join(Directory.systemTemp.path, 'quantum_ide');
+      await Directory(tmp).create(recursive: true);
+      return tmp;
     }
   }
 
