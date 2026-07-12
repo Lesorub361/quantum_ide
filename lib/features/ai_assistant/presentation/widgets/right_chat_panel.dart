@@ -1304,6 +1304,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 ? 'Loading...'
                 : 'Stopped'))
         : currentProvider.displayName;
+    
+    final contextInfo = isLocalEdge && localInferenceState.status == LocalModelStatus.ready
+        ? '${localInferenceState.contextTokensUsed}/${localInferenceState.contextTokensTotal} ctx'
+        : '';
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -1339,6 +1343,21 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          // Context info badge
+          if (contextInfo.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.greenAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                contextInfo,
+                style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.greenAccent, fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
           // Provider switcher
           PopupMenuButton<String>(
             tooltip: '',

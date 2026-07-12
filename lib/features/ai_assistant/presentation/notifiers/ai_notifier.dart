@@ -656,7 +656,7 @@ class AINotifier extends StateNotifier<AIState> {
     }
 
     int currentStep = 0;
-    const maxSteps = 10;
+    const maxSteps = 50;
     String nextPrompt = prompt;
     // Anti-loop: track which files had errors and how many consecutive fix attempts
     int consecutiveErrorFixAttempts = 0;
