@@ -54,7 +54,6 @@ void main() {
         projectPath,
         'my_java_app',
         ProjectType.androidJava,
-        sdkVersion: 'com.example.javaapp',
       );
 
       // Verify root gradle files
@@ -74,13 +73,13 @@ void main() {
         'java',
         'com',
         'example',
-        'javaapp',
+        'my_java_app',
         'MainActivity.java',
       ));
       expect(await mainActivityFile.exists(), isTrue);
 
       final content = await mainActivityFile.readAsString();
-      expect(content, contains('package com.example.javaapp;'));
+      expect(content, contains('package com.example.my_java_app;'));
       expect(content, contains('public class MainActivity extends AppCompatActivity'));
     });
 

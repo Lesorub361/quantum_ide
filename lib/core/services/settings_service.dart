@@ -19,11 +19,13 @@ class SettingsState {
   final String flexScheme;
   final int? customPrimaryColor;
   final String editorFontFamily;
+  final String terminalFontFamily;
   final bool editorFontLigatures;
   final double glassmorphismOpacity;
   final double glassmorphismBlur;
   final String hotkeysJson;
   final bool sdCardSync;
+  final bool formatOnSave;
   final bool isInitialized;
 
   SettingsState({
@@ -43,11 +45,13 @@ class SettingsState {
     this.flexScheme = 'mandyRed',
     this.customPrimaryColor,
     this.editorFontFamily = 'Fira Code',
+    this.terminalFontFamily = 'JetBrains Mono',
     this.editorFontLigatures = true,
     this.glassmorphismOpacity = 0.15,
     this.glassmorphismBlur = 16.0,
     this.hotkeysJson = '{}',
     this.sdCardSync = false,
+    this.formatOnSave = true,
     this.isInitialized = false,
   });
 
@@ -69,11 +73,13 @@ class SettingsState {
     int? customPrimaryColor,
     bool clearCustomColor = false,
     String? editorFontFamily,
+    String? terminalFontFamily,
     bool? editorFontLigatures,
     double? glassmorphismOpacity,
     double? glassmorphismBlur,
     String? hotkeysJson,
     bool? sdCardSync,
+    bool? formatOnSave,
     bool? isInitialized,
   }) {
     return SettingsState(
@@ -93,11 +99,13 @@ class SettingsState {
       flexScheme: flexScheme ?? this.flexScheme,
       customPrimaryColor: clearCustomColor ? null : (customPrimaryColor ?? this.customPrimaryColor),
       editorFontFamily: editorFontFamily ?? this.editorFontFamily,
+      terminalFontFamily: terminalFontFamily ?? this.terminalFontFamily,
       editorFontLigatures: editorFontLigatures ?? this.editorFontLigatures,
       glassmorphismOpacity: glassmorphismOpacity ?? this.glassmorphismOpacity,
       glassmorphismBlur: glassmorphismBlur ?? this.glassmorphismBlur,
       hotkeysJson: hotkeysJson ?? this.hotkeysJson,
       sdCardSync: sdCardSync ?? this.sdCardSync,
+      formatOnSave: formatOnSave ?? this.formatOnSave,
       isInitialized: isInitialized ?? this.isInitialized,
     );
   }
@@ -124,11 +132,13 @@ class SettingsService extends StateNotifier<SettingsState> {
   static const _keyFlexScheme = 'settings_flex_scheme';
   static const _keyCustomColor = 'settings_custom_color';
   static const _keyEditorFontFamily = 'settings_editor_font_family';
+  static const _keyTerminalFontFamily = 'settings_terminal_font_family';
   static const _keyEditorFontLigatures = 'settings_editor_font_ligatures';
   static const _keyGlassmorphismOpacity = 'settings_glassmorphism_opacity';
   static const _keyGlassmorphismBlur = 'settings_glassmorphism_blur';
   static const _keyHotkeys = 'settings_hotkeys';
   static const _keySdCardSync = 'settings_sd_card_sync';
+  static const _keyFormatOnSave = 'settings_format_on_save';
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -151,11 +161,13 @@ class SettingsService extends StateNotifier<SettingsState> {
       flexScheme: prefs.getString(_keyFlexScheme) ?? 'mandyRed',
       customPrimaryColor: prefs.getInt(_keyCustomColor),
       editorFontFamily: prefs.getString(_keyEditorFontFamily) ?? 'Fira Code',
+      terminalFontFamily: prefs.getString(_keyTerminalFontFamily) ?? 'JetBrains Mono',
       editorFontLigatures: prefs.getBool(_keyEditorFontLigatures) ?? true,
       glassmorphismOpacity: prefs.getDouble(_keyGlassmorphismOpacity) ?? 0.15,
       glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? 16.0,
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
       sdCardSync: prefs.getBool(_keySdCardSync) ?? false,
+      formatOnSave: prefs.getBool(_keyFormatOnSave) ?? true,
       isInitialized: true,
     );
   }
@@ -218,6 +230,12 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(terminalTheme: theme);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyTerminalTheme, theme);
+  }
+
+  Future<void> setTerminalFontFamily(String family) async {
+    state = state.copyWith(terminalFontFamily: family);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTerminalFontFamily, family);
   }
 
   Future<void> setHapticFeedback(bool v) async {
@@ -293,6 +311,12 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(sdCardSync: v);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keySdCardSync, v);
+  }
+
+  Future<void> setFormatOnSave(bool v) async {
+    state = state.copyWith(formatOnSave: v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyFormatOnSave, v);
   }
 }
 

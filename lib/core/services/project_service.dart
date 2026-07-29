@@ -19,10 +19,12 @@ class ProjectService extends StateNotifier<List<Project>> {
   StreamSubscription? _watcherSubscription;
   Timer? _syncTimer;
   
+  // SD card sync is OFF by default — only enable when explicitly turned on in settings
+  static const _sdSyncPrefKey = 'settings_sd_card_sync';
+
   ProjectService(Ref ref) : _ref = ref, super([]) {
     _loadAndScanProjects();
-    _startFileWatcher();
-    _startPeriodicSync();
+    _initSyncIfEnabled();
   }
 
   @override
@@ -32,9 +34,31 @@ class ProjectService extends StateNotifier<List<Project>> {
     super.dispose();
   }
 
+  Future<void> _initSyncIfEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final sdSyncEnabled = prefs.getBool(_sdSyncPrefKey) ?? false;
+    if (sdSyncEnabled && Platform.isAndroid) {
+      _startFileWatcher();
+      _startPeriodicSync();
+    }
+  }
+
+  /// Call when user toggles SD card sync in Settings.
+  Future<void> setSdCardSyncEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_sdSyncPrefKey, enabled);
+    if (enabled && Platform.isAndroid) {
+      _startFileWatcher();
+      _startPeriodicSync();
+    } else {
+      _watcherSubscription?.cancel();
+      _syncTimer?.cancel();
+    }
+  }
+
   void _startPeriodicSync() {
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 45), (timer) async {
+    _syncTimer = Timer.periodic(const Duration(minutes: 5), (timer) async {
       await syncAllProjects();
     });
   }
@@ -235,6 +259,8 @@ class ProjectService extends StateNotifier<List<Project>> {
       } else if (event is FileSystemDeleteEvent) {
         mirrorDelete(path);
       }
+    }, onError: (e) {
+      debugPrint('ProjectService watch error: $e');
     });
   }
 
@@ -309,7 +335,7 @@ class ProjectService extends StateNotifier<List<Project>> {
             if (name.startsWith('.')) continue;
 
             // Check if already in saved projects or is a mirror
-            bool isAlreadyInternal = savedProjects.any((p) => p.name == name && p.isInternal);
+            final bool isAlreadyInternal = savedProjects.any((p) => p.name == name && p.isInternal);
             if (isAlreadyInternal) continue;
 
             // AUTOMATIC MIGRATION: If found on SD card but not internally, migrate NOW
@@ -324,7 +350,7 @@ class ProjectService extends StateNotifier<List<Project>> {
             }
 
             // Identify type based on files
-            ProjectType type = _identifyProjectType(internalPath);
+            final ProjectType type = _identifyProjectType(internalPath);
 
             scannedProjects.add(Project(
               id: const Uuid().v4(),
@@ -386,7 +412,7 @@ class ProjectService extends StateNotifier<List<Project>> {
     await _persistProjects();
   }
 
-  Future<void> createProject({
+  Future<Project> createProject({
     required String name,
     required String path,
     required ProjectType type,
@@ -430,6 +456,7 @@ class ProjectService extends StateNotifier<List<Project>> {
 
     await _initializeProjectFiles(finalPath, type, name, _ref, platforms: platforms, sdkVersion: sdkVersion);
     await saveProject(project);
+    return project;
   }
 
   Future<void> importProject(String path) async {
@@ -450,7 +477,7 @@ class ProjectService extends StateNotifier<List<Project>> {
     }
 
     // Identify type based on files
-    ProjectType type = _identifyProjectType(finalPath);
+    final ProjectType type = _identifyProjectType(finalPath);
 
     final project = Project(
       id: const Uuid().v4(),
@@ -479,6 +506,9 @@ class ProjectService extends StateNotifier<List<Project>> {
   }
 
   Future<void> mirrorEntity(String internalPath) async {
+    // Skip mirroring on desktop platforms - only needed for Android external storage
+    if (!Platform.isAndroid) return;
+    
     final runtime = _ref.read(runtimeServiceProvider);
     final projectsPath = p.join(runtime.appDirectory, 'projects');
     
@@ -570,6 +600,24 @@ class ProjectService extends StateNotifier<List<Project>> {
           // Patch Android build files to fix AGP + compileSdk compatibility
           await _patchAndroidBuildFiles(path, sdkVersion: sdkVersion);
           usedCli = true;
+        } else if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+          // Desktop: run flutter create natively (no guest rootfs needed)
+          List<String> effectivePlatforms = platforms ?? [];
+          // Always include the current desktop platform so 'flutter run' works out of the box
+          if (Platform.isLinux && !effectivePlatforms.contains('linux')) {
+            effectivePlatforms = [...effectivePlatforms, 'linux'];
+          } else if (Platform.isMacOS && !effectivePlatforms.contains('macos')) {
+            effectivePlatforms = [...effectivePlatforms, 'macos'];
+          } else if (Platform.isWindows && !effectivePlatforms.contains('windows')) {
+            effectivePlatforms = [...effectivePlatforms, 'windows'];
+          }
+          String cmd = 'flutter create --project-name ${name.replaceAll("-", "_")}';
+          if (effectivePlatforms.isNotEmpty) {
+            cmd += ' --platforms ${effectivePlatforms.join(",")}';
+          }
+          cmd += ' "$path"';
+          await runtime.runCommand(cmd);
+          usedCli = true;
         }
       } else if (type == ProjectType.dart) {
         final dartFile = File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin', 'dart'));
@@ -586,6 +634,7 @@ class ProjectService extends StateNotifier<List<Project>> {
 
     if (usedCli) {
       await _mirrorInitialFiles(path, name);
+      await _createQuantumRulesFiles(path, name);
       return;
     }
 
@@ -594,7 +643,8 @@ class ProjectService extends StateNotifier<List<Project>> {
         await _createFile(p.join(path, 'pubspec.yaml'), _flutterPubspec(name, sdkVersion: sdkVersion));
         await _createFile(p.join(path, 'lib', 'main.dart'), _flutterMain());
         await _createFile(p.join(path, 'analysis_options.yaml'), _analysisOptions());
-        // Write compatible Android build files for manual template if android is selected
+        await _createFile(p.join(path, 'README.md'), '# $name\n\nA Flutter project created with QuantumIDE.\n');
+        await _createFile(p.join(path, '.gitignore'), '.dart_tool/\n.flutter-plugins\n.flutter-plugins-dependencies\n.packages\n.pub-cache/\n.pub/\nbuild/\n*.iml\n.idea/\n');
         if (platforms == null || platforms.isEmpty || platforms.contains('android')) {
           await _writeAndroidBuildFiles(path, name, sdkVersion: sdkVersion);
         }
@@ -602,30 +652,102 @@ class ProjectService extends StateNotifier<List<Project>> {
       case ProjectType.dart:
         await _createFile(p.join(path, 'pubspec.yaml'), _dartPubspec(name));
         await _createFile(p.join(path, 'bin', 'main.dart'), _dartMain());
+        await _createFile(p.join(path, 'README.md'), '# $name\n\nA Dart project created with QuantumIDE.\n');
+        await _createFile(p.join(path, '.gitignore'), '.dart_tool/\n.packages\n.pub/\nbuild/\n*.iml\n.idea/\n');
         break;
       case ProjectType.nodejs:
         await _createFile(p.join(path, 'package.json'), _nodePackage(name));
         await _createFile(p.join(path, 'index.js'), "console.log('Hello from QuantumIDE Node.js!');\n");
+        await _createFile(p.join(path, 'README.md'), '# $name\n\nA Node.js project created with QuantumIDE.\n');
+        await _createFile(p.join(path, '.gitignore'), 'node_modules/\nbuild/\n*.iml\n.idea/\n');
         break;
       case ProjectType.python:
         await _createFile(p.join(path, 'main.py'), "print('Hello from QuantumIDE Python!')\n");
-        await _createFile(p.join(path, 'requirements.txt'), "");
+        await _createFile(p.join(path, 'requirements.txt'), '');
+        await _createFile(p.join(path, 'README.md'), '# $name\n\nA Python project created with QuantumIDE.\n');
+        await _createFile(p.join(path, '.gitignore'), '__pycache__/\n*.pyc\n.idea/\n.venv/\nvenv/\n');
         break;
       case ProjectType.web:
         await _createFile(p.join(path, 'index.html'), _webHtml(name));
-        await _createFile(p.join(path, 'style.css'), "body { background: #0f1117; color: white; font-family: sans-serif; }\n");
+        await _createFile(p.join(path, 'style.css'), 'body { background: #0f1117; color: white; font-family: sans-serif; }\n');
         await _createFile(p.join(path, 'script.js'), "console.log('Web project loaded');\n");
+        await _createFile(p.join(path, 'README.md'), '# $name\n\nA web project created with QuantumIDE.\n');
+        await _createFile(p.join(path, '.gitignore'), 'node_modules/\nbuild/\n*.iml\n.idea/\n');
         break;
       case ProjectType.androidJava:
       case ProjectType.androidKotlin:
         await _writeNativeAndroidFiles(path, name, type, sdkVersion: sdkVersion);
         break;
+      case ProjectType.rust:
+        await _createRustProject(path, name);
+        break;
       default:
-        await _createFile(p.join(path, 'README.md'), "# $name\nCreated with QuantumIDE\n");
+        await _createFile(p.join(path, 'README.md'), '# $name\nCreated with QuantumIDE\n');
     }
 
     // Trigger a manual mirror of these initial files
     _mirrorInitialFiles(path, name);
+
+    // Auto-create QuantumIDE AI rules and agents file
+    await _createQuantumRulesFiles(path, name);
+  }
+
+  Future<void> _createRustProject(String path, String name) async {
+    await _createFile(p.join(path, 'Cargo.toml'), '''[package]
+name = "${name.toLowerCase().replaceAll(' ', '-')}"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+''');
+    await Directory(p.join(path, 'src')).create(recursive: true);
+    await _createFile(p.join(path, 'src', 'main.rs'), '''fn main() {
+    println!("Hello from $name!");
+}
+''');
+    await _createFile(p.join(path, 'README.md'), '# $name\n\nA Rust project created with QuantumIDE.\n');
+    await _createFile(p.join(path, '.gitignore'), 'target/\nCargo.lock\n*.iml\n.idea/\n');
+  }
+
+  Future<void> _createQuantumRulesFiles(String path, String name) async {
+    final quantumRules = File(p.join(path, '.quantumrules'));
+    if (!await quantumRules.exists()) {
+      await quantumRules.writeAsString(
+'# QuantumIDE Project Rules\n'
+'# These rules guide the AI assistant for the "$name" project.\n'
+'\n'
+'## Code Style\n'
+'- Keep code clean, readable and well-commented.\n'
+'- Prefer small focused functions/widgets over large monolithic ones.\n'
+'- Always handle errors and edge cases.\n'
+'\n'
+'## AI Behavior\n'
+'- Be concise. No unnecessary filler text.\n'
+'- When modifying files, show only the changed sections with context.\n'
+'- Always explain what was changed and why.\n'
+'- Prefer incremental changes over full rewrites.\n',
+      );
+    }
+    final agentsMd = File(p.join(path, 'AGENTS.md'));
+    if (!await agentsMd.exists()) {
+      await agentsMd.writeAsString(
+'# AGENTS\n'
+'## Project: $name\n'
+'\n'
+'This file defines AI agent behavior for this project.\n'
+'\n'
+'## Context\n'
+'- Project name: $name\n'
+'- IDE: QuantumIDE\n'
+'\n'
+'## Rules\n'
+'1. Read existing code before making changes.\n'
+'2. Follow the code style already used in the project.\n'
+'3. When adding dependencies, update pubspec.yaml and run flutter pub get.\n'
+'4. Write tests when adding new business logic.\n'
+'5. Avoid breaking existing functionality.\n',
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -633,10 +755,10 @@ class ProjectService extends StateNotifier<List<Project>> {
   // ---------------------------------------------------------------------------
 
   /// Патчит Android build файлы существующего проекта (после flutter create).
-  /// Устанавливает AGP 8.11.1 и compileSdk 35 чтобы избежать проблем с
+  /// Устанавливает AGP 8.11.1 и compileSdk 34 чтобы избежать проблем с
   /// повреждённым android-36/android.jar.
   Future<void> _patchAndroidBuildFiles(String projectPath, {String? sdkVersion}) async {
-    final sdk = sdkVersion ?? '35';
+    final sdk = sdkVersion ?? '34';
     debugPrint('[ProjectService] Patching Android build files in $projectPath with compileSdk $sdk');
 
     // --- android/app/build.gradle.kts ---
@@ -708,8 +830,8 @@ class ProjectService extends StateNotifier<List<Project>> {
     if (await topBuildGroovy.exists()) {
       String content = await topBuildGroovy.readAsString();
       content = content.replaceAllMapped(
-        RegExp(r"com\.android\.tools\.build:gradle:[\d.]+"),
-        (_) => "com.android.tools.build:gradle:8.11.1",
+        RegExp(r'com\.android\.tools\.build:gradle:[\d.]+'),
+        (_) => 'com.android.tools.build:gradle:8.11.1',
       );
       await topBuildGroovy.writeAsString(content);
       debugPrint('[ProjectService] Patched build.gradle (Groovy)');
@@ -743,6 +865,22 @@ class ProjectService extends StateNotifier<List<Project>> {
       await settingsGroovy.writeAsString(groovyContent);
       debugPrint('[ProjectService] Patched settings.gradle (Groovy)');
     }
+
+    // --- android/gradle/wrapper/gradle-wrapper.properties ---
+    final wrapperFile = File(p.join(projectPath, 'android', 'gradle', 'wrapper', 'gradle-wrapper.properties'));
+    if (await wrapperFile.exists()) {
+      String wrapperContent = await wrapperFile.readAsString();
+      if (!wrapperContent.contains('gradle-8.13')) {
+        wrapperContent = wrapperContent.replaceAllMapped(
+          RegExp(r'distributionUrl=.*'),
+          (_) => r'distributionUrl=https\://services.gradle.org/distributions/gradle-8.13-all.zip',
+        );
+        await wrapperFile.writeAsString(wrapperContent);
+        debugPrint('[ProjectService] Patched gradle-wrapper.properties to 8.13-all');
+      }
+    } else {
+      await _copyGradleWrapper(p.join(projectPath, 'android'));
+    }
   }
 
   /// Создаёт совместимые Android build файлы для ручного шаблона Flutter проекта.
@@ -755,7 +893,7 @@ class ProjectService extends StateNotifier<List<Project>> {
     final pkgPath = appId.replaceAll('.', '/');
 
     // ── settings.gradle.kts (Kotlin DSL — правильный синтаксис) ──
-    await _createFile(p.join(androidDir, 'settings.gradle.kts'), """
+    await _createFile(p.join(androidDir, 'settings.gradle.kts'), '''
 pluginManagement {
     val flutterSdkPath = run {
         val properties = java.util.Properties()
@@ -782,10 +920,10 @@ plugins {
 
 include(":app")
 rootProject.name = "$name"
-""");
+''');
 
     // ── build.gradle.kts (top-level) ──
-    await _createFile(p.join(androidDir, 'build.gradle.kts'), """
+    await _createFile(p.join(androidDir, 'build.gradle.kts'), '''
 allprojects {
     repositories {
         google()
@@ -808,10 +946,10 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
-""");
+''');
 
     // ── app/build.gradle.kts ──
-    await _createFile(p.join(appDir, 'build.gradle.kts'), """
+    await _createFile(p.join(appDir, 'build.gradle.kts'), '''
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -850,7 +988,7 @@ android {
 flutter {
     source = "../.."
 }
-""");
+''');
 
     // ── gradle.properties ──
     await _createFile(p.join(androidDir, 'gradle.properties'), 'org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n');
@@ -860,10 +998,10 @@ flutter {
 
     // ── gradle/wrapper/gradle-wrapper.properties ──
     await _createFile(p.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties'),
-        'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.12-all.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n');
+        'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-all.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n');
 
     // ── app/src/main/AndroidManifest.xml ──
-    await _createFile(p.join(appDir, 'src', 'main', 'AndroidManifest.xml'), """<?xml version="1.0" encoding="utf-8"?>
+    await _createFile(p.join(appDir, 'src', 'main', 'AndroidManifest.xml'), '''<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:label="$name"
@@ -891,7 +1029,7 @@ flutter {
             android:value="2" />
     </application>
 </manifest>
-""");
+''');
 
     // ── app/src/debug/AndroidManifest.xml ──
     await _createFile(p.join(appDir, 'src', 'debug', 'AndroidManifest.xml'),
@@ -927,9 +1065,7 @@ flutter {
   }
 
   Future<void> _writeNativeAndroidFiles(String projectPath, String name, ProjectType type, {String? sdkVersion}) async {
-    final pkg = (sdkVersion == null || sdkVersion.trim().isEmpty) 
-        ? 'com.example.${name.toLowerCase().replaceAll('-', '_')}' 
-        : sdkVersion.trim();
+    final pkg = 'com.example.${name.toLowerCase().replaceAll('-', '_')}';
     
     final pkgPath = pkg.replaceAll('.', '/');
     final isKotlin = type == ProjectType.androidKotlin;
@@ -957,7 +1093,7 @@ include(":app")
     // 2. root build.gradle.kts
     await _createFile(p.join(projectPath, 'build.gradle.kts'), '''plugins {
     id("com.android.application") version "8.11.1" apply false
-    id("org.jetbrains.kotlin.android") version "1.8.22" apply false
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
 }
 ''');
 
@@ -1115,8 +1251,11 @@ public class MainActivity extends AppCompatActivity {
   }
 
   Future<void> _copyGradleWrapper(String destPath) async {
+    final runtime = _ref.read(runtimeServiceProvider);
+    // Search for gradle wrapper in proot Linux env and app data directory
     final sourcePaths = [
-      '/home/lesorub/Загрузки/quantum_ide/android',
+      p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'projects', '.gradle_template'),
+      p.join(runtime.appDirectory, 'android'),
       p.join(Directory.current.path, 'android'),
     ];
 
@@ -1156,7 +1295,7 @@ public class MainActivity extends AppCompatActivity {
     if (!copied) {
       await _createFile(p.join(destPath, 'gradle/wrapper/gradle-wrapper.properties'), '''distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=https\\://services.gradle.org/distributions/gradle-8.4-bin.zip
+distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
 ''');
@@ -1308,7 +1447,7 @@ dev_dependencies:
 </html>
 ''';
 
-  String _analysisOptions() => "include: package:flutter_lints/analysis_options.yaml\n";
+  String _analysisOptions() => 'include: package:flutter_lints/analysis_options.yaml\n';
 
   Future<void> removeProject(String id, {bool deleteFiles = false}) async {
     final project = state.firstWhere((p) => p.id == id);
@@ -1373,6 +1512,9 @@ dev_dependencies:
       case ProjectType.androidKotlin:
         command = 'cd "$guestPath" && chmod +x gradlew && ./gradlew installDebug || ./gradlew assembleDebug';
         break;
+      case ProjectType.rust:
+        command = 'cd "$guestPath" && cargo run';
+        break;
       default:
         command = 'cd "$guestPath" && ls -la';
     }
@@ -1406,6 +1548,8 @@ dev_dependencies:
           r"sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
           // Обновить AGP в settings.gradle.kts
           r'''sed -i 's/id("com.android.application") version "[0-9.]*"/id("com.android.application") version "8.11.1"/g' android/settings.gradle.kts 2>/dev/null || true''',
+          // Обновить Gradle Wrapper URL до 8.13 во избежание несовместимостей с AGP 8.11.1
+          r"sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true",
           // Запустить сборку
           'flutter build apk --release --no-tree-shake-icons 2>&1',
         ].join(' && ');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/services/runtime_service.dart';
+import '../../../../core/services/workspace_service.dart';
 
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});
@@ -28,9 +29,17 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
 
   Future<void> _startInit() async {
     final runtime = ref.read(runtimeServiceProvider);
+    final router = GoRouter.of(context);
     await runtime.init();
-    if (mounted && runtime.isInitialized) {
-      context.go('/');
+    if (runtime.isInitialized) {
+      try {
+        await ref.read(workspaceProvider.notifier).restoreLastWorkspace();
+      } catch (e) {
+        debugPrint('Failed to restore last workspace: $e');
+      }
+      if (mounted) {
+        router.go('/');
+      }
     }
   }
 

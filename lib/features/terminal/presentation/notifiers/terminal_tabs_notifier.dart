@@ -61,6 +61,10 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
 
       if (prevPath != nextPath) {
         if (nextPath != null) {
+          // Defer tab creation if runtime is not ready yet
+          if (!_ref.read(runtimeServiceProvider).isInitialized) {
+            return;
+          }
           // User entered a project/workspace.
           // Let's check if we already have a session in this directory.
           final guestDir = PathMapper.mapToGuest(
@@ -132,7 +136,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
 
       final shell = Platform.isAndroid
           ? '/system/bin/sh'
-          : (Platform.isWindows ? 'cmd.exe' : 'bash');
+          : (Platform.isWindows ? 'cmd.exe' : (Platform.environment['SHELL'] ?? 'bash'));
 
       // Desktop Linux: run bash in interactive login mode so .bashrc/.bash_profile are loaded
       // Android: args are handled by the PRoot wrapper script
@@ -284,7 +288,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
 
       final shell = Platform.isAndroid
           ? '/system/bin/sh'
-          : (Platform.isWindows ? 'cmd.exe' : 'bash');
+          : (Platform.isWindows ? 'cmd.exe' : (Platform.environment['SHELL'] ?? 'bash'));
       final List<String> args = Platform.isAndroid
           ? [runtime.prootCommand, runtime.appDirectory, dir]
           : [];
@@ -310,8 +314,10 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
 
       // Set initial size
       newPty.resize(term.viewHeight, term.viewWidth);
-
-      final sub = newPty.output.listen(
+      // ptyOutSub is stored in TerminalSession
+      // and cancelled when the session is closed via ptyOutSubscription?.cancel()
+      // ignore: cancel_subscriptions
+      final ptyOutSub = newPty.output.listen(
         (data) {
           term.write(oldSession.utf8decoder.convert(data));
         },
@@ -326,7 +332,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         workingDir: oldSession.workingDir,
         xtermTerminal: term,
         xtermViewController: xVc,
-        ptyOutSubscription: sub,
+        ptyOutSubscription: ptyOutSub,
         isExited: false,
       );
 
@@ -434,7 +440,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
     }
 
     final runtime = _ref.read(runtimeServiceProvider);
-    String translatedCommand = PathMapper.mapToGuest(
+    final String translatedCommand = PathMapper.mapToGuest(
       command,
       runtime.appDirectory,
     );

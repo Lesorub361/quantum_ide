@@ -1436,7 +1436,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     ),
                     if (state.error != null) ...[
                       const SizedBox(height: 8),
-                      Text(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
+                      SelectableText(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
                     ],
                   ],
                 ),
@@ -1507,7 +1507,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                 ),
                 if (state.error != null) ...[
                   const SizedBox(height: 8),
-                  Text(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
+                  SelectableText(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
                 ],
               ],
             ),
@@ -1625,7 +1625,7 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     ),
                     if (state.error != null) ...[
                       const SizedBox(height: 8),
-                      Text(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
+                      SelectableText(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
                     ],
                     if (!isOllama && state.logs.isNotEmpty) ...[
                       const SizedBox(height: 12),

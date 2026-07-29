@@ -188,7 +188,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
       final savedName = prefs.getString('collab_username');
       final colorHex = prefs.getString('collab_usercolor');
       
-      String name = savedName ?? 'Dev_${Random().nextInt(900) + 100}';
+      final String name = savedName ?? 'Dev_${Random().nextInt(900) + 100}';
       Color color = _userColors[Random().nextInt(_userColors.length)];
       
       if (colorHex != null) {
@@ -217,26 +217,26 @@ class CollaborationService extends StateNotifier<CollaborationState> {
       'type': 'user_update',
       'userId': state.myId ?? 'host',
       'name': name,
-      'color': state.localUserColor.value.toString(),
+      'color': state.localUserColor.toARGB32().toString(),
     });
   }
 
   Future<void> setLocalColor(Color color) async {
     state = state.copyWith(localUserColor: color);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('collab_usercolor', color.value.toString());
+    await prefs.setString('collab_usercolor', color.toARGB32().toString());
 
     // Broadcast user settings update
     _sendBroadcast({
       'type': 'user_update',
       'userId': state.myId ?? 'host',
       'name': state.localUserName,
-      'color': color.value.toString(),
+      'color': color.toARGB32().toString(),
     });
   }
 
   Future<void> _fetchLocalIps() async {
-    List<String> ips = [];
+    final List<String> ips = [];
     try {
       final interfaces = await NetworkInterface.list();
       for (final interface in interfaces) {
@@ -359,7 +359,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
       _socketToHost!.add(jsonEncode({
         'type': 'join',
         'name': state.localUserName,
-        'color': state.localUserColor.value.toString(),
+        'color': state.localUserColor.toARGB32().toString(),
       }));
 
     } catch (e) {
@@ -480,7 +480,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
       'type': 'chat',
       'userId': state.myId ?? 'host',
       'senderName': state.localUserName,
-      'senderColor': state.localUserColor.value.toString(),
+      'senderColor': state.localUserColor.toARGB32().toString(),
       'text': text,
     };
 
@@ -516,7 +516,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
     switch (type) {
       case 'join':
         final name = msg['name'] as String;
-        final colorVal = int.tryParse(msg['color'] as String? ?? '') ?? Colors.cyanAccent.value;
+        final colorVal = int.tryParse(msg['color'] as String? ?? '') ?? Colors.cyanAccent.toARGB32();
         
         final newUser = CollaborationUser(
           id: clientId,
@@ -533,7 +533,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
             .map((u) => {
                   'id': u.id,
                   'name': u.name,
-                  'color': u.color.value.toString(),
+                  'color': u.color.toARGB32().toString(),
                   'activeFile': u.activeFile,
                   'cursorLine': u.cursorLine,
                   'cursorCol': u.cursorCol,
@@ -548,7 +548,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
         currentUsersJson.add({
           'id': 'host',
           'name': state.localUserName,
-          'color': state.localUserColor.value.toString(),
+          'color': state.localUserColor.toARGB32().toString(),
           'activeFile': ref.read(editorProvider).activeFilePath != null
               ? p.relative(ref.read(editorProvider).activeFilePath!, from: ref.read(workspaceProvider).currentPath!)
               : null,
@@ -627,7 +627,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
       case 'chat':
         final text = msg['text'] as String;
         final senderName = msg['senderName'] as String;
-        final colorVal = int.tryParse(msg['senderColor'] as String? ?? '') ?? Colors.cyanAccent.value;
+        final colorVal = int.tryParse(msg['senderColor'] as String? ?? '') ?? Colors.cyanAccent.toARGB32();
 
         // Append locally
         final newMsg = CollabChatMessage(
@@ -645,7 +645,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
 
       case 'user_update':
         final name = msg['name'] as String;
-        final colorVal = int.tryParse(msg['color'] as String? ?? '') ?? Colors.cyanAccent.value;
+        final colorVal = int.tryParse(msg['color'] as String? ?? '') ?? Colors.cyanAccent.toARGB32();
         
         final user = state.users[clientId];
         if (user != null) {
@@ -676,7 +676,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
           if (id == assignedId) continue; // skip myself
 
           final name = uMap['name'] as String;
-          final colorVal = int.tryParse(uMap['color'] as String? ?? '') ?? Colors.cyanAccent.value;
+          final colorVal = int.tryParse(uMap['color'] as String? ?? '') ?? Colors.cyanAccent.toARGB32();
           final activeFile = uMap['activeFile'] as String?;
           final line = uMap['cursorLine'] as int? ?? 0;
           final col = uMap['cursorCol'] as int? ?? 0;
@@ -707,7 +707,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
         final uData = msg['user'] as Map<String, dynamic>;
         final id = uData['id'] as String;
         final name = uData['name'] as String;
-        final colorVal = int.tryParse(uData['color'] as String? ?? '') ?? Colors.cyanAccent.value;
+        final colorVal = int.tryParse(uData['color'] as String? ?? '') ?? Colors.cyanAccent.toARGB32();
 
         if (id == state.myId) return;
 
@@ -783,7 +783,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
         final text = msg['text'] as String;
         final senderId = msg['userId'] as String;
         final senderName = msg['senderName'] as String;
-        final colorVal = int.tryParse(msg['senderColor'] as String? ?? '') ?? Colors.cyanAccent.value;
+        final colorVal = int.tryParse(msg['senderColor'] as String? ?? '') ?? Colors.cyanAccent.toARGB32();
 
         final newMsg = CollabChatMessage(
           senderId: senderId,
@@ -798,7 +798,7 @@ class CollaborationService extends StateNotifier<CollaborationState> {
       case 'user_update':
         final userId = msg['userId'] as String;
         final name = msg['name'] as String;
-        final colorVal = int.tryParse(msg['color'] as String? ?? '') ?? Colors.cyanAccent.value;
+        final colorVal = int.tryParse(msg['color'] as String? ?? '') ?? Colors.cyanAccent.toARGB32();
         
         final user = state.users[userId];
         if (user != null) {

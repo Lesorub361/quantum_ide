@@ -8,7 +8,8 @@ enum ProjectTemplateType {
   node('Node.js', 'Express.js backend project', LucideIcons.server),
   php('PHP', 'Traditional PHP web project', LucideIcons.file_code),
   python('Python', 'Simple Python script or app', LucideIcons.code),
-  flutter('Flutter', 'Cross-platform mobile & web app', LucideIcons.layout_template);
+  flutter('Flutter', 'Cross-platform mobile & web app', LucideIcons.layout_template),
+  rust('Rust', 'High-performance systems programming', LucideIcons.cpu);
 
   final String title;
   final String description;
@@ -336,6 +337,22 @@ dev_dependencies:
 flutter:
   uses-material-design: true''',
           'README.md': '# $projectName\n\nA new Flutter project created with QuantumIDE.',
+        };
+
+      case ProjectTemplateType.rust:
+        return {
+          'Cargo.toml': '''[package]
+name = "${projectName.toLowerCase().replaceAll(' ', '-')}"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+''',
+          'src/main.rs': '''fn main() {
+    println!("Hello from $projectName!");
+}
+''',
+          'README.md': '# $projectName\n\nA Rust project created with QuantumIDE.',
         };
     }
   }

@@ -83,7 +83,7 @@ class EnhancedAIToolExecutor {
 
   List<AIToolDefinition> getTools({bool readAccessOnly = false}) {
     return [
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'read_file',
         description: 'Read the contents of a file. Use before editing when you need current content.',
         inputSchema: {
@@ -96,7 +96,7 @@ class EnhancedAIToolExecutor {
         risk: AIToolRisk.low,
       ),
       if (!readAccessOnly)
-        AIToolDefinition(
+        const AIToolDefinition(
           name: 'write_file',
           description: 'Create or completely replace a file with new content. Creates pending diff.',
           inputSchema: {
@@ -110,7 +110,7 @@ class EnhancedAIToolExecutor {
           risk: AIToolRisk.medium,
         ),
       if (!readAccessOnly)
-        AIToolDefinition(
+        const AIToolDefinition(
           name: 'edit_file',
           description: 'Apply a search-and-replace edit to a file with pending diff tracking.',
           inputSchema: {
@@ -125,7 +125,7 @@ class EnhancedAIToolExecutor {
           risk: AIToolRisk.medium,
         ),
       if (!readAccessOnly)
-        AIToolDefinition(
+        const AIToolDefinition(
           name: 'create_file',
           description: 'Create a new file with the given content.',
           inputSchema: {
@@ -139,7 +139,7 @@ class EnhancedAIToolExecutor {
           risk: AIToolRisk.medium,
         ),
       if (!readAccessOnly)
-        AIToolDefinition(
+        const AIToolDefinition(
           name: 'delete_file',
           description: 'Delete a file. This action cannot be undone.',
           inputSchema: {
@@ -152,7 +152,7 @@ class EnhancedAIToolExecutor {
           risk: AIToolRisk.high,
         ),
       if (!readAccessOnly)
-        AIToolDefinition(
+        const AIToolDefinition(
           name: 'insert_at_line',
           description: 'Insert text before or after a specific 1-indexed line with pending diff tracking.',
           inputSchema: {
@@ -168,7 +168,7 @@ class EnhancedAIToolExecutor {
           risk: AIToolRisk.medium,
         ),
       if (!readAccessOnly)
-        AIToolDefinition(
+        const AIToolDefinition(
           name: 'replace_all_in_file',
           description: 'Replace all matching text in a file with pending diff tracking.',
           inputSchema: {
@@ -183,7 +183,7 @@ class EnhancedAIToolExecutor {
           },
           risk: AIToolRisk.medium,
         ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'read_files_batch',
         description: 'Read multiple files in one call with optional line ranges.',
         inputSchema: {
@@ -206,7 +206,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'glob_search',
         description: 'Find files by glob pattern (e.g. "**/*.dart", "src/**/*.ts").',
         inputSchema: {
@@ -221,7 +221,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'grep_in_files',
         description: 'Search files and return matching lines with before/after context lines.',
         inputSchema: {
@@ -239,7 +239,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'search_code',
         description: 'Search for text patterns across the codebase.',
         inputSchema: {
@@ -252,7 +252,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'list_directory',
         description: 'List files and subdirectories in a directory.',
         inputSchema: {
@@ -264,7 +264,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'get_file_info',
         description: 'Get file/directory metadata: size, modification time, whether it exists.',
         inputSchema: {
@@ -276,7 +276,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'get_pending_edits',
         description: 'Get pending agentic diff hunks for a file.',
         inputSchema: {
@@ -288,13 +288,13 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'active_editor_file',
         description: 'Get the path of the currently active/opened editor file.',
         inputSchema: {'type': 'object', 'properties': {}},
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'run_command',
         description: 'Execute a shell command. Returns stdout and stderr.',
         inputSchema: {
@@ -307,7 +307,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.medium,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'search_web',
         description: 'Search the web for information.',
         inputSchema: {
@@ -319,7 +319,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'fetch_url',
         description: 'Fetch content from a URL.',
         inputSchema: {
@@ -331,13 +331,13 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'git_status',
         description: 'Get the current git status.',
         inputSchema: {'type': 'object', 'properties': {}},
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'git_diff',
         description: 'Show git diff for staged or unstaged changes.',
         inputSchema: {
@@ -349,7 +349,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'git_log',
         description: 'Show recent git commit history.',
         inputSchema: {
@@ -360,7 +360,7 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.low,
       ),
-      AIToolDefinition(
+      const AIToolDefinition(
         name: 'git_commit',
         description: 'Stage all changes and create a git commit.',
         inputSchema: {
@@ -889,7 +889,7 @@ class EnhancedAIToolExecutor {
   }
 
   RegExp _globToRegex(String glob) {
-    var regexStr = glob
+    final regexStr = glob
         .replaceAll('.', r'\.')
         .replaceAll('*', '.*')
         .replaceAll('?', '.');

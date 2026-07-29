@@ -75,11 +75,11 @@ void main() {
         );
       });
 
-      test('Commands like git commit or pub get (not in low risk list) are MEDIUM', () {
+      test('Commands like cargo build (not in low risk list) are MEDIUM', () {
         final cmdAction = AIAction(
           type: 'command',
           path: '',
-          content: 'flutter pub get',
+          content: 'cargo build',
         );
         expect(
           service.evaluateActionRisk(cmdAction, workspaceRoot),

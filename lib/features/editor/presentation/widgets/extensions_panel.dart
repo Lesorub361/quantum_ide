@@ -61,28 +61,28 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
 
   Widget _buildExtensionsList(AppLocalizations l10n) {
     final extensions = [
-      _ExtensionData(
+      const _ExtensionData(
         icon: LucideIcons.list_todo,
         name: 'Todo Tree',
         description: 'Find all TODO, FIXME, HACK comments',
         color: Colors.amberAccent,
         badge: null,
       ),
-      _ExtensionData(
+      const _ExtensionData(
         icon: LucideIcons.play,
         name: 'Test Runner',
         description: 'Run and view test results',
         color: Colors.greenAccent,
         badge: null,
       ),
-      _ExtensionData(
+      const _ExtensionData(
         icon: LucideIcons.package,
         name: 'Dependency Checker',
         description: 'Check for outdated packages',
         color: Colors.orangeAccent,
         badge: null,
       ),
-      _ExtensionData(
+      const _ExtensionData(
         icon: LucideIcons.code,
         name: 'Snippets',
         description: 'Code snippets for Flutter/Dart',
@@ -142,7 +142,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                   ],
                 ),
               ),
-              Icon(LucideIcons.chevron_right, size: 14, color: Colors.white24),
+              const Icon(LucideIcons.chevron_right, size: 14, color: Colors.white24),
             ],
           ),
         ),
@@ -178,7 +178,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(LucideIcons.arrow_left, size: 12, color: Colors.white54),
+            const Icon(LucideIcons.arrow_left, size: 12, color: Colors.white54),
             const SizedBox(width: 4),
             Text('Back', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
           ],
@@ -210,7 +210,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(LucideIcons.refresh_cw, size: 12, color: Colors.amberAccent),
+                        const Icon(LucideIcons.refresh_cw, size: 12, color: Colors.amberAccent),
                         const SizedBox(width: 6),
                         Text('Scan Project', style: GoogleFonts.inter(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.w600)),
                       ],
@@ -313,7 +313,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                         if (testState.isRunning)
                           const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.greenAccent))
                         else
-                          Icon(LucideIcons.play, size: 12, color: Colors.greenAccent),
+                          const Icon(LucideIcons.play, size: 12, color: Colors.greenAccent),
                         const SizedBox(width: 6),
                         Text(
                           testState.isRunning ? 'Running...' : 'Run All Tests',
@@ -416,7 +416,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                   if (depState.isLoading)
                     const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.orangeAccent))
                   else
-                    Icon(LucideIcons.refresh_cw, size: 12, color: Colors.orangeAccent),
+                    const Icon(LucideIcons.refresh_cw, size: 12, color: Colors.orangeAccent),
                   const SizedBox(width: 6),
                   Text(
                     depState.isLoading ? 'Checking...' : 'Check Dependencies',
@@ -445,7 +445,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       child: Row(
                         children: [
-                          Icon(LucideIcons.package, size: 12, color: Colors.orangeAccent),
+                          const Icon(LucideIcons.package, size: 12, color: Colors.orangeAccent),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Column(
@@ -485,25 +485,25 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
 
   Widget _buildSnippetsView(AppLocalizations l10n) {
     final snippets = [
-      _SnippetData('stless', 'StatelessWidget', Colors.cyanAccent),
-      _SnippetData('stful', 'StatefulWidget', Colors.cyanAccent),
-      _SnippetData('stlessp', 'ConsumerWidget', Colors.purpleAccent),
-      _SnippetData('stfulp', 'ConsumerStatefulWidget', Colors.purpleAccent),
-      _SnippetData('column', 'Column', Colors.white54),
-      _SnippetData('row', 'Row', Colors.white54),
-      _SnippetData('sized', 'SizedBox', Colors.white54),
-      _SnippetData('padding', 'Padding', Colors.white54),
-      _SnippetData('container', 'Container', Colors.white54),
-      _SnippetData('provider', 'StateProvider', Colors.purpleAccent),
-      _SnippetData('notifier', 'StateNotifier', Colors.purpleAccent),
-      _SnippetData('async', 'Async Function', Colors.orangeAccent),
-      _SnippetData('try', 'Try-Catch', Colors.orangeAccent),
-      _SnippetData('push', 'Navigator.push', Colors.greenAccent),
-      _SnippetData('text', 'Text Widget', Colors.white54),
-      _SnippetData('btn', 'ElevatedButton', Colors.white54),
-      _SnippetData('model', 'Data Model', Colors.cyanAccent),
-      _SnippetData('test', 'Test Case', Colors.greenAccent),
-      _SnippetData('testwidget', 'Widget Test', Colors.greenAccent),
+      const _SnippetData('stless', 'StatelessWidget', Colors.cyanAccent),
+      const _SnippetData('stful', 'StatefulWidget', Colors.cyanAccent),
+      const _SnippetData('stlessp', 'ConsumerWidget', Colors.purpleAccent),
+      const _SnippetData('stfulp', 'ConsumerStatefulWidget', Colors.purpleAccent),
+      const _SnippetData('column', 'Column', Colors.white54),
+      const _SnippetData('row', 'Row', Colors.white54),
+      const _SnippetData('sized', 'SizedBox', Colors.white54),
+      const _SnippetData('padding', 'Padding', Colors.white54),
+      const _SnippetData('container', 'Container', Colors.white54),
+      const _SnippetData('provider', 'StateProvider', Colors.purpleAccent),
+      const _SnippetData('notifier', 'StateNotifier', Colors.purpleAccent),
+      const _SnippetData('async', 'Async Function', Colors.orangeAccent),
+      const _SnippetData('try', 'Try-Catch', Colors.orangeAccent),
+      const _SnippetData('push', 'Navigator.push', Colors.greenAccent),
+      const _SnippetData('text', 'Text Widget', Colors.white54),
+      const _SnippetData('btn', 'ElevatedButton', Colors.white54),
+      const _SnippetData('model', 'Data Model', Colors.cyanAccent),
+      const _SnippetData('test', 'Test Case', Colors.greenAccent),
+      const _SnippetData('testwidget', 'Widget Test', Colors.greenAccent),
     ];
 
     return Column(

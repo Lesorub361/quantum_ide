@@ -11,6 +11,12 @@ class GitService {
 
   GitService(this.ref);
 
+  static final Map<String, bool> _repoCache = {};
+  static GitStatus? _cachedStatus;
+  static String? _cachedPath;
+  static DateTime? _lastStatusTime;
+  static const Duration _statusCacheTtl = Duration(seconds: 3);
+
   Future<String> _getGuestPath(String hostPath) async {
     final runtime = ref.read(runtimeServiceProvider);
     return PathMapper.mapToGuest(hostPath, runtime.appDirectory);
@@ -21,23 +27,39 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return null;
 
+    if (_cachedStatus != null && _cachedPath == hostPath && _lastStatusTime != null && DateTime.now().difference(_lastStatusTime!) < _statusCacheTtl) {
+      return _cachedStatus;
+    }
+
     final guestPath = await _getGuestPath(hostPath);
     
     try {
       final runtime = ref.read(runtimeServiceProvider);
       
-      // Check if it's a git repo
-      final isRepo = await runtime.runCommand('cd "$guestPath" && git rev-parse --is-inside-work-tree')
-          .then((value) => value.trim() == 'true')
-          .catchError((_) => false);
+      final isRepoKey = '$hostPath|$guestPath';
+      if (!_repoCache.containsKey(isRepoKey)) {
+        final isRepo = await runtime.runCommand('cd "$guestPath" && git rev-parse --is-inside-work-tree 2>/dev/null')
+            .then((value) => value.trim() == 'true')
+            .catchError((_) => false);
+        _repoCache[isRepoKey] = isRepo;
+      }
           
-      if (!isRepo) return null;
+      if (!_repoCache[isRepoKey]!) return null;
 
-      final branch = await runtime.runCommand('cd "$guestPath" && git rev-parse --abbrev-ref HEAD')
-          .then((value) => value.trim())
-          .catchError((_) => 'initial');
+      String branch = 'main';
+      try {
+        final b = await runtime.runCommand('cd "$guestPath" && git rev-parse --abbrev-ref HEAD 2>/dev/null');
+        if (b.trim().isNotEmpty) branch = b.trim();
+      } catch (_) {
+        branch = 'main';
+      }
 
-      final output = await runtime.runCommand('cd "$guestPath" && git status --porcelain');
+      String output = '';
+      try {
+        output = await runtime.runCommand('cd "$guestPath" && git status --porcelain');
+      } catch (_) {
+        output = '';
+      }
       
       final modified = <String>[];
       final staged = <String>[];
@@ -60,23 +82,32 @@ class GitService {
         } else if (status[0] != ' ' && status[1] == ' ') {
           staged.add(file);
         } else if (status[0] != ' ' && status[1] != ' ') {
-          // Partially staged
           staged.add(file);
           modified.add(file);
         }
       }
 
-      return GitStatus(
+      final result = GitStatus(
         modifiedFiles: modified,
         stagedFiles: staged,
         untrackedFiles: untracked,
         conflictedFiles: conflicted,
         currentBranch: branch,
       );
+      _cachedStatus = result;
+      _cachedPath = hostPath;
+      _lastStatusTime = DateTime.now();
+      return result;
     } catch (e) {
       debugPrint('Git Status failed: $e');
       return null;
     }
+  }
+
+  void invalidateCache() {
+    _cachedStatus = null;
+    _cachedPath = null;
+    _lastStatusTime = null;
   }
 
   Future<void> add(String filePath) async {
@@ -89,14 +120,14 @@ class GitService {
     try {
       await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
       await runtime.runCommand('cd "$guestPath" && git add "$filePath"');
+      invalidateCache();
     } catch (e) {
       if (e.toString().contains('unable to write file') || e.toString().contains('No such file or directory') || e.toString().contains('fatal')) {
         debugPrint('Git structure error, attempting aggressive repair...');
-        // Force create directory structure and re-init
         await runtime.runCommand('cd "$guestPath" && mkdir -p .git/objects && git init');
         await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
-        // Retry add
         await runtime.runCommand('cd "$guestPath" && git add "$filePath"');
+        invalidateCache();
       } else {
         rethrow;
       }
@@ -110,6 +141,7 @@ class GitService {
     final guestPath = await _getGuestPath(hostPath);
     
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git reset HEAD "$filePath"');
+    invalidateCache();
   }
 
   Future<void> commit(String message) async {
@@ -119,6 +151,7 @@ class GitService {
     final guestPath = await _getGuestPath(hostPath);
     
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git commit -m "$message"');
+    invalidateCache();
   }
 
   Future<void> push() async {
@@ -137,6 +170,7 @@ class GitService {
     final guestPath = await _getGuestPath(hostPath);
     
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git pull');
+    invalidateCache();
   }
 
   Future<void> initRepo() async {
@@ -146,6 +180,8 @@ class GitService {
     final guestPath = await _getGuestPath(hostPath);
     
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git init');
+    _repoCache.removeWhere((key, _) => key.startsWith(hostPath));
+    invalidateCache();
   }
 
   Future<String> getFileContentFromGit(String relativePath) async {
@@ -173,6 +209,7 @@ class GitService {
     
     try {
       await runtime.runCommand('cd "$guestPath" && git checkout -- "$relativePath"');
+      invalidateCache();
     } catch (e) {
       debugPrint('Git discard failed: $e');
     }

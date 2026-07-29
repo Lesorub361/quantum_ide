@@ -428,18 +428,37 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     state = state.copyWith(openFiles: newOpenFiles);
   }
 
-  void updateFileContentFromAI(String filePath, String newContent) {
-    final index = state.openFiles.indexWhere((f) => f.path == filePath);
-    if (index == -1) return;
+  Future<void> updateFileContentFromAI(String targetPathOrName, String newContent) async {
+    final workspacePath = ref.read(workspaceProvider).currentPath;
+    
+    // 1. Resolve full path
+    String fullPath = targetPathOrName;
+    if (workspacePath != null && !targetPathOrName.startsWith('/')) {
+      fullPath = p.join(workspacePath, targetPathOrName);
+    }
 
-    final file = state.openFiles[index];
-    file.controller.text = newContent;
+    // 2. Save directly to disk
+    try {
+      final file = File(fullPath);
+      await file.parent.create(recursive: true);
+      await file.writeAsString(newContent);
+    } catch (e) {
+      debugPrint('Failed to save AI content to $fullPath: $e');
+    }
 
-    _updateDiff(filePath);
-    _handleContentChange(filePath, triggerAutoSave: false);
+    // 3. Open or switch to the target tab
+    await openFile(fullPath);
 
-    _autoSaveTimers[filePath]?.cancel();
-    _autoSaveTimers.remove(filePath);
+    // 4. Update editor controller and diff
+    final index = state.openFiles.indexWhere((f) => f.path == fullPath || p.basename(f.path) == p.basename(targetPathOrName));
+    if (index != -1) {
+      final file = state.openFiles[index];
+      file.controller.text = newContent;
+      _updateDiff(file.path);
+      _handleContentChange(file.path, triggerAutoSave: false);
+      _autoSaveTimers[file.path]?.cancel();
+      _autoSaveTimers.remove(file.path);
+    }
   }
 
   void closeTab(int index) {
@@ -530,7 +549,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   }
 
   void setActiveTab(int index) {
-    if (index < 0 || index >= state.openFiles.length && state.openFiles.isNotEmpty) return;
+    if (index < 0 || index >= state.openFiles.length) return;
     state = state.copyWith(activeTabIndex: index);
     ref.read(gitProvider.notifier).refreshStatus();
     _persistWorkspaceFiles();

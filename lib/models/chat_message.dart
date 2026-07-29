@@ -1,14 +1,16 @@
 enum MessageRole { user, assistant, system }
-enum AiInteractionMode { chat, refactor, autopilot }
+enum AiInteractionMode { chat, refactor, autopilot, plan }
 
 class AIAction {
-  final String type; // 'edit', 'create', 'delete', 'command', 'web_search', 'web_fetch', 'mcp'
+  final String type; // 'edit', 'create', 'delete', 'command', 'web_search', 'web_fetch', 'mcp', 'edit_patch'
   final String path;
   final String content;
   final String? description;
   final String? server; // for MCP
   final String? tool; // for MCP
   final Map<String, dynamic>? arguments; // for MCP
+  final String? oldText; // for edit_patch: text to find
+  final String? newText; // for edit_patch: replacement text
   int? additions;
   int? deletions;
 
@@ -20,6 +22,8 @@ class AIAction {
     this.server,
     this.tool,
     this.arguments,
+    this.oldText,
+    this.newText,
     this.additions,
     this.deletions,
   });
@@ -33,6 +37,8 @@ class AIAction {
       server: json['server'],
       tool: json['tool'],
       arguments: json['arguments'] != null ? Map<String, dynamic>.from(json['arguments']) : null,
+      oldText: json['old_text'],
+      newText: json['new_text'],
       additions: json['additions'],
       deletions: json['deletions'],
     );
@@ -47,6 +53,8 @@ class AIAction {
       if (server != null) 'server': server,
       if (tool != null) 'tool': tool,
       if (arguments != null) 'arguments': arguments,
+      if (oldText != null) 'old_text': oldText,
+      if (newText != null) 'new_text': newText,
       if (additions != null) 'additions': additions,
       if (deletions != null) 'deletions': deletions,
     };
@@ -60,6 +68,7 @@ class ChatMessage {
   final List<AIAction>? actions;
   final String? imageBase64;
   final String? imagePath;
+  final List<String>? contextFiles;
   String? sessionId;
   
   // Structured metadata fields
@@ -82,6 +91,7 @@ class ChatMessage {
     this.actions,
     this.imageBase64,
     this.imagePath,
+    this.contextFiles,
     this.taskName,
     this.stepNumber,
     this.totalSteps,
@@ -102,6 +112,7 @@ class ChatMessage {
       'timestamp': timestamp.toIso8601String(),
       'actions': actions?.map((a) => a.toJson()).toList(),
       'imagePath': imagePath,
+      'contextFiles': contextFiles,
       'taskName': taskName,
       'stepNumber': stepNumber,
       'totalSteps': totalSteps,
@@ -127,6 +138,7 @@ class ChatMessage {
           ? (json['actions'] as List).map((a) => AIAction.fromJson(a)).toList()
           : null,
       imagePath: json['imagePath'],
+      contextFiles: json['contextFiles'] != null ? List<String>.from(json['contextFiles']) : null,
       taskName: json['taskName'],
       stepNumber: json['stepNumber'],
       totalSteps: json['totalSteps'],

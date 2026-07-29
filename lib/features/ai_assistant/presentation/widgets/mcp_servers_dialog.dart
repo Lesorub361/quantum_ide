@@ -118,7 +118,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       id: 'fetch',
       description: 'Downloads web pages and automatically translates them to Markdown.',
       command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-fetch'],
+      args: ['-y', '@anthropic-ai/mcp-server-fetch'],
     ),
     McpPreset(
       name: 'PostgreSQL Database Client',
@@ -220,6 +220,81 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       command: 'npx',
       args: ['-y', '@modelcontextprotocol/server-sequential-thinking'],
     ),
+    // ─── Extended MCP Servers ──────────────────────────────────
+    McpPreset(
+      name: 'Filesystem Server',
+      id: 'filesystem',
+      description: 'Secure file operations with configurable access controls.',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem'],
+      requiredArgLabels: ['Root directory path'],
+    ),
+    McpPreset(
+      name: 'Time & Timezone Server',
+      id: 'time',
+      description: 'Time and timezone conversion capabilities.',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-time'],
+    ),
+    McpPreset(
+      name: 'Kubernetes Manager',
+      id: 'kubernetes',
+      description: 'Interact with Kubernetes clusters via kubectl.',
+      command: 'npx',
+      args: ['-y', 'mcp-server-kubernetes'],
+    ),
+    McpPreset(
+      name: 'Redis Client',
+      id: 'redis',
+      description: 'Interact with Redis key-value stores.',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-redis'],
+      requiredArgLabels: ['Redis URL (redis://...)'],
+    ),
+    McpPreset(
+      name: 'Chrome DevTools',
+      id: 'chrome-devtools',
+      description: 'Browser automation, screenshots, element inspection.',
+      command: 'npx',
+      args: ['-y', 'chrome-devtools-mcp'],
+    ),
+    McpPreset(
+      name: 'Context7 Documentation',
+      id: 'context7',
+      description: 'Up-to-date documentation context for AI coding.',
+      command: 'npx',
+      args: ['-y', '@upstash/context7-mcp'],
+    ),
+    McpPreset(
+      name: 'Google Drive',
+      id: 'google-drive',
+      description: 'File access, search, and management in Google Drive.',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-gdrive'],
+      requiredEnvKeys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+    ),
+    McpPreset(
+      name: 'AWS S3 Storage',
+      id: 'aws-s3',
+      description: 'Read, write, and manage files in AWS S3 buckets.',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-s3'],
+      requiredEnvKeys: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],
+    ),
+    McpPreset(
+      name: 'Playwright Browser',
+      id: 'playwright',
+      description: 'Modern browser automation with Playwright.',
+      command: 'npx',
+      args: ['-y', '@anthropic-ai/mcp-server-playwright'],
+    ),
+    McpPreset(
+      name: 'Docker Manager',
+      id: 'docker',
+      description: 'Manage Docker containers, images, and volumes.',
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-docker'],
+    ),
   ];
 
   @override
@@ -265,7 +340,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
     final mcpServers = ref.watch(mcpServiceProvider);
     final mcpService = ref.read(mcpServiceProvider.notifier);
 
-    Widget header = Row(
+    final Widget header = Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
@@ -285,7 +360,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       ],
     );
 
-    Widget tabHeader = Container(
+    final Widget tabHeader = Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(

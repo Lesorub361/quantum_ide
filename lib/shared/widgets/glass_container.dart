@@ -91,7 +91,7 @@ class GlassAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final effectiveBlur = blur ?? settings.glassmorphismBlur;
     final effectiveOpacity = opacity ?? settings.glassmorphismOpacity;
 
-    Widget appBar = AppBar(
+    final Widget appBar = AppBar(
       title: title,
       actions: actions,
       leading: leading,

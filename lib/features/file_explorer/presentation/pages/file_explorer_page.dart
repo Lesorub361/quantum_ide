@@ -63,7 +63,11 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         });
       },
       onDragDone: (details) async {
+        // Capture context-dependent objects BEFORE any async gaps
+        final l10n = AppLocalizations.of(context)!;
         final messenger = ScaffoldMessenger.of(context);
+        final explorerNotifier = ref.read(fileExplorerProvider.notifier);
+        final projectNotifier = ref.read(projectServiceProvider.notifier);
         setState(() {
           _isDraggingOver = false;
         });
@@ -84,22 +88,20 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
               await srcFile.copy(destFile.path);
             }
             final destPath = p.join(currentPath, p.basename(file.path));
-            await ref.read(projectServiceProvider.notifier).mirrorEntity(destPath);
+            await projectNotifier.mirrorEntity(destPath);
           } catch (e) {
-            if (mounted) {
-              messenger.showSnackBar(
-                SnackBar(content: Text(AppLocalizations.of(context)!.importError(e.toString()))),
-              );
-            }
+            // messenger was captured before async so it's safe to use
+            messenger.showSnackBar(
+              SnackBar(content: Text(l10n.importError(e.toString()))),
+            );
           }
         }
-        
-        ref.read(fileExplorerProvider.notifier).scanDirectory(currentPath);
-        if (mounted) {
-          messenger.showSnackBar(
-            SnackBar(content: Text(AppLocalizations.of(context)!.filesImportedSuccessfully)),
-          );
-        }
+
+        if (!context.mounted) return;
+        explorerNotifier.scanDirectory(currentPath);
+        messenger.showSnackBar(
+          SnackBar(content: Text(l10n.filesImportedSuccessfully)),
+        );
       },
       child: Stack(
         children: [
@@ -817,7 +819,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
         leading: Container(
           padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
@@ -957,10 +959,13 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     final isZip = node.name.toLowerCase().endsWith('.zip');
     final l10n = AppLocalizations.of(context)!;
 
-    return PopupMenuButton<String>(
-      icon: const Icon(LucideIcons.ellipsis_vertical, size: 18, color: Colors.white24),
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: PopupMenuButton<String>(
+      icon: const Icon(LucideIcons.ellipsis_vertical, size: 20, color: Colors.white38),
       color: const Color(0xFF1A1D27),
-      offset: const Offset(0, 40),
+      offset: const Offset(0, 44),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       onSelected: (value) async {
         if (value == 'rename') {
@@ -1013,25 +1018,26 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
           child: Row(children: [const Icon(LucideIcons.zap, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.optimizeAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
         ),
         const PopupMenuDivider(height: 1),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'rename',
-          child: Row(children: const [Icon(LucideIcons.pencil, size: 14, color: Colors.white70), SizedBox(width: 12), Text('Rename', style: TextStyle(color: Colors.white70))]),
+          child: Row(children: [Icon(LucideIcons.pencil, size: 14, color: Colors.white70), SizedBox(width: 12), Text('Rename', style: TextStyle(color: Colors.white70))]),
         ),
         if (isZip)
-          PopupMenuItem(
+          const PopupMenuItem(
             value: 'extract',
-            child: Row(children: const [Icon(LucideIcons.file_archive, size: 14, color: Colors.greenAccent), SizedBox(width: 12), Text('Extract ZIP', style: TextStyle(color: Colors.greenAccent))]),
+            child: Row(children: [Icon(LucideIcons.file_archive, size: 14, color: Colors.greenAccent), SizedBox(width: 12), Text('Extract ZIP', style: TextStyle(color: Colors.greenAccent))]),
           ),
         if (!isZip)
-          PopupMenuItem(
+          const PopupMenuItem(
             value: 'compress',
-            child: Row(children: const [Icon(LucideIcons.file_archive, size: 14, color: Colors.amberAccent), SizedBox(width: 12), Text('Compress to ZIP', style: TextStyle(color: Colors.amberAccent))]),
+            child: Row(children: [Icon(LucideIcons.file_archive, size: 14, color: Colors.amberAccent), SizedBox(width: 12), Text('Compress to ZIP', style: TextStyle(color: Colors.amberAccent))]),
           ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'delete',
-          child: Row(children: const [Icon(LucideIcons.trash_2, size: 14, color: Colors.redAccent), SizedBox(width: 12), Text('Delete', style: TextStyle(color: Colors.redAccent))]),
+          child: Row(children: [Icon(LucideIcons.trash_2, size: 14, color: Colors.redAccent), SizedBox(width: 12), Text('Delete', style: TextStyle(color: Colors.redAccent))]),
         ),
       ],
+    ),
     );
   }
 

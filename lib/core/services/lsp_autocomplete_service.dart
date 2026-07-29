@@ -45,6 +45,12 @@ class LspAutocompleteService extends StateNotifier<LspAutocompleteState> {
 
   LspAutocompleteService(this.ref) : super(LspAutocompleteState());
 
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
   void triggerAutocomplete({
     required String filePath,
     required int lineIndex,

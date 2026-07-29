@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -120,9 +122,122 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
   late final String _pluginsDir;
   late final String _configFile;
 
+  // Node.js Sandbox fields for Desktop (Linux & Windows)
+  Process? _nodeProcess;
+  final Map<int, Completer<dynamic>> _nodePendingRequests = {};
+  int _nodeRequestId = 1;
+
   WasmPluginService() : super(WasmPluginState()) {
     _initStorage();
   }
+
+  static const String _nodeSandboxJsContent = '''
+const fs = require('fs');
+
+const plugins = {};
+
+function registerLogs(pluginId, msg) {
+  console.log(JSON.stringify({ action: 'log', pluginId: pluginId, message: msg }));
+}
+
+async function loadWasmPlugin(pluginId, base64Bytes) {
+  try {
+    const bytes = Buffer.from(base64Bytes, 'base64');
+    let wasmMemory = new WebAssembly.Memory({ initial: 256, maximum: 512 });
+    
+    const importObject = {
+      env: {
+        memory: wasmMemory,
+        host_log: (ptr, length) => {
+          const buffer = Buffer.from(wasmMemory.buffer, ptr, length);
+          const msg = buffer.toString('utf-8');
+          registerLogs(pluginId, msg);
+        }
+      }
+    };
+    
+    const { instance } = await WebAssembly.instantiate(bytes, importObject);
+    
+    plugins[pluginId] = {
+      instance: instance,
+      memory: instance.exports.memory || wasmMemory
+    };
+    
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.toString() };
+  }
+}
+
+async function runWasmAction(pluginId, actionId, inputText) {
+  const plugin = plugins[pluginId];
+  if (!plugin) throw new Error("Plugin not loaded");
+  
+  const instance = plugin.instance;
+  const memory = plugin.memory;
+  
+  const inputBytes = Buffer.from(inputText, 'utf-8');
+  const inputLen = inputBytes.length;
+  
+  if (!instance.exports.alloc) {
+    throw new Error("WASM module must export an 'alloc' function");
+  }
+  
+  const inputPtr = instance.exports.alloc(inputLen);
+  const memoryBuffer = new Uint8Array(memory.buffer);
+  memoryBuffer.set(inputBytes, inputPtr);
+  
+  if (!instance.exports.run_plugin) {
+    throw new Error("WASM module must export a 'run_plugin' function");
+  }
+  
+  const resultPacked = instance.exports.run_plugin(actionId, inputPtr, inputLen);
+  const packedBig = BigInt(resultPacked);
+  const resultPtr = Number(packedBig >> 32n);
+  const resultLen = Number(packedBig & 0xFFFFFFFFn);
+  
+  const resultBuffer = Buffer.from(memory.buffer, resultPtr, resultLen);
+  const outputText = resultBuffer.toString('utf-8');
+  
+  if (instance.exports.dealloc) {
+    instance.exports.dealloc(inputPtr, inputLen);
+    instance.exports.dealloc(resultPtr, resultLen);
+  }
+  
+  return outputText;
+}
+
+const readline = require('readline');
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+  terminal: false
+});
+
+rl.on('line', async (line) => {
+  if (!line.trim()) return;
+  try {
+    const req = JSON.parse(line);
+    const id = req.id;
+    if (req.action === 'load') {
+      const res = await loadWasmPlugin(req.pluginId, req.base64Bytes);
+      console.log(JSON.stringify({ id: id, action: 'load', pluginId: req.pluginId, ...res }));
+    } else if (req.action === 'run') {
+      try {
+        const result = await runWasmAction(req.pluginId, req.actionId, req.inputText);
+        console.log(JSON.stringify({ id: id, action: 'run', pluginId: req.pluginId, success: true, result: result }));
+      } catch (e) {
+        console.log(JSON.stringify({ id: id, action: 'run', pluginId: req.pluginId, success: false, error: e.toString() }));
+      }
+    } else if (req.action === 'unload') {
+      delete plugins[req.pluginId];
+      console.log(JSON.stringify({ id: id, action: 'unload', pluginId: req.pluginId, success: true }));
+    }
+  } catch (err) {
+    console.log(JSON.stringify({ success: false, error: 'JSON parse error: ' + err.toString() }));
+  }
+});
+  ''';
 
   Future<void> _initStorage() async {
     try {
@@ -135,15 +250,72 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
 
       _configFile = p.join(_pluginsDir, 'plugins.json');
       await _loadConfig();
+
+      if (Platform.isLinux || Platform.isWindows) {
+        await _initNodeSandbox();
+      }
     } catch (e) {
       state = state.copyWith(error: 'Failed to init plugin storage: $e');
     }
   }
 
+  Future<void> _initNodeSandbox() async {
+    try {
+      final sandboxFile = File(p.join(_pluginsDir, 'wasm_sandbox.js'));
+      await sandboxFile.writeAsString(_nodeSandboxJsContent);
+
+      _nodeProcess = await Process.start('node', [sandboxFile.path]);
+
+      _nodeProcess!.stdout
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+        if (line.trim().isEmpty) return;
+        try {
+          final res = jsonDecode(line) as Map<String, dynamic>;
+          final action = res['action'];
+          if (action == 'log') {
+            _appendLog(res['pluginId'], res['message']);
+          } else if (res.containsKey('id')) {
+            final id = res['id'] as int;
+            final completer = _nodePendingRequests.remove(id);
+            if (completer != null) {
+              if (res['success'] == true) {
+                completer.complete(res['result'] ?? res['success']);
+              } else {
+                completer.completeError(res['error'] ?? 'Unknown Node error');
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('Node Sandbox parse error: $e. Line: $line');
+        }
+      });
+
+      _nodeProcess!.stderr.transform(utf8.decoder).listen((err) {
+        debugPrint('Node Sandbox stderr: $err');
+      });
+
+      await _loadAllActivePluginsInNode();
+    } catch (e) {
+      debugPrint('Failed to initialize Node WASM Sandbox: $e');
+      state = state.copyWith(error: 'Failed to initialize Node WASM Sandbox: $e');
+    }
+  }
+
+  Future<dynamic> _sendNodeRequest(Map<String, dynamic> req) {
+    final id = _nodeRequestId++;
+    final completer = Completer<dynamic>();
+    _nodePendingRequests[id] = completer;
+
+    req['id'] = id;
+    _nodeProcess!.stdin.writeln(jsonEncode(req));
+    return completer.future;
+  }
+
   Future<void> _loadConfig() async {
     final file = File(_configFile);
     if (!file.existsSync()) {
-      // Setup default Text Transformer Demo
       final defaultList = [
         WasmPlugin(
           id: 'text_transformer_demo',
@@ -233,6 +405,15 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
     }
   }
 
+  Future<void> _loadAllActivePluginsInNode() async {
+    if (_nodeProcess == null) return;
+    for (final plugin in state.plugins) {
+      if (plugin.isEnabled) {
+        await _loadPluginInNode(plugin);
+      }
+    }
+  }
+
   Future<bool> _loadPluginInWebView(WasmPlugin plugin) async {
     if (_webViewController == null) return false;
     try {
@@ -255,7 +436,7 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
 
       final success = result != null && (result['success'] == true);
       if (success) {
-        _appendLog(plugin.id, 'Loaded successfully in sandbox.');
+        _appendLog(plugin.id, 'Loaded successfully in WebView sandbox.');
       } else {
         final err = result != null ? result['error'] : 'Unknown JS error';
         _appendLog(plugin.id, 'Load Error: $err');
@@ -263,6 +444,36 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
       return success;
     } catch (e) {
       _appendLog(plugin.id, 'Bridge Error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> _loadPluginInNode(WasmPlugin plugin) async {
+    if (_nodeProcess == null) return false;
+    try {
+      String base64Bytes = '';
+      if (plugin.wasmPath == 'embedded_demo') {
+        base64Bytes = demoWasmBase64;
+      } else {
+        final file = File(plugin.wasmPath);
+        if (!file.existsSync()) {
+          _appendLog(plugin.id, 'Error: WASM file not found at ${plugin.wasmPath}');
+          return false;
+        }
+        final bytes = await file.readAsBytes();
+        base64Bytes = base64Encode(bytes);
+      }
+
+      await _sendNodeRequest({
+        'action': 'load',
+        'pluginId': plugin.id,
+        'base64Bytes': base64Bytes,
+      });
+
+      _appendLog(plugin.id, 'Loaded successfully in Node.js sandbox.');
+      return true;
+    } catch (e) {
+      _appendLog(plugin.id, 'Node Load Error: $e');
       return false;
     }
   }
@@ -280,12 +491,25 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
 
     final plugin = updated.firstWhere((p) => p.id == pluginId);
     if (enable) {
-      await _loadPluginInWebView(plugin);
+      if (Platform.isLinux || Platform.isWindows) {
+        await _loadPluginInNode(plugin);
+      } else {
+        await _loadPluginInWebView(plugin);
+      }
     } else {
-      if (_webViewController != null) {
-        await _webViewController!.evaluateJavascript(
-          source: 'delete window.plugins["$pluginId"];',
-        );
+      if (Platform.isLinux || Platform.isWindows) {
+        if (_nodeProcess != null) {
+          await _sendNodeRequest({
+            'action': 'unload',
+            'pluginId': pluginId,
+          });
+        }
+      } else {
+        if (_webViewController != null) {
+          await _webViewController!.evaluateJavascript(
+            source: 'delete window.plugins["$pluginId"];',
+          );
+        }
       }
       _appendLog(pluginId, 'Disabled and unloaded from sandbox.');
     }
@@ -315,7 +539,11 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
     await _saveConfig(updated);
     state = state.copyWith(plugins: updated);
 
-    await _loadPluginInWebView(newPlugin);
+    if (Platform.isLinux || Platform.isWindows) {
+      await _loadPluginInNode(newPlugin);
+    } else {
+      await _loadPluginInWebView(newPlugin);
+    }
   }
 
   Future<void> deletePlugin(String pluginId) async {
@@ -333,10 +561,19 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
     await _saveConfig(updated);
     state = state.copyWith(plugins: updated);
 
-    if (_webViewController != null) {
-      await _webViewController!.evaluateJavascript(
-        source: 'delete window.plugins["$pluginId"];',
-      );
+    if (Platform.isLinux || Platform.isWindows) {
+      if (_nodeProcess != null) {
+        await _sendNodeRequest({
+          'action': 'unload',
+          'pluginId': pluginId,
+        });
+      }
+    } else {
+      if (_webViewController != null) {
+        await _webViewController!.evaluateJavascript(
+          source: 'delete window.plugins["$pluginId"];',
+        );
+      }
     }
   }
 
@@ -350,10 +587,19 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
           } catch (_) {}
         }
       }
-      if (_webViewController != null) {
-        await _webViewController!.evaluateJavascript(
-          source: 'delete window.plugins["${plugin.id}"];',
-        );
+      if (Platform.isLinux || Platform.isWindows) {
+        if (_nodeProcess != null) {
+          await _sendNodeRequest({
+            'action': 'unload',
+            'pluginId': plugin.id,
+          });
+        }
+      } else {
+        if (_webViewController != null) {
+          await _webViewController!.evaluateJavascript(
+            source: 'delete window.plugins["${plugin.id}"];',
+          );
+        }
       }
     }
 
@@ -363,7 +609,11 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
     }
 
     await _loadConfig();
-    await _loadAllActivePluginsInWebView();
+    if (Platform.isLinux || Platform.isWindows) {
+      await _loadAllActivePluginsInNode();
+    } else {
+      await _loadAllActivePluginsInWebView();
+    }
   }
 
   Future<String> executeAction(String pluginId, int actionId, String inputText) async {
@@ -371,19 +621,39 @@ class WasmPluginService extends StateNotifier<WasmPluginState> {
     if (!plugin.isEnabled) {
       throw Exception('Plugin is disabled.');
     }
-    if (_webViewController == null) {
-      throw Exception('Sandbox not initialized.');
+
+    if (Platform.isLinux || Platform.isWindows) {
+      if (_nodeProcess == null) {
+        throw Exception('Node.js WASM Sandbox not initialized.');
+      }
+      final result = await _sendNodeRequest({
+        'action': 'run',
+        'pluginId': pluginId,
+        'actionId': actionId,
+        'inputText': inputText,
+      });
+      return result.toString();
+    } else {
+      if (_webViewController == null) {
+        throw Exception('Sandbox not initialized.');
+      }
+
+      final dynamic result = await _webViewController!.evaluateJavascript(
+        source: 'window.runWasmAction("$pluginId", $actionId, ${jsonEncode(inputText)});',
+      );
+
+      if (result == null) {
+        throw Exception('Failed to receive response from WASM sandbox.');
+      }
+
+      return result.toString();
     }
+  }
 
-    final dynamic result = await _webViewController!.evaluateJavascript(
-      source: 'window.runWasmAction("$pluginId", $actionId, ${jsonEncode(inputText)});',
-    );
-
-    if (result == null) {
-      throw Exception('Failed to receive response from WASM sandbox.');
-    }
-
-    return result.toString();
+  @override
+  void dispose() {
+    _nodeProcess?.kill();
+    super.dispose();
   }
 }
 

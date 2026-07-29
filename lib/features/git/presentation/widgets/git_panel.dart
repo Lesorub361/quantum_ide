@@ -260,7 +260,7 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
 
   Widget _buildGitFileItem(String path, {required bool isStaged, bool isUntracked = false, bool isConflicted = false}) {
     final notifier = ref.read(gitProvider.notifier);
-    Color statusColor = isConflicted 
+    final Color statusColor = isConflicted 
         ? Colors.redAccent 
         : (isStaged ? Colors.greenAccent : (isUntracked ? Colors.orangeAccent : Colors.amberAccent));
     

@@ -459,6 +459,7 @@
   "dartProject": "Dart 项目",
   "webProject": "Web 项目",
   "androidProject": "Android 项目",
+  "rustProject": "Rust 项目",
   "genericProject": "项目",
   "runPC": "运行 (PC)",
   "runMob": "运行 (移动端)",

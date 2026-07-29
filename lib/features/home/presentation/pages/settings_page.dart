@@ -16,6 +16,12 @@ class SettingsPage extends ConsumerWidget {
     final s = ref.watch(settingsProvider);
     final sn = ref.read(settingsProvider.notifier);
     final theme = Theme.of(context);
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final syncTitle = isRu ? 'Синхронизация настроек' : 'Settings Sync';
+    final syncSubtitle = isRu ? 'Резервное копирование и синхронизация' : 'Backup and sync configuration';
+    final logoutTitle = isRu ? 'Выйти из аккаунта' : 'Log Out';
+    final logoutSubtitle = isRu ? 'Выйти на этом устройстве' : 'Sign out from this device';
+
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -102,6 +108,15 @@ class SettingsPage extends ConsumerWidget {
                     _switchTile(context, title: AppLocalizations.of(context)!.lineNumbers, subtitle: AppLocalizations.of(context)!.showLineNumbers, value: s.lineNumbers, onChanged: sn.setLineNumbers),
                     _switchTile(context, title: AppLocalizations.of(context)!.minimap, subtitle: AppLocalizations.of(context)!.showMinimap, value: s.minimap, onChanged: sn.setMinimap),
                     _switchTile(context, title: AppLocalizations.of(context)!.autoSave, subtitle: AppLocalizations.of(context)!.autoSaveDescription, value: s.autoSave, onChanged: sn.setAutoSave),
+                    _switchTile(
+                      context,
+                      title: Localizations.localeOf(context).languageCode == 'ru' ? 'Форматировать при сохранении' : 'Format on Save',
+                      subtitle: Localizations.localeOf(context).languageCode == 'ru'
+                          ? 'Автоматически форматировать код с помощью LSP при сохранении файла'
+                          : 'Automatically format code using LSP when saving the file',
+                      value: s.formatOnSave,
+                      onChanged: sn.setFormatOnSave,
+                    ),
                   ]),
 
                   const SizedBox(height: 24),
@@ -110,6 +125,8 @@ class SettingsPage extends ConsumerWidget {
                   _settingsGroup(context, [
                     _tile(context, icon: LucideIcons.terminal, title: AppLocalizations.of(context)!.terminalFontSize, subtitle: '${s.terminalFontSize.toInt()} px',
                       onTap: () => _showSliderDialog(context, AppLocalizations.of(context)!.terminalFontSize, s.terminalFontSize, 8, 24, sn.setTerminalFontSize)),
+                    _tile(context, icon: LucideIcons.type, title: isRu ? 'Шрифт терминала' : 'Terminal Font Family', subtitle: s.terminalFontFamily,
+                      onTap: () => _showFontFamilyDialog(context, s.terminalFontFamily, sn.setTerminalFontFamily)),
                     _tile(context, icon: LucideIcons.palette, title: AppLocalizations.of(context)!.terminalTheme, subtitle: _terminalThemeName(context, s.terminalTheme),
                       onTap: () => _showTerminalThemeDialog(context, s.terminalTheme, sn.setTerminalTheme)),
                   ]),
@@ -137,8 +154,48 @@ class SettingsPage extends ConsumerWidget {
                   _settingsGroup(context, [
                     _switchTile(context, title: AppLocalizations.of(context)!.showHiddenFiles, subtitle: AppLocalizations.of(context)!.showHiddenFilesDescription, value: s.showHiddenFiles, onChanged: sn.setShowHiddenFiles),
                     _switchTile(context, title: AppLocalizations.of(context)!.vibration, subtitle: AppLocalizations.of(context)!.hapticFeedback, value: s.hapticFeedback, onChanged: sn.setHapticFeedback),
+                    _switchTile(
+                      context,
+                      title: 'SD Card Sync',
+                      subtitle: 'Синхронизировать проекты на SD-карту (/storage/emulated/0/QuantumIDE)',
+                      value: s.sdCardSync,
+                      onChanged: (v) async {
+                        await sn.setSdCardSync(v);
+                      },
+                    ),
                     _tile(context, icon: LucideIcons.info, title: AppLocalizations.of(context)!.aboutApp, subtitle: AppLocalizations.of(context)!.aboutAppSubtitle,
                       onTap: () => _showAbout(context)),
+                  ]),
+
+                  const SizedBox(height: 24),
+                  // ─── Аккаунт ──────────────────────────────────
+                  _sectionHeader(context, isRu ? 'Учетная запись' : 'Account & Sync'),
+                  _settingsGroup(context, [
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      leading: const CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.purpleAccent,
+                        child: Text('QD', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                      title: Text('Quantum Dev', style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14, fontWeight: FontWeight.w600)),
+                      subtitle: Text('quantum.developer@quantumide.io', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+                    ),
+                    _switchTile(
+                      context,
+                      title: syncTitle,
+                      subtitle: syncSubtitle,
+                      value: s.sdCardSync,
+                      onChanged: (v) async {
+                        await sn.setSdCardSync(v);
+                      },
+                    ),
+                    ListTile(
+                      onTap: () => _showLogOutDialog(context),
+                      leading: const Icon(LucideIcons.log_out, color: Colors.redAccent, size: 20),
+                      title: Text(logoutTitle, style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w600)),
+                      subtitle: Text(logoutSubtitle, style: GoogleFonts.inter(color: Colors.redAccent.withValues(alpha: 0.6), fontSize: 12)),
+                    ),
                   ]),
                   const SizedBox(height: 40),
                 ])),
@@ -300,6 +357,7 @@ class SettingsPage extends ConsumerWidget {
     final fonts = [
       'JetBrains Mono',
       'Fira Code',
+      'Cascadia Code',
       'Source Code Pro',
       'Inconsolata',
       'Anonymous Pro',
@@ -544,4 +602,42 @@ class SettingsPage extends ConsumerWidget {
       ),
     );
   }
+
+  void _showLogOutDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.colorScheme.surface,
+        title: Text(isRu ? 'Выйти из аккаунта?' : 'Log Out?'),
+        content: Text(isRu
+            ? 'Вы уверены, что хотите выйти из аккаунта?'
+            : 'Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(isRu ? 'Отмена' : 'Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: theme.colorScheme.surface,
+                  content: Text(isRu ? 'Вы успешно вышли' : 'Successfully logged out'),
+                ),
+              );
+            },
+            child: Text(isRu ? 'Выйти' : 'Log Out'),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

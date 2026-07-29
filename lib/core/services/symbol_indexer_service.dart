@@ -102,25 +102,38 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
     try {
       final List<IndexSymbol> allSymbols = [];
       final List<String> allFiles = [];
-      final dir = Directory(workspaceRoot);
+      final List<Directory> queue = [Directory(workspaceRoot)];
+      int processedCount = 0;
 
-      if (!await dir.exists()) {
-        state = state.copyWith(isIndexing: false, error: 'Project directory not found');
-        return;
-      }
+      while (queue.isNotEmpty) {
+        final currentDir = queue.removeLast();
+        try {
+          final List<FileSystemEntity> entities = await currentDir.list(recursive: false, followLinks: false).toList();
+          for (final entity in entities) {
+            final name = p.basename(entity.path);
+            if (_ignoredDirs.contains(name) || name.startsWith('.')) {
+              continue;
+            }
 
-      final List<FileSystemEntity> entities = await _listAllFiles(dir);
+            if (entity is File) {
+              allFiles.add(entity.path);
+              final ext = p.extension(entity.path).toLowerCase();
+              if (ext == '.dart' || ext == '.js' || ext == '.ts' || ext == '.py' || ext == '.go') {
+                final symbols = await _parseFile(entity);
+                allSymbols.addAll(symbols);
+              }
+            } else if (entity is Directory) {
+              queue.add(entity);
+            }
 
-      for (final entity in entities) {
-        if (entity is File) {
-          allFiles.add(entity.path);
-          final ext = p.extension(entity.path).toLowerCase();
-          if (ext == '.dart' || ext == '.js' || ext == '.ts' || ext == '.py' || ext == '.go') {
-            final symbols = await _parseFile(entity);
-            allSymbols.addAll(symbols);
+            processedCount++;
+            if (processedCount % 20 == 0) {
+              await Future.delayed(Duration.zero);
+            }
           }
+        } catch (_) {
+          // ignore directory access errors
         }
-        // Yield to event loop to keep UI smooth
         await Future.delayed(Duration.zero);
       }
 
@@ -128,28 +141,6 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
     } catch (e) {
       state = state.copyWith(isIndexing: false, error: 'Indexing error: $e');
     }
-  }
-
-  Future<List<FileSystemEntity>> _listAllFiles(Directory dir) async {
-    final List<FileSystemEntity> files = [];
-    try {
-      final List<FileSystemEntity> entities = await dir.list(recursive: true, followLinks: false).toList();
-      for (final entity in entities) {
-        // Skip ignored directories
-        final pathSegments = p.split(entity.path);
-        bool shouldIgnore = false;
-        for (final segment in pathSegments) {
-          if (_ignoredDirs.contains(segment)) {
-            shouldIgnore = true;
-            break;
-          }
-        }
-        if (!shouldIgnore) {
-          files.add(entity);
-        }
-      }
-    } catch (_) {}
-    return files;
   }
 
   Future<void> indexFile(String filePath) async {
@@ -192,16 +183,32 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       final content = await file.readAsString();
       final lines = content.split('\n');
 
-      final ext = p.extension(file.path).toLowerCase();
+      // Precalculate line start offsets to map character positions to line numbers
+      final lineStarts = <int>[];
+      int currentOffset = 0;
+      for (final line in lines) {
+        lineStarts.add(currentOffset);
+        currentOffset += line.length + 1; // +1 for the newline character
+      }
 
-      // Regex patterns
-      final dartClassReg = RegExp(r'^\s*(?:abstract\s+|mixin\s+|extension\s+)?class\s+([A-Za-z0-9_]+)');
-      final dartMethodReg = RegExp(
-          r'^\s*(?:(?:Future<[A-Za-z0-9_<>]+>|Stream<[A-Za-z0-9_<>]+>|void|[A-Za-z0-9_<>]+)\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:async\s*)?[\{=>]');
-      final pythonClassReg = RegExp(r'^\s*class\s+([A-Za-z0-9_]+)');
-      final pythonDefReg = RegExp(r'^\s*def\s+([A-Za-z0-9_]+)');
-      final jsFuncReg = RegExp(r'^\s*(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)');
-      final jsMethodReg = RegExp(r'^\s*(?:async\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{');
+      int getLineNumber(int offset) {
+        int low = 0;
+        int high = lineStarts.length - 1;
+        while (low <= high) {
+          final mid = (low + high) >> 1;
+          if (lineStarts[mid] <= offset) {
+            if (mid == lineStarts.length - 1 || lineStarts[mid + 1] > offset) {
+              return mid + 1;
+            }
+            low = mid + 1;
+          } else {
+            high = mid - 1;
+          }
+        }
+        return 1;
+      }
+
+      final ext = p.extension(file.path).toLowerCase();
 
       const keywords = {
         'if', 'for', 'switch', 'while', 'catch', 'return', 'assert', 'await',
@@ -209,78 +216,79 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
         'void', 'dynamic', 'var', 'final', 'const'
       };
 
-      for (int i = 0; i < lines.length; i++) {
-        final line = lines[i];
+      if (ext == '.dart') {
+        final classReg = RegExp(r'\bclass\s+([A-Za-z0-9_]+)');
+        // Matches functions/methods with optional return type, name, parameters (supporting nested parens and newlines), and => or {
+        final methodReg = RegExp(
+            r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?:async\s*)?(?:{|=>)');
 
-        if (ext == '.dart') {
-          final classMatch = dartClassReg.firstMatch(line);
-          if (classMatch != null) {
-            symbols.add(IndexSymbol(
-              name: classMatch.group(1)!,
-              type: 'class',
-              filePath: file.path,
-              lineNumber: i + 1,
-            ));
-            continue;
-          }
+        for (final match in classReg.allMatches(content)) {
+          final name = match.group(1)!;
+          symbols.add(IndexSymbol(
+            name: name,
+            type: 'class',
+            filePath: file.path,
+            lineNumber: getLineNumber(match.start),
+          ));
+        }
 
-          final methodMatch = dartMethodReg.firstMatch(line);
-          if (methodMatch != null) {
-            final name = methodMatch.group(1)!;
-            if (!keywords.contains(name) && name != 'Widget' && name != 'build') {
-              symbols.add(IndexSymbol(
-                name: name,
-                type: 'method',
-                filePath: file.path,
-                lineNumber: i + 1,
-              ));
-            }
-          }
-        } else if (ext == '.py') {
-          final classMatch = pythonClassReg.firstMatch(line);
-          if (classMatch != null) {
-            symbols.add(IndexSymbol(
-              name: classMatch.group(1)!,
-              type: 'class',
-              filePath: file.path,
-              lineNumber: i + 1,
-            ));
-            continue;
-          }
-
-          final defMatch = pythonDefReg.firstMatch(line);
-          if (defMatch != null) {
-            final name = defMatch.group(1)!;
+        for (final match in methodReg.allMatches(content)) {
+          final name = match.group(1)!;
+          if (!keywords.contains(name) && name != 'Widget') {
             symbols.add(IndexSymbol(
               name: name,
               type: 'method',
               filePath: file.path,
-              lineNumber: i + 1,
+              lineNumber: getLineNumber(match.start),
             ));
           }
-        } else if (ext == '.js' || ext == '.ts') {
-          final funcMatch = jsFuncReg.firstMatch(line);
-          if (funcMatch != null) {
+        }
+      } else if (ext == '.py') {
+        final classReg = RegExp(r'\bclass\s+([A-Za-z0-9_]+)');
+        final defReg = RegExp(r'\bdef\s+([A-Za-z0-9_]+)');
+
+        for (final match in classReg.allMatches(content)) {
+          final name = match.group(1)!;
+          symbols.add(IndexSymbol(
+            name: name,
+            type: 'class',
+            filePath: file.path,
+            lineNumber: getLineNumber(match.start),
+          ));
+        }
+
+        for (final match in defReg.allMatches(content)) {
+          final name = match.group(1)!;
+          symbols.add(IndexSymbol(
+            name: name,
+            type: 'method',
+            filePath: file.path,
+            lineNumber: getLineNumber(match.start),
+          ));
+        }
+      } else if (ext == '.js' || ext == '.ts') {
+        final funcReg = RegExp(r'\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)');
+        final methodReg = RegExp(r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*\{');
+
+        for (final match in funcReg.allMatches(content)) {
+          final name = match.group(1)!;
+          symbols.add(IndexSymbol(
+            name: name,
+            type: 'method',
+            filePath: file.path,
+            lineNumber: getLineNumber(match.start),
+          ));
+        }
+
+        for (final match in methodReg.allMatches(content)) {
+          final name = match.group(1)!;
+          if (!keywords.contains(name) && name != 'constructor') {
             symbols.add(IndexSymbol(
-              name: funcMatch.group(1)!,
+              name: name,
               type: 'method',
               filePath: file.path,
-              lineNumber: i + 1,
+              lineNumber: getLineNumber(match.start),
             ));
-            continue;
-          }
-
-          final methodMatch = jsMethodReg.firstMatch(line);
-          if (methodMatch != null) {
-            final name = methodMatch.group(1)!;
-            if (!keywords.contains(name) && name != 'constructor') {
-              symbols.add(IndexSymbol(
-                name: name,
-                type: 'method',
-                filePath: file.path,
-                lineNumber: i + 1,
-              ));
-            }
           }
         }
       }

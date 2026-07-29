@@ -50,13 +50,13 @@ class LanguageService {
         'String', 'int', 'double', 'bool', 'List', 'Map', 'Set', 'Future', 'Stream',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'stless',
           snippet: 'class NewWidget extends StatelessWidget {\n  const NewWidget({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return Container();\n  }\n}',
           description: 'Stateless Widget',
           selection: TextSelection.collapsed(offset: 6),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'stful',
           snippet: 'class NewWidget extends StatefulWidget {\n  const NewWidget({super.key});\n\n  @override\n  State<NewWidget> createState() => _NewWidgetState();\n}\n\nclass _NewWidgetState extends State<NewWidget> {\n  @override\n  Widget build(BuildContext context) {\n    return Container();\n  }\n}',
           description: 'Stateful Widget',
@@ -76,13 +76,13 @@ class LanguageService {
         'typeof', 'var', 'void', 'while', 'with', 'yield', 'let', 'static', 'of',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'clg',
           snippet: 'console.log();',
           description: 'Console Log',
           selection: TextSelection.collapsed(offset: 12),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'afn',
           snippet: 'const name = () => {\n  \n};',
           description: 'Arrow Function',
@@ -100,7 +100,7 @@ class LanguageService {
         'input', 'form', 'label', 'table', 'tr', 'td', 'th', 'thead', 'tbody',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'html5',
           snippet: '<!DOCTYPE html>\n<html>\n<head>\n  <title></title>\n</head>\n<body>\n\n</body>\n</html>',
           description: 'HTML5 Boilerplate',
@@ -118,7 +118,7 @@ class LanguageService {
         'relative', 'fixed', 'sticky', 'none', 'block', 'inline', 'inline-block',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'flex',
           snippet: 'display: flex;\njustify-content: center;\nalign-items: center;',
           description: 'Flexbox Center',
@@ -143,19 +143,19 @@ class LanguageService {
         'Map', 'HashMap', 'Set', 'HashSet', 'Override',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'psvm',
           snippet: 'public static void main(String[] args) {\n  \n}',
           description: 'Main Method',
           selection: TextSelection.collapsed(offset: 43),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'sout',
           snippet: 'System.out.println();',
           description: 'System Out Println',
           selection: TextSelection.collapsed(offset: 19),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'class',
           snippet: 'public class MyClass {\n  \n}',
           description: 'Java Class',
@@ -181,13 +181,13 @@ class LanguageService {
         'List', 'ArrayList', 'Map', 'HashMap', 'Set', 'HashSet', 'println', 'print',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'main',
           snippet: 'fun main(args: Array<String>) {\n  \n}',
           description: 'Main Function',
           selection: TextSelection.collapsed(offset: 33),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'sout',
           snippet: 'println()',
           description: 'Println',
@@ -207,19 +207,19 @@ class LanguageService {
         'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'def',
           snippet: 'def name():\n    pass',
           description: 'Function Definition',
           selection: TextSelection.collapsed(offset: 4),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'main',
           snippet: 'if __name__ == "__main__":\n    main()',
           description: 'Main Block',
           selection: TextSelection.collapsed(offset: 35),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'class',
           snippet: 'class MyClass:\n    def __init__(self):\n        pass',
           description: 'Class Definition',
@@ -244,19 +244,19 @@ class LanguageService {
         'var', 'while', 'xor', 'yield',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'php',
           snippet: '<?php\n\n?>',
           description: 'PHP Tag',
           selection: TextSelection.collapsed(offset: 6),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'echo',
           snippet: 'echo "";',
           description: 'Echo Statement',
           selection: TextSelection.collapsed(offset: 6),
         ),
-        CodeSnippet(
+        const CodeSnippet(
           label: 'fun',
           snippet: 'function name() {\n  \n}',
           description: 'Function',
@@ -274,7 +274,7 @@ class LanguageService {
         'v-on', 'v-bind',
       ],
       snippets: [
-        CodeSnippet(
+        const CodeSnippet(
           label: 'vue3',
           snippet: '<script setup>\nimport { ref } from \'vue\'\n</script>\n\n<template>\n  <div>\n    \n  </div>\n</template>\n\n<style scoped>\n</style>',
           description: 'Vue 3 SFC Boilerplate',

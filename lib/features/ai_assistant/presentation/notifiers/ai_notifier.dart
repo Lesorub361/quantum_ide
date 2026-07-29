@@ -19,7 +19,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'ai_prompts.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
-import 'package:quantum_ide/core/services/hive_chat_service.dart';
+import 'package:quantum_ide/core/services/json_chat_service.dart';
 import 'package:dio/dio.dart';
 import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
@@ -92,6 +92,7 @@ class AIState {
   /// Пути файлов, которые агент прочитал (для отображения в проводнике)
   final List<String> agentReadFiles;
   final String? currentStatusMessage;
+  final String? currentThought;
   final List<ChatSession> sessions;
   final String? currentSessionId;
   final String? sessionGoal;
@@ -109,6 +110,7 @@ class AIState {
     this.activeAgentRole,
     this.agentReadFiles = const [],
     this.currentStatusMessage,
+    this.currentThought,
     this.sessions = const [],
     this.currentSessionId,
     this.sessionGoal,
@@ -130,6 +132,7 @@ class AIState {
     bool? isAutopilot,
     List<String>? agentReadFiles,
     String? currentStatusMessage,
+    String? currentThought,
     List<ChatSession>? sessions,
     String? currentSessionId,
     String? sessionGoal,
@@ -150,6 +153,7 @@ class AIState {
       activeAgentRole: activeAgentRole ?? this.activeAgentRole,
       agentReadFiles: agentReadFiles ?? this.agentReadFiles,
       currentStatusMessage: currentStatusMessage ?? this.currentStatusMessage,
+      currentThought: currentThought ?? this.currentThought,
       sessions: sessions ?? this.sessions,
       currentSessionId: currentSessionId ?? this.currentSessionId,
       sessionGoal: sessionGoal ?? this.sessionGoal,
@@ -195,34 +199,16 @@ class AINotifier extends StateNotifier<AIState> {
   }
 
   Future<void> _saveSessions() async {
+    final workspacePath = _ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null) return;
+
     try {
-      final hiveService = _ref.read(hiveChatServiceProvider);
-      await hiveService.init();
-      
-      // Save each session
-      for (final session in state.sessions) {
-        await hiveService.saveSession(session);
-      }
-      
-      // Save current session messages
-      final currentId = state.currentSessionId;
-      if (currentId != null) {
-        for (final msg in state.messages) {
-          msg.sessionId = currentId;
-          await hiveService.saveMessage(msg);
-        }
-      }
-      
-      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) with ${state.messages.length} messages via Hive');
-      
-      final workspacePath = _ref.read(workspaceProvider).currentPath;
-      if (workspacePath != null) {
-        await _saveMemory(workspacePath);
-      }
+      final jsonService = _ref.read(jsonChatServiceProvider);
+      await jsonService.saveSessions(workspacePath, state.sessions);
+      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) via JSON');
+      await _saveMemory(workspacePath);
     } catch (e) {
-      debugPrint('[AINotifier] Error saving via Hive, falling back to JSON: $e');
-      // Fallback to JSON
-      await _saveSessionsJson();
+      debugPrint('[AINotifier] Error saving sessions: $e');
     }
   }
 
@@ -331,39 +317,10 @@ class AINotifier extends StateNotifier<AIState> {
 
   Future<void> _loadSessions(String workspacePath) async {
     try {
-      final hiveService = _ref.read(hiveChatServiceProvider);
-      await hiveService.init();
+      final jsonService = _ref.read(jsonChatServiceProvider);
+      List<ChatSession> sessions = await jsonService.loadSessions(workspacePath);
       
-      // Try to load from Hive first
-      var sessions = hiveService.getAllSessions();
-      
-      // If Hive is empty, try JSON fallback
-      if (sessions.isEmpty) {
-        debugPrint('[AINotifier] Hive empty, trying JSON fallback');
-        sessions = await hiveService.loadFromJsonFallback(workspacePath);
-        
-        // Also try app documents fallback
-        if (sessions.isEmpty) {
-          try {
-            final appDir = await _getAppDataDir();
-            sessions = await hiveService.loadFromJsonFallback(appDir);
-          } catch (_) {}
-        }
-        
-        // If we found sessions in JSON, migrate to Hive
-        if (sessions.isNotEmpty) {
-          debugPrint('[AINotifier] Migrating ${sessions.length} sessions from JSON to Hive');
-          for (final session in sessions) {
-            await hiveService.saveSession(session);
-            for (final msg in session.messages) {
-              msg.sessionId = session.id;
-              await hiveService.saveMessage(msg);
-            }
-          }
-        }
-      }
-      
-      debugPrint('[AINotifier] Loaded ${sessions.length} session(s) from Hive');
+      debugPrint('[AINotifier] Loaded ${sessions.length} session(s) for workspace: $workspacePath');
       
       if (sessions.isEmpty) {
         final defaultSession = ChatSession(
@@ -371,12 +328,14 @@ class AINotifier extends StateNotifier<AIState> {
           title: 'New Chat',
           messages: [],
           createdAt: DateTime.now(),
+          workspacePath: workspacePath,
         );
         state = state.copyWith(
           sessions: [defaultSession],
           currentSessionId: defaultSession.id,
           messages: [],
         );
+        await jsonService.saveSessions(workspacePath, [defaultSession]);
         return;
       }
       
@@ -629,6 +588,7 @@ class AINotifier extends StateNotifier<AIState> {
     switch (mode) {
       case AiInteractionMode.chat:
       case AiInteractionMode.refactor:
+      case AiInteractionMode.plan:
         approval = AiApprovalMode.manual;
         break;
       case AiInteractionMode.autopilot:
@@ -645,7 +605,7 @@ class AINotifier extends StateNotifier<AIState> {
     state = state.copyWith(isLoading: false, activeAgentRole: null);
   }
 
-  Future<void> askAI(String prompt, {String? imageBase64}) async {
+  Future<void> askAI(String prompt, {String? imageBase64, List<String>? contextFiles}) async {
     final l10n = _ref.read(localizationsProvider);
 
     if (prompt.trim() == '/dream') {
@@ -921,7 +881,16 @@ class AINotifier extends StateNotifier<AIState> {
 
         // Parse proposed actions from <actions> blocks
         var actions = _parseActions(responseText);
-        
+
+        // Extract internal thought for UI (if present)
+        final thoughtMatch = RegExp(r'<thought>([\s\S]*?)</thought>', caseSensitive: false).firstMatch(responseText);
+        if (thoughtMatch != null) {
+          final thought = thoughtMatch.group(1)?.trim();
+          if (thought != null && thought.isNotEmpty) {
+            state = state.copyWith(currentThought: thought);
+          }
+        }
+
         // For local models: translate natural language into actions
         if (isLocalAi && actions.isEmpty) {
           actions = LocalActionTranslator.translateResponse(responseText, workspacePath);
@@ -1261,12 +1230,15 @@ class AINotifier extends StateNotifier<AIState> {
     final List<AIAction> actions = [];
     final workspacePath = _ref.read(workspaceProvider).currentPath;
 
+    // Strip internal thoughts before parsing actions
+    var cleanText = text.replaceAll(RegExp(r'<thought>[\s\S]*?</thought>', caseSensitive: false), '');
+
     final regExp = RegExp(r'<actions>([\s\S]*?)<\/actions>', caseSensitive: false);
-    var matches = regExp.allMatches(text);
+    var matches = regExp.allMatches(cleanText);
 
     if (matches.isEmpty) {
       final singularRegExp = RegExp(r'<action>([\s\S]*?)<\/action>', caseSensitive: false);
-      matches = singularRegExp.allMatches(text);
+      matches = singularRegExp.allMatches(cleanText);
     }
 
     final List<String> candidateBlocks = [];
@@ -1276,7 +1248,7 @@ class AINotifier extends StateNotifier<AIState> {
 
     if (candidateBlocks.isEmpty) {
       final jsonArrayRegExp = RegExp(r'\[\s*\{\s*"type"[\s\S]*?\}\s*\]');
-      final arrayMatch = jsonArrayRegExp.firstMatch(text);
+      final arrayMatch = jsonArrayRegExp.firstMatch(cleanText);
       if (arrayMatch != null) {
         candidateBlocks.add(arrayMatch.group(0)!);
       }
@@ -1285,17 +1257,11 @@ class AINotifier extends StateNotifier<AIState> {
     for (var jsonStr in candidateBlocks) {
       try {
         if (jsonStr.contains('```')) {
-          final codeBlockRegExp = RegExp(r'```(?:json)?([\s\S]*?)```', caseSensitive: false);
-          final codeBlockMatch = codeBlockRegExp.firstMatch(jsonStr);
-          if (codeBlockMatch != null) {
-            jsonStr = codeBlockMatch.group(1)?.trim() ?? jsonStr;
-          } else {
-            jsonStr = jsonStr
-                .split('\n')
-                .where((line) => !line.trim().startsWith('```'))
-                .join('\n')
-                .trim();
-          }
+          jsonStr = jsonStr
+              .split('\n')
+              .where((line) => !line.trim().startsWith(RegExp(r'```(json)?', caseSensitive: false)))
+              .join('\n')
+              .trim();
         }
 
         final decoded = jsonDecode(jsonStr);

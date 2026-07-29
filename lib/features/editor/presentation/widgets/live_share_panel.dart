@@ -207,7 +207,7 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
               itemCount: _availableColors.length,
               itemBuilder: (context, index) {
                 final color = _availableColors[index];
-                final isSelected = state.localUserColor.value == color.value;
+                final isSelected = state.localUserColor.toARGB32() == color.toARGB32();
                 return GestureDetector(
                   onTap: () => ref.read(collaborationProvider.notifier).setLocalColor(color),
                   child: Container(

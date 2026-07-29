@@ -33,6 +33,8 @@ import 'package:re_highlight/languages/java.dart';
 import 'package:re_highlight/languages/php.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/inline_diff_widget.dart';
+import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
 class CollapsibleConsole extends StatefulWidget {
   final String content;
@@ -198,6 +200,71 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStreamingMessage(String content) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: Color(0xFFd0bcff),
+                  width: 3,
+                ),
+              ),
+            ),
+            child: GlassContainer(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              blur: 20,
+              opacity: 0.15,
+              color: const Color(0xFF282A30),
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(16),
+                bottomRight: Radius.circular(16),
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.08),
+                width: 0.8,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _renderMarkdown(content, context),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2, left: 4),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 8,
+                  height: 8,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    color: Colors.purpleAccent.withValues(alpha: 0.7),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Streaming...',
+                  style: GoogleFonts.inter(
+                    color: Colors.white24,
+                    fontSize: 9,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+        ],
+      ),
+
     );
   }
 
@@ -405,109 +472,123 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                               ? Colors.greenAccent
                               : (action.type == 'delete' ? Colors.redAccent : Colors.blueAccent);
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.02),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  action.type == 'create'
-                                      ? LucideIcons.file_plus
-                                      : (action.type == 'delete' ? LucideIcons.file_x : LucideIcons.file_code),
-                                  size: 13,
-                                  color: fileIconColor,
+                          return Column(
+                            children: [
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.02),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: InkWell(
-                                    onTap: () => ref.read(editorProvider.notifier).openFile(action.path),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          fileName,
-                                          style: GoogleFonts.inter(
-                                            color: Colors.white.withValues(alpha: 0.85),
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            decoration: TextDecoration.underline,
-                                          ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      action.type == 'create'
+                                          ? LucideIcons.file_plus
+                                          : (action.type == 'delete' ? LucideIcons.file_x : LucideIcons.file_code),
+                                      size: 13,
+                                      color: fileIconColor,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () => ref.read(editorProvider.notifier).openFile(action.path),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              fileName,
+                                              style: GoogleFonts.inter(
+                                                color: Colors.white.withValues(alpha: 0.85),
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                decoration: TextDecoration.underline,
+                                              ),
+                                            ),
+                                            if (dirPath.isNotEmpty)
+                                              Text(
+                                                dirPath,
+                                                style: GoogleFonts.inter(color: Colors.white30, fontSize: 9),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                          ],
                                         ),
-                                        if (dirPath.isNotEmpty)
-                                          Text(
-                                            dirPath,
-                                            style: GoogleFonts.inter(color: Colors.white30, fontSize: 9),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
-                                ),
-                                if ((action.additions ?? 0) > 0) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: Colors.greenAccent.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '+${action.additions}',
-                                      style: GoogleFonts.jetBrainsMono(color: Colors.greenAccent, fontSize: 8.5, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                ],
-                                if ((action.deletions ?? 0) > 0) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '-${action.deletions}',
-                                      style: GoogleFonts.jetBrainsMono(color: Colors.redAccent, fontSize: 8.5, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                ],
-                                InkWell(
-                                  onTap: () => ref.read(editorProvider.notifier).openFile(action.path, isDiffView: true),
-                                  child: const Icon(LucideIcons.diff, size: 12, color: Colors.white38),
-                                ),
-                                const SizedBox(width: 6),
-                                InkWell(
-                                  onTap: () async {
-                                    final l10n = AppLocalizations.of(context)!;
-                                    final messenger = ScaffoldMessenger.of(context);
-                                    final gitSvc = ref.read(gitServiceProvider);
-                                    final relPath = workspacePath != null && action.path.startsWith(workspacePath)
-                                        ? p.relative(action.path, from: workspacePath)
-                                        : action.path;
-                                    await gitSvc.discardChanges(relPath);
-
-                                    final isOpen = ref.read(editorProvider).openFiles.any((f) => f.path == action.path);
-                                    if (isOpen) {
-                                      await ref.read(editorProvider.notifier).openFile(action.path);
-                                    }
-
-                                    if (mounted) {
-                                      messenger.showSnackBar(
-                                        SnackBar(
-                                          content: Text(l10n.discardedFileChanges(fileName)),
+                                    if ((action.additions ?? 0) > 0) ...[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: Colors.greenAccent.withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(4),
                                         ),
-                                      );
-                                    }
-                                  },
-                                  child: const Icon(LucideIcons.undo, size: 12, color: Colors.redAccent),
+                                        child: Text(
+                                          '+${action.additions}',
+                                          style: GoogleFonts.jetBrainsMono(color: Colors.greenAccent, fontSize: 8.5, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                    ],
+                                    if ((action.deletions ?? 0) > 0) ...[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: Colors.redAccent.withValues(alpha: 0.08),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          '-${action.deletions}',
+                                          style: GoogleFonts.jetBrainsMono(color: Colors.redAccent, fontSize: 8.5, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    InkWell(
+                                      onTap: () => ref.read(editorProvider.notifier).openFile(action.path, isDiffView: true),
+                                      child: const Icon(LucideIcons.diff, size: 12, color: Colors.white38),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    InkWell(
+                                      onTap: () async {
+                                        final l10n = AppLocalizations.of(context)!;
+                                        final messenger = ScaffoldMessenger.of(context);
+                                        final gitSvc = ref.read(gitServiceProvider);
+                                        final relPath = workspacePath != null && action.path.startsWith(workspacePath)
+                                            ? p.relative(action.path, from: workspacePath)
+                                            : action.path;
+                                        await gitSvc.discardChanges(relPath);
+
+                                        final isOpen = ref.read(editorProvider).openFiles.any((f) => f.path == action.path);
+                                        if (isOpen) {
+                                          await ref.read(editorProvider.notifier).openFile(action.path);
+                                        }
+
+                                        if (mounted) {
+                                          messenger.showSnackBar(
+                                            SnackBar(
+                                              content: Text(l10n.discardedFileChanges(fileName)),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      child: const Icon(LucideIcons.undo, size: 12, color: Colors.redAccent),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              // Inline diff preview for edit actions
+                              if (action.type == 'edit' && message.actionResults != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: InlineDiffWidget(
+                                    oldText: message.actionResults![action.path] ?? '',
+                                    newText: action.content,
+                                    filePath: displayPath,
+                                  ),
+                                ),
+                            ],
                           );
                         },
                       ),
@@ -693,9 +774,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
 
   Widget _buildActionStep(ChatMessage message) {
     final type = message.actionStepType ?? 'unknown';
-    final path = message.actionStepPath ?? '';
     final result = message.actionStepResult;
-    
     Color chipColor;
     IconData chipIcon;
     switch (type) {
@@ -823,7 +902,14 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       );
     }
 
-    final itemCount = widget.aiState.messages.length + (widget.aiState.isLoading ? 1 : 0);
+    final visibleMessages = widget.aiState.messages.where((m) {
+      final text = m.content.trim();
+      if (text.isEmpty) return false;
+      if (m.isStepSummary || m.isActionStep) return false;
+      return true;
+    }).toList();
+
+    final itemCount = visibleMessages.length + (widget.aiState.isLoading ? 1 : 0);
 
     return ListView.builder(
       controller: _scroll,
@@ -832,7 +918,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       addAutomaticKeepAlives: false,
       addRepaintBoundaries: true,
       itemBuilder: (context, index) {
-        if (index == widget.aiState.messages.length) {
+        if (index == visibleMessages.length) {
           final role = widget.aiState.activeAgentRole ?? 'Agent';
           final status = widget.aiState.currentStatusMessage ?? 
               AppLocalizations.of(context)!.thinking;
@@ -859,10 +945,10 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
           );
         }
 
-        final message = widget.aiState.messages[index];
+        final message = visibleMessages[index];
         final isUser = message.role == MessageRole.user;
         final isSystem = message.role == MessageRole.system;
-        final isLastMessage = index == widget.aiState.messages.length - 1;
+        final isLastMessage = index == visibleMessages.length - 1;
 
         return GestureDetector(
           onLongPress: () {
@@ -982,9 +1068,40 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                               ),
                             ],
                           )
-                        : SelectableText(
-                            message.content,
-                            style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.9), fontSize: 12, height: 1.4),
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (message.contextFiles != null && message.contextFiles!.isNotEmpty)
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: message.contextFiles!.map((f) => 
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      margin: const EdgeInsets.only(bottom: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(LucideIcons.file_text, size: 10, color: Colors.white70),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            f.split('/').last,
+                                            style: GoogleFonts.inter(color: Colors.white70, fontSize: 10),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  ).toList(),
+                                ),
+                              SelectableText(
+                                message.content,
+                                style: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.9), fontSize: 12, height: 1.4),
+                              ),
+                            ],
                           ),
                   )
                 else
@@ -1229,8 +1346,9 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
     int lastIndex = 0;
     
     for (final match in regex.allMatches(processedText)) {
+      String prevText = '';
       if (match.start > lastIndex) {
-        final prevText = processedText.substring(lastIndex, match.start).trim();
+        prevText = processedText.substring(lastIndex, match.start).trim();
         if (prevText.isNotEmpty) {
           widgets.add(_buildTextSection(prevText, context));
         }
@@ -1238,7 +1356,8 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       
       final language = match.group(1)?.trim() ?? '';
       final code = match.group(2) ?? '';
-      widgets.add(_buildCodeBlock(code, language, context));
+      final targetFilePath = _detectTargetFilePath(prevText, language);
+      widgets.add(_buildCodeBlock(code, language, context, targetFilePath: targetFilePath));
       
       lastIndex = match.end;
     }
@@ -1251,6 +1370,21 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
     }
     
     return widgets;
+  }
+
+  String? _detectTargetFilePath(String prevText, String language) {
+    if (language.contains(':')) {
+      final parts = language.split(':');
+      if (parts.length > 1 && parts[1].trim().isNotEmpty) {
+        return parts[1].trim();
+      }
+    }
+    final fileRegex = RegExp(r'([a-zA-Z0-9_\-\.\/]+\.(dart|yaml|yml|json|md|gradle|xml|lock|html|css|js|ts|py|cpp|h|sh|gitignore))|(\.gitignore)', caseSensitive: false);
+    final matches = fileRegex.allMatches(prevText);
+    if (matches.isNotEmpty) {
+      return matches.last.group(0)!;
+    }
+    return null;
   }
 
   Widget _buildThinkingBlock(String content, BuildContext context, int index) {
@@ -1286,17 +1420,18 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
     );
   }
 
-  Widget _buildCodeBlock(String code, String language, BuildContext context) {
+  Widget _buildCodeBlock(String code, String language, BuildContext context, {String? targetFilePath}) {
     final editor = ref.watch(editorProvider);
-    final hasActiveFile = editor.activeFilePath != null;
-    final currentFileName = editor.activeFilePath?.split('/').last ?? '';
+    final targetPath = targetFilePath ?? editor.activeFilePath;
+    final targetFileName = targetPath != null ? p.basename(targetPath) : (editor.activeFilePath?.split('/').last ?? '');
+    final hasTarget = targetPath != null && targetPath.isNotEmpty;
 
     return CollapsibleCodeBlock(
       code: code,
       language: language,
-      currentFileName: currentFileName,
-      hasActiveFile: hasActiveFile,
-      activeFilePath: editor.activeFilePath ?? '',
+      currentFileName: targetFileName,
+      hasActiveFile: hasTarget,
+      activeFilePath: targetPath ?? '',
       ref: ref,
     );
   }
@@ -1475,12 +1610,19 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
     super.dispose();
   }
 
+  static bool _isTerminalCommand(String language, String code) {
+    const terminalLangs = {'bash', 'sh', 'shell', 'zsh', 'cmd', 'terminal', 'console', 'powershell'};
+    if (terminalLangs.contains(language.toLowerCase())) return true;
+    final firstLine = code.trim().split('\n').first.trim();
+    const prefixes = ['flutter ', 'dart ', 'git ', 'npm ', 'yarn ', 'pip ', 'pip3 ', 'cargo ', 'docker ', 'cd ', 'ls ', 'mkdir ', 'rm ', 'mv ', 'cp ', 'chmod ', 'sudo ', 'adb ', 'gradle ', 'mvn '];
+    return prefixes.any((p) => firstLine.startsWith(p));
+  }
+
   @override
   Widget build(BuildContext context) {
     final lines = widget.code.trim().split('\n');
     final isLongCode = lines.length > 10;
-    
-
+    final isTerminalCommand = _isTerminalCommand(widget.language, widget.code);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6.0),
@@ -1523,7 +1665,40 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
                         ),
                       ),
                       const Spacer(),
-                      if (widget.hasActiveFile) ...[
+                      if (isTerminalCommand) ...[
+                        Tooltip(
+                          message: 'Запустить команду в терминале',
+                          child: InkWell(
+                            onTap: () {
+                              final command = widget.code.trim();
+                              widget.ref.read(terminalTabsProvider.notifier).sendCommand(command);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('▶ Запуск в терминале: $command'),
+                                  backgroundColor: const Color(0xFF1E2230),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(LucideIcons.play, size: 11, color: Colors.greenAccent),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Run in Terminal',
+                                    style: GoogleFonts.inter(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ] else if (widget.hasActiveFile) ...[
                         Tooltip(
                           message: 'Replace code in ${widget.currentFileName}',
                           child: InkWell(
@@ -1597,10 +1772,8 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
           ),
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Container(
-              constraints: BoxConstraints(
-                maxHeight: (_isExpanded || !isLongCode) ? 450.0 : 160.0,
-              ),
+            child: SizedBox(
+              height: (widget.code.trim().split('\n').length * 19.0 + 16.0).clamp(42.0, (_isExpanded || !isLongCode) ? 450.0 : 160.0),
               child: CodeEditor(
                 controller: _controller,
                 readOnly: true,

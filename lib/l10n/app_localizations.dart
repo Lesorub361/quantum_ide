@@ -2864,6 +2864,12 @@ abstract class AppLocalizations {
   /// **'Android Project'**
   String get androidProject;
 
+  /// No description provided for @rustProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Rust Project'**
+  String get rustProject;
+
   /// No description provided for @genericProject.
   ///
   /// In en, this message translates to:

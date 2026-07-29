@@ -68,20 +68,37 @@ class ProblemsPanel extends ConsumerWidget {
               if (diagnosticsMap.isNotEmpty)
                 TextButton.icon(
                   onPressed: () {
+                    final editorState = ref.read(editorProvider);
+                    final activePath = editorState.activeFilePath;
+                    final activeContent = activePath != null && editorState.openFiles.isNotEmpty && editorState.activeTabIndex < editorState.openFiles.length
+                        ? editorState.openFiles[editorState.activeTabIndex].controller.text
+                        : '';
+
                     final buffer = StringBuffer();
-                    buffer.writeln(l10n.helpMeFixErrors);
+                    buffer.writeln('⚠️ **ОБНАРУЖЕНЫ ОШИБКИ В ПРОЕКТЕ. ПОЖАЛУЙСТА, ИСПРАВЬ ИХ И ОБНОВИ ФАЙЛЫ:**\n');
+
                     diagnosticsMap.forEach((filePath, diags) {
                       final relPath = workspaceRoot.isNotEmpty && filePath.startsWith(workspaceRoot)
                           ? p.relative(filePath, from: workspaceRoot)
                           : filePath;
-                      buffer.writeln('\n📄 File: $relPath');
+                      buffer.writeln('📄 Файл: `$relPath`');
                       for (final d in diags) {
                         final severity = d.severity.name.toUpperCase();
                         final line = d.range.index + 1;
                         final column = d.range.start + 1;
-                        buffer.writeln('- [$severity] Line $line, Column $column: ${d.message}');
+                        buffer.writeln('- [$severity] Стр $line, Кол $column: ${d.message}');
                       }
                     });
+
+                    if (activePath != null && activeContent.isNotEmpty) {
+                      final relActive = workspaceRoot.isNotEmpty && activePath.startsWith(workspaceRoot)
+                          ? p.relative(activePath, from: workspaceRoot)
+                          : activePath;
+                      buffer.writeln('\n### ТЕКУЩИЙ КОД ФАЙЛА (`$relActive`):\n```dart\n$activeContent\n```');
+                    }
+
+                    buffer.writeln('\n🔧 **ИНСТРУКЦИЯ**: Напиши ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД для данного файла и предложи изменения, чтобы полностью устранить все ошибки!');
+
                     ref.read(aiProvider.notifier).askAI(buffer.toString());
                     ref.read(rightChatPanelOpenProvider.notifier).state = true;
                   },

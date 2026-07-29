@@ -7,3 +7,4 @@ final selectedAgentProvider = StateProvider<String?>((ref) => null);
 final rightChatPanelOpenProvider = StateProvider<bool>((ref) => false);
 final rightPanelWidthProvider = StateProvider<double>((ref) => 340.0);
 final leftPanelWidthProvider = StateProvider<double>((ref) => 320.0);
+final leftPanelOpenProvider = StateProvider<bool>((ref) => true);

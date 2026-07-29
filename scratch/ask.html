@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fcfcfc;
+            color: #1a1a1a;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1,
+        h2,
+        h3,
+        .serif {
+            font-family: 'Playfair Display', serif;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col bg-[#fcfcfc]">
+
+    <!-- Main Content -->
+    <main class="w-full max-w-3xl mx-auto px-6 pt-16 pb-8 flex-grow flex flex-col items-center justify-center text-center">
+
+        <!-- The Logo -->
+        <div class="mb-8">
+            <a href="index.html">
+                <img src="site-logo.svg" alt="Ask Logo" class="w-32 mx-auto opacity-90 hover:opacity-100 transition-opacity">
+            </a>
+        </div>
+
+        <!-- The Headline -->
+        <section class="mb-16">
+            <h1 class="text-6xl md:text-8xl font-semibold leading-tight text-gray-900 mb-2">
+                404
+            </h1>
+            <h2 class="text-2xl md:text-3xl serif text-gray-900 mb-6 italic">Page Not Found</h2>
+            <p class="text-lg md:text-xl text-gray-600 font-light leading-relaxed max-w-md mx-auto">
+                The page you are looking for does not exist, has been removed, or is temporarily unavailable.
+            </p>
+            
+            <div class="mt-10">
+                <a href="index.html" class="inline-flex items-center justify-center px-6 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors duration-200">
+                    &larr; Return to Home
+                </a>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="w-full text-center text-xs text-gray-400 font-light pb-8">
+        &copy; 2026 IAC Inc. All rights reserved. | <a href="privacy.html"
+            class="hover:text-gray-600 transition-colors">Privacy Policy</a>
+    </footer>
+
+</body>
+
+</html>

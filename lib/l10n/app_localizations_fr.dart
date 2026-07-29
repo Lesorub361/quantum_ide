@@ -1553,6 +1553,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get androidProject => 'Projet Android';
 
   @override
+  String get rustProject => 'Projet Rust';
+
+  @override
   String get genericProject => 'Projet';
 
   @override

@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/utils/resumable_downloader.dart';
 
 enum ModelCategory { text, image, vision }
 
@@ -105,7 +107,6 @@ class ModelCatalogState {
 
 class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
   final Ref _ref;
-  final Dio _dio = Dio();
   final Map<String, CancelToken> _cancelTokens = {};
 
   static const List<AiCatalogModel> _defaultModels = [
@@ -319,6 +320,14 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
 
   Future<String?> getModelsDir() async {
     try {
+      // On Android / iOS: use Documents/models — same path as native InferenceEngine
+      if (Platform.isAndroid || Platform.isIOS) {
+        final docsDir = await getApplicationDocumentsDirectory();
+        final modelsDir = Directory(p.join(docsDir.path, 'models'));
+        await modelsDir.create(recursive: true);
+        return modelsDir.path;
+      }
+      // Desktop (Linux/macOS/Windows): use rootfs for llama-server compatibility
       final runtime = _ref.read(runtimeServiceProvider);
       if (runtime.isInitialized) {
         final modelsDir = p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models');
@@ -365,37 +374,11 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
     _cancelTokens[model.filename] = cancelToken;
 
     try {
-      final tempPath = '$savePath.part';
-      final tempFile = File(tempPath);
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
-
-      int lastBytes = 0;
-      int lastTime = 0;
-
-      await _dio.download(
-        model.url,
-        tempPath,
+      await ResumableDownloader.download(
+        url: model.url,
+        savePath: savePath,
         cancelToken: cancelToken,
-        deleteOnError: false,
-        options: Options(
-          followRedirects: true,
-          receiveTimeout: const Duration(minutes: 30),
-          headers: {
-            'Connection': 'keep-alive',
-          },
-        ),
-        onReceiveProgress: (received, total) {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          double speed = 0;
-          final elapsed = now - lastTime;
-          if (elapsed > 300) {
-            speed = (received - lastBytes) * 1000.0 / elapsed;
-            lastBytes = received;
-            lastTime = now;
-          }
-
+        onProgress: (received, total, speed) {
           final progress = total > 0 ? received / total : 0.0;
           state = state.copyWith(
             downloads: {
@@ -412,10 +395,6 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
           );
         },
       );
-
-      final finalFile = File(savePath);
-      if (await finalFile.exists()) await finalFile.delete();
-      await tempFile.rename(savePath);
 
       _cancelTokens.remove(model.filename);
       state = state.copyWith(
@@ -434,13 +413,19 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
       );
     } catch (e) {
       _cancelTokens.remove(model.filename);
+      
+      final isCancelled = e is DioException && e.type == DioExceptionType.cancel;
       state = state.copyWith(
         downloads: {
           ...state.downloads,
           model.filename: ModelDownloadInfo(
             filename: model.filename,
-            status: DownloadStatus.error,
-            error: e.toString(),
+            status: isCancelled ? DownloadStatus.paused : DownloadStatus.error,
+            error: isCancelled ? null : e.toString(),
+            // Сохраняем прогресс и скачанные байты при паузе
+            progress: state.downloads[model.filename]?.progress ?? 0.0,
+            downloadedBytes: state.downloads[model.filename]?.downloadedBytes ?? 0,
+            totalBytes: state.downloads[model.filename]?.totalBytes ?? 0,
           ),
         },
       );
@@ -448,7 +433,7 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
   }
 
   void cancelDownload(String filename) {
-    _cancelTokens[filename]?.cancel('cancelled');
+    _cancelTokens[filename]?.cancel('paused');
     _cancelTokens.remove(filename);
 
     final current = state.downloads[filename];
@@ -456,7 +441,7 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
       state = state.copyWith(
         downloads: {
           ...state.downloads,
-          filename: current.copyWith(status: DownloadStatus.idle, progress: 0),
+          filename: current.copyWith(status: DownloadStatus.paused),
         },
       );
     }

@@ -1,12 +1,14 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/model_catalog_service.dart';
 import 'package:quantum_ide/core/services/image_gen_service.dart';
 import 'package:quantum_ide/core/services/chat_settings_service.dart';
-import 'package:quantum_ide/core/services/local_ai_service.dart';
+import 'package:quantum_ide/core/services/local_ai_service.dart' hide LocalModelInfo;
+import 'package:quantum_ide/core/services/local_inference_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class ModelsPanel extends ConsumerStatefulWidget {
@@ -19,6 +21,9 @@ class ModelsPanel extends ConsumerStatefulWidget {
 class _ModelsPanelState extends ConsumerState<ModelsPanel> {
   ModelCategory _selectedCategory = ModelCategory.text;
   bool _showSettings = false;
+
+  bool get _isMobilePlatform =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   @override
   Widget build(BuildContext context) {
@@ -106,6 +111,69 @@ class _ModelsPanelState extends ConsumerState<ModelsPanel> {
   }
 
   Widget _buildStatusBar(LocalAiState localAi, ImageGenState imageGen) {
+    if (_isMobilePlatform) {
+      final inferenceState = ref.watch(localInferenceProvider);
+      final isLoaded = inferenceState.loadedModel != null;
+      final statusText = inferenceState.status == LocalModelStatus.loading
+          ? 'Loading: ${(inferenceState.loadProgress * 100).toStringAsFixed(0)}%'
+          : inferenceState.status == LocalModelStatus.ready
+              ? 'Active: ${inferenceState.loadedModel!.name}'
+              : 'Status: Idle';
+
+      final statusColor = inferenceState.status == LocalModelStatus.loading
+          ? Colors.orangeAccent
+          : inferenceState.status == LocalModelStatus.ready
+              ? Colors.greenAccent
+              : Colors.white54;
+
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: statusColor.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: statusColor.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: statusColor,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                statusText,
+                style: GoogleFonts.inter(
+                  color: statusColor,
+                  fontSize: 10,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (isLoaded)
+              GestureDetector(
+                onTap: () => ref.read(localInferenceProvider.notifier).unloadModel(),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('Unload', style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold)),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 10),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -357,7 +425,7 @@ class _ModelsPanelState extends ConsumerState<ModelsPanel> {
                 ),
                 if (downloadInfo.speed > 0)
                   Text(
-                    '${ModelCatalogNotifier.formatSpeed(downloadInfo.speed)}',
+                    ModelCatalogNotifier.formatSpeed(downloadInfo.speed),
                     style: GoogleFonts.jetBrainsMono(color: Colors.greenAccent, fontSize: 8),
                   ),
               ],
@@ -397,6 +465,48 @@ class _ModelsPanelState extends ConsumerState<ModelsPanel> {
             child: Text('Load', style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 9, fontWeight: FontWeight.bold)),
           ),
         );
+      }
+
+      if (_isMobilePlatform) {
+        final inferenceState = ref.watch(localInferenceProvider);
+        final isLoaded = inferenceState.loadedModel?.filename == model.filename;
+        if (isLoaded) {
+          if (inferenceState.status == LocalModelStatus.loading) {
+            return SizedBox(
+              width: 55,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 10,
+                    height: 10,
+                    child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.cyanAccent),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${(inferenceState.loadProgress * 100).toStringAsFixed(0)}%',
+                    style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.cyanAccent),
+                  ),
+                ],
+              ),
+            );
+          }
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.cyanAccent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              'Active',
+              style: GoogleFonts.inter(
+                color: Colors.cyanAccent,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        }
       }
 
       return Row(
@@ -452,10 +562,23 @@ class _ModelsPanelState extends ConsumerState<ModelsPanel> {
   }
 
   Future<void> _loadModelForText(AiCatalogModel model) async {
-    final notifier = ref.read(localAiServiceProvider.notifier);
-    await notifier.selectModel(model.filename);
-    if (!ref.read(localAiServiceProvider).isRunning) {
-      await notifier.startServer();
+    if (_isMobilePlatform) {
+      final localModel = LocalModelInfo(
+        name: model.name,
+        filename: model.filename,
+        url: model.url,
+        size: model.size,
+        description: model.description,
+        template: model.template,
+        isVision: model.isVision,
+      );
+      await ref.read(localInferenceProvider.notifier).loadModel(localModel);
+    } else {
+      final notifier = ref.read(localAiServiceProvider.notifier);
+      await notifier.selectModel(model.filename);
+      if (!ref.read(localAiServiceProvider).isRunning) {
+        await notifier.startServer();
+      }
     }
   }
 
@@ -506,7 +629,7 @@ class _ModelsPanelState extends ConsumerState<ModelsPanel> {
                 0.0,
                 2.0,
                 (v) => ref.read(chatSettingsProvider.notifier).setTemperature(v),
-                '${settings.temperature.toStringAsFixed(2)}',
+                settings.temperature.toStringAsFixed(2),
               ),
               _buildSliderSetting(
                 'Max Tokens',
@@ -523,6 +646,61 @@ class _ModelsPanelState extends ConsumerState<ModelsPanel> {
                 8192,
                 (v) => ref.read(chatSettingsProvider.notifier).setContextSize(v.toInt()),
                 '${settings.contextSize}',
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _buildSettingSection('Local AI Performance (LiteRT)', [
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  _performanceModeChip('auto_fast', 'Auto', LucideIcons.sparkles, settings.liteRtPerformanceMode),
+                  const SizedBox(width: 6),
+                  _performanceModeChip('gpu_fast', 'GPU', LucideIcons.zap, settings.liteRtPerformanceMode),
+                  const SizedBox(width: 6),
+                  _performanceModeChip('cpu_safe', 'CPU Only', LucideIcons.shield, settings.liteRtPerformanceMode),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                settings.liteRtPerformanceMode == 'auto_fast'
+                    ? 'Tries GPU first, then falls back to CPU automatically.'
+                    : settings.liteRtPerformanceMode == 'gpu_fast'
+                        ? 'Forces GPU acceleration. Maximum speed, but may crash on low-end devices.'
+                        : 'Forces CPU execution. Maximum stability, but lower speed.',
+                style: GoogleFonts.inter(color: Colors.white38, fontSize: 9.5),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            _buildSettingSection('Image Generation (Stable Diffusion)', [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Image Backend',
+                    style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _backendModeChip(true, 'GPU', settings.imageGenForceCpu),
+                      const SizedBox(width: 4),
+                      _backendModeChip(false, 'CPU', settings.imageGenForceCpu),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _buildSliderSetting(
+                'GPU Safety Threshold',
+                settings.imageGenGpuGuardMb.toDouble(),
+                0,
+                4096,
+                (v) => ref.read(chatSettingsProvider.notifier).setImageGenGpuGuardMb(v.toInt()),
+                settings.imageGenGpuGuardMb <= 0 ? 'Off' : '${settings.imageGenGpuGuardMb} MB',
+              ),
+              Text(
+                'Models at or above this size use CPU to prevent out-of-memory crashes on GPU.',
+                style: GoogleFonts.inter(color: Colors.white38, fontSize: 9.5),
               ),
             ]),
             const SizedBox(height: 16),
@@ -598,6 +776,66 @@ class _ModelsPanelState extends ConsumerState<ModelsPanel> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _performanceModeChip(String value, String label, IconData icon, String current) {
+    final isSelected = value == current;
+    final color = isSelected ? Colors.cyanAccent : Colors.white38;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => ref.read(chatSettingsProvider.notifier).setLiteRtPerformanceMode(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.cyanAccent.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.02),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isSelected ? Colors.cyanAccent.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 11, color: color),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: isSelected ? Colors.white : Colors.white54,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _backendModeChip(bool forGpu, String label, bool forceCpu) {
+    final isSelected = forGpu ? !forceCpu : forceCpu;
+    return GestureDetector(
+      onTap: () => ref.read(chatSettingsProvider.notifier).setImageGenForceCpu(!forGpu),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.purpleAccent.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.02),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? Colors.purpleAccent.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.05),
+          ),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            color: isSelected ? Colors.white : Colors.white54,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
       ),
     );
   }

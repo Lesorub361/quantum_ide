@@ -9,6 +9,8 @@ import 'package:path/path.dart' as p;
 
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
+import 'package:quantum_ide/core/services/project_detector.dart';
+import 'package:quantum_ide/models/project_model.dart';
 
 class AnalysisService {
   final Ref ref;
@@ -26,9 +28,11 @@ class AnalysisService {
   void triggerAnalysis({bool immediate = false}) {
     _debounceTimer?.cancel();
     if (immediate) {
-      runAnalysis();
+      _debounceTimer = Timer(const Duration(seconds: 5), () {
+        runAnalysis();
+      });
     } else {
-      _debounceTimer = Timer(const Duration(seconds: 2), () {
+      _debounceTimer = Timer(const Duration(seconds: 10), () {
         runAnalysis();
       });
     }
@@ -43,6 +47,12 @@ class AnalysisService {
     final workspace = ref.read(workspaceProvider);
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
+
+    final projectType = await ProjectDetector.detect(hostPath);
+    if (projectType != ProjectType.flutter && projectType != ProjectType.dart) {
+      debugPrint('AnalysisService: Skipping analysis as project is not Dart/Flutter ($projectType)');
+      return;
+    }
 
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);

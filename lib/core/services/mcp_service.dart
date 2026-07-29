@@ -87,7 +87,10 @@ class McpClientInstance {
 
   McpClientInstance(this.config);
 
+  bool get isConnected => _process != null || _sseResponse != null;
+
   Future<void> connect() async {
+    if (isConnected) return;
     if (_isConnecting) return;
     _isConnecting = true;
     try {
@@ -98,6 +101,7 @@ class McpClientInstance {
       }
     } catch (e) {
       debugPrint('Error connecting to MCP server ${config.name}: $e');
+      rethrow;
     } finally {
       _isConnecting = false;
     }
@@ -112,6 +116,11 @@ class McpClientInstance {
         environment: config.env.isNotEmpty ? config.env : null,
       );
       
+      _process!.exitCode.then((code) {
+        debugPrint('MCP [${config.name}] process exited with code $code');
+        _process = null;
+      });
+
       // Handle stderr
       _process!.stderr.transform(utf8.decoder).listen((data) {
         debugPrint('MCP [${config.name}] stderr: $data');
@@ -126,6 +135,7 @@ class McpClientInstance {
       });
     } catch (e) {
       debugPrint('Failed to start stdio MCP client: $e');
+      _process = null;
       rethrow;
     }
   }
@@ -371,15 +381,19 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
     for (final server in state) {
       if (server.isEnabled) {
         final client = _getOrCreateClient(server);
-        await client.connect();
-        final tools = await client.listTools();
-        for (final tool in tools) {
-          allTools.add({
-            'server': server.name,
-            'name': tool['name'],
-            'description': tool['description'] ?? '',
-            'inputSchema': tool['inputSchema'] ?? {},
-          });
+        try {
+          await client.connect();
+          final tools = await client.listTools();
+          for (final tool in tools) {
+            allTools.add({
+              'server': server.name,
+              'name': tool['name'],
+              'description': tool['description'] ?? '',
+              'inputSchema': tool['inputSchema'] ?? {},
+            });
+          }
+        } catch (e) {
+          debugPrint('Failed to connect or list tools for MCP server ${server.name}: $e');
         }
       }
     }

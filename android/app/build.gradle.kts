@@ -33,7 +33,7 @@ android {
         applicationId = "com.example.quantum_ide"
         // libghostty (flterm) требует shm_open из libc — в Bionic с Android 8 (API 26).
         minSdk = 26
-        targetSdk = 34 // Современный стандарт
+        targetSdk = 36 // Современный стандарт
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
@@ -72,8 +72,12 @@ android {
             } else {
                 signingConfig = signingConfigs.getByName("debug")
             }
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

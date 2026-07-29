@@ -426,8 +426,8 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
       final List<DiffLine?> rightLines = [];
       int i = 0;
       while (i < _diffLines.length) {
-        List<DiffLine> removedBlock = [];
-        List<DiffLine> addedBlock = [];
+        final List<DiffLine> removedBlock = [];
+        final List<DiffLine> addedBlock = [];
         
         while (i < _diffLines.length && _diffLines[i].type == LineType.removed) {
           removedBlock.add(_diffLines[i]);

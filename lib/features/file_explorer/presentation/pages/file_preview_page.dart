@@ -1,13 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 
-class FilePreviewPage extends StatelessWidget {
+class FilePreviewPage extends ConsumerWidget {
   final String filePath;
 
   const FilePreviewPage({
@@ -26,7 +28,7 @@ class FilePreviewPage extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final fileName = p.basename(filePath);
     final isImg = _isImage(filePath);
@@ -55,6 +57,17 @@ class FilePreviewPage extends StatelessWidget {
           ],
         ),
         actions: [
+          if (!isImg)
+            IconButton(
+              icon: const Icon(LucideIcons.pencil, color: Colors.cyanAccent, size: 16),
+              tooltip: 'Редактировать',
+              onPressed: () async {
+                await ref.read(editorProvider.notifier).openFile(filePath);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
+              },
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12.0),
             child: Chip(
@@ -69,13 +82,13 @@ class FilePreviewPage extends StatelessWidget {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF0D0F14),
-              const Color(0xFF0A0B0E),
+              Color(0xFF0D0F14),
+              Color(0xFF0A0B0E),
             ],
           ),
         ),

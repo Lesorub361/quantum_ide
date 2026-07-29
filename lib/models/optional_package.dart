@@ -9,6 +9,7 @@ class OptionalPackage {
   final IconData icon;
   final String category;
   bool isInstalled;
+  bool isInstalling;
 
   OptionalPackage({
     required this.id,
@@ -18,6 +19,7 @@ class OptionalPackage {
     required this.icon,
     this.category = 'Tools',
     this.isInstalled = false,
+    this.isInstalling = false,
   });
 }
 
@@ -57,11 +59,19 @@ final defaultPackages = [
     category: 'Languages',
   ),
   OptionalPackage(
-    id: 'gemini-cli',
-    name: 'Gemini CLI',
-    description: 'Interact with Google Gemini AI models from your terminal',
-    command: '${_aptPrefix}apt update && apt install -y curl && curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs && npm install -g @google/gemini-cli',
+    id: 'antigravity-cli',
+    name: 'Antigravity CLI',
+    description: 'Official CLI tool for Antigravity AI models and agent orchestration',
+    command: '${_aptPrefix}apt update && apt install -y curl && curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs && npm install -g @google/antigravity-cli',
     icon: LucideIcons.sparkles,
+    category: 'AI Tools',
+  ),
+  OptionalPackage(
+    id: 'ollama-cli',
+    name: 'Ollama CLI',
+    description: 'Run large language models locally (Llama 3, Mistral, Qwen, etc.)',
+    command: '${_aptPrefix}apt update && apt install -y curl && curl -fsSL https://ollama.com/install.sh | sh',
+    icon: LucideIcons.brain,
     category: 'AI Tools',
   ),
   OptionalPackage(

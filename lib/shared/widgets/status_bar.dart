@@ -11,9 +11,6 @@ import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
-// Используем ConsumerStatefulWidget, чтобы управлять подпиской на контроллер
-// вручную — без ValueListenableBuilder, который вызывает setState во время
-// фазы сборки (initState → delegate= → notifyListeners → ValueListenable._valueChanged → crash).
 class StatusBar extends ConsumerStatefulWidget {
   const StatusBar({super.key});
 
@@ -34,8 +31,6 @@ class _StatusBarState extends ConsumerState<StatusBar> {
 
   void _onControllerChanged() {
     if (!mounted) return;
-    // Откладываем setState на следующий фрейм, чтобы не конфликтовать
-    // с фазой сборки (именно это и было причиной падения).
     if (!_pendingUpdate) {
       _pendingUpdate = true;
       SchedulerBinding.instance.addPostFrameCallback((_) {
@@ -67,64 +62,60 @@ class _StatusBarState extends ConsumerState<StatusBar> {
         ? editorState.openFiles[editorState.activeTabIndex]
         : null;
 
-    // Обновляем подписку при смене активного файла (без setState —
-    // если контроллер тот же, _switchController — no-op).
     _switchController(activeFile?.controller);
 
     final workspacePath = ref.watch(workspaceProvider).currentPath ?? '';
     final pos = _cursorValue?.selection.extent;
+    final totalErrors = _getTotalErrors(editorState.allDiagnostics, workspacePath);
 
     return RepaintBoundary(
       child: Container(
-        height: 24,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: const Color(0xFF181A1F),
+          color: const Color(0xFF090B10),
           border: Border(
-              top: BorderSide(
-                  color: Colors.white.withValues(alpha: 0.05), width: 0.5)),
+            top: BorderSide(
+              color: Colors.white.withValues(alpha: 0.06),
+              width: 0.5,
+            ),
+          ),
         ),
         child: Row(
           children: [
-            // Git branch & Problems (Left Side)
+            // Left Side: Git & Diagnostics
             Expanded(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
                     if (gitState.status != null) ...[
-                      _StatusBarItem(
+                      _StatusBarPill(
                         icon: LucideIcons.git_branch,
                         label: gitState.status!.currentBranch,
+                        color: Colors.cyanAccent,
                         onTap: () {
-                          ref
-                              .read(panelProvider.notifier)
-                              .selectTab(PanelTab.git);
+                          ref.read(panelProvider.notifier).selectTab(PanelTab.git);
                         },
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 8),
                     ],
-                    _StatusBarItem(
+                    _StatusBarPill(
                       icon: LucideIcons.circle_alert,
-                      label:
-                          '${_getTotalErrors(editorState.allDiagnostics, workspacePath)}',
-                      color: _getTotalErrors(editorState.allDiagnostics, workspacePath) > 0
-                          ? Colors.redAccent
-                          : Colors.white38,
+                      label: '$totalErrors Проблем',
+                      color: totalErrors > 0 ? Colors.redAccent : Colors.white38,
                       onTap: () {
-                        ref
-                            .read(panelProvider.notifier)
-                            .selectTab(PanelTab.problems);
+                        ref.read(panelProvider.notifier).selectTab(PanelTab.problems);
                       },
                     ),
                   ],
                 ),
               ),
             ),
-  
+
             const SizedBox(width: 8),
-  
-            // File status, Cursor pos, Language (Right Side)
+
+            // Right Side: File status, Cursor pos, Language & Encoding
             if (activeFile != null) ...[
               Flexible(
                 child: SingleChildScrollView(
@@ -134,31 +125,38 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       if (activeFile.isModified)
-                        _StatusBarItem(
+                        const _StatusBarPill(
                           icon: LucideIcons.circle_alert,
-                          label: AppLocalizations.of(context)!.unsaved,
+                          label: 'Не сохранено',
                           color: Colors.amberAccent,
                         )
                       else
-                        _StatusBarItem(
+                        const _StatusBarPill(
                           icon: LucideIcons.circle_check_big,
-                          label: AppLocalizations.of(context)!.saved,
+                          label: 'Сохранено',
                           color: Colors.greenAccent,
                         ),
-                      const SizedBox(width: 16),
-  
-                      // Cursor position — безопасно через State, не через
-                      // ValueListenableBuilder (который падал во время initState).
-                      _StatusBarItem(
+                      const SizedBox(width: 10),
+
+                      _StatusBarPill(
+                        icon: LucideIcons.navigation,
                         label: pos != null
                             ? AppLocalizations.of(context)!.lineCol(pos.index + 1, pos.offset + 1)
                             : AppLocalizations.of(context)!.lineCol(1, 1),
+                        color: Colors.white70,
                       ),
-                      const SizedBox(width: 16),
-  
-                      // Language
-                      _StatusBarItem(
+                      const SizedBox(width: 10),
+
+                      const _StatusBarPill(
+                        label: 'UTF-8',
+                        color: Colors.white38,
+                      ),
+                      const SizedBox(width: 10),
+
+                      _StatusBarPill(
+                        icon: LucideIcons.code,
                         label: _getLanguageName(activeFile.path),
+                        color: Colors.cyanAccent,
                       ),
                     ],
                   ),
@@ -209,13 +207,13 @@ class _StatusBarState extends ConsumerState<StatusBar> {
   }
 }
 
-class _StatusBarItem extends StatelessWidget {
+class _StatusBarPill extends StatelessWidget {
   final IconData? icon;
   final String label;
   final Color? color;
   final VoidCallback? onTap;
 
-  const _StatusBarItem({
+  const _StatusBarPill({
     this.icon,
     required this.label,
     this.color,
@@ -225,21 +223,26 @@ class _StatusBarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
+      borderRadius: BorderRadius.circular(4),
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: (color ?? Colors.white54).withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(4),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 12, color: color ?? Colors.white54),
+              Icon(icon, size: 11, color: color ?? Colors.white54),
               const SizedBox(width: 4),
             ],
             Text(
               label,
               style: GoogleFonts.inter(
                 fontSize: 11,
-                color: color ?? Colors.white54,
+                color: color ?? Colors.white60,
                 fontWeight: FontWeight.w500,
               ),
             ),

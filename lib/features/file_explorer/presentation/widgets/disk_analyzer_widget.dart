@@ -297,7 +297,7 @@ class _DiskAnalyzerWidgetState extends ConsumerState<DiskAnalyzerWidget> {
           padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 8.0),
           child: Row(
             children: [
-              Icon(LucideIcons.chart_pie, size: 14, color: Colors.white54),
+              const Icon(LucideIcons.chart_pie, size: 14, color: Colors.white54),
               const SizedBox(width: 6),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

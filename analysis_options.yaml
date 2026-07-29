@@ -1,1 +1,36 @@
 include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Treat deprecated_member_use as warning, not info
+    deprecated_member_use: warning
+    # Critical async safety
+    use_build_context_synchronously: warning
+    # Internal package API usage is a bug
+    implementation_imports: error
+    # Uncancelled subscriptions are resource leaks
+    cancel_subscriptions: warning
+    # Style rules — keep as info (not errors)
+    prefer_final_locals: info
+    prefer_single_quotes: info
+    prefer_const_constructors: info
+    prefer_const_declarations: info
+
+linter:
+  rules:
+    # Safety — critical
+    use_build_context_synchronously: true
+    cancel_subscriptions: true
+    close_sinks: true
+    # Style — enabled but info-level via analyzer.errors above
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    prefer_final_locals: true
+    prefer_single_quotes: true
+    avoid_print: true
+    avoid_unnecessary_containers: true
+    # Null safety
+    prefer_null_aware_operators: true
+    null_check_on_nullable_type_parameter: true
+    # Async
+    unawaited_futures: false

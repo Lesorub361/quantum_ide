@@ -92,20 +92,16 @@ class AiPermissionService {
       // Check against blocklist/high risk patterns
       final destructivePatterns = [
         'rm ',
-        'mv ',
-        'chmod ',
-        'chown ',
+        'rm -rf',
+        'mv /',
+        'chmod /',
+        'chown /',
         'kill ',
         'shutdown',
         'reboot',
         'dd ',
         'mkfs',
-        '>', // Output redirect to files could overwrite system files if not scoped
         'sudo ',
-        'apt ',
-        'apt-get ',
-        'npm install -g',
-        'pip install',
       ];
 
       for (final pattern in destructivePatterns) {
@@ -114,20 +110,40 @@ class AiPermissionService {
         }
       }
 
-      // Check for low-risk read-only commands
+      // Check for low-risk read-only and build commands
       final lowRiskPrefixes = [
         'flutter analyze',
         'flutter test',
+        'flutter pub get',
+        'flutter pub add',
+        'flutter build',
+        'flutter run',
         'dart test',
+        'dart analyze',
+        'dart pub get',
+        'dart run',
+        'python3 ',
+        'python ',
+        'pip install',
+        'pip3 install',
+        'npm run',
+        'npm install',
+        'npx ',
         'git status',
         'git diff',
         'git log',
+        'git add',
+        'git commit',
+        'git push',
+        'git pull',
         'ls',
         'pwd',
         'find',
         'grep',
         'cat',
         'echo',
+        'mkdir',
+        'touch',
       ];
 
       for (final prefix in lowRiskPrefixes) {

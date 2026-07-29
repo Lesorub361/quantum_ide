@@ -399,6 +399,7 @@
   "dartProject": "Proyecto Dart",
   "webProject": "Proyecto Web",
   "androidProject": "Proyecto Android",
+  "rustProject": "Proyecto Rust",
   "genericProject": "Proyecto",
   "runPC": "Ejecutar (PC)",
   "runMob": "Ejecutar (Móvil)",

@@ -145,7 +145,7 @@ class _WasmPluginsPanelState extends ConsumerState<WasmPluginsPanel> {
                 ),
                 Switch(
                   value: plugin.isEnabled,
-                  activeColor: theme.colorScheme.primary,
+                  activeThumbColor: theme.colorScheme.primary,
                   onChanged: (val) => service.togglePlugin(plugin.id, val),
                 ),
               ],

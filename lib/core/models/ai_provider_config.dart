@@ -73,7 +73,7 @@ extension LocalAiEngineExtension on LocalAiEngine {
 class AiProviders {
   static const google = AiProviderConfig(
     id: 'google',
-    displayName: 'Google Gemini',
+    displayName: 'Antigravity',
     logoEmoji: '✨',
     apiKeyHint: 'AIza...',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
@@ -163,6 +163,64 @@ class AiProviders {
     supportsLocalModels: true,
   );
 
+  static const grok = AiProviderConfig(
+    id: 'grok',
+    displayName: 'Grok (xAI)',
+    logoEmoji: '🤖',
+    apiKeyHint: 'xai-...',
+    baseUrl: 'https://api.x.ai/v1',
+    defaultModels: ['grok-2', 'grok-2-mini', 'grok-3', 'grok-3-mini'],
+  );
+
+  static const together = AiProviderConfig(
+    id: 'together',
+    displayName: 'Together AI',
+    logoEmoji: '🤝',
+    apiKeyHint: '...',
+    baseUrl: 'https://api.together.xyz/v1',
+    defaultModels: [
+      'meta-llama/Llama-3-70b-chat-hf',
+      'mistralai/Mixtral-8x7B-Instruct-v0.1',
+      'deepseek-ai/DeepSeek-V3',
+      'Qwen/Qwen2.5-72B-Instruct-Turbo',
+    ],
+  );
+
+  static const perplexity = AiProviderConfig(
+    id: 'perplexity',
+    displayName: 'Perplexity',
+    logoEmoji: '🔍',
+    apiKeyHint: 'pplx-...',
+    baseUrl: 'https://api.perplexity.ai',
+    defaultModels: [
+      'llama-3.1-sonar-small-128k-online',
+      'llama-3.1-sonar-large-128k-online',
+      'llama-3.1-sonar-huge-128k-online',
+    ],
+  );
+
+  static const fireworks = AiProviderConfig(
+    id: 'fireworks',
+    displayName: 'Fireworks AI',
+    logoEmoji: '🎆',
+    apiKeyHint: 'fw-...',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    defaultModels: [
+      'accounts/fireworks/models/llama-v3p1-70b-instruct',
+      'accounts/fireworks/models/mixtral-8x22b-instruct',
+    ],
+  );
+
+  static const custom = AiProviderConfig(
+    id: 'custom',
+    displayName: 'Custom API',
+    logoEmoji: '⚙️',
+    apiKeyHint: 'API key',
+    baseUrl: 'http://localhost:11434/v1',
+    defaultModels: ['custom-model'],
+    requiresApiKey: false,
+  );
+
   static const localEdge = AiProviderConfig(
     id: 'local_edge',
     displayName: 'Local AI',
@@ -174,6 +232,33 @@ class AiProviders {
     requiresApiKey: false,
   );
 
+  static const kimi = AiProviderConfig(
+    id: 'kimi',
+    displayName: 'Kimi (Moonshot AI)',
+    logoEmoji: '🌙',
+    apiKeyHint: 'sk-...',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    defaultModels: [
+      'moonshot-v1-8k',
+      'moonshot-v1-32k',
+      'moonshot-v1-128k',
+    ],
+  );
+
+  static const nvidia = AiProviderConfig(
+    id: 'nvidia',
+    displayName: 'NVIDIA NIM',
+    logoEmoji: '💚',
+    apiKeyHint: 'nvapi-...',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    defaultModels: [
+      'meta/llama-3.1-8b-instruct',
+      'meta/llama-3.1-70b-instruct',
+      'mistralai/mistral-7b-instruct-v0.3',
+      'google/gemma-2-9b-it',
+    ],
+  );
+
   static const all = [
     google,
     openai,
@@ -181,6 +266,13 @@ class AiProviders {
     deepseek,
     groq,
     openrouter,
+    grok,
+    together,
+    perplexity,
+    fireworks,
+    kimi,
+    nvidia,
+    custom,
     localEdge,
   ];
 

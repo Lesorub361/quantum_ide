@@ -38,7 +38,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
     bool interrupt = false,
     bool clear = true,
   }) {
-    var session = state.sessions[type];
+    final session = state.sessions[type];
 
     if (session == null || session.isExited) {
       _createSession(type);
@@ -138,7 +138,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
 
       final shell = Platform.isAndroid
           ? '/system/bin/sh'
-          : (Platform.isWindows ? 'cmd.exe' : 'bash');
+          : (Platform.isWindows ? 'cmd.exe' : (Platform.environment['SHELL'] ?? 'bash'));
       final List<String> args = Platform.isAndroid
           ? [runtime.prootCommand, runtime.appDirectory]
           : [];
@@ -161,8 +161,10 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           pty.resize(rows, cols);
         },
       );
-
-      final sub = pty.output.listen(
+      // ptyOutSub is stored in TerminalSession
+      // and cancelled in dispose() via session.ptyOutSubscription?.cancel()
+      // ignore: cancel_subscriptions
+      final ptyOutSub = pty.output.listen(
         (data) {
           xtermTerm.write(utf8.decode(data, allowMalformed: true));
         },
@@ -179,7 +181,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         workingDir: dir,
         xtermTerminal: xtermTerm,
         xtermViewController: xtermVc,
-        ptyOutSubscription: sub,
+        ptyOutSubscription: ptyOutSub,
       );
 
       final newSessions = Map<DedicatedTerminalType, TerminalSession?>.from(

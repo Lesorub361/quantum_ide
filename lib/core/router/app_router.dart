@@ -9,6 +9,9 @@ import '../../features/terminal/presentation/pages/terminal_page.dart';
 import '../../features/home/presentation/pages/server_page.dart';
 import '../../features/home/presentation/pages/package_page.dart';
 import '../../features/home/presentation/pages/settings_page.dart';
+import '../../features/preview/presentation/widgets/file_preview_widget.dart';
+import '../../features/rest_client/presentation/pages/rest_client_page.dart';
+import '../../features/github/presentation/pages/github_page.dart';
 import '../../shared/widgets/main_layout.dart';
 
 class UnfocusRouteObserver extends NavigatorObserver {
@@ -75,6 +78,21 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/settings',
           builder: (context, state) => const SettingsPage(),
+        ),
+        GoRoute(
+          path: '/preview-file',
+          builder: (context, state) {
+            final filePath = state.uri.queryParameters['path'] ?? '';
+            return FilePreviewWidget(filePath: filePath);
+          },
+        ),
+        GoRoute(
+          path: '/rest-client',
+          builder: (context, state) => const RestClientPage(),
+        ),
+        GoRoute(
+          path: '/github',
+          builder: (context, state) => const GitHubPage(),
         ),
       ],
     ),

@@ -1,33 +1,52 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:quantum_ide/core/services/log_service.dart';
 import 'app.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Global error handlers
-  FlutterError.onError = (FlutterErrorDetails details) {
-    debugPrintStack(stackTrace: details.stack, label: 'Flutter Error');
-  };
-  
-  // Handle platform-specific initialization
-  try {
-    if (Platform.isAndroid) {
-      await _initializeAndroid();
-    } else if (Platform.isLinux) {
-      await _initializeLinux();
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // Initialize LogService with temporary directory
+    final tempDir = await getTemporaryDirectory();
+    await LogService.init(tempDir.path);
+
+    // Intercept debugPrint
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) {
+        LogService.log(message);
+      }
+    };
+
+    // Global error handlers
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      LogService.log('Flutter Error: ${details.exception}\n${details.stack}');
+    };
+
+    // Handle platform-specific initialization
+    try {
+      if (Platform.isAndroid) {
+        await _initializeAndroid();
+      } else if (Platform.isLinux) {
+        await _initializeLinux();
+      }
+    } catch (e) {
+      debugPrint('Platform initialization failed: $e');
     }
-  } catch (e) {
-    debugPrint('Platform initialization failed: $e');
-  }
-  
-  runApp(
-    const ProviderScope(
-      child: QuantumApp(),
-    ),
-  );
+
+    runApp(
+      const ProviderScope(
+        child: QuantumApp(),
+      ),
+    );
+  }, (error, stack) {
+    LogService.log('Uncaught Async Error: $error\n$stack');
+  });
 }
 
 /// Initialize Android-specific settings
@@ -40,12 +59,8 @@ Future<void> _initializeAndroid() async {
         debugPrint('Storage permission denied by user');
       }
     }
-    
-    // Request camera permission if needed
-    if (await Permission.camera.isDenied) {
-      await Permission.camera.request();
-    }
-    
+    // Примечание: разрешение камеры запрашивается только при реальном
+    // использовании (вставка изображения в AI), не при старте.
     debugPrint('Android initialization complete');
   } catch (e) {
     debugPrint('Android initialization error: $e');

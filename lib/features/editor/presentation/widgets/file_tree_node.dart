@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:watcher/watcher.dart';
+import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +18,6 @@ import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
-import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
@@ -186,7 +187,7 @@ class FileTreeNode extends ConsumerStatefulWidget {
 
 class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   List<CompactedEntity>? _children;
-  StreamSubscription<FileSystemEvent>? _watcherSubscription;
+  StreamSubscription? _watcherSubscription;
 
   bool _isCreatingFile = false;
   bool _isCreatingFolder = false;
@@ -210,7 +211,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   void _startWatching() {
     _stopWatching();
     try {
-      _watcherSubscription = Directory(widget.path).watch().listen((event) {
+      _watcherSubscription = DirectoryWatcher(widget.path).events.listen((event) {
         _loadChildren();
       });
     } catch (e) {
@@ -1420,35 +1421,71 @@ Please fulfill this request. If you need to modify the file, create a new one, d
             }
           }
         } else {
-          final ext = p.extension(widget.path).toLowerCase();
-          final isPreviewable = ext == '.md' || 
-              ext == '.png' || 
-              ext == '.jpg' || 
-              ext == '.jpeg' || 
-              ext == '.gif' || 
-              ext == '.webp';
-          if (isPreviewable) {
-            if (mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => FilePreviewPage(filePath: widget.path),
-                ),
-              );
-            }
-          } else {
-            await ref.read(editorProvider.notifier).openFile(widget.path);
-            if (mounted) {
-              final scaffold = Scaffold.maybeOf(context);
-              if (scaffold != null && (scaffold.isDrawerOpen || scaffold.isEndDrawerOpen)) {
-                Navigator.pop(context);
-              }
+          await ref.read(editorProvider.notifier).openFile(widget.path);
+          if (mounted) {
+            final scaffold = Scaffold.maybeOf(context);
+            if (scaffold != null && (scaffold.isDrawerOpen || scaffold.isEndDrawerOpen)) {
+              Navigator.pop(context);
             }
           }
         }
       },
       onLongPress: () => _showBottomSheetMenu(context, ref),
-      child: Container(
+      child: ContextMenuArea(
+        builder: (context) => [
+          ListTile(
+            leading: const Icon(LucideIcons.file_plus, size: 16),
+            title: const Text('New File', style: TextStyle(fontSize: 14)),
+            dense: true,
+            onTap: () {
+              Navigator.pop(context);
+              setState(() {
+                _inlineController = TextEditingController();
+                _isCreatingFile = true;
+                _isCreatingFolder = false;
+                _inlineFocusNode.requestFocus();
+              });
+            },
+          ),
+          ListTile(
+            leading: const Icon(LucideIcons.folder_plus, size: 16),
+            title: const Text('New Folder', style: TextStyle(fontSize: 14)),
+            dense: true,
+            onTap: () {
+              Navigator.pop(context);
+              setState(() {
+                _inlineController = TextEditingController();
+                _isCreatingFolder = true;
+                _isCreatingFile = false;
+                _inlineFocusNode.requestFocus();
+              });
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(LucideIcons.pencil, size: 16),
+            title: const Text('Rename', style: TextStyle(fontSize: 14)),
+            dense: true,
+            onTap: () {
+              Navigator.pop(context);
+              setState(() {
+                _inlineController = TextEditingController(text: widget.name);
+                _isRenaming = true;
+                _inlineFocusNode.requestFocus();
+              });
+            },
+          ),
+          ListTile(
+            leading: const Icon(LucideIcons.trash_2, size: 16, color: Colors.redAccent),
+            title: const Text('Delete', style: TextStyle(fontSize: 14, color: Colors.redAccent)),
+            dense: true,
+            onTap: () {
+              Navigator.pop(context);
+              _confirmDelete(context, ref);
+            },
+          ),
+        ],
+        child: Container(
         color: isSelected 
             ? Colors.blue.withValues(alpha: 0.15) 
             : (_hasAIPending(ref) && !widget.isDirectory)
@@ -1520,6 +1557,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
               ),
           ],
         ),
+      ),
       ),
     );
 

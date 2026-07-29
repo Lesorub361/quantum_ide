@@ -9,6 +9,7 @@ import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/local_ai_service.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/ai_chat_messages.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
 
@@ -307,6 +308,10 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
         modeLabel = isRu ? 'Автопилот' : 'Autopilot';
         modeIcon = LucideIcons.zap;
         modeColor = Colors.orangeAccent;
+      case AiInteractionMode.plan:
+        modeLabel = isRu ? 'Планер' : 'Planner';
+        modeIcon = LucideIcons.map;
+        modeColor = Colors.tealAccent;
     }
 
     return Padding(
@@ -331,6 +336,7 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
                   _buildModeOption(ctx, isRu ? 'Чат' : 'Chat', LucideIcons.message_square, Colors.cyanAccent, AiInteractionMode.chat, aiState.interactionMode),
                   _buildModeOption(ctx, isRu ? 'Рефактор' : 'Refactor', LucideIcons.code, Colors.purpleAccent, AiInteractionMode.refactor, aiState.interactionMode),
                   _buildModeOption(ctx, isRu ? 'Автопилот' : 'Autopilot', LucideIcons.zap, Colors.orangeAccent, AiInteractionMode.autopilot, aiState.interactionMode),
+                  _buildModeOption(ctx, isRu ? 'Планер' : 'Planner', LucideIcons.map, Colors.tealAccent, AiInteractionMode.plan, aiState.interactionMode),
                   const SizedBox(height: 8),
                 ],
               ),
@@ -379,68 +385,129 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
   Widget _buildStatusRow(AIState aiState, AppLocalizations l10n) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: aiState.isLoading
-                ? Row(
-                    children: [
-                      if (aiState.isAutopilot) ...[
-                        InkWell(
-                          onTap: () => ref.read(aiProvider.notifier).stopAutopilot(),
-                          borderRadius: BorderRadius.circular(10),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.redAccent.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 0.5),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(LucideIcons.square, size: 8, color: Colors.redAccent),
-                                const SizedBox(width: 3),
-                                Text(
-                                  l10n.stop,
-                                  style: GoogleFonts.inter(fontSize: 8.5, color: Colors.redAccent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                      ] else ...[
-                        const SizedBox(
-                          width: 8,
-                          height: 8,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.2,
-                            color: Colors.purpleAccent,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Expanded(
-                        child: Text(
-                          aiState.currentStatusMessage ?? (aiState.isAutopilot ? 'Autopilot running...' : 'Thinking...'),
-                          style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  )
-                : const SizedBox(),
-          ),
-          
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildTokenBadge(aiState),
-              const SizedBox(width: 4),
-              _buildSystemStatsBadge(),
+              Expanded(
+                child: aiState.isLoading
+                    ? Row(
+                        children: [
+                          if (aiState.isAutopilot) ...[
+                            InkWell(
+                              onTap: () => ref.read(aiProvider.notifier).stopAutopilot(),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.redAccent.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.6), width: 0.5),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(LucideIcons.square, size: 8, color: Colors.redAccent),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      l10n.stop,
+                                      style: GoogleFonts.inter(fontSize: 8.5, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ] else ...[
+                            const SizedBox(
+                              width: 8,
+                              height: 8,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.2,
+                                color: Colors.purpleAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Expanded(
+                            child: Text(
+                              aiState.currentStatusMessage ?? (aiState.isAutopilot ? 'Autopilot running...' : 'Thinking...'),
+                              style: GoogleFonts.inter(fontSize: 9, color: Colors.white38),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      )
+                    : const SizedBox(),
+              ),
+              
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTokenBadge(aiState),
+                  const SizedBox(width: 4),
+                  _buildSystemStatsBadge(),
+                ],
+              ),
             ],
+          ),
+          // Show agent activity: files read and current operations
+          if (aiState.isLoading && aiState.agentReadFiles.isNotEmpty)
+            _buildAgentActivityBar(aiState),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgentActivityBar(AIState aiState) {
+    final workspacePath = ref.read(workspaceProvider).currentPath ?? '';
+    final recentFiles = aiState.agentReadFiles.length > 5
+        ? aiState.agentReadFiles.sublist(aiState.agentReadFiles.length - 5)
+        : aiState.agentReadFiles;
+    
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.cyanAccent.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.eye, size: 9, color: Colors.cyanAccent),
+              const SizedBox(width: 4),
+              Text(
+                'Agent explored ${aiState.agentReadFiles.length} files',
+                style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Wrap(
+            spacing: 4,
+            runSpacing: 2,
+            children: recentFiles.map((filePath) {
+              final relPath = filePath.startsWith(workspacePath)
+                  ? filePath.substring(workspacePath.length + 1)
+                  : filePath.split('/').last;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+                child: Text(
+                  relPath,
+                  style: GoogleFonts.jetBrainsMono(fontSize: 7.5, color: Colors.white54),
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),
@@ -584,7 +651,7 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
     final hasActiveFile = editor.activeFilePath != null;
     final currentFileName = editor.activeFilePath?.split('/').last ?? '';
     final activeFile = editor.openFiles.isNotEmpty ? editor.openFiles[editor.activeTabIndex] : null;
-    final currentCode = activeFile?.controller.text ?? "";
+    final currentCode = activeFile?.controller.text ?? '';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
@@ -656,8 +723,8 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
                 suffixIcon: Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: Container(
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
                         colors: [Colors.purpleAccent, Colors.cyanAccent],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -674,7 +741,7 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
 
                         String finalPrompt = value;
                         if (_attachActiveFile && hasActiveFile) {
-                          finalPrompt = "In file: $currentFileName\nCode:\n```\n$currentCode\n```\n\n$value";
+                          finalPrompt = 'In file: $currentFileName\nCode:\n```\n$currentCode\n```\n\n$value';
                         }
                         
                         ref.read(aiProvider.notifier).askAI(finalPrompt);

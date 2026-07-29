@@ -14,7 +14,7 @@ class GitState {
     return GitState(
       status: status ?? this.status,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: error ?? this.error,
     );
   }
 }
@@ -22,9 +22,7 @@ class GitState {
 class GitNotifier extends StateNotifier<GitState> {
   final GitService _gitService;
 
-  GitNotifier(this._gitService) : super(GitState()) {
-    refreshStatus();
-  }
+  GitNotifier(this._gitService) : super(GitState());
 
   Future<void> refreshStatus() async {
     state = state.copyWith(isLoading: true);

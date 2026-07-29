@@ -7,7 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:diff_match_patch/diff_match_patch.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 
@@ -19,10 +18,8 @@ import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/models/chat_message.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
-import 'package:quantum_ide/core/services/ai_permission_service.dart';
 
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 import 'package:flutter/services.dart';
@@ -36,7 +33,6 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
-
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 
@@ -59,10 +55,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   int _selectedSuggestionIndex = 0;
   List<String> _pathBinaries = [];
 
-  OverlayEntry? _selectionToolbarOverlay;
-  bool _hasSelection = false;
   TerminalSession? _lastAttachedSession;
-  TerminalSession? _lastSelectionSession;
+  final Set<TerminalSession> _initializedSessions = {}; // Для контроля слушателей выделения
 
   @override
   void initState() {
@@ -73,8 +67,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   @override
   void dispose() {
     _suggestionsNotifier.dispose();
-    _hideSelectionToolbar();
-    _lastSelectionSession?.xtermViewController.removeListener(_onSelectionChanged);
     super.dispose();
   }
 
@@ -84,7 +76,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     }
     if (path == null) return ProjectType.other;
     
-    // Try to auto-detect based on files in the path
     final dir = Directory(path);
     if (!dir.existsSync()) return ProjectType.other;
     
@@ -281,7 +272,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       String sequence = '';
       if (hadCtrl) {
         if (data.length == 1) {
-          int code = data.toUpperCase().codeUnitAt(0);
+          final int code = data.toUpperCase().codeUnitAt(0);
           if (code >= 65 && code <= 90) {
             sequence = String.fromCharCode(code - 64);
           } else {
@@ -311,180 +302,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         });
       }
     };
-  }
-
-  void _setupSelectionListener(TerminalSession session) {
-    if (_lastSelectionSession != session) {
-      _lastSelectionSession?.xtermViewController.removeListener(_onSelectionChanged);
-      _lastSelectionSession = session;
-      session.xtermViewController.addListener(_onSelectionChanged);
-    }
-  }
-
-  void _onSelectionChanged() {
-    final session = _lastSelectionSession;
-    if (session == null) return;
-    
-    final selection = session.xtermViewController.selection;
-    if (selection != null) {
-      if (!_hasSelection) {
-        setState(() {
-          _hasSelection = true;
-        });
-        _showSelectionToolbar(session);
-      }
-    } else {
-      if (_hasSelection) {
-        setState(() {
-          _hasSelection = false;
-        });
-        _hideSelectionToolbar();
-      }
-    }
-  }
-
-  void _showSelectionToolbar(TerminalSession session) {
-    _hideSelectionToolbar();
-    if (!mounted) return;
-
-    final overlay = Overlay.of(context);
-
-    _selectionToolbarOverlay = OverlayEntry(
-      builder: (context) {
-        return Positioned(
-          top: 60,
-          left: 0,
-          right: 0,
-          child: Center(
-            child: Material(
-              elevation: 8,
-              borderRadius: BorderRadius.circular(24),
-              color: const Color(0xFF1E1E24),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _toolbarButton(
-                      icon: LucideIcons.copy,
-                      label: 'Copy',
-                      onTap: () {
-                        final selectedText = session.xtermViewController.selection != null
-                            ? session.xtermTerminal.buffer.getText(session.xtermViewController.selection!)
-                            : '';
-                        if (selectedText.isNotEmpty) {
-                          Clipboard.setData(ClipboardData(text: selectedText));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(AppLocalizations.of(context)!.copiedToClipboard),
-                              duration: const Duration(seconds: 1),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                          );
-                        }
-                        session.xtermViewController.clearSelection();
-                      },
-                    ),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                    _toolbarButton(
-                      icon: LucideIcons.clipboard_paste,
-                      label: 'Paste',
-                      onTap: () async {
-                        final data = await Clipboard.getData(Clipboard.kTextPlain);
-                        if (data?.text != null) {
-                          session.pty.write(Uint8List.fromList(utf8.encode(data!.text!)));
-                        }
-                        session.xtermViewController.clearSelection();
-                      },
-                    ),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                    _toolbarButton(
-                      icon: LucideIcons.search,
-                      label: 'Search',
-                      onTap: () {
-                        final selectedText = session.xtermViewController.selection != null
-                            ? session.xtermTerminal.buffer.getText(session.xtermViewController.selection!)
-                            : '';
-                        if (selectedText.isNotEmpty) {
-                          session.pty.write(Uint8List.fromList(utf8.encode('grep -r "${selectedText.replaceAll('"', '\\"')}" .\n')));
-                        }
-                        session.xtermViewController.clearSelection();
-                      },
-                    ),
-                    Container(
-                      width: 1,
-                      height: 20,
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                    _toolbarButton(
-                      icon: LucideIcons.x,
-                      label: '',
-                      onTap: () {
-                        session.xtermViewController.clearSelection();
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-
-    overlay.insert(_selectionToolbarOverlay!);
-  }
-
-  void _hideSelectionToolbar() {
-    _selectionToolbarOverlay?.remove();
-    _selectionToolbarOverlay = null;
-  }
-
-  Widget _toolbarButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: label.isEmpty ? 8 : 12,
-          vertical: 6,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: Colors.cyanAccent),
-            if (label.isNotEmpty) ...[
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
   }
 
   void _onKeyTap(String value, TerminalSession session) async {
@@ -529,20 +346,20 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
       return;
     }
-    // Named control shortcuts — sent directly to PTY (most reliable)
+    
     if (value == 'ctrl+c') {
-      session.pty.write(Uint8List.fromList([3])); // ETX
+      session.pty.write(Uint8List.fromList([3])); 
       return;
     }
     if (value == 'ctrl+d') {
-      session.pty.write(Uint8List.fromList([4])); // EOT
+      session.pty.write(Uint8List.fromList([4])); 
       return;
     }
     if (value == 'ctrl+l') {
-      session.pty.write(Uint8List.fromList([12])); // FF — clear screen
+      session.pty.write(Uint8List.fromList([12])); 
       return;
     }
-    // Backspace / DEL
+    
     if (value == '\x7f') {
       session.pty.write(Uint8List.fromList([127]));
       _handleInputForAutocomplete(session, '\x7f');
@@ -574,13 +391,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     } else if (value == '\x1b[C') {
       term.keyInput(xt.TerminalKey.arrowRight, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b[H') {
-      // HOME — send directly to PTY
       session.pty.write(Uint8List.fromList(utf8.encode('\x1b[H')));
     } else if (value == '\x1b[F') {
-      // END — send directly to PTY
       session.pty.write(Uint8List.fromList(utf8.encode('\x1b[F')));
     } else if (value.length == 1 && hadCtrl) {
-      // Ctrl+Letter: convert to control code (e.g. Ctrl+A = 0x01)
       final code = value.toUpperCase().codeUnitAt(0);
       if (code >= 65 && code <= 90) {
         session.pty.write(Uint8List.fromList([code - 64]));
@@ -588,10 +402,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         session.pty.write(Uint8List.fromList(utf8.encode(value)));
       }
     } else if (value.length == 1 && hadAlt) {
-      // Alt+Letter: ESC prefix
       session.pty.write(Uint8List.fromList(utf8.encode('\x1b$value')));
     } else {
-      // Regular text — write directly to PTY for reliability
       session.pty.write(Uint8List.fromList(utf8.encode(value)));
       _handleInputForAutocomplete(session, value);
     }
@@ -608,7 +420,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFF0D0F14), // Deeper, more premium black
+        color: Color(0xFF0D0F14), 
       ),
       child: SafeArea(
         bottom: true,
@@ -629,7 +441,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildBody(PanelState state, List<TerminalSession> sessions, TerminalTabsNotifier notifier, EditorState editorState) {
-    final tabs = PanelTab.values;
+    const tabs = PanelTab.values;
     final index = tabs.indexOf(state.selectedTab);
 
     return IndexedStack(
@@ -878,10 +690,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   Widget _buildGitFileItem(String path, {required bool isStaged, bool isUntracked = false, bool isConflicted = false}) {
     final l10n = AppLocalizations.of(context)!;
     final notifier = ref.read(gitProvider.notifier);
-    Color statusColor = isConflicted 
+    final Color statusColor = isConflicted 
         ? Colors.redAccent 
         : (isStaged ? Colors.greenAccent : (isUntracked ? Colors.orangeAccent : Colors.amberAccent));
-    String statusLabel = isConflicted
+    final String statusLabel = isConflicted
         ? 'CONFLICT'
         : (isStaged ? 'STAGED' : (isUntracked ? 'UNTRACKED' : 'MODIFIED'));
     
@@ -923,18 +735,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   if (isConflicted) {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => GitMergeConflictPage(
-                          relativePath: path,
-                        ),
+                        builder: (context) => GitMergeConflictPage(relativePath: path),
                       ),
                     );
                   } else {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (context) => GitDiffPage(
-                          relativePath: path,
-                          initiallyStaged: isStaged,
-                        ),
+                        builder: (context) => GitDiffPage(relativePath: path, initiallyStaged: isStaged),
                       ),
                     );
                   }
@@ -956,29 +763,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     const SizedBox(width: 4),
                     if (isConflicted)
                       IconButton(
-                        icon: const Icon(
-                          LucideIcons.git_pull_request, 
-                          size: 14, 
-                          color: Colors.redAccent,
-                        ),
+                        icon: const Icon(LucideIcons.git_pull_request, size: 14, color: Colors.redAccent),
                         tooltip: l10n.resolveConflictTooltip,
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => GitMergeConflictPage(
-                                relativePath: path,
-                              ),
+                              builder: (context) => GitMergeConflictPage(relativePath: path),
                             ),
                           );
                         },
                       )
                     else
                       IconButton(
-                        icon: Icon(
-                          isStaged ? LucideIcons.minus : LucideIcons.plus, 
-                          size: 14, 
-                          color: Colors.white54,
-                        ),
+                        icon: Icon(isStaged ? LucideIcons.minus : LucideIcons.plus, size: 14, color: Colors.white54),
                         tooltip: isStaged ? l10n.unstageAction : l10n.stageAction,
                         onPressed: () => isStaged ? notifier.unstageFile(path) : notifier.stageFile(path),
                       ),
@@ -1046,7 +843,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'python3 main.py || python3 app.py || (py_file=\$(find . -maxdepth 2 -name "*.py" | head -n 1); if [ -n "\$py_file" ]; then python3 "\$py_file"; else echo "No python file found. Please create main.py"; fi)')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
         ]);
         break;
       case ProjectType.nodejs:
@@ -1056,7 +853,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'npm start || node index.js || node server.js || node app.js || (js_file=\$(find . -maxdepth 2 -name "*.js" ! -path "*/node_modules/*" | head -n 1); if [ -n "\$js_file" ]; then node "\$js_file"; else echo "No JS file found. Please create index.js or package.json"; fi)')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
         ]);
         break;
       case ProjectType.dart:
@@ -1066,7 +863,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'dart run || dart bin/main.dart || dart main.dart || (dart_file=\$(find . -maxdepth 2 -name "*.dart" | head -n 1); if [ -n "\$dart_file" ]; then dart "\$dart_file"; else echo "No Dart file found. Please create bin/main.dart"; fi)')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
         ]);
         break;
       case ProjectType.web:
@@ -1076,7 +873,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
         ]);
         break;
       case ProjectType.androidJava:
@@ -1088,7 +885,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           _buildActionButton(l10n.install, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x gradlew && ./gradlew installDebug')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
         ]);
         break;
       case ProjectType.shell:
@@ -1099,12 +896,22 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               () => _runDedicatedCommand(DedicatedTerminalType.run, 
                   'bash main.sh || bash run.sh || ./run.sh || ./main.sh || (sh_file=\$(find . -maxdepth 2 -name "*.sh" | head -n 1); if [ -n "\$sh_file" ]; then bash "\$sh_file"; else echo "No run script (.sh) found."; fi)')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), // Ctrl+C
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
+        ]);
+        break;
+      case ProjectType.rust:
+        title = l10n.rustProject;
+        actions.addAll([
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
+              () => _runDedicatedCommand(DedicatedTerminalType.run, 'cargo run')),
+          _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, 
+              () => _runDedicatedCommand(DedicatedTerminalType.run, 'cargo build')),
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))),
         ]);
         break;
     }
 
-    // Always add Copy button at the end
     actions.add(
       _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.run))
     );
@@ -1136,25 +943,25 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       onTap: () => setState(() => _buildSubTab = index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isActive ? Colors.cyanAccent.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: isActive ? Colors.cyanAccent.withValues(alpha: 0.25) : Colors.transparent,
-            width: 0.8,
+            width: 0.6,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: isActive ? Colors.cyanAccent : Colors.white38),
-            const SizedBox(width: 6),
+            Icon(icon, size: 12, color: isActive ? Colors.cyanAccent : Colors.white38),
+            const SizedBox(width: 4),
             Text(
               label,
               style: GoogleFonts.inter(
                 color: isActive ? Colors.white : Colors.white38,
-                fontSize: 12,
+                fontSize: 10.5,
                 fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
               ),
             ),
@@ -1276,22 +1083,22 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.only(left: 4),
       child: Tooltip(
         message: label,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(5),
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(5),
                 border: Border.all(color: color.withValues(alpha: 0.2)),
               ),
-              child: Icon(icon, size: 16, color: color.withValues(alpha: 0.9)),
+              child: Icon(icon, size: 14, color: color.withValues(alpha: 0.9)),
             ),
           ),
         ),
@@ -1303,11 +1110,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final workspace = ref.read(workspaceProvider);
     final path = workspace.currentPath;
     
-    // We must ensure we are in the project directory.
-    // To keep it clean, we execute: cd path && clear && command
-    // This way the user doesn't see the long path after the clear happens.
     final finalCmd = path != null ? 'cd "$path" && clear && $cmd' : 'clear && $cmd';
-    
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(type, finalCmd, interrupt: true, clear: false);
   }
 
@@ -1340,7 +1143,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
     }
   }
-
 
   Widget _buildZoomButton(IconData icon, VoidCallback onTap, {Color? color}) {
     return Material(
@@ -1483,7 +1285,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           child: Column(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.black.withValues(alpha: 0.2),
                   border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
@@ -1678,7 +1480,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _suggestionsNotifier.value = null;
         _attachTerminalOutputListener(session);
       }
-      _setupSelectionListener(session);
+
+      // МАГИЯ AUTO-COPY: Вешаем безопасный слушатель (только 1 раз на сессию)
+      if (!_initializedSessions.contains(session)) {
+        _initializedSessions.add(session);
+        session.xtermViewController.addListener(() {
+          final selection = session.xtermViewController.selection;
+          if (selection != null) {
+            final text = session.xtermTerminal.buffer.getText(selection);
+            if (text.isNotEmpty && text.trim().isNotEmpty) {
+              // Тихо и мгновенно копируем в буфер обмена без надоедливых меню!
+              Clipboard.setData(ClipboardData(text: text));
+            }
+          }
+        });
+      }
     } else {
       session.xtermTerminal.onOutput = (data) {
         final hadCtrl = _activeModifiers.contains('CTRL');
@@ -1687,7 +1503,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         String sequence = '';
         if (hadCtrl) {
           if (data.length == 1) {
-            int code = data.toUpperCase().codeUnitAt(0);
+            final int code = data.toUpperCase().codeUnitAt(0);
             if (code >= 65 && code <= 90) {
               sequence = String.fromCharCode(code - 64);
             } else {
@@ -1732,6 +1548,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onLongPressStart: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
+                  onSecondaryTapDown: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
                   child: xt.TerminalView(
                     session.xtermTerminal,
                     controller: session.xtermViewController,
@@ -1741,7 +1558,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     backgroundOpacity: 0,
                     textStyle: xt.TerminalStyle(
                       fontSize: terminalFontSize,
-                      fontFamily: 'jetBrainsMono',
+                      fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
                     ),
                     keyboardType: TextInputType.visiblePassword,
                     deleteDetection: true,
@@ -1774,7 +1591,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       },
     );
   }
-
 
   xt.TerminalTheme _getTerminalTheme(String themeName) {
     Color bg;
@@ -1826,8 +1642,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-
-
   Future<String> _detectProjectCheckCommand(String? workspacePath) async {
     if (workspacePath == null) return 'flutter analyze';
     try {
@@ -1877,7 +1691,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         return 'cmake --build build';
       }
 
-      // Scan first level of directory for python files
       final entities = await dir.list().toList();
       bool hasPython = false;
       for (final entity in entities) {
@@ -1934,10 +1747,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       prompt = 'Run the check command for this project in the background: `$checkCommand`. Wait for the results, analyze the output for errors, fix all found errors using the <actions> block, and run the check again to confirm the fix.';
     }
 
-    // Open right AI chat panel
     ref.read(rightChatPanelOpenProvider.notifier).state = true;
-    
-    // Ask AI
     ref.read(aiProvider.notifier).askAI(prompt);
   }
 
@@ -1957,7 +1767,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     final l10n = AppLocalizations.of(context)!;
 
-    // Header widget that is always shown
     final headerWidget = Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       padding: const EdgeInsets.all(12),
@@ -2197,10 +2006,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   void _handleAiFix(String path, CodeDiagnostic diagnostic) async {
-    // Open right AI chat panel
     ref.read(rightChatPanelOpenProvider.notifier).state = true;
     
-    // Prepare prompt
     String content = '';
     final openFiles = ref.read(editorProvider).openFiles;
     final openedFile = openFiles.any((f) => f.path == path) 
@@ -2210,7 +2017,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     if (openedFile != null) {
       content = openedFile.controller.text;
     } else {
-      // If file not open, try to read it
       try {
         content = await File(path).readAsString();
       } catch (e) {
@@ -2218,7 +2024,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
     }
 
-    final prompt = """
+    final prompt = '''
 I am working on a project. I got an error in file: $path
 Error: ${diagnostic.message}
 Line: ${diagnostic.range.index + 1}, Column: ${diagnostic.range.start + 1}
@@ -2244,66 +2050,101 @@ Example:
 </actions>
 
 Also explain what exactly went wrong and how you fixed it.
-""";
+''';
 
     ref.read(aiProvider.notifier).askAI(prompt);
   }
 
+  // ОБНОВЛЕННОЕ ХАКЕРСКОЕ КОНТЕКСТНОЕ МЕНЮ (Как в Termux)
   void _showTerminalContextMenu(BuildContext context, Offset position, TerminalSession session) async {
     HapticFeedback.mediumImpact();
     
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final hasSelection = session.xtermViewController.selection != null;
     
-    final result = await showMenu(
+    final result = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx,
-        position.dy - 40, // Offset upwards slightly to be above the finger
+        position.dy - 60, 
         overlay.size.width - position.dx,
         overlay.size.height - position.dy,
       ),
-      color: const Color(0xFF1E1E1E),
-      elevation: 8,
+      color: const Color(0xFF25252D), 
+      elevation: 12,
       useRootNavigator: true,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12), 
+        borderRadius: BorderRadius.circular(8), 
         side: BorderSide(color: Colors.white.withValues(alpha: 0.1))
       ),
       items: [
+        if (hasSelection)
+          PopupMenuItem(
+            value: 'copy',
+            height: 40,
+            child: Row(
+              children: [
+                const Icon(LucideIcons.copy, size: 16, color: Colors.cyanAccent),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!.copy, style: const TextStyle(color: Colors.white, fontSize: 14)),
+              ],
+            ),
+          ),
         PopupMenuItem(
-          value: 'copy_all',
+          value: 'paste',
+          height: 40,
           child: Row(
             children: [
-              const Icon(LucideIcons.files, size: 14, color: Colors.white54),
-              const SizedBox(width: 10),
-              Text(AppLocalizations.of(context)!.copyAll, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              const Icon(LucideIcons.clipboard_paste, size: 16, color: Colors.white70),
+              const SizedBox(width: 12),
+              Text(AppLocalizations.of(context)!.paste, style: const TextStyle(color: Colors.white, fontSize: 14)),
             ],
           ),
         ),
+        const PopupMenuDivider(height: 1),
         PopupMenuItem(
-          value: 'paste',
+          value: 'copy_all',
+          height: 40,
           child: Row(
             children: [
-              const Icon(LucideIcons.clipboard_paste, size: 14, color: Colors.white54),
-              const SizedBox(width: 10),
-              Text(AppLocalizations.of(context)!.paste, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              const Icon(LucideIcons.files, size: 16, color: Colors.white54),
+              const SizedBox(width: 12),
+              Text(AppLocalizations.of(context)!.copyAll, style: const TextStyle(color: Colors.white54, fontSize: 14)),
             ],
           ),
         ),
         PopupMenuItem(
           value: 'clear',
+          height: 40,
           child: Row(
             children: [
-              const Icon(LucideIcons.trash_2, size: 14, color: Colors.white54),
-              const SizedBox(width: 10),
-              Text(AppLocalizations.of(context)!.clearTerminal, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              const Icon(LucideIcons.trash_2, size: 16, color: Colors.redAccent),
+              const SizedBox(width: 12),
+              Text(AppLocalizations.of(context)!.clearTerminal, style: const TextStyle(color: Colors.redAccent, fontSize: 14)),
             ],
           ),
         ),
       ],
     );
 
-    if (result == 'copy_all') {
+    if (result == 'copy') {
+      final selectedText = session.xtermViewController.selection != null
+          ? session.xtermTerminal.buffer.getText(session.xtermViewController.selection!)
+          : '';
+      if (selectedText.isNotEmpty) {
+        await Clipboard.setData(ClipboardData(text: selectedText));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.copiedToClipboard),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1),
+            )
+          );
+        }
+      }
+      session.xtermViewController.clearSelection();
+    } else if (result == 'copy_all') {
       final text = _extractTerminalText(session.xtermTerminal);
       if (text.isNotEmpty) {
         await Clipboard.setData(ClipboardData(text: text));
@@ -2313,6 +2154,7 @@ Also explain what exactly went wrong and how you fixed it.
       if (data?.text != null) {
         session.pty.write(Uint8List.fromList(utf8.encode(data!.text!)));
       }
+      session.xtermViewController.clearSelection();
     } else if (result == 'clear') {
        session.xtermTerminal.eraseDisplay();
        session.xtermTerminal.eraseScrollbackOnly();
@@ -2335,6 +2177,30 @@ Also explain what exactly went wrong and how you fixed it.
     );
   }
 
+  String _getFontFamily(String fontName) {
+    final normalized = fontName.toLowerCase().replaceAll(' ', '');
+    switch (normalized) {
+      case 'jetbrainsmono':
+        return 'jetBrainsMono';
+      case 'firacode':
+        return 'firaCode';
+      case 'sourcecodepro':
+        return 'sourceCodePro';
+      case 'inconsolata':
+        return 'inconsolata';
+      case 'cascadiacode':
+      case 'cascadia':
+        return 'cascadia';
+      case 'monospace':
+        return 'monospace';
+      default:
+        try {
+          return GoogleFonts.getFont(fontName).fontFamily ?? 'monospace';
+        } catch (_) {
+          return 'monospace';
+        }
+    }
+  }
 }
 
 class _SuggestionBox extends StatefulWidget {
@@ -2517,8 +2383,6 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
   }
 }
 
-// ── AI Chat Messages Widget (auto-scrolls to bottom) ────────────────────────
-
 class CollapsibleConsole extends StatefulWidget {
   final String content;
   const CollapsibleConsole({super.key, required this.content});
@@ -2575,326 +2439,3 @@ class _CollapsibleConsoleState extends State<CollapsibleConsole> {
     );
   }
 }
-
-
-class AIActionFileItem extends ConsumerStatefulWidget {
-  final AIAction action;
-  final VoidCallback onShowDiff;
-  final VoidCallback onRemove;
-  final bool isPending;
-
-  const AIActionFileItem({
-    super.key,
-    required this.action,
-    required this.onShowDiff,
-    required this.onRemove,
-    this.isPending = true,
-  });
-
-  @override
-  ConsumerState<AIActionFileItem> createState() => _AIActionFileItemState();
-}
-
-class _AIActionFileItemState extends ConsumerState<AIActionFileItem> {
-  int _additions = 0;
-  int _deletions = 0;
-  bool _calculated = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _calculateDiffStats();
-  }
-
-  @override
-  void didUpdateWidget(AIActionFileItem oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.action.content != widget.action.content || oldWidget.action.path != widget.action.path) {
-      _calculateDiffStats();
-    }
-  }
-
-  Future<void> _calculateDiffStats() async {
-    if (widget.action.type == 'command') return;
-    
-    try {
-      final file = File(widget.action.path);
-      String originalContent = '';
-      if (widget.action.type == 'edit' && await file.exists()) {
-        originalContent = await file.readAsString();
-      }
-      final modifiedContent = widget.action.content;
-
-      final dmp = DiffMatchPatch();
-      final diffs = dmp.diff(originalContent, modifiedContent);
-      dmp.diffCleanupSemantic(diffs);
-
-      int additions = 0;
-      int deletions = 0;
-
-      for (final d in diffs) {
-        final lineCount = '\n'.allMatches(d.text).length + (d.text.isNotEmpty ? 1 : 0);
-        if (d.operation == DIFF_INSERT) {
-          additions += lineCount;
-        } else if (d.operation == DIFF_DELETE) {
-          deletions += lineCount;
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _additions = additions;
-          _deletions = deletions;
-          _calculated = true;
-        });
-      }
-    } catch (_) {
-      // Fallback
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final workspacePath = ref.read(workspaceProvider).currentPath;
-    final displayPath = (workspacePath != null && widget.action.path.startsWith(workspacePath))
-        ? p.relative(widget.action.path, from: workspacePath)
-        : widget.action.path;
-
-    final fileName = displayPath.split('/').last;
-    final dirPath = displayPath.contains('/') 
-        ? displayPath.substring(0, displayPath.lastIndexOf('/')) 
-        : '';
-
-    Color typeColor;
-    IconData typeIcon;
-    switch (widget.action.type) {
-      case 'edit':
-        typeColor = Colors.blueAccent;
-        typeIcon = LucideIcons.pencil;
-        break;
-      case 'create':
-        typeColor = Colors.greenAccent;
-        typeIcon = LucideIcons.file_plus;
-        break;
-      case 'delete':
-        typeColor = Colors.redAccent;
-        typeIcon = LucideIcons.file_x;
-        break;
-      case 'command':
-        typeColor = Colors.amberAccent;
-        typeIcon = LucideIcons.terminal;
-        break;
-      default:
-        typeColor = Colors.white38;
-        typeIcon = LucideIcons.sparkles;
-    }
-
-    const permissionService = AiPermissionService();
-    
-    // Evaluate risk and path scoping
-    final inScope = widget.action.type == 'command' || permissionService.isPathInScope(widget.action.path, workspacePath ?? '');
-    final risk = permissionService.evaluateActionRisk(widget.action, workspacePath ?? '');
-    
-    Color riskColor;
-    String riskLabel;
-    
-    if (!inScope) {
-      riskColor = Colors.redAccent;
-      riskLabel = AppLocalizations.of(context)!.outOfScope;
-    } else {
-      switch (risk) {
-        case AiRiskLevel.low:
-          riskColor = Colors.greenAccent;
-          riskLabel = AppLocalizations.of(context)!.low;
-          break;
-        case AiRiskLevel.medium:
-          riskColor = Colors.purpleAccent;
-          riskLabel = AppLocalizations.of(context)!.medium;
-          break;
-        case AiRiskLevel.high:
-          riskColor = Colors.orangeAccent;
-          riskLabel = AppLocalizations.of(context)!.high;
-          break;
-      }
-    }
-
-    return InkWell(
-      onTap: () {
-        if (widget.action.type == 'edit' || widget.action.type == 'create') {
-          ref.read(editorProvider.notifier).openFile(widget.action.path);
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.04))),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // File name row + diff stats
-            Row(
-              children: [
-                Icon(typeIcon, size: 13, color: typeColor),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: widget.action.type == 'command'
-                      ? Text(
-                          widget.action.content,
-                          style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.w500),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        )
-                      : Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                fileName,
-                                style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (dirPath.isNotEmpty) ...[
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(
-                                  dirPath,
-                                  style: GoogleFonts.inter(color: Colors.white30, fontSize: 10.5),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                ),
-                // Diff stats +N -N
-                if (widget.action.type != 'command' && _calculated) ...[
-                  if (_additions > 0) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      '+$_additions',
-                      style: GoogleFonts.jetBrainsMono(color: const Color(0xFF4EC994), fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                  if (_deletions > 0) ...[
-                    const SizedBox(width: 2),
-                    Text(
-                      '-$_deletions',
-                      style: GoogleFonts.jetBrainsMono(color: const Color(0xFFFF6B6B), fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ],
-              ],
-            ),
-            // Risk badge + action buttons row
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: riskColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: riskColor.withValues(alpha: 0.25)),
-                  ),
-                  child: Text(
-                    riskLabel,
-                    style: GoogleFonts.inter(color: riskColor, fontSize: 8.5, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const Spacer(),
-                if (widget.isPending) ...[
-                  // Diff preview link
-                  if (widget.action.type == 'edit' || widget.action.type == 'create') ...[
-                    InkWell(
-                      onTap: widget.onShowDiff,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(LucideIcons.diff, size: 10, color: Colors.white38),
-                            const SizedBox(width: 3),
-                            Text('Diff', style: GoogleFonts.inter(fontSize: 10, color: Colors.white38)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  // Keep / Accept button
-                  InkWell(
-                    onTap: () => ref.read(aiProvider.notifier).executeActionManually(widget.action),
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F5132).withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: const Color(0xFF4EC994).withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        AppLocalizations.of(context)!.keep,
-                        style: GoogleFonts.inter(color: const Color(0xFF4EC994), fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  // Reject button
-                  InkWell(
-                    onTap: widget.onRemove,
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF5C1818).withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        AppLocalizations.of(context)!.reject,
-                        style: GoogleFonts.inter(color: const Color(0xFFFF6B6B), fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  if (widget.action.type == 'edit' || widget.action.type == 'create') ...[
-                    InkWell(
-                      onTap: widget.onShowDiff,
-                      borderRadius: BorderRadius.circular(4),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(LucideIcons.eye, size: 10, color: Colors.white38),
-                            const SizedBox(width: 3),
-                            Text(AppLocalizations.of(context)!.viewAction, style: GoogleFonts.inter(fontSize: 10, color: Colors.white38)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(LucideIcons.circle_check, size: 10, color: Color(0xFF4EC994)),
-                      const SizedBox(width: 3),
-                      Text(
-                        AppLocalizations.of(context)!.applied,
-                        style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF4EC994), fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-

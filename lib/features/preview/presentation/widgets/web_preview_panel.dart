@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -15,7 +16,7 @@ class SidebarWebPreviewPanel extends ConsumerStatefulWidget {
 }
 
 class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel> {
-  final TextEditingController _urlController = TextEditingController(text: "http://localhost:8080");
+  final TextEditingController _urlController = TextEditingController(text: 'http://localhost:8080');
   InAppWebViewController? _webViewController;
   bool _serverIsRunning = false;
 
@@ -135,19 +136,43 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
         // WebView Frame
         Expanded(
           child: _serverIsRunning
-              ? InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(_urlController.text)),
-                  initialSettings: InAppWebViewSettings(
-                    transparentBackground: true,
-                    javaScriptEnabled: true,
-                  ),
-                  onWebViewCreated: (controller) => _webViewController = controller,
-                  onReceivedError: (controller, request, error) {
-                    Future.delayed(const Duration(seconds: 2), () {
-                      _webViewController?.reload();
-                    });
-                  },
-                )
+              ? ((Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
+                  ? InAppWebView(
+                      initialUrlRequest: URLRequest(url: WebUri(_urlController.text)),
+                      initialSettings: InAppWebViewSettings(
+                        transparentBackground: true,
+                        javaScriptEnabled: true,
+                      ),
+                      onWebViewCreated: (controller) => _webViewController = controller,
+                      onReceivedError: (controller, request, error) {
+                        Future.delayed(const Duration(seconds: 2), () {
+                          _webViewController?.reload();
+                        });
+                      },
+                    )
+                  : Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(LucideIcons.globe, size: 36, color: Colors.blueAccent.withValues(alpha: 0.5)),
+                            const SizedBox(height: 12),
+                            Text(
+                              l10n.webPreviewNotSupported,
+                              style: GoogleFonts.inter(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              l10n.webPreviewNotSupportedDesc,
+                              style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ))
               : Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,

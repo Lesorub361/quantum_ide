@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
-import '../../../../core/services/language_service.dart';
 import '../notifiers/editor_notifier.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'snippet_prompt.dart';
@@ -8,6 +7,26 @@ import '../../../../core/services/ai_autocomplete_service.dart';
 import '../../../../core/services/lsp_autocomplete_service.dart';
 import '../../../../core/services/lsp_service.dart';
 import '../../../../core/services/settings_service.dart';
+import '../../../../core/services/emmet_service.dart';
+import '../../../../core/services/language_service.dart';
+
+class CodeKeywordPrompt extends CodePrompt {
+  final String? label;
+  
+  CodeKeywordPrompt({required super.word, this.label});
+  
+  @override
+  CodeAutocompleteResult get autocomplete => CodeAutocompleteResult(
+    input: '',
+    word: word,
+    selection: TextSelection.collapsed(offset: word.length),
+  );
+  
+  @override
+  bool match(String input) {
+    return word.toLowerCase().startsWith(input.toLowerCase());
+  }
+}
 
 class LspCompletionPrompt extends CodePrompt {
   final CompletionItem item;
@@ -179,6 +198,19 @@ class QuantumAutocompletePromptsBuilder extends CodeAutocompletePromptsBuilder {
       for (final k in config.keywords) {
         if (k.toLowerCase().startsWith(word.toLowerCase()) && k != word) {
           prompts.add(CodeKeywordPrompt(word: k));
+        }
+      }
+    }
+
+    // Add Emmet abbreviations
+    if (word.isNotEmpty) {
+      final emmet = EmmetService();
+      final langConfig = LanguageService.getConfigForFile(file.path);
+      final language = langConfig?.name.toLowerCase() ?? '';
+      if (emmet.isEmmetAbbreviation(word) && (language == 'html' || language == 'css' || language == 'xml')) {
+        final expanded = emmet.expandAbbreviation(word, language);
+        if (expanded != word) {
+          prompts.add(CodeKeywordPrompt(word: expanded, label: 'Emmet: $word'));
         }
       }
     }

@@ -18,7 +18,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
   }
 
   void _startPeriodicCheck() {
-    _syncTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _checkActualInstallation();
     });
   }
@@ -143,8 +143,11 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'flutter':
               exists = _hasCommand('flutter');
               break;
-            case 'gemini-cli':
-              exists = _hasCommand('gemini');
+            case 'antigravity-cli':
+              exists = _hasCommand('agy') || _hasCommand('antigravity');
+              break;
+            case 'ollama-cli':
+              exists = _hasCommand('ollama');
               break;
             case 'kilocode-cli':
               exists = _hasCommand('kilocode');
@@ -201,9 +204,15 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'flutter':
               exists = await File(p.join(rootfsPath, 'root', 'flutter', 'bin', 'flutter')).exists();
               break;
-            case 'gemini-cli':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'gemini')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'gemini')).exists();
+            case 'antigravity-cli':
+              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'agy')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'agy')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'antigravity')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'antigravity')).exists();
+              break;
+            case 'ollama-cli':
+              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'ollama')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'ollama')).exists();
               break;
             case 'kilocode-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kilocode')).exists();
@@ -294,16 +303,15 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     if (!Platform.isAndroid) {
       command = _translateCommandForPC(command);
     }
+
+    // Mark as installing — triggers animated spinner in the UI
+    state = [for (final p in state) if (p.id == package.id) p..isInstalling = true else p];
+
     terminal.sendCommand(command);
-    
-    // Update state to marked as installed (or keep as is if already installed)
-    state = [
-      for (final p in state)
-        if (p.id == package.id)
-          p..isInstalled = true
-        else
-          p
-    ];
+
+    // Wait for the command to propagate, then mark installed
+    await Future.delayed(const Duration(seconds: 2));
+    state = [for (final p in state) if (p.id == package.id) p..isInstalling = false..isInstalled = true else p];
 
     final prefs = await SharedPreferences.getInstance();
     final installedIds = state

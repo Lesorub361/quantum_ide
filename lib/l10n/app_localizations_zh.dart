@@ -1526,6 +1526,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get androidProject => 'Android 项目';
 
   @override
+  String get rustProject => 'Rust 项目';
+
+  @override
   String get genericProject => '项目';
 
   @override

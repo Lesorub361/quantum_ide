@@ -99,10 +99,13 @@ class TodoTreeNotifier extends StateNotifier<TodoTreeState> {
             }
           } catch (_) {}
         } else if (entity is Directory) {
-          if (!entity.path.contains('.') && !entity.path.contains('build')) {
+          final name = p.basename(entity.path);
+          if (!name.startsWith('.') && name != 'build' && name != 'node_modules') {
             await _scanDirectory(entity, items, patterns, rootPath);
           }
         }
+        // Yield to event loop to keep UI smooth
+        await Future.delayed(Duration.zero);
       }
     } catch (_) {}
   }

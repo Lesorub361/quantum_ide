@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
+import 'package:quantum_ide/core/services/log_service.dart';
 
 class WorkspaceState {
   final String? currentPath;
@@ -55,13 +55,26 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
           return p.join(pcProjectsDir, path.substring(index + '/projects/'.length));
         }
         return path;
-      }).where((path) => Directory(path).existsSync()).toList();
+      }).toList();
+      final validRecent = <String>[];
+      for (final path in recent) {
+        if (await Directory(path).exists()) validRecent.add(path);
+      }
+      recent = validRecent;
       if (migrated) {
         await prefs.setStringList(_keyRecentProjects, recent);
       }
     }
 
     state = WorkspaceState(currentPath: null, recentProjects: recent);
+  }
+
+  Future<void> restoreLastWorkspace() async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentSaved = prefs.getString(_keyCurrentPath);
+    if (currentSaved != null && Directory(currentSaved).existsSync()) {
+      await setWorkspace(currentSaved);
+    }
   }
 
   Future<void> setWorkspace(String path) async {
@@ -75,16 +88,43 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
       await prefs.setStringList(_keyRecentProjects, recent);
     }
     
+    await _ensureGitIgnore(path);
+    await LogService.setWorkspace(path);
     state = state.copyWith(currentPath: path, recentProjects: recent);
+  }
+
+  Future<void> _ensureGitIgnore(String workspacePath) async {
+    try {
+      final gitIgnoreFile = File(p.join(workspacePath, '.gitignore'));
+      if (await gitIgnoreFile.exists()) {
+        final content = await gitIgnoreFile.readAsString();
+        if (!content.contains('.quantum/') && !content.contains('.quantum')) {
+          final sb = StringBuffer(content);
+          if (!content.endsWith('\n')) {
+            sb.write('\n');
+          }
+          sb.writeln('.quantum/');
+          await gitIgnoreFile.writeAsString(sb.toString());
+          LogService.log('Gitignore auto-check: added .quantum/ to .gitignore to keep workspace clean.');
+        } else {
+          LogService.log('Gitignore auto-check: .quantum/ is already ignored.');
+        }
+      } else {
+        await gitIgnoreFile.writeAsString('.quantum/\n');
+        LogService.log('Gitignore auto-check: created .gitignore and added .quantum/.');
+      }
+    } catch (e) {
+      LogService.log('Gitignore auto-check failed: $e');
+    }
   }
 
   Future<void> closeWorkspace() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyCurrentPath);
+    await LogService.setWorkspace(null);
     state = state.copyWith(currentPath: null);
     
     // Perform centralized cleanup of other modules
-    ref.read(editorProvider.notifier).clearWorkspace();
     ref.read(terminalTabsProvider.notifier).closeAllSessions();
     ref.read(gitProvider.notifier).refreshStatus();
   }

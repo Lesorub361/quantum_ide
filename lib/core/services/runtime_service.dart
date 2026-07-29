@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,10 @@ class RuntimeService extends ChangeNotifier {
   String get filesDir => _filesDir;
   late String _nativeLibDir;
   final _dio = Dio();
+
+  static const int _maxConcurrentCommands = 1;
+  int _runningCommands = 0;
+  final List<Completer<void>> _commandQueue = [];
 
   // URL for rootfs (Ubuntu 24.04.4 Noble Numbat)
   static const _rootfsUrl =
@@ -79,7 +84,26 @@ class RuntimeService extends ChangeNotifier {
     }
   }
 
+  Future<void> _acquireCommandSlot() async {
+    if (_runningCommands < _maxConcurrentCommands) {
+      _runningCommands++;
+      return;
+    }
+    final completer = Completer<void>();
+    _commandQueue.add(completer);
+    await completer.future;
+    _runningCommands++;
+  }
+
+  void _releaseCommandSlot() {
+    _runningCommands--;
+    if (_commandQueue.isNotEmpty) {
+      _commandQueue.removeAt(0).complete();
+    }
+  }
+
   Future<String> runCommand(String command, {String? workingDirectory}) async {
+    await _acquireCommandSlot();
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         if (Platform.isAndroid) {
@@ -124,6 +148,8 @@ class RuntimeService extends ChangeNotifier {
       debugPrint('Command failed: $command, error: $e');
 
       rethrow;
+    } finally {
+      _releaseCommandSlot();
     }
   }
 
@@ -254,7 +280,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '3';
+    const bashrcVersion = '8';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -273,7 +299,7 @@ class RuntimeService extends ChangeNotifier {
 
     if (needsWrite) {
       const bashrcContent = r'''
-# BASHRC_VERSION=3
+# BASHRC_VERSION=8
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest
@@ -312,7 +338,7 @@ alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
 alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="flutter build apk --release --android-skip-build-dependency-validation"
+alias fb-apk-release="flutter build apk --release --split-per-abi --android-skip-build-dependency-validation --no-tree-shake-icons"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -328,20 +354,18 @@ fi
 # Ubuntu Greeting
 if [ -z "$VTE_VERSION" ]; then
     clear
-    echo -e "\e[1;36m ██████   ██    ██   █████   ███    ██  ████████  ██    ██  ███    ███ \e[0m"
-    echo -e "\e[1;36m██    ██  ██    ██  ██   ██  ████   ██     ██     ██    ██  ████  ████ \e[0m"
-    echo -e "\e[1;36m██    ██  ██    ██  ███████  ██ ██  ██     ██     ██    ██  ██ ████ ██ \e[0m"
-    echo -e "\e[1;36m██ ▄▄ ██  ██    ██  ██   ██  ██  ██ ██     ██     ██    ██  ██  ██  ██ \e[0m"
-    echo -e "\e[1;36m ██████    ██████   ██   ██  ██   ████     ██      ██████   ██      ██ \e[0m"
-    echo -e "\e[1;36m    ▀▀                                                                 \e[0m"
-    echo -e "\e[1;34m                      ██████  ██████  ███████                          \e[0m"
-    echo -e "\e[1;34m                        ██    ██   ██ ██                               \e[0m"
-    echo -e "\e[1;34m                        ██    ██   ██ █████                            \e[0m"
-    echo -e "\e[1;34m                        ██    ██   ██ ██                               \e[0m"
-    echo -e "\e[1;34m                      ██████  ██████  ███████                          \e[0m"
+    echo -e '\e[38;5;51m   ___                  __              \e[0m'
+    echo -e '\e[38;5;45m  / _ \__ _____ ____  / /___ ____ _     \e[0m'
+    echo -e '\e[38;5;39m / // / // / _ `/ _ \/ __/ // /  ` \    \e[0m'
+    echo -e '\e[38;5;33m/____/\_,_/\_,_/_//_/\__/\_,_/_/_/_/    \e[0m'
+    echo -e '\e[38;5;27m                                        \e[0m'
+    echo -e '\e[38;5;93m  ___   ___     ___                     \e[0m'
+    echo -e '\e[38;5;129m |_ _| |   \   | __|                    \e[0m'
+    echo -e '\e[38;5;165m  | |  | |) |  | _|                     \e[0m'
+    echo -e '\e[38;5;201m |___| |___/   |___|                    \e[0m'
     echo
-    echo -e '\e[1;35mWelcome to Ubuntu 24.04 LTS (Quantum Edition v3)\e[0m'
-    echo -e '\e[1;32mPowered by Quantum IDE — Your Mobile Dev Environment\e[0m'
+    echo -e '\e[38;5;213m   Welcome to Ubuntu 24.04 LTS (Quantum Edition v8)   \e[0m'
+    echo -e '\e[38;5;248m   Powered by Quantum IDE — Your Mobile Dev Environment\e[0m'
     echo
     echo -e '\e[1;34m  Useful aliases:\e[0m'
     echo -e '\e[0;37m    ll           = ls -la\e[0m'
@@ -356,9 +380,65 @@ fi
       try {
         if (await bashrc.parent.exists()) {
           await bashrc.writeAsString(bashrcContent.replaceAll('\r', ''));
+
+          final zshrc = File('$_filesDir/rootfs/ubuntu/root/.zshrc');
+          const zshrcContent = r'''
+export ANDROID_HOME=/root/android-sdk
+export ANDROID_SDK_ROOT=/root/android-sdk
+if [ -d "/root/jdk-17" ]; then
+    export JAVA_HOME="/root/jdk-17"
+else
+    DETECTED_JVM=$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)
+    if [ -n "$DETECTED_JVM" ]; then
+        export JAVA_HOME="$DETECTED_JVM"
+    else
+        export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
+    fi
+fi
+export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/root/.local/bin:$PATH
+export TERM=xterm-256color
+export COLORTERM=truecolor
+
+autoload -Uz vcs_info
+precmd() { vcs_info }
+zstyle ':vcs_info:git:*' formats ' (%b)'
+PROMPT='%F{green}boss@ubuntu%f:%F{blue}%~%f%F{yellow}${vcs_info_msg_0_}%f$ '
+
+export FLUTTER_ALLOW_SU_ROOT=true
+export FLUTTER_SUPPRESS_ANALYTICS=true
+
+alias ll='ls -la --color=auto'
+alias la='ls -A --color=auto'
+alias l='ls -CF --color=auto'
+alias grep='grep --color=auto'
+alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
+alias fb-apk-release="flutter build apk --release --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias f-clean="flutter clean && flutter pub get"
+alias f-get="flutter pub get"
+alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
+alias cls='clear'
+
+if [ -z "$VTE_VERSION" ]; then
+    clear
+    echo -e '\e[38;5;51m   ___                  __              \e[0m'
+    echo -e '\e[38;5;45m  / _ \__ _____ ____  / /___ ____ _     \e[0m'
+    echo -e '\e[38;5;39m / // / // / _ `/ _ \/ __/ // /  ` \    \e[0m'
+    echo -e '\e[38;5;33m/____/\_,_/\_,_/_//_/\__/\_,_/_/_/_/    \e[0m'
+    echo -e '\e[38;5;27m                                        \e[0m'
+    echo -e '\e[38;5;93m  ___   ___     ___                     \e[0m'
+    echo -e '\e[38;5;129m |_ _| |   \   | __|                    \e[0m'
+    echo -e '\e[38;5;165m  | |  | |) |  | _|                     \e[0m'
+    echo -e '\e[38;5;201m |___| |___/   |___|                    \e[0m'
+    echo
+    echo -e '\e[38;5;213m   Welcome to Ubuntu 24.04 LTS (Quantum Edition v8)   \e[0m'
+    echo -e '\e[38;5;248m   Powered by Quantum IDE — Your Mobile Dev Environment\e[0m'
+    echo
+fi
+''';
+          await zshrc.writeAsString(zshrcContent.replaceAll('\r', ''));
         }
       } catch (e) {
-        debugPrint('Warning: Failed to write .bashrc: $e');
+        debugPrint('Warning: Failed to write shell config files: $e');
       }
     }
   }
@@ -490,6 +570,15 @@ if [ -L "\$TMPDIR/resolv.conf" ] || [ ! -f "\$TMPDIR/resolv.conf" ]; then
     printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "\$TMPDIR/resolv.conf"
 fi
 
+# Build fd bindings only if /proc/self/fd exists (avoids proot warnings)
+FD_BINDS=""
+if [ -d /proc/self/fd ]; then
+    FD_BINDS="--bind=/proc/self/fd:/dev/fd"
+    [ -e /proc/self/fd/0 ] && FD_BINDS="\$FD_BINDS --bind=/proc/self/fd/0:/dev/stdin"
+    [ -e /proc/self/fd/1 ] && FD_BINDS="\$FD_BINDS --bind=/proc/self/fd/1:/dev/stdout"
+    [ -e /proc/self/fd/2 ] && FD_BINDS="\$FD_BINDS --bind=/proc/self/fd/2:/dev/stderr"
+fi
+
 # shellcheck disable=SC2086
 if [ \$# -gt 2 ]; then
     shift 2
@@ -498,10 +587,7 @@ if [ \$# -gt 2 ]; then
         --rootfs="\$ROOTFS" --cwd="\$GUEST_CWD" \\
         --bind=/dev --bind=/proc --bind=/sys \\
         --bind=/dev/urandom:/dev/random \\
-        --bind=/proc/self/fd:/dev/fd \\
-        --bind=/proc/self/fd/0:/dev/stdin \\
-        --bind=/proc/self/fd/1:/dev/stdout \\
-        --bind=/proc/self/fd/2:/dev/stderr \\
+        \$FD_BINDS \\
         --bind="\$TMPDIR/resolv.conf:/etc/resolv.conf" \\
         --bind="\$CONFIG/proc_fakes/loadavg:/proc/loadavg" \\
         --bind="\$CONFIG/proc_fakes/stat:/proc/stat" \\
@@ -537,10 +623,7 @@ else
         --rootfs="\$ROOTFS" --cwd="\$GUEST_CWD" \\
         --bind=/dev --bind=/proc --bind=/sys \\
         --bind=/dev/urandom:/dev/random \\
-        --bind=/proc/self/fd:/dev/fd \\
-        --bind=/proc/self/fd/0:/dev/stdin \\
-        --bind=/proc/self/fd/1:/dev/stdout \\
-        --bind=/proc/self/fd/2:/dev/stderr \\
+        \$FD_BINDS \\
         --bind="\$TMPDIR/resolv.conf:/etc/resolv.conf" \\
         --bind="\$CONFIG/proc_fakes/loadavg:/proc/loadavg" \\
         --bind="\$CONFIG/proc_fakes/stat:/proc/stat" \\
@@ -603,7 +686,11 @@ fi
     return Platform.environment['HOME'] ?? Directory.current.path;
   }
 
+  String? _cachedJavaHome;
+  String? _cachedAapt2;
+
   String get _detectedJavaHome {
+    if (_cachedJavaHome != null) return _cachedJavaHome!;
     final jvmDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'lib', 'jvm'));
     if (jvmDir.existsSync()) {
       try {
@@ -612,24 +699,28 @@ fi
           if (entity is Directory) {
             final name = p.basename(entity.path);
             if (name.startsWith('java-') && name.endsWith('-openjdk-arm64')) {
-              return '/usr/lib/jvm/$name';
+              _cachedJavaHome = '/usr/lib/jvm/$name';
+              return _cachedJavaHome!;
             }
           }
         }
       } catch (_) {}
     }
-    // Check if jdk-17 exists inside rootfs root
     final rootJdk = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root', 'jdk-17'));
     if (rootJdk.existsSync()) {
-      return '/root/jdk-17';
+      _cachedJavaHome = '/root/jdk-17';
+      return _cachedJavaHome!;
     }
-    return '/usr/lib/jvm/java-17-openjdk-arm64';
+    _cachedJavaHome = '/usr/lib/jvm/java-17-openjdk-arm64';
+    return _cachedJavaHome!;
   }
 
   String get _detectedAapt2 {
+    if (_cachedAapt2 != null) return _cachedAapt2!;
     final usrBinAapt2 = File(p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'aapt2'));
     if (usrBinAapt2.existsSync()) {
-      return '/usr/bin/aapt2';
+      _cachedAapt2 = '/usr/bin/aapt2';
+      return _cachedAapt2!;
     }
     try {
       final buildToolsDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'build-tools'));
@@ -641,11 +732,13 @@ fi
             .toList();
         if (dirs.isNotEmpty) {
           dirs.sort((a, b) => b.compareTo(a));
-          return '/root/android-sdk/build-tools/${dirs.first}/aapt2';
+          _cachedAapt2 = '/root/android-sdk/build-tools/${dirs.first}/aapt2';
+          return _cachedAapt2!;
         }
       }
     } catch (_) {}
-    return '/usr/bin/aapt2';
+    _cachedAapt2 = '/usr/bin/aapt2';
+    return _cachedAapt2!;
   }
 
   Map<String, String> get env {
@@ -988,69 +1081,58 @@ org.gradle.parallel=false
 org.gradle.workers.max=1
 EOF
 
-# 7. Persistent background daemon to auto-heal AAPT2 / SDK toolchain binaries & patch newly created projects
-(
-  SDK_ROOT="/root/android-sdk"
-  LOCKFILE="/tmp/setup_daemon_loop.lock"
-  if [ -f "$LOCKFILE" ]; then
-      read -r last_pid < "$LOCKFILE"
-      if [ -n "$last_pid" ] && kill -0 "$last_pid" 2>/dev/null; then
-          exit 0
-      fi
-  fi
-  echo "$$" > "$LOCKFILE"
-
-  while true; do
-    # Symlink SDK build-tools to native tools on the fly
-    if [ -d "$SDK_ROOT/build-tools" ]; then
-        for bt in "$SDK_ROOT/build-tools/"*; do
-            if [ -d "$bt" ]; then
-                if [ -f "$bt/aapt2" ] && [ ! -L "$bt/aapt2" ]; then
-                    rm -f "$bt/aapt2"
-                    ln -sf /usr/bin/aapt2 "$bt/aapt2"
-                fi
-                if [ -f "$bt/aapt" ] && [ ! -L "$bt/aapt" ]; then
-                    rm -f "$bt/aapt"
-                    ln -sf /usr/bin/aapt "$bt/aapt"
-                fi
-                if [ -f "$bt/zipalign" ] && [ ! -L "$bt/zipalign" ]; then
-                    rm -f "$bt/zipalign"
-                    ln -sf /usr/bin/zipalign "$bt/zipalign"
-                fi
-                if [ -f "$bt/apksigner" ] && [ ! -L "$bt/apksigner" ]; then
-                    rm -f "$bt/apksigner"
-                    ln -sf /usr/bin/apksigner "$bt/apksigner"
-                fi
+# 7. Run one-time auto-heal for AAPT2 / SDK toolchain binaries & patch projects
+SDK_ROOT="/root/android-sdk"
+# Symlink SDK build-tools to native tools on the fly
+if [ -d "$SDK_ROOT/build-tools" ]; then
+    for bt in "$SDK_ROOT/build-tools/"*; do
+        if [ -d "$bt" ]; then
+            if [ -f "$bt/aapt2" ] && [ ! -L "$bt/aapt2" ]; then
+                rm -f "$bt/aapt2"
+                ln -sf /usr/bin/aapt2 "$bt/aapt2"
             fi
-        done
-    fi
-
-    # Symlink newly downloaded Gradle cached AAPT2 binaries
-    if [ -d "/root/.gradle" ] && [ -f "/usr/bin/aapt2" ]; then
-        find /root/.gradle -name "aapt2" 2>/dev/null | while read -r gp; do
-            if [ -f "$gp" ] && [ ! -L "$gp" ]; then
-                cp -f /usr/bin/aapt2 "$gp" 2>/dev/null
+            if [ -f "$bt/aapt" ] && [ ! -L "$bt/aapt" ]; then
+                rm -f "$bt/aapt"
+                ln -sf /usr/bin/aapt "$bt/aapt"
             fi
-        done
-    fi
-
-    # Patch newly created projects' gradle.properties on the fly
-    find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties" 2>/dev/null | while read -r f; do
-        if ! grep -q "android.aapt2.daemon" "$f"; then
-            echo "android.aapt2.daemon=false" >> "$f"
-            echo "android.aapt2FromMaven=false" >> "$f"
-            echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$f"
-            echo "org.gradle.daemon=false" >> "$f"
-            echo "org.gradle.parallel=false" >> "$f"
-            echo "org.gradle.workers.max=1" >> "$f"
+            if [ -f "$bt/zipalign" ] && [ ! -L "$bt/zipalign" ]; then
+                rm -f "$bt/zipalign"
+                ln -sf /usr/bin/zipalign "$bt/zipalign"
+            fi
+            if [ -f "$bt/apksigner" ] && [ ! -L "$bt/apksigner" ]; then
+                rm -f "$bt/apksigner"
+                ln -sf /usr/bin/apksigner "$bt/apksigner"
+            fi
         fi
     done
+fi
 
-    # Patch Groovy build.gradle on the fly to force arm64-v8a abiFilters
-    find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 5 -name "build.gradle" 2>/dev/null | while read -r f; do
-        if grep -q "defaultConfig" "$f" 2>/dev/null; then
-            if ! grep -q "abiFilters" "$f" 2>/dev/null; then
-                python3 -c '
+# Symlink newly downloaded Gradle cached AAPT2 binaries
+if [ -d "/root/.gradle" ] && [ -f "/usr/bin/aapt2" ]; then
+    find /root/.gradle -name "aapt2" 2>/dev/null | while read -r gp; do
+        if [ -f "$gp" ] && [ ! -L "$gp" ]; then
+            cp -f /usr/bin/aapt2 "$gp" 2>/dev/null
+        fi
+    done
+fi
+
+# Patch newly created projects' gradle.properties
+find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties" 2>/dev/null | while read -r f; do
+    if ! grep -q "android.aapt2.daemon" "$f"; then
+        echo "android.aapt2.daemon=false" >> "$f"
+        echo "android.aapt2FromMaven=false" >> "$f"
+        echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$f"
+        echo "org.gradle.daemon=false" >> "$f"
+        echo "org.gradle.parallel=false" >> "$f"
+        echo "org.gradle.workers.max=1" >> "$f"
+    fi
+done
+
+# Patch Groovy build.gradle to force arm64-v8a abiFilters
+find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 5 -name "build.gradle" 2>/dev/null | while read -r f; do
+    if grep -q "defaultConfig" "$f" 2>/dev/null; then
+        if ! grep -q "abiFilters" "$f" 2>/dev/null; then
+            python3 -c '
 import sys
 path = sys.argv[1]
 with open(path, "r") as file:
@@ -1060,15 +1142,15 @@ if "defaultConfig {" in content and "abiFilters" not in content:
     with open(path, "w") as file:
         file.write(patched)
 ' "$f" 2>/dev/null
-            fi
         fi
-    done
+    fi
+done
 
-    # Patch Kotlin build.gradle.kts on the fly to force arm64-v8a abiFilters
-    find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 5 -name "build.gradle.kts" 2>/dev/null | while read -r f; do
-        if grep -q "defaultConfig" "$f" 2>/dev/null; then
-            if ! grep -q "abiFilters" "$f" 2>/dev/null; then
-                python3 -c '
+# Patch Kotlin build.gradle.kts to force arm64-v8a abiFilters
+find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 5 -name "build.gradle.kts" 2>/dev/null | while read -r f; do
+    if grep -q "defaultConfig" "$f" 2>/dev/null; then
+        if ! grep -q "abiFilters" "$f" 2>/dev/null; then
+            python3 -c '
 import sys
 path = sys.argv[1]
 with open(path, "r") as file:
@@ -1078,13 +1160,9 @@ if "defaultConfig {" in content and "abiFilters" not in content:
     with open(path, "w") as file:
         file.write(patched)
 ' "$f" 2>/dev/null
-            fi
         fi
-    done
-
-    sleep 300
-  done
-) >/dev/null 2>&1 &
+    fi
+done
 ''';
   }
 }

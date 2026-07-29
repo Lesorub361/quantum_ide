@@ -11,7 +11,8 @@ enum ProjectType {
   shell,
   other,
   androidJava,
-  androidKotlin
+  androidKotlin,
+  rust
 }
 
 class Project {

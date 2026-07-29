@@ -1413,7 +1413,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final theme = Theme.of(context);
 
     // Flutter-specific configurations
-    final sdkCtrl = TextEditingController(text: (project?.type == ProjectType.androidJava || project?.type == ProjectType.androidKotlin) ? (project?.sdkVersion ?? 'com.example.app') : '35');
+    final sdkCtrl = TextEditingController(text: (project?.type == ProjectType.androidJava || project?.type == ProjectType.androidKotlin) ? (project?.sdkVersion ?? 'com.example.app') : '34');
     final List<String> availablePlatforms = ['android', 'ios', 'web', 'windows', 'macos', 'linux'];
     final List<String> selectedPlatforms = ['android'];
 
@@ -1462,6 +1462,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       const Color(0xFFFFD54F),
     ];
     final isDesktop = MediaQuery.of(context).size.width > 800;
+
+    bool isCreating = false;
+    String? creationError;
 
     if (isDesktop) {
       await showDialog(
@@ -1539,11 +1542,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                                         final oldType = selectedType;
                                         selectedType = type;
                                         if ((type == ProjectType.androidJava || type == ProjectType.androidKotlin) && 
-                                            (oldType == ProjectType.flutter || sdkCtrl.text == '35')) {
+                                            (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
                                           sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
                                         } else if (type == ProjectType.flutter && 
                                                    (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
-                                          sdkCtrl.text = '35';
+                                          sdkCtrl.text = '34';
                                         }
                                       }),
                                       child: Container(
@@ -1775,9 +1778,32 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 32),
-                    Row(
+                     ),
+                     if (creationError != null) ...[
+                       const SizedBox(height: 12),
+                       Container(
+                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                         decoration: BoxDecoration(
+                           color: Colors.redAccent.withValues(alpha: 0.1),
+                           borderRadius: BorderRadius.circular(10),
+                           border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                         ),
+                           child: Row(
+                             children: [
+                               Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+                             const SizedBox(width: 8),
+                             Expanded(
+                               child: Text(
+                                 creationError!,
+                                 style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 11),
+                               ),
+                             ),
+                           ],
+                         ),
+                       ),
+                     ],
+                     const SizedBox(height: 32),
+                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton(
@@ -1786,37 +1812,48 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ),
                         const SizedBox(width: 12),
                         ElevatedButton(
-                          onPressed: () async {
+                          onPressed: isCreating ? null : () async {
                             if (nameCtrl.text.isEmpty) return;
-                            if (isEdit) {
-                              await ref.read(projectServiceProvider.notifier).saveProject(Project(
-                                id: project.id,
-                                name: nameCtrl.text,
-                                path: project.path,
-                                type: project.type,
-                                lastOpened: project.lastOpened,
-                                isInternal: project.isInternal,
-                                colorValue: selectedColorValue,
-                                iconCodePoint: selectedIconCodePoint,
-                                iconFontFamily: selectedIconFontFamily,
-                                iconFontPackage: selectedIconFontPackage,
-                                platforms: project.platforms,
-                                sdkVersion: project.sdkVersion,
-                              ));
-                            } else {
-                              await ref.read(projectServiceProvider.notifier).createProject(
-                                name: nameCtrl.text,
-                                path: '',
-                                type: selectedType,
-                                iconCodePoint: selectedIconCodePoint,
-                                colorValue: selectedColorValue,
-                                iconFontFamily: selectedIconFontFamily,
-                                iconFontPackage: selectedIconFontPackage,
-                                platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
-                                sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
-                              );
+                            setState(() {
+                              isCreating = true;
+                              creationError = null;
+                            });
+                            try {
+                              if (isEdit) {
+                                await ref.read(projectServiceProvider.notifier).saveProject(Project(
+                                  id: project.id,
+                                  name: nameCtrl.text,
+                                  path: project.path,
+                                  type: project.type,
+                                  lastOpened: project.lastOpened,
+                                  isInternal: project.isInternal,
+                                  colorValue: selectedColorValue,
+                                  iconCodePoint: selectedIconCodePoint,
+                                  iconFontFamily: selectedIconFontFamily,
+                                  iconFontPackage: selectedIconFontPackage,
+                                  platforms: project.platforms,
+                                  sdkVersion: project.sdkVersion,
+                                ));
+                              } else {
+                                await ref.read(projectServiceProvider.notifier).createProject(
+                                  name: nameCtrl.text,
+                                  path: '',
+                                  type: selectedType,
+                                  iconCodePoint: selectedIconCodePoint,
+                                  colorValue: selectedColorValue,
+                                  iconFontFamily: selectedIconFontFamily,
+                                  iconFontPackage: selectedIconFontPackage,
+                                  platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
+                                  sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
+                                );
+                              }
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            } catch (e) {
+                              setState(() {
+                                isCreating = false;
+                                creationError = e.toString();
+                              });
                             }
-                            if (ctx.mounted) Navigator.pop(ctx);
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: theme.colorScheme.primary,
@@ -1824,7 +1861,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          child: Text(isEdit ? AppLocalizations.of(context)!.saveAction : AppLocalizations.of(context)!.createProject, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                          child: isCreating
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : Text(isEdit ? AppLocalizations.of(context)!.saveAction : AppLocalizations.of(context)!.createProject, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
                         ),
                       ],
                     ),
@@ -1893,11 +1932,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                             final oldType = selectedType;
                             selectedType = type;
                             if ((type == ProjectType.androidJava || type == ProjectType.androidKotlin) && 
-                                (oldType == ProjectType.flutter || sdkCtrl.text == '35')) {
+                                (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
                               sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
                             } else if (type == ProjectType.flutter && 
                                        (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
-                              sdkCtrl.text = '35';
+                              sdkCtrl.text = '34';
                             }
                           }),
                           child: Container(
@@ -2137,41 +2176,75 @@ class _HomePageState extends ConsumerState<HomePage> {
                       },
                     ),
                   ),
+                  if (creationError != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              creationError!,
+                              style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () async {
+                      onPressed: isCreating ? null : () async {
                         if (nameCtrl.text.isEmpty) return;
-                        if (isEdit) {
-                          await ref.read(projectServiceProvider.notifier).saveProject(Project(
-                            id: project.id,
-                            name: nameCtrl.text,
-                            path: project.path,
-                            type: project.type,
-                            lastOpened: project.lastOpened,
-                            isInternal: project.isInternal,
-                            colorValue: selectedColorValue,
-                            iconCodePoint: selectedIconCodePoint,
-                            iconFontFamily: selectedIconFontFamily,
-                            iconFontPackage: selectedIconFontPackage,
-                            platforms: project.platforms,
-                            sdkVersion: project.sdkVersion,
-                          ));
-                        } else {
-                          await ref.read(projectServiceProvider.notifier).createProject(
-                            name: nameCtrl.text,
-                            path: '',
-                            type: selectedType,
-                            iconCodePoint: selectedIconCodePoint,
-                            colorValue: selectedColorValue,
-                            iconFontFamily: selectedIconFontFamily,
-                            iconFontPackage: selectedIconFontPackage,
-                            platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
-                            sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
-                          );
+                        setState(() {
+                          isCreating = true;
+                          creationError = null;
+                        });
+                        try {
+                          if (isEdit) {
+                            await ref.read(projectServiceProvider.notifier).saveProject(Project(
+                              id: project.id,
+                              name: nameCtrl.text,
+                              path: project.path,
+                              type: project.type,
+                              lastOpened: project.lastOpened,
+                              isInternal: project.isInternal,
+                              colorValue: selectedColorValue,
+                              iconCodePoint: selectedIconCodePoint,
+                              iconFontFamily: selectedIconFontFamily,
+                              iconFontPackage: selectedIconFontPackage,
+                              platforms: project.platforms,
+                              sdkVersion: project.sdkVersion,
+                            ));
+                          } else {
+                            await ref.read(projectServiceProvider.notifier).createProject(
+                              name: nameCtrl.text,
+                              path: '',
+                              type: selectedType,
+                              iconCodePoint: selectedIconCodePoint,
+                              colorValue: selectedColorValue,
+                              iconFontFamily: selectedIconFontFamily,
+                              iconFontPackage: selectedIconFontPackage,
+                              platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
+                              sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
+                            );
+                          }
+                          if (ctx.mounted) Navigator.pop(ctx);
+                        } catch (e) {
+                          setState(() {
+                            isCreating = false;
+                            creationError = e.toString();
+                          });
                         }
-                        if (ctx.mounted) Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.colorScheme.primary,
@@ -2180,7 +2253,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         elevation: 0,
                       ),
-                      child: Text(isEdit ? AppLocalizations.of(context)!.saveAction : AppLocalizations.of(context)!.createProject, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                      child: isCreating
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Text(isEdit ? AppLocalizations.of(context)!.saveAction : AppLocalizations.of(context)!.createProject, style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],

@@ -30,12 +30,25 @@ class FileExplorerState {
 class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
   final Ref _ref;
   FileExplorerNotifier(this._ref, String initialPath) : super(FileExplorerState(currentPath: initialPath)) {
-    scanDirectory(initialPath);
+    if (initialPath.isNotEmpty) {
+      scanDirectory(initialPath);
+    }
     
     // React to sort mode changes reactively
     _ref.listen<FileSortMode>(fileSortModeProvider, (previous, next) {
       if (state.currentPath.isNotEmpty) {
         scanDirectory(state.currentPath);
+      }
+    });
+
+    // React to workspace changes — rescan when a different project is opened
+    _ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
+      final newPath = next.currentPath;
+      if (newPath != null && newPath != state.currentPath) {
+        scanDirectory(newPath);
+      } else if (newPath == null && state.currentPath.isNotEmpty) {
+        // Workspace closed — clear explorer
+        state = state.copyWith(currentPath: '', files: const AsyncValue.data([]));
       }
     });
   }
@@ -88,6 +101,9 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
 
   void goUp() {
     final parent = Directory(state.currentPath).parent.path;
+    // Safety: never navigate above the workspace root
+    final workspace = _ref.read(workspaceProvider).currentPath;
+    if (workspace != null && state.currentPath == workspace) return;
     scanDirectory(parent);
   }
 

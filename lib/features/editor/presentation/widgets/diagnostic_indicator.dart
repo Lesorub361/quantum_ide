@@ -53,15 +53,15 @@ class _DiagnosticPainter extends CustomPainter {
         );
 
         for (final rect in rects) {
-          final startX = paragraph.offset.dx + rect.left;
-          final endX = paragraph.offset.dx + rect.right;
+          final startX = size.width + paragraph.offset.dx + rect.left;
+          final endX = size.width + paragraph.offset.dx + rect.right;
           final width = endX - startX;
           if (width <= 0) continue;
 
           // Draw glow
           _drawWavyLine(
             canvas,
-            Offset(startX, paragraph.offset.dy + paragraph.paragraph.height - 2),
+            Offset(startX, paragraph.offset.dy + rect.bottom - 2),
             width,
             baseColor.withValues(alpha: 0.3),
             isGlow: true,
@@ -70,7 +70,7 @@ class _DiagnosticPainter extends CustomPainter {
           // Draw main line
           _drawWavyLine(
             canvas,
-            Offset(startX, paragraph.offset.dy + paragraph.paragraph.height - 2),
+            Offset(startX, paragraph.offset.dy + rect.bottom - 2),
             width,
             baseColor,
           );

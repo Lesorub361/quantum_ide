@@ -61,12 +61,28 @@ class RightChatPanel extends ConsumerStatefulWidget {
 class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   final TextEditingController _aiChatController = TextEditingController();
   bool _attachActiveFile = false;
-  bool _isResizingHovered = false;
+  bool _showSlashCommands = false;
   String? _selectedImagePath;
   String? _selectedImageBase64;
 
   @override
+  void initState() {
+    super.initState();
+    _aiChatController.addListener(_onTextChanged);
+  }
+
+  void _onTextChanged() {
+    final text = _aiChatController.text;
+    if (text.startsWith('/') && text.length < 15 && !text.contains(' ')) {
+      if (!_showSlashCommands) setState(() => _showSlashCommands = true);
+    } else {
+      if (_showSlashCommands) setState(() => _showSlashCommands = false);
+    }
+  }
+
+  @override
   void dispose() {
+    _aiChatController.removeListener(_onTextChanged);
     _aiChatController.dispose();
     super.dispose();
   }
@@ -94,6 +110,74 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       _selectedImagePath = null;
       _selectedImageBase64 = null;
     });
+  }
+
+  Widget _buildSlashCommands() {
+    final commands = [
+      {'cmd': '/goal', 'desc': 'Set a long-running goal for Autopilot'},
+      {'cmd': '/explain', 'desc': 'Explain the active file or selected code'},
+      {'cmd': '/fix', 'desc': 'Fix issues in the active file'},
+      {'cmd': '/dream', 'desc': 'Generate a UI based on prompt'},
+    ];
+    
+    final query = _aiChatController.text.substring(1).toLowerCase();
+    final filtered = query.isEmpty 
+        ? commands 
+        : commands.where((c) => c['cmd']!.toLowerCase().contains(query)).toList();
+
+    if (filtered.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      constraints: const BoxConstraints(maxHeight: 150),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2230),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: ListView.builder(
+        shrinkWrap: true,
+        itemCount: filtered.length,
+        itemBuilder: (context, index) {
+          final cmd = filtered[index];
+          return InkWell(
+            onTap: () {
+              _aiChatController.text = '${cmd['cmd']} ';
+              _aiChatController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _aiChatController.text.length),
+              );
+              setState(() => _showSlashCommands = false);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Text(
+                    cmd['cmd']!,
+                    style: GoogleFonts.inter(
+                      color: Colors.cyanAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      cmd['desc']!,
+                      style: GoogleFonts.inter(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -237,40 +321,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
 
     if (widget.isInline) {
-      return Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: rightWidth,
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E2230).withValues(alpha: 0.85),
-              border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
-            ),
-            child: content,
-          ),
-          Positioned(
-            left: -3,
-            top: 0,
-            bottom: 0,
-            width: 6,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.resizeLeftRight,
-              onEnter: (_) => setState(() => _isResizingHovered = true),
-              onExit: (_) => setState(() => _isResizingHovered = false),
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onHorizontalDragUpdate: (details) {
-                  final currentWidth = ref.read(rightPanelWidthProvider);
-                  final newWidth = (currentWidth - details.primaryDelta!).clamp(240.0, 600.0);
-                  ref.read(rightPanelWidthProvider.notifier).state = newWidth;
-                },
-                child: Container(
-                  color: _isResizingHovered ? Colors.cyanAccent.withValues(alpha: 0.4) : Colors.transparent,
-                ),
-              ),
-            ),
-          ),
-        ],
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E2230).withValues(alpha: 0.85),
+          border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
+        ),
+        child: content,
       );
     }
 
@@ -850,24 +906,76 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
+  Widget _buildQuickActionChips(BuildContext context, WidgetRef ref) {
+    final chips = [
+      {'label': '💡 Объяснить', 'prompt': '/explain Объясни выделенный код и данный файл'},
+      {'label': '🔧 Исправить', 'prompt': '/fix Найди и исправь возможные ошибки и баги'},
+      {'label': '⚡ Рефакторинг', 'prompt': '/refactor Проведи рефакторинг и оптимизируй этот код'},
+      {'label': '🧪 Тесты', 'prompt': '/tests Напиши юнит-тесты для функций данного файла'},
+      {'label': '📝 Документация', 'prompt': '/doc Добавь подробные docstring и комментарии'},
+    ];
+
+    return Container(
+      height: 28,
+      margin: const EdgeInsets.only(bottom: 6),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: chips.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 5),
+        itemBuilder: (context, index) {
+          final item = chips[index];
+          return InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () {
+              final promptText = item['prompt']!;
+              _aiChatController.text = promptText;
+              _sendMessage(context, ref);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF131824),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.cyanAccent.withValues(alpha: 0.25),
+                  width: 0.8,
+                ),
+              ),
+              child: Text(
+                item['label']!,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: Colors.cyanAccent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildAIChatInput(BuildContext context, WidgetRef ref, AIState aiState) {
     final l10n = AppLocalizations.of(context)!;
     final editor = ref.watch(editorProvider);
     final hasActiveFile = editor.activeFilePath != null;
     final currentFileName = editor.activeFilePath?.split('/').last ?? '';
-    final activeFile = editor.openFiles.isNotEmpty ? editor.openFiles[editor.activeTabIndex] : null;
-    final currentCode = activeFile?.controller.text ?? '';
 
     String dynamicHint;
     switch (aiState.interactionMode) {
       case AiInteractionMode.chat:
-        dynamicHint = 'Спросите ИИ о коде, попросите объяснить...';
+        dynamicHint = 'Спросите ИИ о коде... (#file:путь для контекста)';
         break;
       case AiInteractionMode.autopilot:
         dynamicHint = 'Опишите сложную задачу для агента...';
         break;
       case AiInteractionMode.refactor:
         dynamicHint = 'Что исправить в выделенном фрагменте?';
+        break;
+      case AiInteractionMode.plan:
+        dynamicHint = 'Опишите идею проекта — ИИ составит план...';
         break;
     }
 
@@ -879,7 +987,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildQuickPrompts(context, ref),
+          _buildQuickActionChips(context, ref),
           
           // Active file attachment indicator (above input)
           if (_attachActiveFile && hasActiveFile)
@@ -946,7 +1054,6 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 ],
               ),
             ),
-
           // Unified Premium Input Card
           Container(
             decoration: BoxDecoration(
@@ -969,6 +1076,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (_showSlashCommands) _buildSlashCommands(),
                 // Top Row: Attachments + TextField + Send
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -1085,25 +1193,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                         icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: () {
-                          final value = _aiChatController.text.trim();
-                          if (value.isEmpty && _selectedImageBase64 == null) return;
-                          
-                          final fullPrompt = (_attachActiveFile && hasActiveFile)
-                              ? l10n.workingOnFile(currentFileName, currentCode, value)
-                              : value;
-
-                          ref.read(aiProvider.notifier).askAI(
-                            fullPrompt,
-                            imageBase64: _selectedImageBase64,
-                          );
-                          _aiChatController.clear();
-                          setState(() {
-                            _attachActiveFile = false;
-                            _selectedImagePath = null;
-                            _selectedImageBase64 = null;
-                          });
-                        },
+                        onPressed: () => _sendMessage(context, ref),
                       ),
                     ),
                   ],
@@ -1133,6 +1223,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                           _buildDropdownItem(AiInteractionMode.chat, 'Чат', LucideIcons.message_square, Colors.cyanAccent),
                           _buildDropdownItem(AiInteractionMode.autopilot, 'Агент', LucideIcons.bot, Colors.orangeAccent),
                           _buildDropdownItem(AiInteractionMode.refactor, 'Редактор', LucideIcons.code, Colors.purpleAccent),
+                          _buildDropdownItem(AiInteractionMode.plan, 'Планер', LucideIcons.map, Colors.tealAccent),
                         ],
                       ),
                     ),
@@ -1170,11 +1261,116 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
+  Future<void> _sendMessage(BuildContext context, WidgetRef ref) async {
+    final value = _aiChatController.text.trim();
+    if (value.isEmpty && _selectedImageBase64 == null) return;
+    
+    final editor = ref.read(editorProvider);
+    final hasActiveFile = editor.activeFilePath != null;
+    final currentFileName = editor.activeFilePath?.split('/').last ?? '';
+    final activeFile = editor.openFiles.isNotEmpty && editor.activeTabIndex < editor.openFiles.length ? editor.openFiles[editor.activeTabIndex] : null;
+    final currentCode = activeFile?.controller.text ?? '';
+
+    final lowerVal = value.toLowerCase();
+    final isActionChip = lowerVal.startsWith('/fix') || 
+                        lowerVal.startsWith('/refactor') || 
+                        lowerVal.startsWith('/explain') || 
+                        lowerVal.startsWith('/tests') || 
+                        lowerVal.startsWith('/doc') ||
+                        lowerVal.contains('исправь');
+
+    final shouldIncludeFile = (_attachActiveFile || isActionChip) && hasActiveFile;
+
+    String fullPrompt = value;
+    if (shouldIncludeFile && currentCode.isNotEmpty) {
+      fullPrompt = '⚠️ Рабочий файл: **$currentFileName**\n'
+          'Исходный код ($currentFileName):\n```dart\n$currentCode\n```\n\n'
+          'Инструкция: $value\n'
+          'ОБЯЗАТЕЛЬНО: Предложи рабочий код и внеси исправления!';
+    }
+
+    List<String> contextFiles = [];
+    if (shouldIncludeFile && editor.activeFilePath != null) {
+      contextFiles.add(editor.activeFilePath!);
+    }
+
+    // Process @codebase / @search mentions
+    final lowerPrompt = fullPrompt.toLowerCase();
+    if (lowerPrompt.contains('@codebase') || lowerPrompt.contains('@search')) {
+      final workspacePath = ref.read(workspaceProvider).currentPath;
+      if (workspacePath != null) {
+        final dir = Directory(workspacePath);
+        final fileEntries = <String>[];
+        if (await dir.exists()) {
+          try {
+            final entities = dir.listSync(recursive: true);
+            for (final entity in entities) {
+              if (entity is File) {
+                final ext = p.extension(entity.path).toLowerCase();
+                if (['.dart', '.yaml', '.json', '.md', '.gradle', '.xml'].contains(ext) &&
+                    !entity.path.contains('.git/') &&
+                    !entity.path.contains('.dart_tool/') &&
+                    !entity.path.contains('build/')) {
+                  fileEntries.add(p.relative(entity.path, from: workspacePath));
+                }
+              }
+              if (fileEntries.length >= 30) break;
+            }
+          } catch (e) {
+            debugPrint('Failed to scan codebase: $e');
+          }
+        }
+        final treePreview = fileEntries.map((f) => '- $f').join('\n');
+        fullPrompt = fullPrompt
+            .replaceAll(RegExp(r'@codebase', caseSensitive: false), '### ИНДЕКС ФАЙЛОВ ПРОЕКТА (@codebase):\n$treePreview\n')
+            .replaceAll(RegExp(r'@search', caseSensitive: false), '### ИНДЕКС ФАЙЛОВ ПРОЕКТА:\n$treePreview\n');
+      }
+    }
+
+    // Process #-mentions for file context
+    final mentionPattern = RegExp(r'#file:([^\s]+)', caseSensitive: false);
+    final mentions = mentionPattern.allMatches(fullPrompt);
+    if (mentions.isNotEmpty) {
+      final workspacePath = ref.read(workspaceProvider).currentPath;
+      if (workspacePath != null) {
+        for (final match in mentions) {
+          final filePath = match.group(1)!;
+          final fullPath = filePath.startsWith('/')
+              ? filePath
+              : '$workspacePath/$filePath';
+          final file = File(fullPath);
+          if (await file.exists()) {
+            contextFiles.add(fullPath);
+            final content = await file.readAsString();
+            final preview = content.length > 2000
+                ? '${content.substring(0, 2000)}\n... (truncated)'
+                : content;
+            final replacement = '**File: $filePath**\n```dart\n$preview\n```';
+            fullPrompt = fullPrompt.replaceAll(match.group(0)!, replacement);
+          }
+        }
+      }
+    }
+
+    ref.read(aiProvider.notifier).askAI(
+      fullPrompt,
+      imageBase64: _selectedImageBase64,
+      contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
+    );
+    _aiChatController.clear();
+    setState(() {
+      _attachActiveFile = false;
+      _selectedImagePath = null;
+      _selectedImageBase64 = null;
+    });
+  }
+
   String _getModeLabel(AiInteractionMode mode) {
     switch (mode) {
       case AiInteractionMode.chat: return 'Чат';
       case AiInteractionMode.autopilot: return 'Агент';
       case AiInteractionMode.refactor: return 'Редактор';
+      case AiInteractionMode.plan: return 'Планер';
     }
   }
 
@@ -1183,6 +1379,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       case AiInteractionMode.chat: return LucideIcons.message_square;
       case AiInteractionMode.autopilot: return LucideIcons.bot;
       case AiInteractionMode.refactor: return LucideIcons.code;
+      case AiInteractionMode.plan: return LucideIcons.map;
     }
   }
 
@@ -1191,6 +1388,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       case AiInteractionMode.chat: return Colors.cyanAccent;
       case AiInteractionMode.autopilot: return Colors.orangeAccent;
       case AiInteractionMode.refactor: return Colors.purpleAccent;
+      case AiInteractionMode.plan: return Colors.tealAccent;
     }
   }
 
@@ -1416,7 +1614,6 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   Widget _buildModelSelectorDropdown(BuildContext context, WidgetRef ref) {
     final activeModel = ref.watch(activeAiModelProvider);
     final activeProviderId = ref.watch(activeAiProviderIdProvider);
-    final aiSvc = ref.read(aiServiceProvider);
     final localInferenceState = ref.watch(localInferenceProvider);
     
     final currentProvider = AiProviders.byId(activeProviderId);
@@ -1685,41 +1882,4 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
-  Widget _buildQuickPrompts(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context)!;
-    final prompts = [
-      {'label': l10n.quickPromptRefactor, 'text': l10n.quickPromptRefactorText},
-      {'label': l10n.quickPromptExplain, 'text': l10n.quickPromptExplainText},
-      {'label': l10n.quickPromptFixErrors, 'text': l10n.quickPromptFixErrorsText},
-      {'label': l10n.quickPromptOptimize, 'text': l10n.quickPromptOptimizeText},
-      {'label': l10n.quickPromptWriteTests, 'text': l10n.quickPromptWriteTestsText},
-    ];
-
-    return Container(
-      height: 30,
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: prompts.length,
-        itemBuilder: (context, index) {
-          final p = prompts[index];
-          return Padding(
-            padding: const EdgeInsets.only(right: 6.0),
-            child: ActionChip(
-              visualDensity: VisualDensity.compact,
-              backgroundColor: Colors.white.withValues(alpha: 0.05),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-              label: Text(
-                p['label']!,
-                style: GoogleFonts.inter(color: Colors.white70, fontSize: 10),
-              ),
-              onPressed: () {
-                _aiChatController.text = p['text']!;
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
 }

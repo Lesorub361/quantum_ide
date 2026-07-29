@@ -86,6 +86,15 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } else result.error("INVALID_ARGS", "text required", null)
                 }
+                "getDeviceModel" -> {
+                    try {
+                        val model = android.os.Build.MODEL ?: ""
+                        val manufacturer = android.os.Build.MANUFACTURER ?: ""
+                        result.success("$manufacturer $model")
+                    } catch (e: Exception) {
+                        result.success("")
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -155,11 +164,16 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startDownload(url: String, filename: String, modelsDir: String): Long {
+        // Use the modelsDir passed from Dart to ensure same path
+        val modelsDirFile = File(modelsDir)
+        if (!modelsDirFile.exists()) modelsDirFile.mkdirs()
+        val destFile = File(modelsDirFile, filename)
+
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle(filename)
             .setDescription("Downloading AI model...")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalFilesDir(null, "models", filename)
+            .setDestinationUri(Uri.fromFile(destFile))
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(true)
 

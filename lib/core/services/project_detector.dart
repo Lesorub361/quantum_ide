@@ -67,7 +67,7 @@ class ProjectDetector {
 
     // Rust
     if (await File(p.join(path, 'Cargo.toml')).exists()) {
-      return ProjectType.other;
+      return ProjectType.rust;
     }
 
     return ProjectType.other;
@@ -169,6 +169,20 @@ class ProjectDetector {
             RunCommand('Build Release APK', 'cd "$guestPath" && chmod +x gradlew && ./gradlew assembleRelease'),
           ],
         );
+      case ProjectType.rust:
+        return RunConfig(
+          label: 'Cargo Run',
+          command: 'cd "$guestPath" && cargo run',
+          port: null,
+          supportsPreview: false,
+          icon: '🦀',
+          color: 0xFFDEA584,
+          extraCommands: [
+            RunCommand('Cargo Build', 'cd "$guestPath" && cargo build'),
+            RunCommand('Cargo Check', 'cd "$guestPath" && cargo check'),
+            RunCommand('Cargo Test', 'cd "$guestPath" && cargo test'),
+          ],
+        );
       default:
         return RunConfig(
           label: 'List Files',
@@ -192,6 +206,7 @@ class ProjectDetector {
       case ProjectType.shell:   return 'Shell';
       case ProjectType.androidJava:   return 'Android (Java)';
       case ProjectType.androidKotlin: return 'Android (Kotlin)';
+      case ProjectType.rust:    return 'Rust';
       default:                  return 'Other';
     }
   }

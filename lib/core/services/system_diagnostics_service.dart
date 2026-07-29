@@ -51,7 +51,7 @@ class SystemDiagnosticsService {
       String deviceModel = 'Unknown';
       bool isAndroid = false;
       bool isLinux = false;
-      int availableMemory = 0;
+      const int availableMemory = 0;
 
       if (Platform.isAndroid) {
         isAndroid = true;

@@ -178,7 +178,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
         }
       }
 
-      int totalMatches = searchResults.fold(0, (sum, group) => sum + group.matches.length);
+      final int totalMatches = searchResults.fold(0, (sum, group) => sum + group.matches.length);
 
       setState(() {
         _results = searchResults;
@@ -442,7 +442,7 @@ class _GlobalSearchPanelState extends ConsumerState<GlobalSearchPanel> {
     final int start = match.startOffset;
     final int end = match.endOffset;
 
-    List<TextSpan> textSpans = [];
+    final List<TextSpan> textSpans = [];
 
     if (start > 0 && start <= content.length) {
       String prefix = content.substring(0, start);

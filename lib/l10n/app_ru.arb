@@ -947,6 +947,7 @@
   "dartProject": "Dart Проект",
   "webProject": "Web Проект",
   "androidProject": "Android Проект",
+  "rustProject": "Rust Проект",
   "genericProject": "Проект",
   "runPC": "Запуск (ПК)",
   "runMob": "Запуск (Тел.)",

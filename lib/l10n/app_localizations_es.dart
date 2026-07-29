@@ -1552,6 +1552,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get androidProject => 'Proyecto Android';
 
   @override
+  String get rustProject => 'Proyecto Rust';
+
+  @override
   String get genericProject => 'Proyecto';
 
   @override
