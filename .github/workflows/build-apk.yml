@@ -7,6 +7,10 @@ on:
         description: Flutter version (leave default)
         required: false
         default: '3.44.9'
+      create_release:
+        description: 'Create a GitHub Release with the APK'
+        required: false
+        default: 'true'
   push:
     branches: [main]
     paths:
@@ -14,6 +18,8 @@ on:
       - 'android/**'
       - 'pubspec.yaml'
       - '.github/workflows/build-apk.yml'
+    tags:
+      - 'v*.*.*'
 
 jobs:
   build:
@@ -71,3 +77,20 @@ jobs:
           name: app-release
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 14
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag' && (github.ref_name == 'v1.1.2' || github.event.inputs.create_release == 'true')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name == 'v1.1.2' && 'v1.1.2' || github.ref_name }}
+          name: QuantumIDE ${{ github.ref_name == 'v1.1.2' && 'v1.1.2' || github.ref_name }}
+          body: |
+            ✨ New APK build.
+
+            ## What's new in this build
+            - Terminal text selection with draggable handles (like Termux)
+            - Termux-style toolbar: Copy / Select all / Paste / Share
+            - Removed auto-copy-on-selection in the terminal
+          files: build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -36,6 +36,7 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_selection_overlay.dart';
 
 class TerminalPanelContent extends ConsumerStatefulWidget {
   final bool onlyTerminal;
@@ -58,7 +59,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   TerminalSession? _lastAttachedSession;
   final Set<TerminalSession> _initializedSessions = {}; // Для контроля слушателей выделения
-  Timer? _autoCopyDebounce;
+
+  final Map<String, GlobalKey<xt.TerminalViewState>> _terminalViewStateKeys = {};
 
   final ScrollController _terminalScrollController = ScrollController();
   final ScrollController _secondaryScrollController = ScrollController();
@@ -109,7 +111,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   @override
   void dispose() {
-    _autoCopyDebounce?.cancel();
     _terminalScrollController.dispose();
     _secondaryScrollController.dispose();
     _searchController.dispose();
@@ -1841,21 +1842,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _attachTerminalOutputListener(session);
       }
 
-      // МАГИЯ AUTO-COPY: Вешаем безопасный слушатель (только 1 раз на сессию)
-      if (!_initializedSessions.contains(session)) {
-        _initializedSessions.add(session);
-        session.xtermViewController.addListener(() {
-          final selection = session.xtermViewController.selection;
-          if (selection == null) return;
-          final text = session.xtermTerminal.buffer.getText(selection);
-          if (text.isEmpty || text.trim().isEmpty) return;
-          _autoCopyDebounce?.cancel();
-          _autoCopyDebounce = Timer(const Duration(milliseconds: 300), () {
-            Clipboard.setData(ClipboardData(text: text));
-          });
-        });
-      }
-
       // Чистим слушателей закрытых сессий, чтобы не копить память
       final active = ref.read(terminalTabsProvider).toSet();
       _initializedSessions.removeWhere((s) => !active.contains(s));
@@ -1915,39 +1901,45 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onScaleStart: (_) => _pinchBaseFontSize = terminalFontSize,
-                    onScaleUpdate: (details) {
-                      if (details.scale != 1.0) {
-                        _applyPinchZoom(details.scale);
-                      }
-                    },
-                    child: xt.TerminalView(
-                      session.xtermTerminal,
-                      controller: session.xtermViewController,
-                      autofocus: true,
-                      padding: const EdgeInsets.all(12),
-                      theme: theme,
-                      backgroundOpacity: 0,
-                      textStyle: xt.TerminalStyle(
-                        fontSize: terminalFontSize,
-                        fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                        fontFamilyFallback: const [
-                          'monospace',
-                          'sans-serif',
-                          'Roboto Mono',
-                          'Droid Sans Mono',
-                          'Noto Sans Mono',
-                        ],
+child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onScaleStart: (_) => _pinchBaseFontSize = terminalFontSize,
+                      onScaleUpdate: (details) {
+                        if (details.scale != 1.0) {
+                          _applyPinchZoom(details.scale);
+                        }
+                      },
+                      child: TerminalSelectionOverlay(
+                        session: session,
+                        terminalKey: _terminalViewStateKeys[session.id] ??=
+                            GlobalKey<xt.TerminalViewState>(),
+                        scrollController: scrollController,
+                        child: xt.TerminalView(
+                          session.xtermTerminal,
+                          controller: session.xtermViewController,
+                          autofocus: true,
+                          padding: const EdgeInsets.all(12),
+                          theme: theme,
+                          backgroundOpacity: 0,
+                          textStyle: xt.TerminalStyle(
+                            fontSize: terminalFontSize,
+                            fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                            fontFamilyFallback: const [
+                              'monospace',
+                              'sans-serif',
+                              'Roboto Mono',
+                              'Droid Sans Mono',
+                              'Noto Sans Mono',
+                            ],
+                          ),
+                          keyboardType: TextInputType.visiblePassword,
+                          deleteDetection: true,
+                          scrollController: scrollController,
+                          onSecondaryTapDown: (details, _) =>
+                              _showTerminalContextMenu(context, details.globalPosition, session),
+                        ),
                       ),
-                      keyboardType: TextInputType.visiblePassword,
-                      deleteDetection: true,
-                      scrollController: scrollController,
-                      onSecondaryTapDown: (details, _) =>
-                          _showTerminalContextMenu(context, details.globalPosition, session),
                     ),
-                  ),
                 ),
               ),
             ],
