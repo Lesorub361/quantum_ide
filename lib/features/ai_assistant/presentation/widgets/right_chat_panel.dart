@@ -827,11 +827,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   ),
                 ),
                 const SizedBox(width: 6),
-                // Accept All — VS Code blue button
+                // Accept All — shows confirmation dialog
                 InkWell(
-                  onTap: () async {
-                    await ref.read(aiProvider.notifier).executeActionsManually(aiState.proposedActions);
-                  },
+                  onTap: () => _showActionsConfirmationDialog(context, ref, aiState),
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
@@ -863,6 +861,65 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 );
               },
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showActionsConfirmationDialog(BuildContext context, WidgetRef ref, AIState aiState) {
+    final l10n = AppLocalizations.of(context)!;
+    final modificationActions = aiState.proposedActions.where((a) => a.type != 'command').toList();
+    
+    if (modificationActions.isEmpty) return;
+    
+    // Build a summary of what will be changed
+    final actionSummary = modificationActions.map((action) {
+      final fileName = action.path.split('/').last;
+      final typePrefix = action.type.toUpperCase();
+      return '- $typePrefix: $fileName';
+    }).join('\n');
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1D27),
+        title: Text(l10n.confirmApplyChanges, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.actionsWillApply(actionSummary),
+                style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                l10n.reviewChangesBeforeApply,
+                style: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n.cancel, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await ref.read(aiProvider.notifier).executeActionsManually(aiState.proposedActions);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Изменения применены'),
+                    backgroundColor: Color(0xFF1E6FE6),
+                  ),
+                );
+              }
+            },
+            child: Text(l10n.apply, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

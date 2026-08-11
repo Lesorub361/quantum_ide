@@ -189,7 +189,7 @@ class EditorTabBar extends ConsumerWidget {
     }
 
     return Container(
-      height: 40,
+      height: 36,
       decoration: BoxDecoration(
         color: const Color(0xFF0D1017),
         border: Border(
@@ -199,7 +199,7 @@ class EditorTabBar extends ConsumerWidget {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
         itemCount: openFiles.length,
         itemBuilder: (context, index) {
           final file = openFiles[index];
@@ -216,24 +216,24 @@ class EditorTabBar extends ConsumerWidget {
               onTap: () => notifier.setActiveTab(index),
               onSecondaryTapDown: (details) => _showTabContextMenu(context, ref, index, details.globalPosition),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
+                duration: const Duration(milliseconds: 150),
                 curve: Curves.easeOutCubic,
-                margin: const EdgeInsets.only(right: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                margin: const EdgeInsets.only(right: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
                   color: isActive ? const Color(0xFF181C28) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: isActive 
                         ? Colors.cyanAccent.withValues(alpha: 0.3) 
                         : Colors.transparent,
-                    width: 0.8,
+                    width: 0.6,
                   ),
                   boxShadow: isActive ? [
                     BoxShadow(
-                      color: Colors.cyanAccent.withValues(alpha: 0.05),
-                      blurRadius: 6,
-                      spreadRadius: 1,
+                      color: Colors.cyanAccent.withValues(alpha: 0.04),
+                      blurRadius: 4,
+                      spreadRadius: 0.5,
                     )
                   ] : null,
                 ),
@@ -242,37 +242,37 @@ class EditorTabBar extends ConsumerWidget {
                   children: [
                     Icon(
                       iconInfo.icon,
-                      size: 13,
+                      size: 11,
                       color: isActive ? iconInfo.color : iconInfo.color.withValues(alpha: 0.5),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 5),
                     Text(
                       file.name,
                       style: GoogleFonts.inter(
-                        fontSize: 12,
+                        fontSize: 11,
                         fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                         color: isActive ? Colors.white : Colors.white60,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 5),
                     if (file.isModified)
                       Container(
-                        width: 6,
-                        height: 6,
-                        margin: const EdgeInsets.only(right: 4),
+                        width: 5,
+                        height: 5,
+                        margin: const EdgeInsets.only(right: 3),
                         decoration: const BoxDecoration(
                           color: Colors.amberAccent,
                           shape: BoxShape.circle,
                         ),
                       ),
                     InkWell(
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(8),
                       onTap: () => notifier.closeTab(index),
                       child: Container(
-                        padding: const EdgeInsets.all(3),
+                        padding: const EdgeInsets.all(2),
                         child: Icon(
                           LucideIcons.x,
-                          size: 12,
+                          size: 10,
                           color: isActive ? Colors.white70 : Colors.white30,
                         ),
                       ),

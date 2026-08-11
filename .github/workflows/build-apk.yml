@@ -21,9 +21,6 @@ on:
     tags:
       - 'v*.*.*'
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -94,9 +91,6 @@ jobs:
             - Terminal text selection with draggable handles (like Termux)
             - Termux-style toolbar: Copy / Select all / Paste / Share
             - Removed auto-copy-on-selection in the terminal
-            - Fixed terminal scrolling while full-screen apps (opencode) run:
-              drag-up/down now scrolls the app's output, plus floating page up/down buttons
-            - Pinch-zoom now only works with two fingers, so one-finger scroll is never blocked
           files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1077,20 +1077,21 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                                   runSpacing: 6,
                                   children: message.contextFiles!.map((f) => 
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      margin: const EdgeInsets.only(bottom: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      margin: const EdgeInsets.only(bottom: 4),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(4),
+                                        color: Colors.cyanAccent.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.left(BorderSide(color: Colors.cyanAccent, width: 2)),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(LucideIcons.file_text, size: 10, color: Colors.white70),
+                                          const Icon(LucideIcons.file_text, size: 10, color: Colors.cyanAccent),
                                           const SizedBox(width: 4),
                                           Text(
                                             f.split('/').last,
-                                            style: GoogleFonts.inter(color: Colors.white70, fontSize: 10),
+                                            style: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.w500),
                                           ),
                                         ],
                                       ),

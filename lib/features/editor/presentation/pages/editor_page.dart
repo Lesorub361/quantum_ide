@@ -246,6 +246,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   bool _isDragging = false;
   bool _isSplitMode = false;
   int _splitTabIndex = -1;
+  bool _isImmersiveMode = false;
 
   double _leftSidebarWidth = 260.0;
   double _rightSidebarWidth = 340.0;
@@ -1798,6 +1799,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   void _toggleZenMode(WidgetRef ref) {
     final panelNotifier = ref.read(panelProvider.notifier);
     panelNotifier.toggle();
+    // Toggle immersive system UI mode
+    _toggleImmersiveMode(!_isImmersiveMode);
   }
 
   void _toggleSplitMode(WidgetRef ref) {
@@ -1818,6 +1821,30 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         _splitTabIndex = editorState.activeTabIndex == 0 ? 1 : 0;
       }
     });
+  }
+
+  void _toggleImmersiveMode(bool enabled) async {
+    _isImmersiveMode = enabled;
+    if (enabled) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+      await SystemChrome.setSystemUIOverlayStyle(SystemUIOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarDividerColor: Colors.white10,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ));
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manualOverlays);
+      await SystemChrome.setSystemUIOverlayStyle(SystemUIOverlayStyle(
+        statusBarColor: const Color(0xFF0F1013),
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarDividerColor: Colors.white10,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ));
+    }
+    setState(() {});
   }
 
   Widget _buildSingleEditor(WidgetRef ref, SettingsState settings, EditorFile activeFile) {

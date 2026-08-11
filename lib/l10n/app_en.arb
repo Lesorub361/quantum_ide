@@ -274,6 +274,10 @@
     }
   },
   "fixWithAi": "Fix with AI",
+  "confirmApplyChanges": "Confirm Apply Changes",
+  "actionsWillApply": "The following actions will be applied:",
+  "reviewChangesBeforeApply": "Review changes before applying:",
+  "confirmApply": "Apply",
   "runningCommand": "Running command: {command}...",
   "@runningCommand": {
     "placeholders": {

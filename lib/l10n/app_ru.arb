@@ -258,6 +258,10 @@
   "send": "Отправить",
   "acceptAll": "Принять все",
   "rejectAll": "Отклонить все",
+  "confirmApplyChanges": "Подтвердить применение изменений",
+  "actionsWillApply": "Следующие действия будут применены:",
+  "reviewChangesBeforeApply": "Проверьте изменения перед применением:",
+  "confirmApply": "Применить",
   "projectAnalysis": "Анализ проекта",
   "problemsFound": "Проблем найдено: {count} ({errors} ошибок, {warnings} предупреждений)",
   "@problemsFound": {

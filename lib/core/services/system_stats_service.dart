@@ -37,22 +37,27 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   int _lastCpuIdle = 0;
   final _random = Random();
 
+  double? _lastCpuUsage;
+  double? _lastRamUsage;
+
   SystemStatsNotifier() : super(SystemStats()) {
+    _lastCpuUsage = state.cpuUsage;
+    _lastRamUsage = state.ramUsage;
     _startUpdates();
   }
 
   void _startUpdates() {
     _updateStats();
-    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _updateStats();
     });
   }
 
   Future<void> _updateStats() async {
-    double cpu = 0.0;
-    double ramUsageVal = 0.0;
-    double ramTotal = 8.0;
-    double ramUsed = 4.0;
+    double cpu = state.cpuUsage;
+    double ramUsageVal = state.ramUsage;
+    double ramTotal = state.ramTotalGB;
+    double ramUsed = state.ramUsedGB;
 
     final cpuStats = await _parseCpuStats();
     if (cpuStats != null) {
@@ -96,13 +101,21 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       ramUsageVal = ramUsed / ramTotal;
     }
 
-    if (mounted) {
-      state = SystemStats(
-        cpuUsage: cpu,
-        ramUsage: ramUsageVal,
-        ramTotalGB: ramTotal,
-        ramUsedGB: ramUsed,
-      );
+    // Only update state if values changed significantly (more than 1%)
+    final cpuChanged = (cpu - _lastCpuUsage ?? 0.0).abs() > 0.01;
+    final ramChanged = (ramUsageVal - _lastRamUsage ?? 0.0).abs() > 0.01;
+
+    if (cpuChanged || ramChanged) {
+      _lastCpuUsage = cpu;
+      _lastRamUsage = ramUsageVal;
+      if (mounted) {
+        state = SystemStats(
+          cpuUsage: cpu,
+          ramUsage: ramUsageVal,
+          ramTotalGB: ramTotal,
+          ramUsedGB: ramUsed,
+        );
+      }
     }
   }
 
