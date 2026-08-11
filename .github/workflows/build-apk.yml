@@ -21,6 +21,9 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -79,18 +82,17 @@ jobs:
           retention-days: 14
 
       - name: Create GitHub Release
-        if: github.ref_type == 'tag' && (github.ref_name == 'v1.1.2' || github.event.inputs.create_release == 'true')
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name == 'v1.1.2' && 'v1.1.2' || github.ref_name }}
-          name: QuantumIDE ${{ github.ref_name == 'v1.1.2' && 'v1.1.2' || github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          name: QuantumIDE ${{ github.ref_name }}
           body: |
-            ✨ New APK build.
+            ✨ Новый релиз QuantumIDE.
 
-            ## What's new in this build
-            - Terminal text selection with draggable handles (like Termux)
-            - Termux-style toolbar: Copy / Select all / Paste / Share
-            - Removed auto-copy-on-selection in the terminal
+            ## Что нового в этой сборке
+            - Сборка через GitHub Actions
+            - Подписанный release APK
           files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
