@@ -1123,6 +1123,23 @@ if [ -d "/usr/lib/jvm/java-21-openjdk-arm64" ]; then
   fi
 fi
 
+# 5.5 Auto-install base tools (one-time, so fresh installs work out of the box)
+BASE_TOOLS_MARKER="/root/.quantumide_base_tools_done"
+if [ ! -f "$BASE_TOOLS_MARKER" ]; then
+  echo "[setup-arm64] Installing base tools (git, java, python, node)..."
+  apt-get update >/dev/null 2>&1 || true
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    git curl wget unzip xz-utils ca-certificates \
+    python3 python3-pip openjdk-17-jdk-headless \
+    >/dev/null 2>&1 || true
+  if ! command -v node >/dev/null 2>&1; then
+    curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1 || true
+    apt-get install -y nodejs >/dev/null 2>&1 || true
+  fi
+  touch "$BASE_TOOLS_MARKER"
+  echo "[setup-arm64] Base tools installed."
+fi
+
 # 6. Global Gradle settings configuration
 mkdir -p /root/.gradle
 cat << 'EOF' > /root/.gradle/gradle.properties
