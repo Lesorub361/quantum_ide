@@ -48,12 +48,8 @@ jobs:
           set -e
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
-            cat > android/key.properties <<EOF
-            storePassword=$KEYSTORE_PASSWORD
-            keyPassword=$KEY_PASSWORD
-            keyAlias=$KEY_ALIAS
-            storeFile=release.keystore
-            EOF
+            printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=release.keystore\n' \
+              "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
           else
             echo "WARNING: no KEYSTORE_BASE64 secret — APK will be signed with the debug key."
           fi
