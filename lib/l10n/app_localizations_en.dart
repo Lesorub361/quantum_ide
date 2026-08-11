@@ -540,6 +540,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fixWithAi => 'Fix with AI';
 
   @override
+  String get confirmApplyChanges => 'Confirm Apply Changes';
+
+  @override
+  String get actionsWillApply => 'The following actions will be applied:';
+
+  @override
+  String get reviewChangesBeforeApply => 'Review changes before applying:';
+
+  @override
+  String get confirmApply => 'Apply';
+
+  @override
   String runningCommand(String command) {
     return 'Running command: $command...';
   }

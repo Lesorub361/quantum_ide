@@ -539,6 +539,19 @@ class AppLocalizationsFr extends AppLocalizations {
   String get fixWithAi => 'Corriger avec l\'IA';
 
   @override
+  String get confirmApplyChanges => 'Confirmer les modifications en cours';
+
+  @override
+  String get actionsWillApply => 'Les actions suivantes seront appliquées :';
+
+  @override
+  String get reviewChangesBeforeApply =>
+      'Vérifiez les modifications avant de les appliquer :';
+
+  @override
+  String get confirmApply => 'Appliquer';
+
+  @override
   String runningCommand(String command) {
     return 'Exécution de la commande : $command...';
   }

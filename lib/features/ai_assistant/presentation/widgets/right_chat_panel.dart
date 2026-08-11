@@ -890,7 +890,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                l10n.actionsWillApply(actionSummary),
+                l10n.actionsWillApply,
                 style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
               ),
               const SizedBox(height: 12),

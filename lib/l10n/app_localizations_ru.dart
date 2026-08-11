@@ -541,6 +541,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get fixWithAi => 'Исправить ИИ';
 
   @override
+  String get confirmApplyChanges => 'Подтвердить применение изменений';
+
+  @override
+  String get actionsWillApply => 'Следующие действия будут применены:';
+
+  @override
+  String get reviewChangesBeforeApply =>
+      'Проверьте изменения перед применением:';
+
+  @override
+  String get confirmApply => 'Применить';
+
+  @override
   String runningCommand(String command) {
     return 'Выполняю команду: $command...';
   }

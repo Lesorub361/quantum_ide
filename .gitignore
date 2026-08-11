@@ -46,3 +46,8 @@ app.*.map.json
 /android/.kotlin/
 .quantum/
 *.deb
+android/app/*.keystore
+android/app/*.jks
+android/key.properties
+android/keystore.properties
+android/local.properties

@@ -1094,6 +1094,30 @@ abstract class AppLocalizations {
   /// **'Fix with AI'**
   String get fixWithAi;
 
+  /// No description provided for @confirmApplyChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Apply Changes'**
+  String get confirmApplyChanges;
+
+  /// No description provided for @actionsWillApply.
+  ///
+  /// In en, this message translates to:
+  /// **'The following actions will be applied:'**
+  String get actionsWillApply;
+
+  /// No description provided for @reviewChangesBeforeApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Review changes before applying:'**
+  String get reviewChangesBeforeApply;
+
+  /// No description provided for @confirmApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get confirmApply;
+
   /// No description provided for @runningCommand.
   ///
   /// In en, this message translates to:

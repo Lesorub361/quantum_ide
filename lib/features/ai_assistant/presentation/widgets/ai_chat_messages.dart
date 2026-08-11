@@ -1082,7 +1082,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                                       decoration: BoxDecoration(
                                         color: Colors.cyanAccent.withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(6),
-                                        border: Border.left(BorderSide(color: Colors.cyanAccent, width: 2)),
+                                        border: const Border(left: BorderSide(color: Colors.cyanAccent, width: 2)),
                                       ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,

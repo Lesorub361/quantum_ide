@@ -539,6 +539,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get fixWithAi => 'Corregir con IA';
 
   @override
+  String get confirmApplyChanges => 'Confirmar cambios aplicados';
+
+  @override
+  String get actionsWillApply => 'Las siguientes acciones se aplicarán:';
+
+  @override
+  String get reviewChangesBeforeApply => 'Revisa los cambios antes de aplicar:';
+
+  @override
+  String get confirmApply => 'Aplicar';
+
+  @override
   String runningCommand(String command) {
     return 'Ejecutando comando: $command...';
   }
@@ -713,7 +725,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get projectSize => 'Tamaño del proyecto:';
 
   @override
-  String get folderDistribution => 'Distribución por carpetas';
+  String get folderDistribution => 'Folder Distribution';
 
   @override
   String get topHeavyFiles => 'Top 10 archivos pesados';

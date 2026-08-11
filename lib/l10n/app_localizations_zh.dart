@@ -536,8 +536,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fixWithAi => '使用 AI 修复';
 
   @override
+  String get confirmApplyChanges => '确认应用更改';
+
+  @override
+  String get actionsWillApply => '将应用以下更改:';
+
+  @override
+  String get reviewChangesBeforeApply => '在应用前审查更改:';
+
+  @override
+  String get confirmApply => '应用';
+
+  @override
   String runningCommand(String command) {
-    return '正在运行命令: $command...';
+    return 'Running command: $command...';
   }
 
   @override

@@ -1827,7 +1827,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     _isImmersiveMode = enabled;
     if (enabled) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-      await SystemChrome.setSystemUIOverlayStyle(SystemUIOverlayStyle(
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarBrightness: Brightness.dark,
         systemNavigationBarColor: Colors.black,
@@ -1835,8 +1835,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         systemNavigationBarIconBrightness: Brightness.light,
       ));
     } else {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manualOverlays);
-      await SystemChrome.setSystemUIOverlayStyle(SystemUIOverlayStyle(
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual);
+      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         statusBarColor: const Color(0xFF0F1013),
         statusBarBrightness: Brightness.dark,
         systemNavigationBarColor: Colors.black,

@@ -102,8 +102,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     }
 
     // Only update state if values changed significantly (more than 1%)
-    final cpuChanged = (cpu - _lastCpuUsage ?? 0.0).abs() > 0.01;
-    final ramChanged = (ramUsageVal - _lastRamUsage ?? 0.0).abs() > 0.01;
+    final cpuChanged = (cpu - (_lastCpuUsage ?? 0.0)).abs() > 0.01;
+    final ramChanged = (ramUsageVal - (_lastRamUsage ?? 0.0)).abs() > 0.01;
 
     if (cpuChanged || ramChanged) {
       _lastCpuUsage = cpu;
