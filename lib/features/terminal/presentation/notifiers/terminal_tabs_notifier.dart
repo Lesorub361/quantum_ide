@@ -16,7 +16,7 @@ import '../../../git/presentation/notifiers/git_notifier.dart';
 
 class TerminalSession {
   final String id;
-  final String title;
+  String title;
   final Pty pty;
   final String workingDir;
   bool isExited;
@@ -24,8 +24,7 @@ class TerminalSession {
   final xt.Terminal xtermTerminal;
   final xt.TerminalController xtermViewController;
 
-  StreamSubscription<Uint8List>? ptyOutSubscription;
-  final Utf8Decoder utf8decoder = const Utf8Decoder(allowMalformed: true);
+  StreamSubscription<String>? ptyOutSubscription;
 
   TerminalSession({
     required this.id,
@@ -193,9 +192,9 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       );
 
       Timer? gitRefreshDebounceTimer;
-      final sub = pty.output.listen(
-        (data) {
-          xtermTerm.write(session.utf8decoder.convert(data));
+      final sub = const Utf8Decoder(allowMalformed: true).bind(pty.output).listen(
+        (text) {
+          xtermTerm.write(text);
 
           gitRefreshDebounceTimer?.cancel();
           gitRefreshDebounceTimer = Timer(
@@ -317,9 +316,11 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       // ptyOutSub is stored in TerminalSession
       // and cancelled when the session is closed via ptyOutSubscription?.cancel()
       // ignore: cancel_subscriptions
-      final ptyOutSub = newPty.output.listen(
-        (data) {
-          term.write(oldSession.utf8decoder.convert(data));
+      final ptyOutSub = const Utf8Decoder(allowMalformed: true)
+          .bind(newPty.output)
+          .listen(
+        (text) {
+          term.write(text);
         },
         onDone: () => _markSessionAsExited(oldSession.id),
         onError: (_) {},
@@ -444,6 +445,32 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       command,
       runtime.appDirectory,
     );
+
+    // Обновляем заголовок вкладки, показывая текущую запущенную команду
+    final trimmed = translatedCommand.trim();
+    final display = trimmed
+        .split('\n')
+        .first
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
+    if (display.isNotEmpty && display.length <= 40) {
+      final updated = state.map((s) {
+        if (s.id == session.id) {
+          return TerminalSession(
+            id: s.id,
+            title: display,
+            pty: s.pty,
+            workingDir: s.workingDir,
+            xtermTerminal: s.xtermTerminal,
+            xtermViewController: s.xtermViewController,
+            ptyOutSubscription: s.ptyOutSubscription,
+            isExited: s.isExited,
+          );
+        }
+        return s;
+      }).toList();
+      state = updated;
+    }
 
     if (interrupt) {
       session.pty.write(Uint8List.fromList([3]));

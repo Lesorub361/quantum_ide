@@ -1,3 +1,6 @@
+# QuantumIDE - рабочий pubspec.yaml (с AI-пакетами, без которых не собирается inference_engine)
+# Убраны только: 5 шрифтов (экономия ~2-3 MB), обновлены версии dev-зависимостей
+
 name: quantum_ide
 description: "QuantumIDE - A next-generation AI-powered mobile IDE for web development built with Flutter."
 publish_to: 'none'
@@ -45,13 +48,11 @@ dependencies:
   image_picker: ^1.1.2
   flutter_secure_storage: ^9.2.4
   share_plus: ^10.1.4
-  
+  # AI inference (required by inference_engine.dart)
   sqflite: ^2.4.2
   ffi: ^2.1.2
-  llama_flutter_android:
-    path: local_plugins/llama_flutter_android
-  flutter_litert_lm:
-    path: local_plugins/flutter_litert_lm
+  llama_flutter_android: ^0.2.6
+  flutter_litert_lm: ^0.3.0
   flutter_fancy_tree_view: ^1.6.0
   watcher: ^1.2.1
   multi_split_view: ^3.6.2
@@ -60,13 +61,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
-  riverpod_generator: ^2.3.0
-  build_runner: ^2.4.0
-
-dependency_overrides:
-  llama_flutter_android:
-    path: local_plugins/llama_flutter_android
+  flutter_lints: ^5.0.0
+  riverpod_generator: ^2.6.1
+  build_runner: ^2.4.14
 
 flutter:
   uses-material-design: true
@@ -78,24 +75,9 @@ flutter:
     - family: firaCode
       fonts:
         - asset: assets/fonts/FiraCode-Medium.ttf
-    - family: cascadia
-      fonts:
-        - asset: assets/fonts/CascadiaCodePL-Regular.ttf
-    - family: hack
-      fonts:
-        - asset: assets/fonts/Hack-Regular.ttf
-    - family: dejaVuSansMono
-      fonts:
-        - asset: assets/fonts/DejaVuSansMono.ttf
-    - family: inconsolata
-      fonts:
-        - asset: assets/fonts/Inconsolata-Regular.ttf
     - family: jetBrainsMono
       fonts:
         - asset: assets/fonts/JetBrainsMono-Medium.ttf
-    - family: proggy
-      fonts:
-        - asset: assets/fonts/ProggyVector-Regular.ttf
     - family: sourceCodePro
       fonts:
         - asset: assets/fonts/SourceCodePro-Medium.ttf

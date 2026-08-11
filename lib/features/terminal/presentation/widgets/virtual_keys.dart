@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -93,7 +94,10 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
             child: _VirtualKeyButton(
               keyData: key,
               isActive: isActive,
-              onTap: () => widget.onKeyTap(key.value ?? key.label),
+              onTap: () {
+                HapticFeedback.lightImpact();
+                widget.onKeyTap(key.value ?? key.label);
+              },
             ),
           ),
         );

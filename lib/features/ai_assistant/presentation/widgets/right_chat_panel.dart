@@ -676,6 +676,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     textStyle: xt.TerminalStyle(
                       fontSize: terminalFontSize * 0.9,
                       fontFamily: 'jetBrainsMono',
+                      fontFamilyFallback: const [
+                        'monospace',
+                        'sans-serif',
+                        'Roboto Mono',
+                        'Droid Sans Mono',
+                        'Noto Sans Mono',
+                      ],
                     ),
                     keyboardType: TextInputType.visiblePassword,
                     deleteDetection: true,

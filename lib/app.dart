@@ -17,7 +17,9 @@ class QuantumApp extends ConsumerWidget {
     final settings = ref.watch(settingsProvider);
 
     final scheme = AppTheme.getScheme(settings.flexScheme);
-    final customColor = settings.customPrimaryColor != null ? Color(settings.customPrimaryColor!) : null;
+    final customColor = settings.customPrimaryColor != null
+        ? Color(settings.customPrimaryColor!)
+        : null;
 
     return MaterialApp.router(
       title: 'QuantumIDE',

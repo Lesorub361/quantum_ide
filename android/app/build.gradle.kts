@@ -18,6 +18,8 @@ android {
     namespace = "com.example.quantum_ide"
     // Поднимаем для совместимости с новыми плагинами (требование ошибки)
     compileSdk = 36
+    // Используем NDK из Flutter (обходной фикс для кривого линкового окружения
+    // __emutls_get_address сделан на уровне sysroot NDK 28, см. logs).
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -38,6 +40,12 @@ android {
         versionName = flutter.versionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Только arm64: хост у нас linux-arm64; остальные ABI не нужны и
+        // ускоряют/стабилизируют сборку (меньше памяти).
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     packaging {

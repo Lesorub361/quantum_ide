@@ -43,7 +43,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   void _startUpdates() {
     _updateStats();
-    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
       _updateStats();
     });
   }
@@ -194,6 +194,6 @@ class _RamStats {
   });
 }
 
-final systemStatsProvider = StateNotifierProvider<SystemStatsNotifier, SystemStats>((ref) {
+final systemStatsProvider = StateNotifierProvider.autoDispose<SystemStatsNotifier, SystemStats>((ref) {
   return SystemStatsNotifier();
 });

@@ -280,7 +280,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '8';
+    const bashrcVersion = '9';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -299,7 +299,9 @@ class RuntimeService extends ChangeNotifier {
 
     if (needsWrite) {
       const bashrcContent = r'''
-# BASHRC_VERSION=8
+# BASHRC_VERSION=9
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest
@@ -553,13 +555,13 @@ export FLUTTER_ALLOW_SU_ROOT=true
 # (IPv6 socket routing is broken inside PRoot on Android)
 export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 if [ -f /usr/bin/aapt2 ]; then
-    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+    export GRADLE_OPTS="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
 else
     BUILD_TOOLS_AAPT2=\$(find /root/android-sdk/build-tools -name "aapt2" 2>/dev/null | sort -V | tail -n 1)
     if [ -n "\$BUILD_TOOLS_AAPT2" ]; then
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
+        export GRADLE_OPTS="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
     else
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false"
+        export GRADLE_OPTS="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false"
     fi
 fi
 
@@ -766,7 +768,8 @@ fi
       // Force IPv4 for Java/Gradle — Android PRoot routing of IPv6 sockets is broken
       '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true',
       'GRADLE_OPTS':
-          '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
+          '-Xmx1536m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
+      'KOTLIN_DAEMON_JVMARGS': '-Xmx1024m -XX:MaxMetaspaceSize=384m',
     };
   }
 
@@ -938,20 +941,62 @@ if [ -d "$SDK_ROOT" ]; then
 fi
 
 # gen_snapshot fix:
-# Flutter AOT compilation requires gen_snapshot for the HOST architecture.
-# On ARM64 Android, Flutter looks for android-arm64-release/linux-arm64/gen_snapshot
-# but only linux-x64 is shipped by default. Copy the linux-arm64 version.
+# Flutter AOT compilation on an ARM64 host needs an android-arm64 gen_snapshot
+# that RUNS on the arm64 host. Google ships gen_snapshot for android targets only
+# as a linux-x64 host binary, so we install a qemu-x86_64 wrapper (same trick as
+# aapt2 above) around the real android-arm64 linux-x64 gen_snapshot.
+#
+# IMPORTANT: Do NOT copy $FLUTTER_ENGINE/linux-arm64/gen_snapshot into the android
+# engine dirs. That is the DESKTOP LINUX gen_snapshot; it bakes "arm64 linux" into
+# libapp.so, which the Android product engine rejects at Dart VM init:
+#   "Flag dedup_instructions is false in snapshot, but dedup_instructions is
+#    always true in product mode"
+QEMU_X86=""
+if command -v qemu-x86_64-static >/dev/null 2>&1; then
+    QEMU_X86="$(command -v qemu-x86_64-static)"
+fi
+X86_SYSROOT="/tmp/opencode/qemu_x86_sysroot"
+if [ -n "$QEMU_X86" ] && [ ! -f "$X86_SYSROOT/usr/lib/x86_64-linux-gnu/libstdc++.so.6" ]; then
+    echo "[setup-arm64] Preparing x86_64 sysroot for qemu gen_snapshot..."
+    mkdir -p "$X86_SYSROOT"
+    if command -v apt-get >/dev/null 2>&1; then
+        cat > /tmp/sources_amd64.list << 'EOF'
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble main
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble-updates main
+deb [arch=amd64] http://archive.ubuntu.com/ubuntu noble-security main
+EOF
+        apt-get update -o Dir::Etc::sourcelist=/tmp/sources_amd64.list -o Dir::Etc::sourceparts=/dev/null >/dev/null 2>&1 || true
+        apt-get download -o Dir::Etc::sourcelist=/tmp/sources_amd64.list -o Dir::Etc::sourceparts=/dev/null libc6:amd64 libgcc-s1:amd64 libstdc++6:amd64 >/dev/null 2>&1 || true
+        dpkg -x libc6*amd64.deb "$X86_SYSROOT" 2>/dev/null || true
+        dpkg -x libgcc-s1*amd64.deb "$X86_SYSROOT" 2>/dev/null || true
+        dpkg -x libstdc++6*amd64.deb "$X86_SYSROOT" 2>/dev/null || true
+        rm -f libc6*amd64.deb libgcc-s1*amd64.deb libstdc++6*amd64.deb 2>/dev/null || true
+        mkdir -p "$X86_SYSROOT/lib64"
+        if [ ! -e "$X86_SYSROOT/lib64/ld-linux-x86-64.so.2" ]; then
+            if [ -e "$X86_SYSROOT/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2" ]; then
+                cp "$X86_SYSROOT/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2" "$X86_SYSROOT/lib64/ld-linux-x86-64.so.2" 2>/dev/null || true
+            fi
+        fi
+    fi
+fi
 FLUTTER_ENGINE="/root/flutter/bin/cache/artifacts/engine"
-if [ -f "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" ]; then
+if [ -n "$QEMU_X86" ] && [ -f "$X86_SYSROOT/lib64/ld-linux-x86-64.so.2" ]; then
     for build_type in android-arm64-release android-arm64-profile; do
+        REAL="$FLUTTER_ENGINE/$build_type/linux-x64/gen_snapshot"
         TARGET_DIR="$FLUTTER_ENGINE/$build_type/linux-arm64"
-        if [ ! -f "$TARGET_DIR/gen_snapshot" ]; then
+        if [ -f "$REAL" ] && [ ! -f "$TARGET_DIR/gen_snapshot" ]; then
             mkdir -p "$TARGET_DIR"
-            cp "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" "$TARGET_DIR/gen_snapshot"
+            cat > "$TARGET_DIR/gen_snapshot" << WRAP
+#!/bin/bash
+# qemu wrapper: runs the real android-arm64 linux-x64 gen_snapshot on arm64 host
+exec "$QEMU_X86" -L "$X86_SYSROOT" "$REAL" "\$@"
+WRAP
             chmod +x "$TARGET_DIR/gen_snapshot"
-            echo "[setup-arm64] Installed gen_snapshot for $build_type/linux-arm64"
+            echo "[setup-arm64] Installed qemu-wrapped gen_snapshot for $build_type/linux-arm64"
         fi
     done
+else
+    echo "[setup-arm64] WARNING: qemu-x86_64-static or x86_64 sysroot missing; on-device android release builds need them (run setup-android-build.sh first)."
 fi
 
 # 2. Project Patching (Auto-fix common build issues on ARM64)
@@ -963,6 +1008,14 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties"
         echo "org.gradle.daemon=false" >> "$f"
         echo "org.gradle.parallel=false" >> "$f"
         echo "org.gradle.workers.max=1" >> "$f"
+        echo "kotlin.incremental=false" >> "$f"
+    fi
+    # Enforce sane memory limits so builds do not OOM-kill the IDE on low-RAM devices
+    if ! grep -q "org.gradle.jvmargs=-Xmx" "$f" || grep -q "org.gradle.jvmargs=-Xmx[3-9]" "$f" || grep -q "org.gradle.jvmargs=-Xmx[0-9][0-9]*[Gg]" "$f"; then
+        sed -i -E 's/org\.gradle\.jvmargs=.*/org.gradle.jvmargs=-Xmx1536m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError/' "$f"
+    fi
+    if ! grep -q "kotlin.daemon.jvmargs" "$f"; then
+        echo "kotlin.daemon.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=384m" >> "$f"
     fi
 done
 

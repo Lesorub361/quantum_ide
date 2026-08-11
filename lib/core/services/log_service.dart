@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
@@ -93,9 +94,11 @@ class LogService {
     
     _logStreamController.add(formattedLine);
     
-    try {
-      stdout.writeln(formattedLine);
-    } catch (_) {}
+    if (kDebugMode) {
+      try {
+        stdout.writeln(formattedLine);
+      } catch (_) {}
+    }
 
     _writeBuffer.add(formattedLine);
   }

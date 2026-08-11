@@ -164,13 +164,18 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       // ptyOutSub is stored in TerminalSession
       // and cancelled in dispose() via session.ptyOutSubscription?.cancel()
       // ignore: cancel_subscriptions
-      final ptyOutSub = pty.output.listen(
-        (data) {
-          xtermTerm.write(utf8.decode(data, allowMalformed: true));
+      final ptyOutSub = const Utf8Decoder(allowMalformed: true)
+          .bind(pty.output)
+          .listen(
+        (text) {
+          xtermTerm.write(text);
         },
         onDone: () {
           _markAsExited(type);
           xtermTerm.write('\r\n\x1b[1;31m[Process exited]\x1b[0m\r\n');
+        },
+        onError: (e) {
+          debugPrint('Dedicated terminal $type output decode error: $e');
         },
       );
 

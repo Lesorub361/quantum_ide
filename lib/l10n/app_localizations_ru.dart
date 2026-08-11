@@ -2132,6 +2132,21 @@ class AppLocalizationsRu extends AppLocalizations {
   String get copyAll => 'Копировать всё';
 
   @override
+  String get openInEditor => 'Открыть в редакторе';
+
+  @override
+  String get noFileFoundInSelection => 'В выделении не найден путь к файлу';
+
+  @override
+  String get quickCommands => 'Быстрые команды';
+
+  @override
+  String get commandHistory => 'История команд';
+
+  @override
+  String get noCommandHistory => 'История команд пуста';
+
+  @override
   String get clearTerminal => 'Очистить терминал';
 
   @override

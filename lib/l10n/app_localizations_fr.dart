@@ -2137,6 +2137,22 @@ class AppLocalizationsFr extends AppLocalizations {
   String get copyAll => 'Copy All';
 
   @override
+  String get openInEditor => 'Ouvrir dans l\'éditeur';
+
+  @override
+  String get noFileFoundInSelection =>
+      'Aucun chemin de fichier trouvé dans la sélection';
+
+  @override
+  String get quickCommands => 'Commandes rapides';
+
+  @override
+  String get commandHistory => 'Historique des commandes';
+
+  @override
+  String get noCommandHistory => 'Aucun historique de commandes';
+
+  @override
   String get clearTerminal => 'Clear Terminal';
 
   @override

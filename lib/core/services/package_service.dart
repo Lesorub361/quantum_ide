@@ -18,7 +18,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
   }
 
   void _startPeriodicCheck() {
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _checkActualInstallation();
     });
   }
@@ -30,9 +30,9 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     await _checkActualInstallation();
   }
 
-  bool _hasCommand(String cmd) {
+  Future<bool> _hasCommand(String cmd) async {
     try {
-      final res = Process.runSync('which', [cmd]);
+      final res = await Process.run('which', [cmd]);
       return res.exitCode == 0;
     } catch (_) {
       return false;
@@ -132,61 +132,61 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
           // Check on PC using PATH
           switch (pkg.id) {
             case 'python':
-              exists = _hasCommand('python3') || _hasCommand('python');
+              exists = await _hasCommand('python3') || await _hasCommand('python');
               break;
             case 'nodejs':
-              exists = _hasCommand('node');
+              exists = await _hasCommand('node');
               break;
             case 'git':
-              exists = _hasCommand('git');
+              exists = await _hasCommand('git');
               break;
             case 'flutter':
-              exists = _hasCommand('flutter');
+              exists = await _hasCommand('flutter');
               break;
             case 'antigravity-cli':
-              exists = _hasCommand('agy') || _hasCommand('antigravity');
+              exists = await _hasCommand('agy') || await _hasCommand('antigravity');
               break;
             case 'ollama-cli':
-              exists = _hasCommand('ollama');
+              exists = await _hasCommand('ollama');
               break;
             case 'kilocode-cli':
-              exists = _hasCommand('kilocode');
+              exists = await _hasCommand('kilocode');
               break;
             case 'opencode-ai':
-              exists = _hasCommand('opencode-ai');
+              exists = await _hasCommand('opencode-ai');
               break;
             case 'build-essential':
-              exists = _hasCommand('gcc') || _hasCommand('g++');
+              exists = await _hasCommand('gcc') || await _hasCommand('g++');
               break;
             case 'android-sdk':
-              exists = await Directory(sdkPath).exists() || _hasCommand('sdkmanager');
+              exists = await Directory(sdkPath).exists() || await _hasCommand('sdkmanager');
               break;
             case 'java-lsp':
-              exists = _hasCommand('jdtls');
+              exists = await _hasCommand('jdtls');
               break;
             case 'kotlin-lsp':
-              exists = _hasCommand('kotlin-language-server');
+              exists = await _hasCommand('kotlin-language-server');
               break;
             case 'typescript-lsp':
-              exists = _hasCommand('typescript-language-server');
+              exists = await _hasCommand('typescript-language-server');
               break;
             case 'html-css-lsp':
-              exists = _hasCommand('html-languageserver') || _hasCommand('vscode-html-language-server');
+              exists = await _hasCommand('html-languageserver') || await _hasCommand('vscode-html-language-server');
               break;
             case 'yaml-json-lsp':
-              exists = _hasCommand('yaml-language-server');
+              exists = await _hasCommand('yaml-language-server');
               break;
             case 'markdown-lsp':
-              exists = _hasCommand('marksman');
+              exists = await _hasCommand('marksman');
               break;
             case 'vue-lsp':
-              exists = _hasCommand('vue-language-server');
+              exists = await _hasCommand('vue-language-server');
               break;
             case 'php-lsp':
-              exists = _hasCommand('intelephense');
+              exists = await _hasCommand('intelephense');
               break;
             case 'python-lsp':
-              exists = _hasCommand('pyright');
+              exists = await _hasCommand('pyright');
               break;
           }
         } else {

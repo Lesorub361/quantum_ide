@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
@@ -57,15 +58,61 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   TerminalSession? _lastAttachedSession;
   final Set<TerminalSession> _initializedSessions = {}; // Для контроля слушателей выделения
+  Timer? _autoCopyDebounce;
+
+  final ScrollController _terminalScrollController = ScrollController();
+  final ScrollController _secondaryScrollController = ScrollController();
+  bool _showScrollToBottom = false;
+  bool _isVirtualKeysCollapsed = false;
+
+  final List<String> _commandHistory = [];
+  bool _showSearchBar = false;
+  final TextEditingController _searchController = TextEditingController();
+  final List<int> _searchMatches = [];
+  int _searchIndex = -1;
+
+  static const List<({String label, String command})> _quickCommands = [
+    (label: 'git status', command: 'git status'),
+    (label: 'git add . + commit', command: 'git add . && git commit -m "update"'),
+    (label: 'flutter run', command: 'flutter run'),
+    (label: 'flutter analyze', command: 'flutter analyze'),
+    (label: 'flutter pub get', command: 'flutter pub get'),
+    (label: 'adb logcat', command: 'adb logcat -v color'),
+    (label: 'clear', command: 'clear'),
+    (label: 'ls -la', command: 'ls -la'),
+  ];
 
   @override
   void initState() {
     super.initState();
     _loadPathBinaries();
+    _terminalScrollController.addListener(_onTerminalScroll);
+  }
+
+  void _onTerminalScroll() {
+    if (!_terminalScrollController.hasClients) return;
+    final pos = _terminalScrollController.position;
+    final nearBottom =
+        pos.pixels >= pos.maxScrollExtent - 8;
+    if (nearBottom != !_showScrollToBottom) {
+      setState(() => _showScrollToBottom = !nearBottom);
+    }
+  }
+
+  void _scrollTerminalToBottom() {
+    if (_terminalScrollController.hasClients) {
+      _terminalScrollController.jumpTo(
+        _terminalScrollController.position.maxScrollExtent,
+      );
+    }
   }
 
   @override
   void dispose() {
+    _autoCopyDebounce?.cancel();
+    _terminalScrollController.dispose();
+    _secondaryScrollController.dispose();
+    _searchController.dispose();
     _suggestionsNotifier.dispose();
     super.dispose();
   }
@@ -140,6 +187,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   void _handleInputForAutocomplete(TerminalSession session, String data) {
     if (data == '\r' || data == '\n') {
+      if (_currentInput.trim().isNotEmpty) {
+        _commandHistory.removeWhere((c) => c == _currentInput.trim());
+        _commandHistory.insert(0, _currentInput.trim());
+        if (_commandHistory.length > 50) _commandHistory.removeLast();
+      }
       _suggestionsNotifier.value = null;
       _currentInput = '';
       return;
@@ -433,7 +485,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             ),
             if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
                 !(Platform.isLinux || Platform.isWindows || Platform.isMacOS || MediaQuery.of(context).size.width > 800))
-              _buildVirtualKeys(sessions, notifier),
+              _isVirtualKeysCollapsed
+                  ? const SizedBox.shrink()
+                  : _buildVirtualKeys(sessions, notifier),
           ],
         ),
       ),
@@ -1162,6 +1216,277 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
+  Future<void> _copyTerminalSessionOutput(TerminalSession session) async {
+    final selection = session.xtermViewController.selection;
+    final String text;
+    if (selection != null) {
+      text = session.xtermTerminal.buffer.getText(selection);
+      session.xtermViewController.clearSelection();
+    } else {
+      text = _extractTerminalText(session.xtermTerminal);
+    }
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.copiedToClipboard), duration: const Duration(seconds: 1)),
+      );
+    }
+  }
+
+  Future<void> _pasteToTerminalSession(TerminalSession session) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text != null && data!.text!.isNotEmpty) {
+      session.pty.write(Uint8List.fromList(utf8.encode(data.text!)));
+    }
+  }
+
+  void _runSearchQuery(TerminalSession session, String query) {
+    _searchMatches.clear();
+    _searchIndex = -1;
+    if (query.isEmpty) {
+      setState(() {});
+      return;
+    }
+    final buffer = session.xtermTerminal.buffer;
+    final q = query.toLowerCase();
+    for (var i = 0; i < buffer.lines.length; i++) {
+      if (buffer.lines[i].toString().toLowerCase().contains(q)) {
+        _searchMatches.add(i);
+      }
+    }
+    if (_searchMatches.isNotEmpty) _searchIndex = 0;
+    setState(() {});
+  }
+
+  void _jumpToSearchMatch(TerminalSession session, int delta) {
+    if (_searchMatches.isEmpty) return;
+    _searchIndex = (_searchIndex + delta) % _searchMatches.length;
+    if (_searchIndex < 0) _searchIndex = _searchMatches.length - 1;
+    setState(() {});
+  }
+
+  void _openSearch(TerminalSession session) {
+    setState(() {
+      _showSearchBar = !_showSearchBar;
+      if (!_showSearchBar) {
+        _searchController.clear();
+        _runSearchQuery(session, '');
+      }
+    });
+  }
+
+  void _sendQuickCommand(TerminalSession session, String command) {
+    _commandHistory.removeWhere((c) => c == command);
+    _commandHistory.insert(0, command);
+    if (_commandHistory.length > 50) _commandHistory.removeLast();
+    session.pty.write(Uint8List.fromList(utf8.encode('$command\n')));
+  }
+
+  Future<void> _showCommandHistory(TerminalSession session) async {
+    if (_commandHistory.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.noCommandHistory),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+      return;
+    }
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E24),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                AppLocalizations.of(context)!.commandHistory,
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _commandHistory.length,
+                itemBuilder: (ctx, index) {
+                  final cmd = _commandHistory[index];
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(LucideIcons.terminal,
+                        size: 14, color: Colors.cyanAccent),
+                    title: Text(
+                      cmd,
+                      style: GoogleFonts.jetBrainsMono(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => Navigator.pop(ctx, cmd),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      _sendQuickCommand(session, selected);
+    }
+  }
+
+  Widget _buildSearchOverlay(TerminalSession session) {
+    if (!_showSearchBar) return const SizedBox.shrink();
+    return Positioned(
+      top: 16,
+      left: 16,
+      right: 16,
+      child: Material(
+        color: const Color(0xFF1E1E24).withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(12),
+        elevation: 6,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.search, size: 14, color: Colors.white54),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  style: GoogleFonts.jetBrainsMono(
+                      color: Colors.white, fontSize: 12),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    hintText: 'Search...',
+                    hintStyle: TextStyle(color: Colors.white24, fontSize: 12),
+                  ),
+                  onChanged: (v) => _runSearchQuery(session, v),
+                ),
+              ),
+              if (_searchMatches.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    '${_searchIndex + 1}/${_searchMatches.length}',
+                    style: GoogleFonts.jetBrainsMono(
+                        color: Colors.cyanAccent, fontSize: 10),
+                  ),
+                ),
+              IconButton(
+                icon: const Icon(LucideIcons.chevron_up,
+                    size: 16, color: Colors.white54),
+                onPressed: () => _jumpToSearchMatch(session, -1),
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.chevron_down,
+                    size: 16, color: Colors.white54),
+                onPressed: () => _jumpToSearchMatch(session, 1),
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                onPressed: () => _openSearch(session),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScrollToBottomButton() {
+    if (!_showScrollToBottom) return const SizedBox.shrink();
+    return Positioned(
+      right: 16,
+      bottom: 16,
+      child: Material(
+        color: const Color(0xFF1E1E24).withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(20),
+        elevation: 4,
+        child: InkWell(
+          onTap: _scrollTerminalToBottom,
+          borderRadius: BorderRadius.circular(20),
+          child: const Padding(
+            padding: EdgeInsets.all(8),
+            child: Icon(LucideIcons.arrow_down_to_line,
+                size: 18, color: Colors.cyanAccent),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showQuickCommands(TerminalSession session) async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E24),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                AppLocalizations.of(context)!.quickCommands,
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _quickCommands.length,
+                itemBuilder: (ctx, index) {
+                  final cmd = _quickCommands[index];
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(LucideIcons.zap,
+                        size: 14, color: Colors.amberAccent),
+                    title: Text(
+                      cmd.label,
+                      style: GoogleFonts.inter(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      cmd.command,
+                      style: GoogleFonts.jetBrainsMono(
+                        color: Colors.white38,
+                        fontSize: 9,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    onTap: () => Navigator.pop(ctx, cmd.command),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      _sendQuickCommand(session, selected);
+    }
+  }
+
   Widget _buildTerminalView(List<TerminalSession> sessions, TerminalTabsNotifier notifier, {Key? key}) {
     if (sessions.isEmpty) return const Center(child: CircularProgressIndicator());
     final currentSession = sessions[notifier.currentIndex];
@@ -1380,6 +1705,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       notifier.createNewSession();
                     }, color: Colors.cyanAccent),
                     const SizedBox(width: 8),
+                    _buildZoomButton(LucideIcons.copy, () {
+                      _copyTerminalSessionOutput(currentSession);
+                    }, color: Colors.cyanAccent),
+                    const SizedBox(width: 8),
+                    _buildZoomButton(LucideIcons.clipboard_paste, () {
+                      _pasteToTerminalSession(currentSession);
+                    }, color: Colors.white70),
+                    const SizedBox(width: 8),
                     _buildZoomButton(_isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2, () {
                       setState(() {
                         _isTerminalSplit = !_isTerminalSplit;
@@ -1388,6 +1721,31 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         }
                       });
                     }),
+                    const SizedBox(width: 8),
+                    _buildZoomButton(LucideIcons.search, () {
+                      _openSearch(currentSession);
+                    }, color: Colors.white70),
+                    const SizedBox(width: 8),
+                    _buildZoomButton(LucideIcons.history, () {
+                      _showCommandHistory(currentSession);
+                    }, color: Colors.white70),
+                    const SizedBox(width: 8),
+                    _buildZoomButton(LucideIcons.zap, () {
+                      _showQuickCommands(currentSession);
+                    }, color: Colors.amberAccent),
+                    const SizedBox(width: 8),
+                    _buildZoomButton(
+                      _isVirtualKeysCollapsed
+                          ? LucideIcons.keyboard
+                          : LucideIcons.keyboard_off,
+                      () {
+                        setState(() =>
+                            _isVirtualKeysCollapsed = !_isVirtualKeysCollapsed);
+                      },
+                      color: _isVirtualKeysCollapsed
+                          ? Colors.white54
+                          : Colors.cyanAccent,
+                    ),
                     const SizedBox(width: 8),
                     Material(
                       color: Colors.transparent,
@@ -1472,6 +1830,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
     final theme = _getTerminalTheme(terminalThemeName);
+    final scrollController =
+        isSecondary ? _secondaryScrollController : _terminalScrollController;
 
     if (!isSecondary) {
       if (_lastAttachedSession != session) {
@@ -1486,15 +1846,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _initializedSessions.add(session);
         session.xtermViewController.addListener(() {
           final selection = session.xtermViewController.selection;
-          if (selection != null) {
-            final text = session.xtermTerminal.buffer.getText(selection);
-            if (text.isNotEmpty && text.trim().isNotEmpty) {
-              // Тихо и мгновенно копируем в буфер обмена без надоедливых меню!
-              Clipboard.setData(ClipboardData(text: text));
-            }
-          }
+          if (selection == null) return;
+          final text = session.xtermTerminal.buffer.getText(selection);
+          if (text.isEmpty || text.trim().isEmpty) return;
+          _autoCopyDebounce?.cancel();
+          _autoCopyDebounce = Timer(const Duration(milliseconds: 300), () {
+            Clipboard.setData(ClipboardData(text: text));
+          });
         });
       }
+
+      // Чистим слушателей закрытых сессий, чтобы не копить память
+      final active = ref.read(terminalTabsProvider).toSet();
+      _initializedSessions.removeWhere((s) => !active.contains(s));
     } else {
       session.xtermTerminal.onOutput = (data) {
         final hadCtrl = _activeModifiers.contains('CTRL');
@@ -1532,45 +1896,93 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       };
     }
 
-    return Stack(
-      children: [
-        Column(
-          children: [
-            Expanded(
-              child: Container(
-                margin: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: theme.background,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPressStart: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
-                  onSecondaryTapDown: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
-                  child: xt.TerminalView(
-                    session.xtermTerminal,
-                    controller: session.xtermViewController,
-                    autofocus: true,
-                    padding: const EdgeInsets.all(12),
-                    theme: theme,
-                    backgroundOpacity: 0,
-                    textStyle: xt.TerminalStyle(
-                      fontSize: terminalFontSize,
-                      fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragEnd: (details) {
+        if (isSecondary) return;
+        _onHorizontalSwipe(details.primaryVelocity ?? 0, session);
+      },
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.background,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onScaleStart: (_) => _pinchBaseFontSize = terminalFontSize,
+                    onScaleUpdate: (details) {
+                      if (details.scale != 1.0) {
+                        _applyPinchZoom(details.scale);
+                      }
+                    },
+                    child: xt.TerminalView(
+                      session.xtermTerminal,
+                      controller: session.xtermViewController,
+                      autofocus: true,
+                      padding: const EdgeInsets.all(12),
+                      theme: theme,
+                      backgroundOpacity: 0,
+                      textStyle: xt.TerminalStyle(
+                        fontSize: terminalFontSize,
+                        fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                        fontFamilyFallback: const [
+                          'monospace',
+                          'sans-serif',
+                          'Roboto Mono',
+                          'Droid Sans Mono',
+                          'Noto Sans Mono',
+                        ],
+                      ),
+                      keyboardType: TextInputType.visiblePassword,
+                      deleteDetection: true,
+                      scrollController: scrollController,
+                      onSecondaryTapDown: (details, _) =>
+                          _showTerminalContextMenu(context, details.globalPosition, session),
                     ),
-                    keyboardType: TextInputType.visiblePassword,
-                    deleteDetection: true,
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-        _buildSuggestionBox(session),
-      ],
+            ],
+          ),
+          _buildSearchOverlay(session),
+          _buildScrollToBottomButton(),
+          _buildSuggestionBox(session),
+        ],
+      ),
     );
+  }
+
+  double? _pinchBaseFontSize;
+
+  void _applyPinchZoom(double scale) {
+    final base = _pinchBaseFontSize;
+    if (base == null) return;
+    final newSize = (base * scale).clamp(8.0, 24.0);
+    ref.read(settingsProvider.notifier).setTerminalFontSize(newSize);
+  }
+
+  void _onHorizontalSwipe(double velocity, TerminalSession session) {
+    if (velocity.abs() < 300) return;
+    final notifier = ref.read(terminalTabsProvider.notifier);
+    final sessions = ref.read(terminalTabsProvider);
+    if (sessions.isEmpty) return;
+    if (velocity > 0) {
+      // свайп вправо → предыдущая сессия
+      notifier.currentIndex =
+          (notifier.currentIndex - 1 + sessions.length) % sessions.length;
+    } else {
+      // свайп влево → следующая сессия
+      notifier.currentIndex = (notifier.currentIndex + 1) % sessions.length;
+    }
+    _scrollTerminalToBottom();
   }
 
   Widget _buildSuggestionBox(TerminalSession session) {
@@ -2056,6 +2468,67 @@ Also explain what exactly went wrong and how you fixed it.
   }
 
   // ОБНОВЛЕННОЕ ХАКЕРСКОЕ КОНТЕКСТНОЕ МЕНЮ (Как в Termux)
+  Future<void> _openSelectedPathInEditor(String selectedText) async {
+    final runtime = ref.read(runtimeServiceProvider);
+
+    // Ищем строку, похожую на путь к файлу: "path/to/file.ext" (с расширением)
+    final candidate = selectedText
+        .split(RegExp(r'[\r\n]'))
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .firstWhere(
+          (line) => _looksLikeFilePath(line),
+          orElse: () => '',
+        );
+    if (candidate.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.noFileFoundInSelection),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // Извлекаем голый путь из строки вроде "lib/main.dart:12:34" или "  /abs/path.py "
+    var guestPath = candidate;
+    final lineCol = RegExp(r'^(.+?):(\d+)(?::(\d+))?\s*$').firstMatch(candidate);
+    int? line;
+    int? column;
+    if (lineCol != null) {
+      guestPath = lineCol.group(1)!;
+      line = int.tryParse(lineCol.group(2)!);
+      column = lineCol.group(3) != null ? int.tryParse(lineCol.group(3)!) : null;
+    }
+    guestPath = guestPath.replaceAll(RegExp("[\"'<>]"), '').trim();
+
+    final hostPath = PathMapper.mapToHost(guestPath, runtime.appDirectory);
+    if (!await File(hostPath).exists()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.fileNotFound(hostPath)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    await ref.read(editorProvider.notifier).openFile(
+          hostPath,
+          line: line != null ? (line - 1).clamp(0, 1 << 30) : null,
+          column: column,
+        );
+  }
+
+  bool _looksLikeFilePath(String line) {
+    // Строка должна содержать путь с расширением файла
+    if (!line.contains('/')) return false;
+    final cleaned = line.replaceAll(RegExp(r':\d+.*$'), '');
+    return RegExp(r'\.\w{1,6}$').hasMatch(cleaned.trim());
+  }
+
   void _showTerminalContextMenu(BuildContext context, Offset position, TerminalSession session) async {
     HapticFeedback.mediumImpact();
     
@@ -2087,6 +2560,18 @@ Also explain what exactly went wrong and how you fixed it.
                 const Icon(LucideIcons.copy, size: 16, color: Colors.cyanAccent),
                 const SizedBox(width: 12),
                 Text(AppLocalizations.of(context)!.copy, style: const TextStyle(color: Colors.white, fontSize: 14)),
+              ],
+            ),
+          ),
+        if (hasSelection)
+          PopupMenuItem(
+            value: 'open_in_editor',
+            height: 40,
+            child: Row(
+              children: [
+                const Icon(LucideIcons.file_pen, size: 16, color: Colors.blueAccent),
+                const SizedBox(width: 12),
+                Text(AppLocalizations.of(context)!.openInEditor, style: const TextStyle(color: Colors.white, fontSize: 14)),
               ],
             ),
           ),
@@ -2133,7 +2618,7 @@ Also explain what exactly went wrong and how you fixed it.
           : '';
       if (selectedText.isNotEmpty) {
         await Clipboard.setData(ClipboardData(text: selectedText));
-        if (mounted) {
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(AppLocalizations.of(context)!.copiedToClipboard),
@@ -2144,6 +2629,14 @@ Also explain what exactly went wrong and how you fixed it.
         }
       }
       session.xtermViewController.clearSelection();
+    } else if (result == 'open_in_editor') {
+      final selectedText = session.xtermViewController.selection != null
+          ? session.xtermTerminal.buffer.getText(session.xtermViewController.selection!)
+          : '';
+      session.xtermViewController.clearSelection();
+      if (selectedText.trim().isNotEmpty) {
+        await _openSelectedPathInEditor(selectedText);
+      }
     } else if (result == 'copy_all') {
       final text = _extractTerminalText(session.xtermTerminal);
       if (text.isNotEmpty) {
@@ -2185,20 +2678,23 @@ Also explain what exactly went wrong and how you fixed it.
       case 'firacode':
         return 'firaCode';
       case 'sourcecodepro':
+      case 'anonymouspro':
         return 'sourceCodePro';
       case 'inconsolata':
         return 'inconsolata';
+      case 'hack':
+        return 'hack';
+      case 'dejavusansmono':
+        return 'dejaVuSansMono';
+      case 'proggy':
+      case 'proggyvector':
+        return 'proggy';
       case 'cascadiacode':
       case 'cascadia':
         return 'cascadia';
       case 'monospace':
-        return 'monospace';
       default:
-        try {
-          return GoogleFonts.getFont(fontName).fontFamily ?? 'monospace';
-        } catch (_) {
-          return 'monospace';
-        }
+        return 'monospace';
     }
   }
 }

@@ -3938,6 +3938,36 @@ abstract class AppLocalizations {
   /// **'Copy All'**
   String get copyAll;
 
+  /// No description provided for @openInEditor.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Editor'**
+  String get openInEditor;
+
+  /// No description provided for @noFileFoundInSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'No file path found in selection'**
+  String get noFileFoundInSelection;
+
+  /// No description provided for @quickCommands.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick Commands'**
+  String get quickCommands;
+
+  /// No description provided for @commandHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Command History'**
+  String get commandHistory;
+
+  /// No description provided for @noCommandHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'No command history yet'**
+  String get noCommandHistory;
+
   /// No description provided for @clearTerminal.
   ///
   /// In en, this message translates to:

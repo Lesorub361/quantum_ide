@@ -212,16 +212,28 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     _stopWatching();
     try {
       _watcherSubscription = DirectoryWatcher(widget.path).events.listen((event) {
-        _loadChildren();
+        _scheduleReload();
       });
     } catch (e) {
       // Watcher might not be supported on this filesystem / OS config
     }
   }
 
+  Timer? _reloadDebounce;
+
+  void _scheduleReload() {
+    // Coalesce burst events (builds, git operations) into a single reload.
+    _reloadDebounce?.cancel();
+    _reloadDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) _loadChildren();
+    });
+  }
+
   void _stopWatching() {
     _watcherSubscription?.cancel();
     _watcherSubscription = null;
+    _reloadDebounce?.cancel();
+    _reloadDebounce = null;
   }
 
   Future<void> _loadChildren() async {

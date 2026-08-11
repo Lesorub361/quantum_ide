@@ -2107,6 +2107,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get copyAll => '复制全部';
 
   @override
+  String get openInEditor => '在编辑器中打开';
+
+  @override
+  String get noFileFoundInSelection => '选中内容中未找到文件路径';
+
+  @override
+  String get quickCommands => '快速命令';
+
+  @override
+  String get commandHistory => '命令历史';
+
+  @override
+  String get noCommandHistory => '暂无命令历史';
+
+  @override
   String get clearTerminal => '清空终端';
 
   @override

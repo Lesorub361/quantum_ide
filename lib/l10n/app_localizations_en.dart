@@ -2130,6 +2130,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get copyAll => 'Copy All';
 
   @override
+  String get openInEditor => 'Open in Editor';
+
+  @override
+  String get noFileFoundInSelection => 'No file path found in selection';
+
+  @override
+  String get quickCommands => 'Quick Commands';
+
+  @override
+  String get commandHistory => 'Command History';
+
+  @override
+  String get noCommandHistory => 'No command history yet';
+
+  @override
   String get clearTerminal => 'Clear Terminal';
 
   @override

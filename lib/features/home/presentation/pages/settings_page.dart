@@ -360,7 +360,8 @@ class SettingsPage extends ConsumerWidget {
       'Cascadia Code',
       'Source Code Pro',
       'Inconsolata',
-      'Anonymous Pro',
+      'Hack',
+      'DejaVu Sans Mono',
       'Monospace',
     ];
     showDialog(

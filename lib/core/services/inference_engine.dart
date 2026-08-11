@@ -297,7 +297,6 @@ class InferenceEngine {
         cacheDir: cacheDir,
         visionBackend: enableVision ? LiteLmBackend.cpu : null,
         audioBackend: null,
-        maxNumTokens: contextSize,
       ),
     );
   }
@@ -361,9 +360,8 @@ class InferenceEngine {
     // ── Use generateChat() for native template handling ──
     Stream<String>? stream;
     try {
-      final messages = _buildChatMessages(
-          prompt, conversationHistory, systemPrompt,
-          imagePath: imagePath);
+      final messages =
+          _buildChatMessages(prompt, conversationHistory, systemPrompt);
       stream = _controller!.generateChat(
         messages: messages,
         template: null,
@@ -490,43 +488,14 @@ class InferenceEngine {
           LiteLmContent.audioFile(audioPath),
       ];
 
-      _subscription =
-          _liteConversation!.sendMultimodalMessageStream(contents).listen(
-        (delta) {
-          var text = _cleanLiteRtChunk(delta.text);
-          if (text.isEmpty) return;
-
-          if (!hasVisibleOutput) {
-            if (!_hasPrintableText(text)) return;
-            text = text.trimLeft();
-            hasVisibleOutput = true;
-          }
-
-          if (tokenCount == 0) {
-            debugPrint('[Inference] LiteRT-LM multimodal FIRST TOKEN received');
-          }
-          _liteConversationHasMessages = true;
-          tokenCount++;
-          buffer.write(text);
-          onToken?.call(text);
-          _idleTimer?.cancel();
-          _idleTimer = Timer(const Duration(seconds: 8), () {
-            debugPrint(
-                '[Inference] LiteRT-LM multimodal idle timeout - $tokenCount chunks');
-            finish(buffer.toString());
-          });
-        },
-        onDone: () {
-          _liteConversationHasMessages = true;
-          debugPrint(
-              '[Inference] LiteRT-LM multimodal stream done - $tokenCount chunks');
-          finish(buffer.toString());
-        },
-        onError: (error) {
-          debugPrint('[Inference] LiteRT-LM multimodal stream error: $error');
-          finish('ERROR: LiteRT-LM multimodal generation failed - $error');
-        },
-      );
+      _subscription = null;
+      unawaited(_runMultimodalNonStreaming(
+        contents,
+        prompt: prompt,
+        buffer: buffer,
+        onToken: onToken,
+        finish: finish,
+      ));
 
       _idleTimer = Timer(const Duration(seconds: 90), () {
         if (tokenCount == 0) {
@@ -619,6 +588,35 @@ class InferenceEngine {
     });
 
     return completer.future;
+  }
+
+  /// LiteRT-LM 0.3.0 has no streaming API for multimodal (image/audio) input.
+  /// It returns the full response at once via [LiteLmConversation.sendMultimodalMessage].
+  Future<void> _runMultimodalNonStreaming(
+    List<LiteLmContent> contents, {
+    required String prompt,
+    required StringBuffer buffer,
+    void Function(String token)? onToken,
+    required void Function(String result) finish,
+  }) async {
+    try {
+      final response =
+          await _liteConversation!.sendMultimodalMessage(contents);
+      _liteConversationHasMessages = true;
+      var text = _cleanLiteRtChunk(response.text);
+      if (text.isEmpty) {
+        finish('');
+        return;
+      }
+      buffer.write(text);
+      onToken?.call(text);
+      debugPrint(
+          '[Inference] LiteRT-LM multimodal response received (${text.length} chars)');
+      finish(buffer.toString());
+    } catch (error) {
+      debugPrint('[Inference] LiteRT-LM multimodal generation failed: $error');
+      finish('ERROR: LiteRT-LM multimodal generation failed - $error');
+    }
   }
 
   /// Detects if the LiteRT output stream is generating garbage (KV cache overflow).
@@ -858,9 +856,8 @@ class InferenceEngine {
   List<ChatMessage> _buildChatMessages(
     String prompt,
     List<Map<String, String>>? history,
-    String systemPrompt, {
-    String? imagePath,
-  }) {
+    String systemPrompt,
+  ) {
     final messages = <ChatMessage>[];
     messages.add(ChatMessage(role: 'system', content: systemPrompt));
 
@@ -881,7 +878,7 @@ class InferenceEngine {
     }
 
     messages
-        .add(ChatMessage(role: 'user', content: prompt, imagePath: imagePath));
+        .add(ChatMessage(role: 'user', content: prompt));
     return messages;
   }
 
