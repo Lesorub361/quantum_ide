@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
@@ -1888,24 +1889,26 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         if (isSecondary) return;
         _onHorizontalSwipe(details.primaryVelocity ?? 0, session);
       },
-      child: Stack(
-        children: [
-          Column(
-            children: [
-              Expanded(
-                child: Container(
-                  margin: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: theme.background,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-child: GestureDetector(
+      child: _buildAltBufferDragForwarder(
+        session,
+        Stack(
+          children: [
+            Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.background,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onScaleStart: (_) => _pinchBaseFontSize = terminalFontSize,
                       onScaleUpdate: (details) {
-                        if (details.scale != 1.0) {
+                        if (details.scale != 1.0 && details.pointerCount >= 2) {
                           _applyPinchZoom(details.scale);
                         }
                       },
@@ -1940,14 +1943,154 @@ child: GestureDetector(
                         ),
                       ),
                     ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+            _buildSearchOverlay(session),
+            _buildScrollToBottomButton(),
+            _buildScrollPageButtons(session, scrollController),
+            _buildSuggestionBox(session),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAltBufferDragForwarder(TerminalSession session, Widget child) {
+    Offset? dragStart;
+    var lastY = 0.0;
+    var accum = 0.0;
+
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (e) {
+        dragStart = e.localPosition;
+        lastY = e.localPosition.dy;
+        accum = 0;
+      },
+      onPointerMove: (e) {
+        if (dragStart == null) return;
+        if (e.kind != PointerDeviceKind.touch) return;
+        // В alternate-буфере (полноэкранные TUI: opencode, vim, top и т.п.)
+        // нет scrollback — превращаем свайп в scroll-события для приложения.
+        if (!session.xtermTerminal.isUsingAltBuffer) return;
+        if (session.xtermViewController.selection != null) return;
+        final rt = _terminalViewStateKeys[session.id]?.currentState?.renderTerminal;
+        if (rt == null) return;
+
+        final lineH = rt.lineHeight > 0 ? rt.lineHeight : 16.0;
+        final dy = e.localPosition.dy - lastY;
+        lastY = e.localPosition.dy;
+        accum += dy;
+
+        final cell = rt.getCellOffset(e.localPosition);
+        while (accum.abs() >= lineH) {
+          final up = accum > 0;
+          accum = up ? accum - lineH : accum + lineH;
+          final handled = session.xtermTerminal.mouseInput(
+            up
+                ? xt.TerminalMouseButton.wheelUp
+                : xt.TerminalMouseButton.wheelDown,
+            xt.TerminalMouseButtonState.down,
+            cell,
+          );
+          if (!handled) {
+            session.xtermTerminal.keyInput(
+              up ? xt.TerminalKey.arrowUp : xt.TerminalKey.arrowDown,
+            );
+          }
+        }
+      },
+      onPointerUp: (_) {
+        dragStart = null;
+        accum = 0;
+      },
+      onPointerCancel: (_) {
+        dragStart = null;
+        accum = 0;
+      },
+      child: child,
+    );
+  }
+
+  Widget _buildScrollPageButtons(
+    TerminalSession session,
+    ScrollController scrollController,
+  ) {
+    if (!session.xtermTerminal.isUsingAltBuffer) {
+      return const SizedBox.shrink();
+    }
+    return Positioned(
+      right: 6,
+      bottom: 14,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _floatingScrollButton(
+            LucideIcons.chevron_up,
+            () => _scrollTerminalPage(session, scrollController, -1),
           ),
-          _buildSearchOverlay(session),
-          _buildScrollToBottomButton(),
-          _buildSuggestionBox(session),
+          const SizedBox(height: 4),
+          _floatingScrollButton(
+            LucideIcons.chevron_down,
+            () => _scrollTerminalPage(session, scrollController, 1),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _floatingScrollButton(IconData icon, VoidCallback onTap) {
+    return Material(
+      color: const Color(0xE61E1E24),
+      shape: const CircleBorder(),
+      elevation: 3,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 14, color: Colors.white70),
+        ),
+      ),
+    );
+  }
+
+  void _scrollTerminalPage(
+    TerminalSession session,
+    ScrollController scrollController,
+    int direction,
+  ) {
+    final term = session.xtermTerminal;
+    if (term.isUsingAltBuffer) {
+      // Сначала пробуем колесо мыши (если приложение включило mouse-отчёт),
+      // иначе шлём PageUp/PageDown — их понимает большинство TUI (opencode,
+      // vim, less) для прокрутки собственного вывода.
+      final rt = _terminalViewStateKeys[session.id]?.currentState?.renderTerminal;
+      var handled = false;
+      if (rt != null) {
+        final cell = rt.getCellOffset(Offset(rt.size.width / 2, rt.size.height / 2));
+        handled = term.mouseInput(
+          direction < 0
+              ? xt.TerminalMouseButton.wheelUp
+              : xt.TerminalMouseButton.wheelDown,
+          xt.TerminalMouseButtonState.down,
+          cell,
+        );
+      }
+      if (!handled) {
+        final seq = direction < 0 ? '\x1b[5~' : '\x1b[6~';
+        session.pty.write(Uint8List.fromList(utf8.encode(seq)));
+      }
+      return;
+    }
+    if (!scrollController.hasClients) return;
+    final pos = scrollController.position;
+    scrollController.jumpTo(
+      (pos.pixels + direction * pos.viewportDimension * 0.8).clamp(
+        0.0,
+        pos.maxScrollExtent,
       ),
     );
   }
