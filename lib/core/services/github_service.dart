@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:quantum_ide/core/services/secure_storage_service.dart';
@@ -20,6 +21,7 @@ class GitHubService {
 
   bool get isAuthenticated => _accessToken != null && _accessToken!.isNotEmpty;
   Map<String, dynamic>? get currentUser => _currentUser;
+  String? get token => _accessToken;
 
   Future<void> init() async {
     final storage = SecureStorageService();
@@ -126,5 +128,155 @@ class GitHubService {
     } catch (e) {
       return null;
     }
+  }
+
+  // ─── In-app Build & Publish ───────────────────────────────────────────────
+
+  /// Читает файл из репозитория (Contents API). Возвращает текст и sha для последующего коммита.
+  Future<({String content, String sha})?> getFile(
+    String owner,
+    String repo,
+    String path, {
+    String ref = 'main',
+  }) async {
+    try {
+      final resp = await _dio.get(
+        '/repos/$owner/$repo/contents/$path',
+        queryParameters: {'ref': ref},
+      );
+      final data = resp.data as Map<String, dynamic>;
+      final encoded = data['content'] as String;
+      final content = utf8.decode(base64.decode(encoded.replaceAll('\n', '')));
+      return (content: content, sha: data['sha'] as String);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Обновляет файл в репозитории (коммит через Contents API).
+  Future<bool> updateFile(
+    String owner,
+    String repo,
+    String path,
+    String content,
+    String message,
+    String sha, {
+    String branch = 'main',
+  }) async {
+    try {
+      await _dio.put(
+        '/repos/$owner/$repo/contents/$path',
+        data: {
+          'message': message,
+          'content': base64.encode(utf8.encode(content)),
+          'sha': sha,
+          'branch': branch,
+        },
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// SHA последнего коммита ветки (нужен для создания тега).
+  Future<String?> getBranchHeadSha(String owner, String repo, String branch) async {
+    try {
+      final resp = await _dio.get('/repos/$owner/$repo/git/ref/heads/$branch');
+      final obj = resp.data['object'] as Map<String, dynamic>;
+      return obj['sha'] as String?;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Создаёт git-тег (refs/tags/&lt;tag&gt;) на указанном коммите.
+  Future<bool> createTag(String owner, String repo, String tag, String sha) async {
+    try {
+      await _dio.post(
+        '/repos/$owner/$repo/git/refs',
+        data: {
+          'ref': 'refs/tags/$tag',
+          'sha': sha,
+        },
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Запускает workflow сборки/публикации (workflow_dispatch).
+  Future<bool> triggerWorkflow({
+    required String owner,
+    required String repo,
+    required String version,
+    required String notes,
+    String branch = 'main',
+    String flutterVersion = '3.44.9',
+  }) async {
+    try {
+      await _dio.post(
+        '/repos/$owner/$repo/actions/workflows/build-apk.yml/dispatches',
+        data: {
+          'ref': branch,
+          'inputs': {
+            'flutter_version': flutterVersion,
+            'create_release': 'true',
+            'version': version,
+            'release_notes': notes,
+          }
+        },
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listWorkflowRuns(
+    String owner,
+    String repo, {
+    int limit = 5,
+  }) async {
+    try {
+      final resp = await _dio.get(
+        '/repos/$owner/$repo/actions/runs',
+        queryParameters: {'per_page': limit},
+      );
+      return ((resp.data['workflow_runs'] ?? []) as List)
+          .cast<Map<String, dynamic>>();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> getRun(String owner, String repo, int runId) async {
+    try {
+      final resp = await _dio.get('/repos/$owner/$repo/actions/runs/$runId');
+      return resp.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getLatestRelease(String owner, String repo) async {
+    try {
+      final resp = await _dio.get('/repos/$owner/$repo/releases/latest');
+      return resp.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Текущая версия приложения из pubspec.yaml (имя до «+»).
+  Future<String?> getCurrentVersion(String owner, String repo) async {
+    final file = await getFile(owner, repo, 'pubspec.yaml');
+    if (file == null) return null;
+    final m = RegExp(
+      r'^version:\s*([\d.]+)\+?\d*',
+      multiLine: true,
+    ).firstMatch(file.content);
+    return m?.group(1);
   }
 }

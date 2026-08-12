@@ -14,6 +14,14 @@ on:
         description: 'Create a GitHub Release with the APK'
         required: false
         default: 'true'
+      version:
+        description: 'Release version, e.g. 1.1.6 (used as the git tag)'
+        required: false
+        default: ''
+      release_notes:
+        description: 'Release notes (markdown). Shown in the GitHub Release body.'
+        required: false
+        default: ''
   push:
     branches: [main]
     paths:
@@ -27,6 +35,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DEFAULT_NOTES: |
+        ## QuantumIDE release
+
+        ### Local AI engines
+        - **Mistral.rs (Rust)** local engine — fast Rust LLM server, faster than llama.cpp on CPU. Connect to a `mistralrs-server` over the network.
+        - **LM Studio** kept as a local engine option.
+        - Local engine model lists show only real models (no fake defaults).
+
+        ### Model storage
+        - Downloaded models on mobile are saved next to your projects (`<app>/projects/ai_models`).
+
+        ### Chat experience
+        - Chat mode is now a clean conversational assistant (like OpenCode): streamed output, visible reasoning, may read files / search the web — but never loops as an autonomous agent.
+
+        ### Networking
+        - **LAN scanner** in Local AI settings: auto-discovers Ollama (`:11434`), Mistral.rs / LM Studio (`:1234`), llama-server (`:8080`) and other OpenAI-compatible servers, with one-tap connect.
+        - "Test connection" for local servers.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,26 +111,9 @@ jobs:
         if: github.ref_type == 'tag' && (startsWith(github.ref_name, 'v') || github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: QuantumIDE ${{ github.ref_name }}
-          body: |
-            ## QuantumIDE ${{ github.ref_name }}
-
-            ### Local AI engines
-            - Added **Mistral.rs (Rust)** as a local engine — a fast Rust LLM server, faster than llama.cpp on CPU. Connect to a `mistralrs-server` over the network (OpenAI-compatible API).
-            - **LM Studio** kept as a local engine option.
-            - Local engine model lists no longer show fake default models — only real models (downloaded catalog models for the built-in engine, or models actually loaded in Ollama / LM Studio / Mistral.rs).
-
-            ### Model storage
-            - Downloaded models on mobile are saved next to your projects (`<app>/projects/ai_models`), so they survive and can be re-added or replaced manually.
-
-            ### Chat experience
-            - Chat mode is now a clean conversational assistant (like OpenCode): streamed output, visible reasoning, may read files / search the web to answer — but never loops as an autonomous agent. Modification actions are still proposed for confirmation.
-            - Agent / Autopilot mode remains for autonomous implementation.
-
-            ### Networking
-            - Added a **LAN scanner** in Local AI settings: auto-discovers Ollama (`:11434`), Mistral.rs / LM Studio (`:1234`), llama-server (`:8080`) and other OpenAI-compatible servers on your Wi-Fi, with one-tap connect.
-            - Added "Test connection" for local servers.
+          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
+          name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
+          body: ${{ github.event.inputs.release_notes != '' && github.event.inputs.release_notes || env.DEFAULT_NOTES }}
           files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

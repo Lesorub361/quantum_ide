@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/core/services/github_service.dart';
+import 'package:quantum_ide/features/github/presentation/pages/build_release_page.dart';
 
 class GitHubPage extends StatefulWidget {
   const GitHubPage({super.key});
@@ -102,6 +103,14 @@ class _GitHubPageState extends State<GitHubPage> {
                   await _githubService.logout();
                   setState(() {});
                 },
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.rocket, size: 16),
+                tooltip: 'Сборка и публикация',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const BuildReleasePage()),
+                ),
               ),
             ],
           ),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/models/git_status.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/github_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 
 class GitService {
@@ -159,8 +160,12 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git push');
+
+    final token = GitHubService().token;
+    final authPrefix = token != null && token.isNotEmpty
+        ? ' -c "url.https://$token@github.com/.insteadOf=https://github.com/"'
+        : '';
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git$authPrefix push');
   }
 
   Future<void> pull() async {
@@ -168,8 +173,12 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git pull');
+
+    final token = GitHubService().token;
+    final authPrefix = token != null && token.isNotEmpty
+        ? ' -c "url.https://$token@github.com/.insteadOf=https://github.com/"'
+        : '';
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git$authPrefix pull');
     invalidateCache();
   }
 
