@@ -21,7 +21,7 @@ class AiProviderConfig {
   });
 }
 
-enum LocalAiEngine { llamaServer, ollama, lmStudio }
+enum LocalAiEngine { llamaServer, ollama, lmStudio, mistralRs }
 
 extension LocalAiEngineExtension on LocalAiEngine {
   String get id {
@@ -32,17 +32,21 @@ extension LocalAiEngineExtension on LocalAiEngine {
         return 'ollama';
       case LocalAiEngine.lmStudio:
         return 'lm_studio';
+      case LocalAiEngine.mistralRs:
+        return 'mistral_rs';
     }
   }
 
   String get displayName {
     switch (this) {
       case LocalAiEngine.llamaServer:
-        return 'llama-server (built-in)';
+        return 'Встроенный движок (llama.cpp)';
       case LocalAiEngine.ollama:
         return 'Ollama';
       case LocalAiEngine.lmStudio:
         return 'LM Studio';
+      case LocalAiEngine.mistralRs:
+        return 'Mistral.rs (Rust)';
     }
   }
 
@@ -54,17 +58,23 @@ extension LocalAiEngineExtension on LocalAiEngine {
         return 'http://localhost:11434';
       case LocalAiEngine.lmStudio:
         return 'http://localhost:1234/v1';
+      case LocalAiEngine.mistralRs:
+        return 'http://localhost:1234/v1';
     }
   }
 
+  // Локальные движки не показывают «фейковые» модели по умолчанию:
+  // список берётся либо из запущенного сервера, либо из скачанных моделей в каталоге.
   List<String> get defaultModels {
     switch (this) {
       case LocalAiEngine.llamaServer:
-        return ['qwen2.5-coder-1.5b-instruct'];
+        return [];
       case LocalAiEngine.ollama:
-        return ['qwen2.5-coder', 'llama3.2', 'llama3.1', 'codellama', 'gemma2'];
+        return [];
       case LocalAiEngine.lmStudio:
-        return ['local-model'];
+        return [];
+      case LocalAiEngine.mistralRs:
+        return [];
     }
   }
 }
@@ -227,7 +237,7 @@ class AiProviders {
     logoEmoji: '🔮',
     apiKeyHint: 'not required',
     baseUrl: 'http://localhost:8080/v1',
-    defaultModels: ['qwen2.5-coder-1.5b-instruct'],
+    defaultModels: [],
     supportsLocalModels: true,
     requiresApiKey: false,
   );

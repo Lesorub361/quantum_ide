@@ -70,7 +70,16 @@ class ChatMessage {
   final String? imagePath;
   final List<String>? contextFiles;
   String? sessionId;
-  
+
+  // Reasoning/thinking block shown live while streaming
+  final String? thinking;
+  // Error state: when the assistant message is an error card with retry
+  final bool isError;
+  final String? errorMessage;
+  final String? retryPrompt;
+  // Transient: true while tokens are still streaming into this message (not persisted)
+  final bool isStreaming;
+
   // Structured metadata fields
   final String? taskName;
   final int? stepNumber;
@@ -92,6 +101,11 @@ class ChatMessage {
     this.imageBase64,
     this.imagePath,
     this.contextFiles,
+    this.thinking,
+    this.isError = false,
+    this.errorMessage,
+    this.retryPrompt,
+    this.isStreaming = false,
     this.taskName,
     this.stepNumber,
     this.totalSteps,
@@ -113,6 +127,10 @@ class ChatMessage {
       'actions': actions?.map((a) => a.toJson()).toList(),
       'imagePath': imagePath,
       'contextFiles': contextFiles,
+      if (thinking != null) 'thinking': thinking,
+      'isError': isError,
+      if (errorMessage != null) 'errorMessage': errorMessage,
+      if (retryPrompt != null) 'retryPrompt': retryPrompt,
       'taskName': taskName,
       'stepNumber': stepNumber,
       'totalSteps': totalSteps,
@@ -139,6 +157,10 @@ class ChatMessage {
           : null,
       imagePath: json['imagePath'],
       contextFiles: json['contextFiles'] != null ? List<String>.from(json['contextFiles']) : null,
+      thinking: json['thinking'],
+      isError: json['isError'] ?? false,
+      errorMessage: json['errorMessage'],
+      retryPrompt: json['retryPrompt'],
       taskName: json['taskName'],
       stepNumber: json['stepNumber'],
       totalSteps: json['totalSteps'],
@@ -153,6 +175,58 @@ class ChatMessage {
       actionStepType: json['actionStepType'],
       actionStepPath: json['actionStepPath'],
       actionStepResult: json['actionStepResult'],
+    );
+  }
+
+  ChatMessage copyWith({
+    MessageRole? role,
+    String? content,
+    DateTime? timestamp,
+    List<AIAction>? actions,
+    String? imageBase64,
+    String? imagePath,
+    List<String>? contextFiles,
+    String? thinking,
+    bool? isError,
+    String? errorMessage,
+    String? retryPrompt,
+    bool? isStreaming,
+    String? taskName,
+    int? stepNumber,
+    int? totalSteps,
+    List<AIAction>? executedActions,
+    Map<String, String>? actionResults,
+    bool? isStepSummary,
+    bool? isActionStep,
+    String? actionStepType,
+    String? actionStepPath,
+    String? actionStepResult,
+    Map<String, String?>? fileBackups,
+  }) {
+    return ChatMessage(
+      role: role ?? this.role,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      actions: actions ?? this.actions,
+      imageBase64: imageBase64 ?? this.imageBase64,
+      imagePath: imagePath ?? this.imagePath,
+      contextFiles: contextFiles ?? this.contextFiles,
+      thinking: thinking ?? this.thinking,
+      isError: isError ?? this.isError,
+      errorMessage: errorMessage ?? this.errorMessage,
+      retryPrompt: retryPrompt ?? this.retryPrompt,
+      isStreaming: isStreaming ?? this.isStreaming,
+      taskName: taskName ?? this.taskName,
+      stepNumber: stepNumber ?? this.stepNumber,
+      totalSteps: totalSteps ?? this.totalSteps,
+      executedActions: executedActions ?? this.executedActions,
+      actionResults: actionResults ?? this.actionResults,
+      isStepSummary: isStepSummary ?? this.isStepSummary,
+      isActionStep: isActionStep ?? this.isActionStep,
+      actionStepType: actionStepType ?? this.actionStepType,
+      actionStepPath: actionStepPath ?? this.actionStepPath,
+      actionStepResult: actionStepResult ?? this.actionStepResult,
+      fileBackups: fileBackups ?? this.fileBackups,
     );
   }
 }

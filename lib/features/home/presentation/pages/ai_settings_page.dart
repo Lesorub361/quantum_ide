@@ -33,6 +33,10 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
   // Доступность моделей: modelName -> true/false/null (null = не проверена)
   final Map<String, bool?> _modelAvailability = {};
   bool _checkingAvailability = false;
+  String? _mistralStatus;
+  List<DiscoveredServer> _scanResults = [];
+  bool _scanning = false;
+  String _scanProgress = '';
 
   @override
   void initState() {
@@ -103,6 +107,71 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
       default:
         return '';
     }
+  }
+
+  Future<void> _scanLan() async {
+    final svc = ref.read(aiServiceProvider);
+    final url = _urlControllers['local_edge']?.text.trim() ?? '';
+    if (url.isNotEmpty) await svc.setBaseUrl('local_edge', url);
+
+    setState(() {
+      _scanning = true;
+      _scanResults = [];
+      _scanProgress = '';
+    });
+    try {
+      final results = await svc.scanLocalNetwork(
+        onProgress: (done, total) {
+          if (mounted) {
+            setState(() => _scanProgress = '$done/$total');
+          }
+        },
+      );
+      if (mounted) {
+        setState(() => _scanResults = results);
+        if (results.isEmpty) {
+          _mistralStatus = '❌ Серверы не найдены в локальной сети. '
+              'Убедитесь, что ПК и телефон в одной Wi-Fi сети, и сервер запущен.';
+        } else {
+          _mistralStatus = '✅ Найдено серверов: ${results.length}. Нажмите на нужный, чтобы подключиться.';
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _mistralStatus = '❌ Ошибка сканирования: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Future<void> _testMistralConnection() async {
+    final svc = ref.read(aiServiceProvider);
+    // Сохраняем актуальный URL перед проверкой
+    final url = _urlControllers['local_edge']?.text.trim() ?? '';
+    if (url.isNotEmpty) await svc.setBaseUrl('local_edge', url);
+
+    setState(() => _mistralStatus = '⏳ Проверка подключения…');
+    try {
+      final (connected, models) = await svc.probeLocalEngine();
+      if (!mounted) return;
+      if (connected) {
+        final list = models.isEmpty
+            ? 'сервер доступен, но модели не загружены (добавьте GGUF в mistralrs-server).'
+            : 'доступны модели: ${models.join(', ')}.';
+        setState(() => _mistralStatus = '✅ Сервер Mistral.rs найден. $list');
+      } else {
+        setState(() => _mistralStatus =
+            '❌ Сервер недоступен по ${svc.getBaseUrl('local_edge')}. '
+            'Запустите mistralrs-server и проверьте порт/URL.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _mistralStatus = '❌ Ошибка проверки: $e');
+      }
+    }
+    // Обновляем список моделей в настройках по итогам проверки
+    if (mounted) _fetchModels('local_edge');
   }
 
   Future<void> _fetchModels(String pid) async {
@@ -512,6 +581,71 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     fontStyle: FontStyle.italic,
                   ),
                 ),
+              ],
+              const SizedBox(height: 8),
+              if (p.id == 'local_edge') ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _scanning ? null : () => _scanLan(),
+                    icon: _scanning
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(LucideIcons.radar, size: 16),
+                    label: Text(_scanning
+                        ? 'Сканирование сети… $_scanProgress'
+                        : 'Сканировать локальную сеть'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.colorScheme.primary,
+                      side: BorderSide(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                if (_scanResults.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _scanResults.map((s) {
+                      return GestureDetector(
+                        onTap: () {
+                          _urlControllers['local_edge']?.text = s.baseUrl;
+                          svc.setBaseUrl('local_edge', s.baseUrl);
+                          _fetchModels('local_edge');
+                          setState(() {});
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: theme.colorScheme.primary.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Text(
+                            s.label,
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ],
               const SizedBox(height: 12),
             ],
@@ -1320,6 +1454,55 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
             title: l10n.lmStudioRunningLocally,
             description: l10n.lmStudioRunningLocallyDesc,
           ),
+        ] else if (currentEngine == LocalAiEngine.mistralRs) ...[
+          _buildExternalEngineNote(
+            icon: LucideIcons.zap,
+            title: 'Mistral.rs запущен локально',
+            description:
+                'Убедитесь, что сервер Mistral.rs запущен (например: mistralrs-server --port 1234). '
+                'Это Rust-движок: быстрее llama.cpp на CPU и эффективнее расходует память. '
+                'Загрузите нужную GGUF-модель в сервер.',
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _testMistralConnection(),
+              icon: const Icon(LucideIcons.zap, size: 16),
+              label: Text(_mistralStatus?.isEmpty ?? true
+                  ? 'Проверить подключение к серверу'
+                  : 'Проверить снова'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
+          if (_mistralStatus != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (_mistralStatus!.startsWith('✅')
+                        ? Colors.green
+                        : theme.colorScheme.error)
+                    .withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: (_mistralStatus!.startsWith('✅')
+                          ? Colors.green
+                          : theme.colorScheme.error)
+                      .withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                _mistralStatus!,
+                style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurface),
+              ),
+            ),
+          ],
         ],
       ],
     );

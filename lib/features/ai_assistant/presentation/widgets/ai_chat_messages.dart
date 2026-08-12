@@ -909,7 +909,12 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       return true;
     }).toList();
 
-    final itemCount = visibleMessages.length + (widget.aiState.isLoading ? 1 : 0);
+    final agentSteps = widget.aiState.messages
+        .where((m) => m.isStepSummary || m.isActionStep)
+        .toList();
+    final showTimeline = agentSteps.isNotEmpty;
+
+    final itemCount = visibleMessages.length + (widget.aiState.isLoading ? 1 : 0) + (showTimeline ? 1 : 0);
 
     return ListView.builder(
       controller: _scroll,
@@ -918,7 +923,11 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       addAutomaticKeepAlives: false,
       addRepaintBoundaries: true,
       itemBuilder: (context, index) {
-        if (index == visibleMessages.length) {
+        if (showTimeline && index == 0) {
+          return _buildAgentTimeline(agentSteps);
+        }
+        final msgIndex = index - (showTimeline ? 1 : 0);
+        if (msgIndex == visibleMessages.length) {
           final role = widget.aiState.activeAgentRole ?? 'Agent';
           final status = widget.aiState.currentStatusMessage ?? 
               AppLocalizations.of(context)!.thinking;
@@ -1130,7 +1139,14 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _renderMarkdown(message.content, context),
+                        children: [
+                          if (message.thinking != null && message.thinking!.isNotEmpty)
+                            _buildThinkingBlock(message.thinking!, context, index, isStreaming: message.isStreaming),
+                          if (message.isError)
+                            _buildErrorCard(message, context)
+                          else
+                            ..._renderMarkdown(message.content, context),
+                        ],
                       ),
                     ),
                   ),
@@ -1165,6 +1181,83 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
         );
       },
     );
+  }
+
+  Widget _buildAgentTimeline(List<ChatMessage> steps) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161923),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: false,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+          leading: const Icon(LucideIcons.list, size: 14, color: Colors.cyanAccent),
+          title: Text(
+            'Шаги агента (${steps.length})',
+            style: GoogleFonts.inter(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: steps.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final step = entry.value;
+                  final isLast = i == steps.length - 1;
+                  final iconAndLabel = _timelineStepIcon(step);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Column(
+                        children: [
+                          Icon(iconAndLabel.$1, size: 12, color: Colors.cyanAccent),
+                          if (!isLast)
+                            Container(width: 1, height: 18, color: Colors.white.withValues(alpha: 0.15)),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            iconAndLabel.$2,
+                            style: GoogleFonts.jetBrainsMono(color: Colors.white60, fontSize: 10.5, height: 1.4),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  (IconData, String) _timelineStepIcon(ChatMessage step) {
+    if (step.isActionStep) {
+      switch (step.actionStepType) {
+        case 'edit':
+        case 'create':
+          return (LucideIcons.file_text, step.actionStepPath ?? 'edit');
+        case 'delete':
+          return (LucideIcons.trash_2, step.actionStepPath ?? 'delete');
+        case 'command':
+          return (LucideIcons.terminal, step.actionStepPath ?? 'command');
+        default:
+          return (LucideIcons.circle, step.actionStepPath ?? step.actionStepType ?? 'action');
+      }
+    }
+    final firstLine = step.content.split('\n').firstWhere((l) => l.trim().isNotEmpty, orElse: () => 'Step');
+    return (LucideIcons.circle_check, firstLine.length > 80 ? '${firstLine.substring(0, 80)}…' : firstLine);
   }
 
   Widget _buildMessageActionsCard(List<AIAction> actions, bool isLastMessage) {
@@ -1388,8 +1481,70 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
     return null;
   }
 
-  Widget _buildThinkingBlock(String content, BuildContext context, int index) {
-    return _CollapsibleThinking(content: content, index: index);
+  Widget _buildThinkingBlock(String content, BuildContext context, int index, {bool isStreaming = false}) {
+    return _CollapsibleThinking(content: content, index: index, autoExpand: isStreaming, isStreaming: isStreaming);
+  }
+
+  Widget _buildErrorCard(ChatMessage message, BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final errorText = message.errorMessage ?? l10n.errorOccurred('');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.triangle_alert, size: 14, color: Colors.redAccent),
+              const SizedBox(width: 8),
+              Text(
+                l10n.errorOccurred(''),
+                style: GoogleFonts.inter(
+                  color: Colors.redAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SelectableText(
+            errorText,
+            style: GoogleFonts.jetBrainsMono(
+              color: Colors.white70,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ElevatedButton.icon(
+              icon: const Icon(LucideIcons.refresh_cw, size: 13),
+              label: Text(l10n.retry),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
+                foregroundColor: Colors.redAccent,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                minimumSize: Size.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: const BorderSide(color: Colors.redAccent, width: 0.4),
+                ),
+              ),
+              onPressed: () => ref.read(aiProvider.notifier).retryLast(),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildTextSection(String text, BuildContext context) {
@@ -2352,23 +2507,56 @@ class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderState
 class _CollapsibleThinking extends StatefulWidget {
   final String content;
   final int index;
+  final bool autoExpand;
+  final bool isStreaming;
 
   const _CollapsibleThinking({
     required this.content,
     required this.index,
+    this.autoExpand = false,
+    this.isStreaming = false,
   });
 
   @override
   State<_CollapsibleThinking> createState() => _CollapsibleThinkingState();
 }
 
-class _CollapsibleThinkingState extends State<_CollapsibleThinking> {
-  bool _isExpanded = false;
+class _CollapsibleThinkingState extends State<_CollapsibleThinking>
+    with SingleTickerProviderStateMixin {
+  late bool _isExpanded;
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _isExpanded = widget.autoExpand;
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CollapsibleThinking old) {
+    super.didUpdateWidget(old);
+    if (widget.autoExpand && !_isExpanded) {
+      setState(() => _isExpanded = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final headerColor = widget.isStreaming
+        ? Colors.purpleAccent.shade100
+        : Colors.purpleAccent.shade100.withValues(alpha: 0.8);
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.purpleAccent.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(8),
@@ -2384,13 +2572,19 @@ class _CollapsibleThinkingState extends State<_CollapsibleThinking> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
                 children: [
-                  Icon(LucideIcons.brain, size: 12, color: Colors.purpleAccent.shade100),
+                  if (widget.isStreaming)
+                    FadeTransition(
+                      opacity: _pulse,
+                      child: const Icon(LucideIcons.brain, size: 12, color: Colors.purpleAccent),
+                    )
+                  else
+                    Icon(LucideIcons.brain, size: 12, color: headerColor),
                   const SizedBox(width: 6),
                   Text(
-                    'Thinking...',
+                    widget.isStreaming ? 'Reasoning…' : 'Reasoning',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10,
-                      color: Colors.purpleAccent.shade100,
+                      color: headerColor,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

@@ -168,6 +168,13 @@ class AINotifier extends StateNotifier<AIState> {
   final Map<String, String?> _currentStepBackups = {};
   final AiContextCompressor _contextCompressor = AiContextCompressor();
   final AiPermissionService _permissionService = const AiPermissionService();
+  // Active streaming request cancellation
+  CancelToken? _cancelToken;
+  bool _cancelled = false;
+  // Timestamp of the in-flight "live" assistant message being streamed into
+  DateTime? _liveTs;
+  // Last user prompt — used for retry-after-error
+  String _lastPrompt = '';
   // Shared Dio instance — не создаём новый на каждый запрос
   final Dio _dio = Dio(
     BaseOptions(
@@ -602,7 +609,147 @@ class AINotifier extends StateNotifier<AIState> {
   }
 
   void stopAutopilot() {
-    state = state.copyWith(isLoading: false, activeAgentRole: null);
+    cancel();
+  }
+
+  /// Cancel the in-flight request (chat or autopilot) and stop the loop.
+  void cancel() {
+    _cancelled = true;
+    _cancelToken?.cancel('User cancelled');
+    _cancelToken = null;
+    _liveTs = null;
+    state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+  }
+
+  /// Retry the last failed (error) assistant message.
+  Future<void> retryLast() async {
+    final errorMsg = state.messages.lastWhere(
+      (m) => m.isError,
+      orElse: () => ChatMessage(role: MessageRole.system, content: '', timestamp: DateTime.now()),
+    );
+    final prompt = errorMsg.retryPrompt;
+    if (prompt != null && prompt.isNotEmpty) {
+      await askAI(prompt, imageBase64: errorMsg.imageBase64);
+    }
+  }
+
+  // ─── Live streaming helpers ───────────────────────────────────────────────
+
+  void _insertLivePlaceholder() {
+    _liveTs = DateTime.now();
+    final placeholder = ChatMessage(
+      role: MessageRole.assistant,
+      content: '',
+      timestamp: _liveTs!,
+      isStreaming: true,
+    );
+    state = state.copyWith(messages: [...state.messages, placeholder]);
+  }
+
+  void _patchLiveContent(String content, {String? thinking}) {
+    if (_liveTs == null) return;
+    state = state.copyWith(
+      messages: state.messages.map((m) {
+        if (m.timestamp == _liveTs) {
+          return m.copyWith(content: content, thinking: thinking, isStreaming: true);
+        }
+        return m;
+      }).toList(),
+    );
+  }
+
+  String _stripInternal(String text) {
+    return text
+        .replaceAll(RegExp(r'<thought>[\s\S]*?</thought>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*(?:\]|$)'), '')
+        .trim();
+  }
+
+  String? _extractThought(String text) {
+    final match = RegExp(r'<thought>([\s\S]*?)</thought>', caseSensitive: false).firstMatch(text);
+    if (match == null) return null;
+    final t = match.group(1)?.trim();
+    return (t != null && t.isNotEmpty) ? t : null;
+  }
+
+  /// Runs a single LLM turn with live token streaming into the placeholder message.
+  /// Returns (text, thinking, promptTokens, completionTokens, responseTokens).
+  Future<({
+    String text,
+    String? thinking,
+    int promptTokens,
+    int completionTokens,
+    int responseTokens,
+  })> _runModelTurn(
+    String prompt,
+    List<Map<String, String>> history,
+    String systemInstruction, {
+    String? imageBase64,
+  }) async {
+    final pid = _aiService.selectedProviderId;
+    final localInferenceState = _ref.read(localInferenceProvider);
+    final isLocalModelLoaded =
+        localInferenceState.status == LocalModelStatus.ready && localInferenceState.loadedModel != null;
+
+    final buffer = StringBuffer();
+    String? thinking;
+
+    ChatResponse resp;
+    if (pid == 'local_edge' && isLocalModelLoaded) {
+      // Native on-device inference (no streaming support)
+      final text = await _ref.read(localInferenceProvider.notifier).generate(
+            prompt: prompt,
+            history: history,
+            systemInstruction: systemInstruction,
+          );
+      buffer.write(text);
+      _patchLiveContent(_stripInternal(text), thinking: null);
+      resp = ChatResponse(text);
+    } else {
+      resp = await _aiService.streamChatMessage(
+        prompt,
+        history,
+        systemInstruction: systemInstruction,
+        imageBase64: imageBase64,
+        cancelToken: _cancelToken,
+        onToken: (token) {
+          buffer.write(token);
+          final acc = buffer.toString();
+          final open = acc.indexOf('<thought>');
+          if (open != -1) {
+            final after = acc.substring(open + '<thought>'.length);
+            final close = after.indexOf('</thought>');
+            final partial = close != -1 ? after.substring(0, close) : after;
+            final trimmed = partial.trim();
+            _patchLiveContent(_stripInternal(acc), thinking: trimmed.isNotEmpty ? trimmed : null);
+          } else {
+            _patchLiveContent(_stripInternal(acc), thinking: thinking);
+          }
+        },
+      );
+      // streamChatMessage falls back to non-streaming for google/anthropic,
+      // where onToken never fires — make sure the full text is captured.
+      if (buffer.isEmpty) {
+        buffer.write(resp.text);
+        _patchLiveContent(_stripInternal(resp.text), thinking: _extractThought(resp.text));
+      }
+      thinking = _extractThought(buffer.toString());
+    }
+
+    final text = buffer.toString();
+    // Surface transport/API errors as exceptions so the caller shows an error card
+    if (text.trim().startsWith('Error:') || text.trim().startsWith('❌')) {
+      throw Exception(text.trim());
+    }
+    return (
+      text: text,
+      thinking: thinking,
+      promptTokens: resp.tokenUsage?.promptTokens ?? 0,
+      completionTokens: resp.tokenUsage?.completionTokens ?? 0,
+      responseTokens: resp.tokenUsage?.totalTokens ?? _estimateTokens(text),
+    );
   }
 
   Future<void> askAI(String prompt, {String? imageBase64, List<String>? contextFiles}) async {
@@ -612,13 +759,18 @@ class AINotifier extends StateNotifier<AIState> {
       await _executeDream();
       return;
     }
-    
+
     if (prompt.trim().startsWith('/goal ')) {
       final goal = prompt.trim().substring(6).trim();
       state = state.copyWith(sessionGoal: goal);
       // We will proceed to pass this goal to the LLM to start Autopilot
     }
-    
+
+    // (Re)initialise streaming/cancellation state for this run
+    _cancelled = false;
+    _cancelToken = CancelToken();
+    _lastPrompt = prompt;
+
     final userMessage = ChatMessage(
       role: MessageRole.user,
       content: prompt,
@@ -661,6 +813,17 @@ class AINotifier extends StateNotifier<AIState> {
 
       while (state.isLoading) {
         currentStep++;
+        // Chat mode: conversational assistant (like opencode). It may use
+        // read-only tools / web search to answer, but must NOT loop as an
+        // autonomous agent. Cap it to a single tool round + final answer.
+        if (state.interactionMode == AiInteractionMode.chat && currentStep > 3) {
+          state = state.copyWith(
+            isLoading: false,
+            activeAgentRole: null,
+            currentStatusMessage: null,
+          );
+          break;
+        }
         if (currentStep > maxSteps) {
           state = state.copyWith(
             isLoading: false,
@@ -812,72 +975,71 @@ class AINotifier extends StateNotifier<AIState> {
                 })
             .toList();
 
-        // Get completion from AI service
-        String responseText;
-        int responseTokens = 0;
-        int promptTokens = 0;
-        int completionTokens = 0;
-        
-        final localInferenceState = _ref.read(localInferenceProvider);
-        final isLocalModelLoaded = localInferenceState.status == LocalModelStatus.ready && localInferenceState.loadedModel != null;
+        // Get completion from AI service (streaming into a live assistant bubble)
+        _insertLivePlaceholder();
 
-        if (_aiService.selectedProviderId == 'local_edge' && isLocalModelLoaded) {
-           // Native inference on Android/iOS via InferenceEngine
-           responseText = await _ref.read(localInferenceProvider.notifier).generate(
-             prompt: nextPrompt,
-             history: history,
-             systemInstruction: systemInstruction,
-           );
-           responseTokens = _estimateTokens(responseText);
-        } else if (_aiService.selectedProviderId == 'local_edge' && !isLocalModelLoaded) {
-           // local_edge selected but no model loaded → check if it's desktop
-           // On desktop: llama-server might or might not be running
-           // Try the HTTP request but catch connection errors gracefully
-           try {
-             final chatResponse = await _aiService.sendChatMessage(
-               nextPrompt,
-               history,
-               systemInstruction: systemInstruction,
-               imageBase64: imageBase64,
-             );
-             responseText = chatResponse.text;
-             promptTokens = chatResponse.tokenUsage?.promptTokens ?? 0;
-             completionTokens = chatResponse.tokenUsage?.completionTokens ?? 0;
-             responseTokens = chatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
-           } catch (e) {
-             final errorStr = e.toString();
-             final isConnectionError = errorStr.contains('connection error') ||
-                 errorStr.contains('В соединении отказано') ||
-                 errorStr.contains('Connection refused') ||
-                 errorStr.contains('SocketException') ||
-                 errorStr.contains('errno = 111');
-
-             if (isConnectionError) {
-               responseText = '⚠️ **Локальный ИИ недоступен**\n\n'
-                   'Не удалось подключиться к локальному серверу.\n\n'
-                   '**На ПК (Linux/Desktop):**\n'
-                   '• Откройте боковую панель **Local Models** → нажмите **Start** чтобы запустить llama-server\n'
-                   '• Или выберите другого провайдера в настройках (Gemini, OpenAI и др.)\n\n'
-                   '**На телефоне (Android):**\n'
-                   '• Скачайте модель в панели Local Models → нажмите **Run** — сервер не нужен, ИИ работает прямо на устройстве\n\n'
-                   '_Технически: llama-server не запущен на localhost_';
-             } else {
-               rethrow;
-             }
-             responseTokens = 0;
-           }
-        } else {
-           final chatResponse = await _aiService.sendChatMessage(
-             nextPrompt,
-             history,
-             systemInstruction: systemInstruction,
-             imageBase64: imageBase64,
-           );
-           responseText = chatResponse.text;
-           promptTokens = chatResponse.tokenUsage?.promptTokens ?? 0;
-           completionTokens = chatResponse.tokenUsage?.completionTokens ?? 0;
-           responseTokens = chatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
+        late final ({
+          String text,
+          String? thinking,
+          int promptTokens,
+          int completionTokens,
+          int responseTokens,
+        }) turn;
+        try {
+          turn = await _runModelTurn(
+            nextPrompt,
+            history,
+            systemInstruction,
+            imageBase64: imageBase64,
+          );
+        } on Exception catch (e) {
+          // Transport/API error → show a retryable error card
+          final errorText = e.toString().replaceFirst(RegExp(r'^Exception: '), '');
+          final errorCard = ChatMessage(
+            role: MessageRole.assistant,
+            content: '',
+            timestamp: DateTime.now(),
+            isError: true,
+            errorMessage: errorText,
+            retryPrompt: _lastPrompt,
+            imageBase64: imageBase64,
+          );
+          _updateMessagesAndSync([
+            ...state.messages.where((m) => m.timestamp != _liveTs),
+            errorCard,
+          ]);
+          state = state.copyWith(
+            isLoading: false,
+            activeAgentRole: null,
+            currentStatusMessage: null,
+            error: errorText,
+          );
+          _liveTs = null;
+          return;
         }
+
+        // Honour cancellation requested mid-flight
+        if (_cancelled) {
+          final partial = _stripInternal(turn.text);
+          final partialMsg = ChatMessage(
+            role: MessageRole.assistant,
+            content: partial.isNotEmpty
+                ? '$partial\n\n_(остановлено пользователем)_'
+                : '_(остановлено пользователем)_',
+            timestamp: DateTime.now(),
+            thinking: turn.thinking,
+          );
+          _updateMessagesAndSync([
+            ...state.messages.where((m) => m.timestamp != _liveTs),
+            partialMsg,
+          ]);
+          state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+          _liveTs = null;
+          return;
+        }
+
+        final responseText = turn.text;
+        String? liveThought = turn.thinking;
 
         // Parse proposed actions from <actions> blocks
         var actions = _parseActions(responseText);
@@ -888,6 +1050,7 @@ class AINotifier extends StateNotifier<AIState> {
           final thought = thoughtMatch.group(1)?.trim();
           if (thought != null && thought.isNotEmpty) {
             state = state.copyWith(currentThought: thought);
+            liveThought = thought;
           }
         }
 
@@ -895,31 +1058,8 @@ class AINotifier extends StateNotifier<AIState> {
         if (isLocalAi && actions.isEmpty) {
           actions = LocalActionTranslator.translateResponse(responseText, workspacePath);
           if (actions.isNotEmpty) {
-            // Log that we translated actions from natural language
             debugPrint('[LocalActionTranslator] Translated ${actions.length} action(s) from model response');
           }
-        }
-
-        // Intercept and auto-execute web_search / web_fetch actions for live internet access
-        final webActions = actions.where((a) => a.type == 'web_search' || a.type == 'web_fetch').toList();
-        if (webActions.isNotEmpty) {
-          final webAction = webActions.first;
-          final statusMsg = webAction.type == 'web_search'
-              ? 'Поиск в интернете: "${webAction.content}"...'
-              : 'Загрузка страницы: "${webAction.path}"...';
-          state = state.copyWith(currentStatusMessage: statusMsg);
-
-          final searchResult = await applyAction(webAction, runInBackground: true);
-
-          // Feed search results back to the model as context and continue loop
-          nextPrompt = '$nextPrompt\n\n[Результаты поиска из интернета]\n$searchResult\n\nПожалуйста, сформулируй окончательный ответ пользователю на русском языке на основе этих свежих данных.';
-          
-          // Clean the actions tags from the response before continuing
-          responseText = responseText
-              .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
-              .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '');
-          
-          continue;
         }
 
         final cleanContent = responseText
@@ -933,14 +1073,46 @@ class AINotifier extends StateNotifier<AIState> {
           content: cleanContent,
           timestamp: DateTime.now(),
           actions: actions.isNotEmpty ? actions : null,
+          thinking: liveThought,
         );
 
+        // Intercept and auto-execute web_search / web_fetch actions for live internet access
+        final webActions = actions.where((a) => a.type == 'web_search' || a.type == 'web_fetch').toList();
+        if (webActions.isNotEmpty) {
+          // Persist this turn's message, then continue the loop with search results
+          final finalized = state.messages.where((m) => m.timestamp != _liveTs).toList()..add(assistantMessage);
+          state = state.copyWith(
+            totalTokens: state.totalTokens + turn.responseTokens,
+            lastPromptTokens: turn.promptTokens,
+            lastCompletionTokens: turn.completionTokens,
+            currentThought: liveThought,
+          );
+          _updateMessagesAndSync(finalized);
+          _liveTs = null;
+
+          final webAction = webActions.first;
+          final statusMsg = webAction.type == 'web_search'
+              ? 'Поиск в интернете: "${webAction.content}"...'
+              : 'Загрузка страницы: "${webAction.path}"...';
+          state = state.copyWith(currentStatusMessage: statusMsg);
+
+          final searchResult = await applyAction(webAction, runInBackground: true);
+
+          // Feed search results back to the model as context and continue loop
+          nextPrompt = '$nextPrompt\n\n[Результаты поиска из интернета]\n$searchResult\n\nПожалуйста, сформулируй окончательный ответ пользователю на русском языке на основе этих свежих данных.';
+          continue;
+        }
+
+        // Persist the final assistant message (replaces the live placeholder)
+        final finalized = state.messages.where((m) => m.timestamp != _liveTs).toList()..add(assistantMessage);
         state = state.copyWith(
-          totalTokens: state.totalTokens + responseTokens,
-          lastPromptTokens: promptTokens,
-          lastCompletionTokens: completionTokens,
+          totalTokens: state.totalTokens + turn.responseTokens,
+          lastPromptTokens: turn.promptTokens,
+          lastCompletionTokens: turn.completionTokens,
+          currentThought: liveThought,
         );
-        _updateMessagesAndSync([...state.messages, assistantMessage]);
+        _updateMessagesAndSync(finalized);
+        _liveTs = null;
 
         if (!isAutopilot) {
           final readOnlyActions = actions.where(_isReadOnlyAction).toList();

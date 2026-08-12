@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -356,6 +357,8 @@ class AIService {
             return await _fetchOllamaModels();
           case LocalAiEngine.lmStudio:
             return await _fetchLmStudioModels();
+          case LocalAiEngine.mistralRs:
+            return await _fetchLocalEdgeModels();
         }
       default:
         return AiProviders.byId(pid).defaultModels;
@@ -533,6 +536,24 @@ class AIService {
       return models;
     } catch (_) {
       return AiProviders.localEdge.defaultModels;
+    }
+  }
+
+  /// Проверяет доступность локального сервера (OpenAI-совместимого) и возвращает
+  /// список загруженных в него моделей. Используется кнопкой «Проверить сервер».
+  Future<(bool connected, List<String> models)> probeLocalEngine() async {
+    try {
+      final resp = await _executeOpenAiCompatRequest(
+        'local_edge',
+        '/models',
+        isGet: true,
+      );
+      final models =
+          (resp.data['data'] as List).map((m) => m['id'] as String).toList()
+            ..sort();
+      return (true, models);
+    } catch (_) {
+      return (false, const <String>[]);
     }
   }
 
@@ -844,11 +865,23 @@ class AIService {
     List<Map<String, String>> history, {
     String? systemInstruction,
     void Function(String token)? onToken,
+    CancelToken? cancelToken,
+    String? imageBase64,
   }) async {
     final pid = _settings.selectedProviderId;
-    
+
+    // Images are only supported by the non-streaming path for now
+    if (imageBase64 != null) {
+      return await sendChatMessage(
+        message,
+        history,
+        systemInstruction: systemInstruction,
+        imageBase64: imageBase64,
+      );
+    }
+
     // For OpenAI-compatible providers, use streaming
-    if (pid == 'openai' || pid == 'deepseek' || pid == 'groq' || 
+    if (pid == 'openai' || pid == 'deepseek' || pid == 'groq' ||
         pid == 'openrouter' || pid == 'grok' || pid == 'together' ||
         pid == 'perplexity' || pid == 'fireworks' ||
         pid == 'kimi' || pid == 'nvidia' ||
@@ -858,9 +891,10 @@ class AIService {
         history,
         systemInstruction: systemInstruction,
         onToken: onToken,
+        cancelToken: cancelToken,
       );
     }
-    
+
     // For other providers, fall back to non-streaming
     return await sendChatMessage(message, history, systemInstruction: systemInstruction);
   }
@@ -870,6 +904,7 @@ class AIService {
     List<Map<String, String>> history, {
     String? systemInstruction,
     void Function(String token)? onToken,
+    CancelToken? cancelToken,
   }) async {
     final pid = _settings.selectedProviderId;
     try {
@@ -903,6 +938,7 @@ class AIService {
               responseType: ResponseType.stream,
               validateStatus: (s) => s != null && s < 600,
             ),
+            cancelToken: cancelToken,
             data: jsonEncode({
               'model': _settings.selectedModel,
               'messages': messages,
@@ -1249,6 +1285,120 @@ class AIService {
       );
     } catch (e) {
       return ChatResponse('Ollama Error: $e');
+    }
+  }
+
+  // ─── LAN-сканер локальных ИИ-серверов ──────────────────────────────────────
+
+  /// Сканирует приватные Wi-Fi подсети устройства и ищет запущенные
+  /// локальные серверы (Ollama :11434, Mistral.rs/LM Studio :1234,
+  /// llama-server :8080, а также :8000/:8081). Возвращает найденные серверы.
+  Future<List<DiscoveredServer>> scanLocalNetwork({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    const scanPorts = {
+      11434: 'ollama',
+      1234: 'mistralrs',
+      8080: 'llama',
+      8000: 'openai',
+      8081: 'openai',
+    };
+
+    final hosts = <String>{};
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      for (final iface in interfaces) {
+        for (final addr in iface.addresses) {
+          final p = addr.address.split('.');
+          if (p.length != 4) continue;
+          final a = int.tryParse(p[0]);
+          final b = int.tryParse(p[1]);
+          // сканируем только приватные подсети (не трогаем публичные IP)
+          final isPrivate = (a == 10) ||
+              (a == 192 && b == 168) ||
+              (a == 172 && b != null && b >= 16 && b <= 31);
+          if (!isPrivate) {
+            continue;
+          }
+          final subnet = '${p[0]}.${p[1]}.${p[2]}';
+          for (int o = 1; o <= 254; o++) {
+            hosts.add('$subnet.$o');
+          }
+        }
+      }
+    } catch (_) {
+      return [];
+    }
+    if (hosts.isEmpty) return [];
+
+    final targets = <(String, int, String)>[];
+    for (final h in hosts) {
+      scanPorts.forEach((port, kind) => targets.add((h, port, kind)));
+    }
+    final total = targets.length;
+    final found = <DiscoveredServer>[];
+    int done = 0;
+    const maxConcurrent = 120;
+
+    for (int i = 0; i < targets.length; i += maxConcurrent) {
+      final chunk = targets.skip(i).take(maxConcurrent);
+      await Future.wait(chunk.map((t) async {
+        final (host, port, kind) = t;
+        if (await _probePort(host, port)) {
+          found.add(DiscoveredServer(host, port, kind));
+        }
+        done++;
+        onProgress?.call(done, total);
+      }));
+    }
+
+    final seen = <String>{};
+    final unique = <DiscoveredServer>[];
+    for (final s in found) {
+      final key = '${s.host}:${s.port}';
+      if (seen.add(key)) unique.add(s);
+    }
+    return unique;
+  }
+
+  Future<bool> _probePort(String host, int port) async {
+    try {
+      final sock = await RawSocket.connect(
+        host,
+        port,
+        timeout: const Duration(milliseconds: 400),
+      );
+      sock.close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+/// Найденный в локальной сети ИИ-сервер.
+class DiscoveredServer {
+  final String host;
+  final int port;
+  final String kind; // 'ollama' | 'mistralrs' | 'llama' | 'openai'
+  const DiscoveredServer(this.host, this.port, this.kind);
+
+  String get baseUrl =>
+      kind == 'ollama' ? 'http://$host:$port' : 'http://$host:$port/v1';
+
+  String get label {
+    switch (kind) {
+      case 'ollama':
+        return 'Ollama @ $host:$port';
+      case 'mistralrs':
+        return 'Mistral.rs/LM Studio @ $host:$port';
+      case 'llama':
+        return 'llama-server @ $host:$port';
+      default:
+        return 'OpenAI-совместимый сервер @ $host:$port';
     }
   }
 }

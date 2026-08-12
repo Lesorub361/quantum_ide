@@ -406,42 +406,30 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             child: aiState.isLoading
                 ? Row(
                     children: [
-                      if (aiState.isAutopilot) ...[
-                        InkWell(
-                          onTap: () => ref.read(aiProvider.notifier).stopAutopilot(),
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.redAccent.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.8), width: 0.8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(LucideIcons.square, size: 10, color: Colors.redAccent),
-                                const SizedBox(width: 4),
-                                Text(
-                                  l10n.stop,
-                                  style: GoogleFonts.inter(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
+                      InkWell(
+                        onTap: () => ref.read(aiProvider.notifier).cancel(),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.redAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.8), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideIcons.square, size: 10, color: Colors.redAccent),
+                              const SizedBox(width: 4),
+                              Text(
+                                l10n.stop,
+                                style: GoogleFonts.inter(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 6),
-                      ] else ...[
-                        const SizedBox(
-                          width: 8,
-                          height: 8,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: Colors.purpleAccent,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
+                      ),
+                      const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           aiState.currentStatusMessage ?? (aiState.isAutopilot ? 'Autopilot running...' : 'Thinking...'),
@@ -459,6 +447,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildTokenBadge(aiState),
+              const SizedBox(width: 4),
+              _buildContextChip(ref, aiState),
               const SizedBox(width: 4),
               _buildSystemStatsBadge(ref),
             ],
@@ -497,6 +487,68 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Roughly estimates the context window size for the selected model so we can
+  /// show a usage bar. Cloud models vary — this is an approximation.
+  int _estimatedContextLimit(WidgetRef ref) {
+    final localState = ref.read(localInferenceProvider);
+    if (localState.contextTokensTotal > 0) return localState.contextTokensTotal;
+    final model = ref.read(aiServiceProvider).settings.selectedModel.toLowerCase();
+    if (model.contains('32k')) return 32000;
+    if (model.contains('64k')) return 64000;
+    if (model.contains('128k')) return 128000;
+    if (model.contains('200k')) return 200000;
+    if (model.contains('1m') || model.contains('1000k')) return 1000000;
+    if (model.contains('gemini')) return 1000000;
+    if (model.contains('gpt-4') || model.contains('claude')) return 200000;
+    return 128000;
+  }
+
+  Widget _buildContextChip(WidgetRef ref, AIState aiState) {
+    final limit = _estimatedContextLimit(ref);
+    final used = aiState.totalTokens;
+    final ratio = limit > 0 ? (used / limit).clamp(0.0, 1.0) : 0.0;
+    final color = ratio > 0.85
+        ? Colors.orangeAccent
+        : ratio > 0.6
+            ? Colors.cyanAccent
+            : Colors.greenAccent;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      ),
+      child: Tooltip(
+        message: 'Context: $used / $limit tokens (${(ratio * 100).toInt()}%)',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(LucideIcons.align_horizontal_justify_center, size: 10, color: Colors.white54),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 46,
+              height: 5,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: ratio,
+                  backgroundColor: Colors.white.withValues(alpha: 0.1),
+                  valueColor: AlwaysStoppedAnimation<Color>(color),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${(ratio * 100).toInt()}%',
+              style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -88,12 +88,23 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: QuantumIDE ${{ github.ref_name }}
           body: |
-            ✨ New APK build.
+            ## QuantumIDE ${{ github.ref_name }}
 
-            ## What's new in this build
-            - Native Android terminal text selection: long-press / double-tap shows the OS selection handles
-            - Draggable start/end handles to precisely adjust the selection
-            - Standard Android ActionMode with Copy / Select all
+            ### Local AI engines
+            - Added **Mistral.rs (Rust)** as a local engine — a fast Rust LLM server, faster than llama.cpp on CPU. Connect to a `mistralrs-server` over the network (OpenAI-compatible API).
+            - **LM Studio** kept as a local engine option.
+            - Local engine model lists no longer show fake default models — only real models (downloaded catalog models for the built-in engine, or models actually loaded in Ollama / LM Studio / Mistral.rs).
+
+            ### Model storage
+            - Downloaded models on mobile are saved next to your projects (`<app>/projects/ai_models`), so they survive and can be re-added or replaced manually.
+
+            ### Chat experience
+            - Chat mode is now a clean conversational assistant (like OpenCode): streamed output, visible reasoning, may read files / search the web to answer — but never loops as an autonomous agent. Modification actions are still proposed for confirmation.
+            - Agent / Autopilot mode remains for autonomous implementation.
+
+            ### Networking
+            - Added a **LAN scanner** in Local AI settings: auto-discovers Ollama (`:11434`), Mistral.rs / LM Studio (`:1234`), llama-server (`:8080`) and other OpenAI-compatible servers on your Wi-Fi, with one-tap connect.
+            - Added "Test connection" for local servers.
           files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

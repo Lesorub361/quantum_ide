@@ -12,6 +12,7 @@ import 'package:quantum_ide/core/utils/resumable_downloader.dart';
 import 'package:quantum_ide/core/services/chat_settings_service.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 // model_catalog_service types are used only via re-export in local_models_dialog; no direct import needed here
 
 
@@ -402,8 +403,11 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
   /// Desktop     → temp/quantum_models (fallback, llama-server manages its own path).
   Future<String> _getModelsDir() async {
     if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
-      final dir = await getApplicationDocumentsDirectory();
-      final modelsDir = Directory(p.join(dir.path, 'models'));
+      final runtime = _ref.read(runtimeServiceProvider);
+      final base = runtime.isInitialized
+          ? runtime.appDirectory
+          : (await getApplicationDocumentsDirectory()).path;
+      final modelsDir = Directory(p.join(base, 'projects', 'ai_models'));
       if (!await modelsDir.exists()) await modelsDir.create(recursive: true);
       return modelsDir.path;
     }

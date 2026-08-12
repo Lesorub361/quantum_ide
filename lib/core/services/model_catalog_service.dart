@@ -320,10 +320,15 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
 
   Future<String?> getModelsDir() async {
     try {
-      // On Android / iOS: use Documents/models — same path as native InferenceEngine
+      // On Android / iOS: store models next to the user's projects
+      // (runtime.appDirectory/projects/ai_models) so they live in the same
+      // place as projects and can be re-added / managed manually.
       if (Platform.isAndroid || Platform.isIOS) {
-        final docsDir = await getApplicationDocumentsDirectory();
-        final modelsDir = Directory(p.join(docsDir.path, 'models'));
+        final runtime = _ref.read(runtimeServiceProvider);
+        final base = runtime.isInitialized
+            ? runtime.appDirectory
+            : (await getApplicationDocumentsDirectory()).path;
+        final modelsDir = Directory(p.join(base, 'projects', 'ai_models'));
         await modelsDir.create(recursive: true);
         return modelsDir.path;
       }
