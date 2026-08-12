@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.view.ViewGroup
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -17,6 +18,7 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.quantum_ide/native"
     private val DOWNLOAD_CHANNEL = "com.example.quantum_ide/download"
+    private val SELECTION_CHANNEL = "com.example.quantum_ide/selection"
     private lateinit var bootstrapManager: BootstrapManager
     private lateinit var processManager: ProcessManager
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -157,6 +159,41 @@ class MainActivity : FlutterActivity() {
                     } else {
                         result.error("INVALID_ARGS", "filename required", null)
                     }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        val selectionChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SELECTION_CHANNEL)
+        selectionChannel.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "show" -> {
+                    val args = call.argument<Map<String, Any>>("args") ?: emptyMap()
+                    runOnUiThread {
+                        val overlay = TerminalSelectionOverlay.getInstance(this, selectionChannel)
+                        overlay.show(args)
+                    }
+                    result.success(true)
+                }
+                "hide" -> {
+                    runOnUiThread {
+                        val overlay = TerminalSelectionOverlay.getInstance(this, selectionChannel)
+                        overlay.hide()
+                    }
+                    result.success(true)
+                }
+                "updatePosition" -> {
+                    val args = call.argument<Map<String, Any>>("args") ?: emptyMap()
+                    runOnUiThread {
+                        val overlay = TerminalSelectionOverlay.getInstance(this, selectionChannel)
+                        overlay.updatePosition(
+                            args["left"] as Int,
+                            args["top"] as Int,
+                            args["width"] as Int,
+                            args["height"] as Int,
+                        )
+                    }
+                    result.success(true)
                 }
                 else -> result.notImplemented()
             }

@@ -21,9 +21,6 @@ on:
     tags:
       - 'v*.*.*'
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -82,17 +79,18 @@ jobs:
           retention-days: 14
 
       - name: Create GitHub Release
-        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        if: github.ref_type == 'tag' && (startsWith(github.ref_name, 'v') || github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: QuantumIDE ${{ github.ref_name }}
           body: |
-            ✨ Новый релиз QuantumIDE.
+            ✨ New APK build.
 
-            ## Что нового в этой сборке
-            - Сборка через GitHub Actions
-            - Подписанный release APK
+            ## What's new in this build
+            - Native Android terminal text selection: long-press / double-tap shows the OS selection handles
+            - Draggable start/end handles to precisely adjust the selection
+            - Standard Android ActionMode with Copy / Select all
           files: build/app/outputs/flutter-apk/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

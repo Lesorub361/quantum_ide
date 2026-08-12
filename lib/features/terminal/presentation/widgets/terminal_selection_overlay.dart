@@ -1,21 +1,14 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_lucide/flutter_lucide.dart';
-
 import 'package:xterm/xterm.dart' as xt;
 
-import '../../../../core/utils/share_utils.dart';
+import 'native_terminal_selection.dart';
 import '../../../terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
-/// Термукс-подобный оверлей для выделения текста в терминале.
+/// Оверлей для нативного выделения текста в терминале (Android System Text Selection).
 ///
-/// Когда в терминале появляется выделение — рисует два ползунка-ручки
-/// (егиpte: стартовую и конечную), которые можно перетаскивать чтобы
-/// продолжить / изменить выделение, а также показывает панель
-/// Копировать / Выделить всё / Вставить / Отправить.
+/// Использует прозрачный нативный EditText поверх терминала для отображения
+/// стандартных синих маркеров выделения и ActionMode (Copy/Select All).
 class TerminalSelectionOverlay extends StatefulWidget {
   final TerminalSession session;
   final GlobalKey<xt.TerminalViewState> terminalKey;
@@ -36,20 +29,24 @@ class TerminalSelectionOverlay extends StatefulWidget {
 }
 
 class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
-  final GlobalKey _overlayKey = GlobalKey();
+  final NativeTerminalSelectionBridge _nativeBridge = NativeTerminalSelectionBridge();
 
-  Offsets? _offset;
-
-  _HandleKind? _dragHandle;
-  xt.CellOffset? _dragFixed;
-
-  bool get _hasSelection => widget.session.xtermViewController.selection != null;
-
-  xt.BufferRange? get _selection => widget.session.xtermViewController.selection;
+  bool _nativeActive = false;
+  bool _suppressNativeSync = false;
+  BufferTextMapper? _mapper;
+  Rect? _terminalTextRect;
+  int _firstVisibleLine = 0;
+  int _lastVisibleLine = 0;
 
   @override
   void initState() {
     super.initState();
+    _nativeBridge.startListening();
+    _nativeBridge.onSelectionChanged = _onNativeSelectionChanged;
+    _nativeBridge.onCopy = _onNativeCopy;
+    _nativeBridge.onSelectAll = _onNativeSelectAll;
+    _nativeBridge.onActionModeDestroyed = _onNativeActionModeDestroyed;
+
     widget.session.xtermViewController.addListener(_onChange);
     widget.session.xtermTerminal.addListener(_onChange);
     widget.scrollController.addListener(_onChange);
@@ -61,6 +58,8 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
     widget.session.xtermViewController.removeListener(_onChange);
     widget.session.xtermTerminal.removeListener(_onChange);
     widget.scrollController.removeListener(_onChange);
+    _nativeBridge.stopListening();
+    _nativeBridge.hide();
     super.dispose();
   }
 
@@ -73,331 +72,176 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
   }
 
   void _updateOffsets() {
-    final rt = widget.terminalKey.currentState?.renderTerminal;
-    final overlayBox =
-        _overlayKey.currentContext?.findRenderObject() as RenderBox?;
-    final selection = _selection;
-    if (rt == null || overlayBox == null) {
-      _offset = null;
+    final terminalViewState = widget.terminalKey.currentState;
+    if (terminalViewState == null) {
+      if (_nativeActive) {
+        _hideNativeOverlay();
+      }
+      _mapper = null;
+      _terminalTextRect = null;
       return;
     }
+
+    final rt = terminalViewState.renderTerminal;
+    final selection = widget.session.xtermViewController.selection;
     if (selection == null) {
-      _offset = null;
+      if (_nativeActive) {
+        _hideNativeOverlay();
+      }
+      _mapper = null;
+      _terminalTextRect = null;
       return;
     }
 
     final norm = selection.normalized;
     final cellSize = rt.cellSize;
+    final lineHeight = rt.lineHeight;
 
-    Offset localToOverlay(Offset local) {
-      final global = rt.localToGlobal(local);
-      return overlayBox.globalToLocal(global);
+    // Compute visible line range
+    final scrollPixels = widget.scrollController.hasClients
+        ? widget.scrollController.position.pixels
+        : 0.0;
+    final firstVisibleLine = (scrollPixels / lineHeight).floor().clamp(0, widget.session.xtermTerminal.buffer.height - 1);
+    final visibleRows = (rt.size.height / lineHeight).floor().clamp(1, widget.session.xtermTerminal.buffer.height);
+    final lastVisibleLine = (firstVisibleLine + visibleRows - 1).clamp(0, widget.session.xtermTerminal.buffer.height - 1);
+
+    // Check if visible range changed
+    if (_firstVisibleLine != firstVisibleLine || _lastVisibleLine != lastVisibleLine) {
+      _firstVisibleLine = firstVisibleLine;
+      _lastVisibleLine = lastVisibleLine;
     }
 
-    final startLocal = rt.getOffset(norm.begin);
-    final endLocal = rt.getOffset(norm.end);
+    // Build text mapper for visible lines
+    _mapper = BufferTextMapper(
+      terminal: widget.session.xtermTerminal,
+      firstVisibleLine: firstVisibleLine,
+      lastVisibleLine: lastVisibleLine,
+    );
 
-    _offset = Offsets(
-      start: localToOverlay(startLocal),
-      end: localToOverlay(endLocal + Offset(cellSize.width, cellSize.height)),
-      cellSize: cellSize,
+    // Compute terminal text area rect in global coordinates
+    final textOrigin = rt.localToGlobal(Offset(0, firstVisibleLine * lineHeight));
+    final terminal = terminalViewState.widget.terminal;
+    final textWidth = terminal.viewWidth * cellSize.width;
+    final textHeight = visibleRows * lineHeight;
+    _terminalTextRect = Rect.fromLTWH(textOrigin.dx, textOrigin.dy, textWidth, textHeight);
+
+    // Map selection to character indices in the overlay text
+    final startIdx = _mapper!.charIndexForCell(norm.begin);
+    final endIdx = _mapper!.charIndexForCell(norm.end);
+
+    // Show or update native overlay.
+    // Once the native overlay is active the user drives the selection through
+    // the OS handles, so we must NOT reset the native selection — we only keep
+    // its position in sync with the terminal (e.g. while scrolling).
+    if (!_nativeActive) {
+      _showNativeOverlay(startIdx, endIdx);
+    } else {
+      _updateNativePosition();
+    }
+  }
+
+  void _updateNativePosition() {
+    if (_terminalTextRect == null) return;
+    _nativeBridge.updatePosition(_terminalTextRect!);
+  }
+
+  void _showNativeOverlay(int startIdx, int endIdx) {
+    if (_mapper == null || _terminalTextRect == null) return;
+    final terminalViewState = widget.terminalKey.currentState;
+    if (terminalViewState == null) return;
+
+    final rt = terminalViewState.renderTerminal;
+    final fontSize = rt.cellSize.width; // approximate, use cell width as font size
+    final lineHeight = rt.lineHeight;
+
+    // Get font family from terminal view's textStyle
+    final fontFamily = terminalViewState.widget.textStyle.fontFamily;
+
+    _nativeActive = true;
+    _nativeBridge.show(
+      text: _mapper!.fullText,
+      selectionStart: startIdx,
+      selectionEnd: endIdx,
+      rect: _terminalTextRect!,
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      fontFamily: fontFamily,
     );
   }
 
-  xt.CellOffset _cellAt(Offset globalPos) {
-    final rt = widget.terminalKey.currentState!.renderTerminal;
-    final local = rt.globalToLocal(globalPos);
-    return rt.getCellOffset(local);
+  void _hideNativeOverlay() {
+    if (_nativeActive) {
+      _nativeActive = false;
+      _nativeBridge.hide();
+    }
   }
 
-  void _beginHandleDrag(_HandleKind kind) {
-    final sel = _selection;
-    if (sel == null) return;
-    HapticFeedback.mediumImpact();
-    _dragHandle = kind;
-    _dragFixed = kind == _HandleKind.start ? sel.end : sel.begin;
-  }
+  void _onNativeSelectionChanged(int start, int end) {
+    if (_mapper == null || _suppressNativeSync) return;
+    _suppressNativeSync = true;
 
-  void _moveHandle(Offset globalPos) {
-    final sel = _selection;
-    if (sel == null) return;
-    final kind = _dragHandle;
-    if (kind == null) return;
+    final startCell = _mapper!.cellForCharIndex(start);
+    final endCell = _mapper!.cellForCharIndex(end);
 
-    final cell = _cellAt(globalPos);
-    final buffer = widget.session.xtermTerminal.buffer;
-    final fixed = _dragFixed ?? (kind == _HandleKind.start ? sel.end : sel.begin);
-
-    final newAnchor = buffer.createAnchorFromOffset(cell);
-    final fixedAnchor = buffer.createAnchorFromOffset(fixed);
-
-    if (kind == _HandleKind.start) {
-      widget.session.xtermViewController.setSelection(newAnchor, fixedAnchor);
-    } else {
-      widget.session.xtermViewController.setSelection(fixedAnchor, newAnchor);
+    if (startCell != null && endCell != null) {
+      final buffer = widget.session.xtermTerminal.buffer;
+      final beginAnchor = buffer.createAnchorFromOffset(startCell);
+      final endAnchor = buffer.createAnchorFromOffset(endCell);
+      widget.session.xtermViewController.setSelection(beginAnchor, endAnchor);
     }
 
-    _autoScrollForDrag(globalPos);
+    _suppressNativeSync = false;
   }
 
-  void _endHandleDrag() {
-    _dragHandle = null;
-    _dragFixed = null;
-  }
-
-  void _autoScrollForDrag(Offset globalPos) {
-    final rt = widget.terminalKey.currentState?.renderTerminal;
-    final sc = widget.scrollController;
-    if (rt == null || !sc.hasClients) return;
-
-    final local = rt.globalToLocal(globalPos);
-    final lineH = rt.lineHeight;
-    const edge = 32.0;
-    var delta = 0.0;
-    if (local.dy < edge) delta = -lineH;
-    if (local.dy > rt.size.height - edge) delta = lineH;
-    if (delta == 0) return;
-
-    final pos = sc.position;
-    final target = (pos.pixels + delta * 2).clamp(0.0, pos.maxScrollExtent);
-    sc.jumpTo(target);
-  }
-
-  Future<void> _copySelected() async {
-    final sel = _selection;
-    if (sel == null) return;
-    final text = widget.session.xtermTerminal.buffer.getText(sel);
-    if (text.isNotEmpty) {
-      await Clipboard.setData(ClipboardData(text: text));
+  void _onNativeCopy() {
+    final sel = widget.session.xtermViewController.selection;
+    if (sel != null) {
+      final text = widget.session.xtermTerminal.buffer.getText(sel);
+      if (text.isNotEmpty) {
+        Clipboard.setData(ClipboardData(text: text));
+      }
     }
-    widget.session.xtermViewController.clearSelection();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Copied to clipboard'),
-          duration: Duration(seconds: 1),
+    // Keep selection visible briefly, then clear
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        widget.session.xtermViewController.clearSelection();
+      }
+    });
+  }
+
+  void _onNativeSelectAll() {
+    // The native EditText already selected all of its (visible) text and fired
+    // onSelectionChanged, which mirrored the selection into xterm. We just make
+    // sure xterm's selection also spans the full visible buffer range and keep
+    // the current native overlay/position intact (no reset of handles).
+    final terminalViewState = widget.terminalKey.currentState;
+    if (terminalViewState == null) return;
+
+    final terminal = terminalViewState.widget.terminal;
+    final buffer = terminal.buffer;
+    final first = _firstVisibleLine;
+    final last = _lastVisibleLine;
+    if (last >= first) {
+      widget.session.xtermViewController.setSelection(
+        buffer.createAnchorFromOffset(xt.CellOffset(0, first)),
+        buffer.createAnchorFromOffset(
+          xt.CellOffset(terminal.viewWidth - 1, last),
         ),
       );
     }
   }
 
-  void _selectAll() {
-    final term = widget.session.xtermTerminal;
-    final buffer = term.buffer;
-    widget.session.xtermViewController.setSelection(
-      buffer.createAnchorFromOffset(const xt.CellOffset(0, 0)),
-      buffer.createAnchorFromOffset(
-        xt.CellOffset(term.viewWidth - 1, buffer.height - 1),
-      ),
-    );
-  }
-
-  Future<void> _paste() async {
-    final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null) {
-      widget.session.pty
-          .write(Uint8List.fromList(utf8.encode(data!.text!)));
+  void _onNativeActionModeDestroyed() {
+    _nativeActive = false;
+    if (mounted) {
+      widget.session.xtermViewController.clearSelection();
     }
-    widget.session.xtermViewController.clearSelection();
-  }
-
-  Future<void> _share() async {
-    final sel = _selection;
-    if (sel == null) return;
-    final text = widget.session.xtermTerminal.buffer.getText(sel);
-    if (text.isNotEmpty) {
-      await ShareUtils.shareText(text);
-    }
-  }
-
-  void _clearSelection() {
-    widget.session.xtermViewController.clearSelection();
-    _offset = null;
-    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      key: _overlayKey,
-      fit: StackFit.expand,
-      clipBehavior: Clip.none,
-      children: [
-        widget.child,
-        if (_hasSelection) ...[
-          if (_offset != null) ...[
-            Positioned(
-              left: _offset!.start.dx - 14,
-              top: _offset!.start.dy - 14,
-              child: _buildHandle(_HandleKind.start),
-            ),
-            Positioned(
-              left: _offset!.end.dx - 6,
-              top: _offset!.end.dy - 10,
-              child: _buildHandle(_HandleKind.end),
-            ),
-          ],
-          _buildToolbar(),
-        ],
-      ],
-    );
+    // The native overlay handles all selection UI (handles, ActionMode)
+    // We just pass through the child
+    return widget.child;
   }
-
-  Widget _buildToolbar() {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Center(
-          child: Material(
-            color: const Color(0xF21E1E24),
-            elevation: 8,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.08),
-                  width: 0.6,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _toolbarButton(
-                    LucideIcons.copy,
-                    'Copy',
-                    Colors.cyanAccent,
-                    _copySelected,
-                  ),
-                  _toolbarButton(
-                    LucideIcons.check_check,
-                    'All',
-                    Colors.blueAccent,
-                    _selectAll,
-                  ),
-                  _toolbarButton(
-                    LucideIcons.clipboard_paste,
-                    'Paste',
-                    Colors.greenAccent,
-                    _paste,
-                  ),
-                  _toolbarButton(
-                    LucideIcons.share_2,
-                    'Share',
-                    Colors.orangeAccent,
-                    _share,
-                  ),
-                  const SizedBox(width: 2),
-                  IconButton(
-                    icon: const Icon(LucideIcons.x,
-                        size: 14, color: Colors.white54),
-                    onPressed: _clearSelection,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 26, minHeight: 26),
-                    tooltip: 'Clear selection',
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _toolbarButton(
-    IconData icon,
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 2),
-      child: Tooltip(
-        message: label,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: color.withValues(alpha: 0.15)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 15, color: color),
-                  const SizedBox(height: 1),
-                  Text(
-                    label,
-                    style: GoogleFonts.inter(
-                      color: color.withValues(alpha: 0.9),
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHandle(_HandleKind kind) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanStart: (_) => _beginHandleDrag(kind),
-      onPanUpdate: (d) => _moveHandle(d.globalPosition),
-      onPanEnd: (_) => _endHandleDrag(),
-      onPanCancel: _endHandleDrag,
-      child: Container(
-        width: 24,
-        height: 24,
-        decoration: BoxDecoration(
-          color: Colors.cyanAccent.withValues(alpha: 0.15),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.cyanAccent, width: 1.6),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 4,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Container(
-            width: 3,
-            height: 12,
-            decoration: BoxDecoration(
-              color: Colors.cyanAccent,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-enum _HandleKind { start, end }
-
-class Offsets {
-  final Offset start;
-  final Offset end;
-  final Size cellSize;
-
-  Offsets({required this.start, required this.end, required this.cellSize});
 }
