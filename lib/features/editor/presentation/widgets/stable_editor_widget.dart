@@ -342,6 +342,21 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     _diffMarkers = widget.file.diffMarkers;
     _findController = CodeFindController(widget.file.controller);
     _setupControllerListener();
+
+    ref.listen<AiAutocompleteState>(aiAutocompleteServiceProvider, (previous, current) {
+      if (!current.isLoading && current.suggestion != null && current.suggestion!.isNotEmpty) {
+        if (current.filePath == widget.file.path) {
+          widget.file.controller.value = widget.file.controller.value;
+        }
+      }
+    });
+    ref.listen<LspAutocompleteState>(lspAutocompleteServiceProvider, (previous, current) {
+      if (!current.isLoading && current.items.isNotEmpty) {
+        if (current.filePath == widget.file.path) {
+          widget.file.controller.value = widget.file.controller.value;
+        }
+      }
+    });
   }
 
   @override
@@ -466,32 +481,19 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               ],
             ),
           ),
-        PopupMenuItem(
-          value: 'aiExplain',
-          child: Row(
-            children: [
-              const Icon(LucideIcons.brain, size: 14, color: Colors.cyanAccent),
-              const SizedBox(width: 8),
-              Text(
-                hasSelection ? 'Explain this code' : 'Explain file',
-                style: const TextStyle(color: Colors.cyanAccent, fontSize: 12),
-              ),
-            ],
+          PopupMenuItem(
+            value: 'aiRefactor',
+            child: Row(
+              children: [
+                const Icon(LucideIcons.wrench, size: 14, color: Colors.orangeAccent),
+                const SizedBox(width: 8),
+                Text(
+                  'Refactor',
+                  style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                ),
+              ],
+            ),
           ),
-        ),
-        PopupMenuItem(
-          value: 'aiRefactor',
-          child: Row(
-            children: [
-              const Icon(LucideIcons.wrench, size: 14, color: Colors.orangeAccent),
-              const SizedBox(width: 8),
-              Text(
-                'Refactor',
-                style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'goToDefinition',
@@ -671,20 +673,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AiAutocompleteState>(aiAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.suggestion != null && current.suggestion!.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
-    ref.listen<LspAutocompleteState>(lspAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.items.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
     final settings = widget.settings;
     final file = widget.file;
 

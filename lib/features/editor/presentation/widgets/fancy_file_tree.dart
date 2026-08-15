@@ -6,7 +6,7 @@ import 'package:quantum_ide/features/file_explorer/domain/file_node.dart';
 
 class FancyFileTree extends ConsumerStatefulWidget {
   final String rootPath;
-  const FancyFileTree({Key? key, required this.rootPath}) : super(key: key);
+  const FancyFileTree({super.key, required this.rootPath});
 
   @override
   ConsumerState<FancyFileTree> createState() => _FancyFileTreeState();

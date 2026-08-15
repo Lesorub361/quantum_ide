@@ -62,13 +62,13 @@ class TerminalSelectionOverlay private constructor(
                 return when (item.itemId) {
                     android.R.id.copy -> {
                         copyToClipboard(text)
-                        channel.invokeMethod("onCopy", mapOf("text" to text))
+                        channel?.invokeMethod("onCopy", mapOf("text" to text))
                         mode.finish()
                         true
                     }
                     android.R.id.selectAll -> {
                         selectAll()
-                        channel.invokeMethod("onSelectAll", null)
+                        channel?.invokeMethod("onSelectAll", null)
                         true
                     }
                     else -> false
@@ -77,7 +77,7 @@ class TerminalSelectionOverlay private constructor(
 
             override fun onDestroyActionMode(mode: ActionMode) {
                 actionMode = null
-                channel.invokeMethod("onActionModeDestroyed", null)
+                channel?.invokeMethod("onActionModeDestroyed", null)
             }
         })
     }
@@ -85,7 +85,7 @@ class TerminalSelectionOverlay private constructor(
     override fun onSelectionChanged(selStart: Int, selEnd: Int) {
         super.onSelectionChanged(selStart, selEnd)
         if (!suppressSelectionEvents) {
-            channel.invokeMethod("onSelectionChanged", mapOf(
+            channel?.invokeMethod("onSelectionChanged", mapOf(
                 "start" to selStart,
                 "end" to selEnd
             ))
@@ -182,6 +182,8 @@ class TerminalSelectionOverlay private constructor(
 
     companion object {
         private var INSTANCE: TerminalSelectionOverlay? = null
+
+        fun isCreated(): Boolean = INSTANCE != null
 
         fun getInstance(context: Context, channel: MethodChannel): TerminalSelectionOverlay {
             if (INSTANCE == null) {

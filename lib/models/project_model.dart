@@ -77,8 +77,11 @@ class Project {
   IconData get icon {
     if (iconCodePoint != null) {
       return IconData(
-        iconCodePoint!, 
-        fontFamily: iconFontFamily ?? 'LucideIcons', 
+        // ignore: non_const_argument_for_const_parameter
+        iconCodePoint!,
+        // ignore: non_const_argument_for_const_parameter
+        fontFamily: iconFontFamily ?? 'LucideIcons',
+        // ignore: non_const_argument_for_const_parameter
         fontPackage: iconFontPackage ?? 'flutter_lucide',
       );
     }

@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 
 class MultiCursorService extends ChangeNotifier {
-  final List<Offset> _cursors = [];
-  List<Offset> _selections = [];
+  final List<Offset> _cursors = <Offset>[];
+  final List<Offset> _selections = <Offset>[];
   bool _isActive = false;
 
   List<Offset> get cursors => List.unmodifiable(_cursors);

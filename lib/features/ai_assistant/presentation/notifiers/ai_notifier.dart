@@ -16,7 +16,6 @@ import 'package:quantum_ide/core/services/ai_context_compressor.dart';
 import 'package:quantum_ide/core/services/analysis_service.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'ai_prompts.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/json_chat_service.dart';
@@ -219,66 +218,6 @@ class AINotifier extends StateNotifier<AIState> {
     }
   }
 
-  Future<void> _saveSessionsJson() async {
-    final workspacePath = _ref.read(workspaceProvider).currentPath;
-    try {
-      final String saveDir;
-      if (workspacePath != null) {
-        saveDir = p.join(workspacePath, '.quantum');
-      } else {
-        final appDir = await _getAppDataDir();
-        saveDir = p.join(appDir, '.quantum');
-      }
-      final dir = Directory(saveDir);
-      if (!dir.existsSync()) {
-        dir.createSync(recursive: true);
-      }
-      final file = File(p.join(dir.path, 'chat_history.json'));
-      final trimmedSessions = state.sessions.map((s) {
-        final trimmedMessages = s.messages.map((m) {
-          final json = m.toJson();
-          if (json['executedActions'] != null) {
-            final actions = (json['executedActions'] as List).map((a) {
-              final action = Map<String, dynamic>.from(a);
-              if (action['content'] != null && (action['content'] as String).length > 500) {
-                action['content'] = '(truncated)';
-              }
-              return action;
-            }).toList();
-            json['executedActions'] = actions;
-          }
-          if (json['actionResults'] != null) {
-            final results = Map<String, String>.from(json['actionResults']);
-            final trimmed = <String, String>{};
-            for (final entry in results.entries) {
-              trimmed[entry.key] = entry.value.length > 500
-                  ? '${entry.value.substring(0, 500)}...'
-                  : entry.value;
-            }
-            json['actionResults'] = trimmed;
-          }
-          json.remove('imageBase64');
-          return json;
-        }).toList();
-        return {
-          'id': s.id,
-          'title': s.title,
-          'messages': trimmedMessages,
-          'createdAt': s.createdAt.toIso8601String(),
-        };
-      }).toList();
-      final jsonStr = jsonEncode(trimmedSessions);
-      await file.writeAsString(jsonStr);
-      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) via JSON fallback');
-      
-      if (workspacePath != null) {
-        await _saveMemory(workspacePath);
-      }
-    } catch (e) {
-      debugPrint('[AINotifier] Error saving via JSON: $e');
-    }
-  }
-
   Future<void> _saveMemory(String workspacePath) async {
     try {
       final dir = Directory(p.join(workspacePath, '.quantum'));
@@ -325,7 +264,7 @@ class AINotifier extends StateNotifier<AIState> {
   Future<void> _loadSessions(String workspacePath) async {
     try {
       final jsonService = _ref.read(jsonChatServiceProvider);
-      List<ChatSession> sessions = await jsonService.loadSessions(workspacePath);
+      final List<ChatSession> sessions = await jsonService.loadSessions(workspacePath);
       
       debugPrint('[AINotifier] Loaded ${sessions.length} session(s) for workspace: $workspacePath');
       
@@ -1403,7 +1342,7 @@ class AINotifier extends StateNotifier<AIState> {
     final workspacePath = _ref.read(workspaceProvider).currentPath;
 
     // Strip internal thoughts before parsing actions
-    var cleanText = text.replaceAll(RegExp(r'<thought>[\s\S]*?</thought>', caseSensitive: false), '');
+    final cleanText = text.replaceAll(RegExp(r'<thought>[\s\S]*?</thought>', caseSensitive: false), '');
 
     final regExp = RegExp(r'<actions>([\s\S]*?)<\/actions>', caseSensitive: false);
     var matches = regExp.allMatches(cleanText);
@@ -1896,22 +1835,6 @@ class AINotifier extends StateNotifier<AIState> {
     }
   }
 
-  Future<String> _getAppDataDir() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final quantumDir = Directory(p.join(dir.path, '.quantum_ide'));
-      if (!quantumDir.existsSync()) {
-        await quantumDir.create(recursive: true);
-      }
-      return quantumDir.path;
-    } catch (e) {
-      debugPrint('[AINotifier] Fallback dir error: $e');
-      final tmp = p.join(Directory.systemTemp.path, 'quantum_ide');
-      await Directory(tmp).create(recursive: true);
-      return tmp;
-    }
-  }
-
   void _refreshFileExplorer(String filePath) {
     final workspacePath = _ref.read(workspaceProvider).currentPath;
     if (workspacePath == null) return;
@@ -2223,37 +2146,6 @@ $history
       case 'web_fetch': return l10n.actionFetchingPage;
       case 'mcp': return l10n.actionMcpTool;
       default: return l10n.actionExecuting;
-    }
-  }
-
-  String _getActionFriendlyLogText(AIAction action, String workspacePath) {
-    final relPath = action.path.isNotEmpty && workspacePath.isNotEmpty
-        ? (action.path.startsWith(workspacePath) ? p.relative(action.path, from: workspacePath) : action.path)
-        : action.path;
-
-    switch (action.type) {
-      case 'read_file':
-        return '📁 **Чтение файла:** `$relPath`';
-      case 'list_dir':
-        return '📂 **Просмотр папки:** `$relPath`';
-      case 'grep_search':
-        return '🔍 **Поиск по тексту ("${action.content}") в:** `$relPath`';
-      case 'find_symbols':
-        return '🔎 **Поиск символа "${action.content}"**';
-      case 'create':
-        return '✨ **Создание нового файла:** `$relPath`';
-      case 'edit':
-        return '✏️ **Редактирование файла:** `$relPath`';
-      case 'delete':
-        return '🗑️ **Удаление файла:** `$relPath`';
-      case 'command':
-        return '💻 **Выполнение команды:** `${action.content}`';
-      case 'web_search':
-        return '🌐 **Поиск в интернете:** *"${action.content}"*';
-      case 'web_fetch':
-        return '📥 **Загрузка веб-страницы:** *"${action.path}"*';
-      default:
-        return '⚙️ **Выполнение действия (${action.type}):** `$relPath`';
     }
   }
 

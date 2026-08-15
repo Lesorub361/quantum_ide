@@ -56,8 +56,8 @@ class DiffViewerPage extends StatefulWidget {
 
 class _DiffViewerPageState extends State<DiffViewerPage> {
   DiffViewMode _viewMode = DiffViewMode.unified;
-  List<DiffLineInfo> _diffLines = [];
-  List<DiffHunk> _hunks = [];
+  List<DiffLineInfo> _diffLines = <DiffLineInfo>[];
+  final List<DiffHunk> _hunks = <DiffHunk>[];
   int _currentHunkIndex = 0;
   final ScrollController _scrollController = ScrollController();
 

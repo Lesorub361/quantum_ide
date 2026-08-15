@@ -336,11 +336,6 @@ class SshService extends ChangeNotifier {
       rethrow;
     }
   }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }
 
 final sshServiceProvider = Provider((ref) => SshService(ref));

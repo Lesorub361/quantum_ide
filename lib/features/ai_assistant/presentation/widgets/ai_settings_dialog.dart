@@ -54,15 +54,18 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
   }
 
   Future<void> _checkOllamaStatus() async {
+    if (!mounted) return;
     setState(() => _checkingOllama = true);
     try {
       final aiSvc = ref.read(aiServiceProvider);
       final models = await aiSvc.fetchAvailableModels('local_edge');
+      if (!mounted) return;
       setState(() {
         _ollamaReachable = models.isNotEmpty;
         _checkingOllama = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() {
         _ollamaReachable = false;
         _checkingOllama = false;
@@ -77,6 +80,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
     try {
       final aiSvc = ref.read(aiServiceProvider);
       final models = await aiSvc.fetchAvailableModels(_selectedProviderId);
+      if (!mounted) return;
       setState(() {
         _availableModels = models;
         if (!_availableModels.contains(_selectedModel)) {
@@ -87,6 +91,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
       // For local_edge Ollama: show empty list with error instead of defaults
       final isOllamaProvider = _selectedProviderId == 'local_edge' &&
           _selectedLocalEngine == LocalAiEngine.ollama;
+      if (!mounted) return;
       setState(() {
         _availableModels = isOllamaProvider
             ? [] // Ollama unavailable — no fallback list
@@ -97,9 +102,11 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
         _ollamaReachable = false;
       });
     } finally {
-      setState(() {
-        _isLoadingModels = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoadingModels = false;
+        });
+      }
     }
   }
 

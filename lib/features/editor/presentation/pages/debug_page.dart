@@ -67,7 +67,7 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                     const Icon(LucideIcons.bug, size: 18, color: Colors.orangeAccent),
                     const SizedBox(width: 8),
                     ShaderMask(
-                      shaderCallback: (b) => LinearGradient(
+                      shaderCallback: (b) => const LinearGradient(
                         colors: [Colors.orangeAccent, Colors.deepOrangeAccent],
                       ).createShader(b),
                       child: Text(

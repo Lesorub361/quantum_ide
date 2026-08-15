@@ -1050,7 +1050,7 @@ class AIService {
     String? systemInstruction,
     String? imageBase64,
   }) async {
-    if (_geminiModel == null) return ChatResponse('Error: Set Gemini API key.');
+    if (_geminiModel == null) return const ChatResponse('Error: Set Gemini API key.');
     try {
       var model = _geminiModel!;
       if (systemInstruction != null) {
@@ -1186,7 +1186,7 @@ class AIService {
     String? imageBase64,
   }) async {
     final key = _settings.apiKeys['anthropic'] ?? '';
-    if (key.isEmpty) return ChatResponse('Error: Set Anthropic API key.');
+    if (key.isEmpty) return const ChatResponse('Error: Set Anthropic API key.');
     try {
       // Build user content with optional image
       dynamic userContent;

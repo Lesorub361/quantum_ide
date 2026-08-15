@@ -925,14 +925,14 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     }
 
     final prompt = widget.isDirectory
-        ? """
+        ? '''
 I am working in directory: `${widget.path}`.
 User request:
 $instruction
 
 Please fulfill this request. If you need to modify or create files/folders, or run a command in the terminal, use the actions format <actions>.
-"""
-        : """
+'''
+        : '''
 I am working on file: `${widget.path}`.
 Its current content:
 ```
@@ -943,7 +943,7 @@ User request:
 $instruction
 
 Please fulfill this request. If you need to modify the file, create a new one, delete, or run a command in the terminal, use the actions format <actions>.
-""";
+''';
 
     ref.read(aiProvider.notifier).askAI(prompt);
     ref.read(rightChatPanelOpenProvider.notifier).state = true;

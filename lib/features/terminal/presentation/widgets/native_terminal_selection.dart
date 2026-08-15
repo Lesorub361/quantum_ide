@@ -52,6 +52,8 @@ class NativeTerminalSelectionBridge {
   /// [rect] is the global rect of the terminal text area in logical pixels.
   /// [fontSize] and [lineHeight] are in logical pixels (dp).
   /// [fontFamily] is the font family name.
+  bool _active = false;
+
   Future<void> show({
     required String text,
     required int selectionStart,
@@ -62,39 +64,56 @@ class NativeTerminalSelectionBridge {
     required String fontFamily,
   }) async {
     final dpr = WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
-    await _channel.invokeMethod('show', {
-      'args': {
-        'text': text,
-        'start': selectionStart,
-        'end': selectionEnd,
-        'left': (rect.left * dpr).round(),
-        'top': (rect.top * dpr).round(),
-        'width': (rect.width * dpr).round(),
-        'height': (rect.height * dpr).round(),
-        'fontSizePx': fontSize * dpr,
-        'lineHeightPx': lineHeight * dpr,
-        'fontFamily': fontFamily,
-      },
-    });
+    try {
+      await _channel.invokeMethod('show', {
+        'args': {
+          'text': text,
+          'start': selectionStart,
+          'end': selectionEnd,
+          'left': (rect.left * dpr).round(),
+          'top': (rect.top * dpr).round(),
+          'width': (rect.width * dpr).round(),
+          'height': (rect.height * dpr).round(),
+          'fontSizePx': fontSize * dpr,
+          'lineHeightPx': lineHeight * dpr,
+          'fontFamily': fontFamily,
+        },
+      });
+      _active = true;
+    } catch (_) {
+      _active = false;
+    }
   }
 
   Future<void> hide() async {
-    await _channel.invokeMethod('hide', null);
+    if (!_active) return;
+    try {
+      await _channel.invokeMethod('hide', null);
+    } catch (_) {
+      // Native overlay may already be torn down; ignore.
+    } finally {
+      _active = false;
+    }
   }
 
   /// Update only the overlay position/size (in logical pixels). Used while the
   /// overlay is already active so we follow scrolling without resetting the
   /// user's active selection/handles.
   Future<void> updatePosition(Rect rect) async {
+    if (!_active) return;
     final dpr = WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
-    await _channel.invokeMethod('updatePosition', {
-      'args': {
-        'left': (rect.left * dpr).round(),
-        'top': (rect.top * dpr).round(),
-        'width': (rect.width * dpr).round(),
-        'height': (rect.height * dpr).round(),
-      },
-    });
+    try {
+      await _channel.invokeMethod('updatePosition', {
+        'args': {
+          'left': (rect.left * dpr).round(),
+          'top': (rect.top * dpr).round(),
+          'width': (rect.width * dpr).round(),
+          'height': (rect.height * dpr).round(),
+        },
+      });
+    } catch (_) {
+      // Overlay may have been destroyed; ignore.
+    }
   }
 
   Future<void> updateSelection(int start, int end) async {

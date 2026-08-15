@@ -37,6 +37,16 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
   void initState() {
     super.initState();
     Future.microtask(() => _parseActiveFile());
+
+    ref.listen<int>(editorProvider.select((s) => s.activeTabIndex), (prev, next) {
+      _parseActiveFile();
+    });
+
+    ref.listen<String?>(editorProvider.select((s) => s.activeFilePath), (_, newPath) {
+      if (newPath != _activePath) {
+        _parseActiveFile();
+      }
+    });
   }
 
   Future<void> _parseActiveFile() async {
@@ -185,18 +195,6 @@ class _CodeOutlineWidgetState extends ConsumerState<CodeOutlineWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to editor tab change to re-parse outline
-    ref.listen<int>(editorProvider.select((s) => s.activeTabIndex), (prev, next) {
-      _parseActiveFile();
-    });
-
-    // Also listen to current path changes in editor
-    ref.listen<String?>(editorProvider.select((s) => s.activeFilePath), (_, newPath) {
-      if (newPath != _activePath) {
-        _parseActiveFile();
-      }
-    });
-
     final l10n = AppLocalizations.of(context)!;
     String? resolvedError;
     if (_errorKey != null) {

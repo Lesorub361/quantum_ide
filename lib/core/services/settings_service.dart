@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -164,7 +165,7 @@ class SettingsService extends StateNotifier<SettingsState> {
       terminalFontFamily: prefs.getString(_keyTerminalFontFamily) ?? 'JetBrains Mono',
       editorFontLigatures: prefs.getBool(_keyEditorFontLigatures) ?? true,
       glassmorphismOpacity: prefs.getDouble(_keyGlassmorphismOpacity) ?? 0.15,
-      glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? 16.0,
+      glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? (Platform.isAndroid || Platform.isIOS ? 0.0 : 16.0),
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
       sdCardSync: prefs.getBool(_keySdCardSync) ?? false,
       formatOnSave: prefs.getBool(_keyFormatOnSave) ?? true,

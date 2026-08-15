@@ -122,7 +122,8 @@ final editorProvider = StateNotifierProvider<EditorNotifier, EditorState>((ref) 
 
 class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObserver {
   final Ref ref;
-  late final LspService _lspService;
+  LspService? _lspService;
+  StreamSubscription<FileDiagnostics>? _lspDiagnosticsSubscription;
   Timer? _diffTimer;
   final Map<String, Timer> _autoSaveTimers = {};
   final DiffService _diffService = DiffService();
@@ -134,7 +135,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   EditorNotifier(this.ref) : super(EditorState()) {
     _init();
     WidgetsBinding.instance.addObserver(this);
-    
+
     // Listen for workspace changes
     ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
       final prevPath = previous?.currentPath;
@@ -155,26 +156,17 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     });
   }
 
-  void _init() {
-    try {
-      final terminal = xt.Terminal(maxLines: 5000);
-      final controller = xt.TerminalController();
-      state = state.copyWith(
-        aiXtermTerminal: terminal,
-        aiXtermViewController: controller,
-      );
-    } catch (e) {
-      debugPrint('Failed to initialize AI Terminal Controller: $e');
+  LspService get lspService {
+    if (_lspService == null) {
+      _lspService = ref.read(lspServiceProvider);
+      _lspDiagnosticsSubscription = _lspService!.diagnosticsStream.listen((fileDiagnostics) {
+        updateDiagnostics(fileDiagnostics.path, fileDiagnostics.diagnostics);
+      });
     }
-    
-    // Initialize LSP
-    _lspService = ref.read(lspServiceProvider);
-    
-    // Listen to diagnostics
-    _lspService.diagnosticsStream.listen((fileDiagnostics) {
-      updateDiagnostics(fileDiagnostics.path, fileDiagnostics.diagnostics);
-    });
+    return _lspService!;
+  }
 
+  void _init() {
     // Load saved files if a workspace is already active
     final activeWorkspace = ref.read(workspaceProvider).currentPath;
     if (activeWorkspace != null) {
@@ -315,7 +307,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       _persistWorkspaceFiles();
 
       // Handle LSP open safely
-      _lspService.onFileOpened(path, content).catchError((e) {
+      lspService.onFileOpened(path, content).catchError((e) {
         debugPrint('LSP error opening file: $e');
       });
 
@@ -372,7 +364,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       // Re-read text at timer fire time to avoid stale closure
       final latestIdx = state.openFiles.indexWhere((f) => f.path == path);
       if (latestIdx != -1) {
-        _lspService.onFileChanged(path, state.openFiles[latestIdx].controller.text).catchError((e) {
+        lspService.onFileChanged(path, state.openFiles[latestIdx].controller.text).catchError((e) {
           debugPrint('LSP error changing file: $e');
         });
       }
@@ -495,7 +487,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     final settings = ref.read(settingsProvider);
     if (settings.formatOnSave) {
       try {
-        final edits = await _lspService.format(path);
+        final edits = await lspService.format(path);
         if (edits.isNotEmpty) {
           final jsonEdits = edits.map((e) => {
             'range': {
@@ -746,8 +738,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       
       // Handle LSP open and diagnostics in background safely
       ref.read(collaborationProvider.notifier).initializeFileSync(path, content);
-      _lspService.onFileOpened(path, content).then((_) {
-        _lspService.getDiagnostics(path).then((diagnostics) {
+      lspService.onFileOpened(path, content).then((_) {
+        lspService.getDiagnostics(path).then((diagnostics) {
           updateDiagnostics(path, diagnostics);
         }).catchError((e) {
           debugPrint('LSP error getting diagnostics: $e');
@@ -840,6 +832,21 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     }
   }
 
+  void _ensureAiTerminal() {
+    if (state.aiXtermTerminal == null) {
+      try {
+        final terminal = xt.Terminal(maxLines: 5000);
+        final controller = xt.TerminalController();
+        state = state.copyWith(
+          aiXtermTerminal: terminal,
+          aiXtermViewController: controller,
+        );
+      } catch (e) {
+        debugPrint('Failed to initialize AI Terminal Controller: $e');
+      }
+    }
+  }
+
   void runAgentCommand(String command) async {
     debugPrint('Running agent command: $command');
     
@@ -884,20 +891,20 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         workingDirectory: Platform.isAndroid ? runtime.appDirectory : dir,
       );
 
-      final terminal = state.aiXtermTerminal;
-      if (terminal != null) {
-        terminal.eraseScrollbackOnly();
-        terminal.eraseDisplay();
-        
-        terminal.onOutput = (data) {
-          _agentPty?.write(Uint8List.fromList(utf8.encode(data)));
-        };
-        terminal.onResize = (cols, rows, int pixelWidth, int pixelHeight) {
-          _agentPty?.resize(rows, cols);
-        };
-        
-        const decoder = Utf8Decoder(allowMalformed: true);
-        _agentPtySubscription = _agentPty!.output.listen(
+      _ensureAiTerminal();
+      final terminal = state.aiXtermTerminal!;
+      terminal.eraseScrollbackOnly();
+      terminal.eraseDisplay();
+      
+      terminal.onOutput = (data) {
+        _agentPty?.write(Uint8List.fromList(utf8.encode(data)));
+      };
+      terminal.onResize = (cols, rows, int pixelWidth, int pixelHeight) {
+        _agentPty?.resize(rows, cols);
+      };
+      
+      const decoder = Utf8Decoder(allowMalformed: true);
+      _agentPtySubscription = _agentPty!.output.listen(
           (data) {
             terminal.write(decoder.convert(data));
           },
@@ -915,8 +922,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         // Give it a brief moment to warm up, then execute command
         await Future.delayed(const Duration(milliseconds: 200));
         _agentPty?.write(Uint8List.fromList(utf8.encode('$command\n')));
-      }
-    } catch (e) {
+      } catch (e) {
       debugPrint('Failed to start agent command process: $e');
     }
   }
@@ -938,6 +944,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     WidgetsBinding.instance.removeObserver(this);
     _workspaceWatcherSubscription?.cancel();
     _diffTimer?.cancel();
+    _lspDiagnosticsSubscription?.cancel();
     for (final timer in _autoSaveTimers.values) {
       timer.cancel();
     }
@@ -964,7 +971,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     final file = state.openFiles[state.activeTabIndex];
     final cursor = file.controller.selection.extent;
     
-    final locations = await _lspService.getDefinition(path, cursor.index, cursor.offset);
+    final locations = await lspService.getDefinition(path, cursor.index, cursor.offset);
     if (locations.isNotEmpty) {
       final loc = locations.first;
       final targetUri = Uri.parse(loc.uri);
@@ -982,7 +989,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     final file = state.openFiles[state.activeTabIndex];
     final cursor = file.controller.selection.extent;
     
-    return await _lspService.getHover(path, cursor.index, cursor.offset);
+    return await lspService.getHover(path, cursor.index, cursor.offset);
   }
 
   Future<List<Location>> getReferences() async {
@@ -992,7 +999,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     final file = state.openFiles[state.activeTabIndex];
     final cursor = file.controller.selection.extent;
     
-    return await _lspService.getReferences(path, cursor.index, cursor.offset);
+    return await lspService.getReferences(path, cursor.index, cursor.offset);
   }
 
   Future<void> rename(String newName) async {
@@ -1002,13 +1009,13 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     final file = state.openFiles[state.activeTabIndex];
     final cursor = file.controller.selection.extent;
     
-    await _lspService.rename(path, cursor.index, cursor.offset, newName);
+    await lspService.rename(path, cursor.index, cursor.offset, newName);
   }
 
   Future<void> formatActiveFile() async {
     final path = state.activeFilePath;
     if (path == null) return;
-    final edits = await _lspService.format(path);
+    final edits = await lspService.format(path);
     if (edits.isEmpty) return;
 
     final jsonEdits = edits.map((e) => {

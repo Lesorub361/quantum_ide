@@ -93,7 +93,7 @@ class AgentExecutionRecord {
 }
 
 class AiAgentOrchestrator extends ChangeNotifier {
-  final RuntimeService _runtime;
+  RuntimeService? _runtime;
   final Ref _ref;
 
   final List<AgentExecutionRecord> _history = [];
@@ -102,6 +102,13 @@ class AiAgentOrchestrator extends ChangeNotifier {
   bool _awaitingConfirmation = false;
 
   AiAgentOrchestrator(this._runtime, this._ref);
+
+  void setRuntime(RuntimeService runtime) {
+    _runtime = runtime;
+    notifyListeners();
+  }
+
+  RuntimeService get runtime => _runtime!;
 
   List<AgentExecutionRecord> get history => List.unmodifiable(_history);
   List<AgentAction> get pendingActions => List.unmodifiable(_pendingActions);
@@ -260,14 +267,14 @@ class AiAgentOrchestrator extends ChangeNotifier {
   Future<String> _runCommand(AgentAction action) async {
     final command = action.params['command'] as String;
     final workingDir = action.params['workingDirectory'] as String?;
-    return _runtime.runCommand(command, workingDirectory: workingDir);
+    return runtime.runCommand(command, workingDirectory: workingDir);
   }
 
   Future<String> _searchCode(AgentAction action) async {
     final query = action.params['query'] as String;
     final directory = action.params['directory'] as String? ?? _workspacePath;
 
-    final result = await _runtime.runCommand(
+    final result = await runtime.runCommand(
       'grep -rn "$query" "$directory" --include="*.dart" --include="*.js" --include="*.ts" 2>/dev/null | head -50',
     );
     return result.trim().isEmpty ? 'No matches found' : result;
@@ -292,8 +299,14 @@ class AiAgentOrchestrator extends ChangeNotifier {
 }
 
 final aiAgentOrchestratorProvider = ChangeNotifierProvider<AiAgentOrchestrator>((ref) {
-  final runtime = ref.watch(runtimeServiceProvider);
-  final orchestrator = AiAgentOrchestrator(runtime, ref);
+  final orchestrator = AiAgentOrchestrator(null, ref);
   ref.onDispose(() => orchestrator.dispose());
+
+  ref.listen<RuntimeService>(runtimeServiceProvider, (previous, next) {
+    if (next.isInitialized && (previous == null || !previous.isInitialized)) {
+      orchestrator.setRuntime(next);
+    }
+  });
+
   return orchestrator;
 });

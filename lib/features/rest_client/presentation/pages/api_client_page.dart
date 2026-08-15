@@ -152,7 +152,7 @@ class _ApiClientPageState extends ConsumerState<ApiClientPage> with SingleTicker
                         final value = apiState.environmentVariables[key]!;
                         return ListTile(
                           dense: true,
-                          title: Text('{{${key}}}', style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+                          title: Text('{{$key}}', style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
                           subtitle: Text(value, style: const TextStyle(fontSize: 11)),
                           trailing: IconButton(
                             icon: const Icon(LucideIcons.trash_2, size: 12),

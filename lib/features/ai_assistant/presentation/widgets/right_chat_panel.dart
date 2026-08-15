@@ -950,6 +950,11 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 l10n.reviewChangesBeforeApply,
                 style: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.w500),
               ),
+              const SizedBox(height: 8),
+              Text(
+                actionSummary,
+                style: GoogleFonts.inter(color: Colors.white70, fontSize: 11),
+              ),
             ],
           ),
         ),
@@ -961,15 +966,15 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
+              final messenger = ScaffoldMessenger.of(context);
               await ref.read(aiProvider.notifier).executeActionsManually(aiState.proposedActions);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Изменения применены'),
-                    backgroundColor: Color(0xFF1E6FE6),
-                  ),
-                );
-              }
+              if (!mounted) return;
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('Изменения применены'),
+                  backgroundColor: Color(0xFF1E6FE6),
+                ),
+              );
             },
             child: Text(l10n.apply, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
           ),
@@ -1405,7 +1410,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           'ОБЯЗАТЕЛЬНО: Предложи рабочий код и внеси исправления!';
     }
 
-    List<String> contextFiles = [];
+    final List<String> contextFiles = [];
     if (shouldIncludeFile && editor.activeFilePath != null) {
       contextFiles.add(editor.activeFilePath!);
     }
@@ -1611,9 +1616,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 : Colors.white30))
         : Colors.cyanAccent;
     
-    final statusText = isLocalEdge
+        final statusText = isLocalEdge
         ? (localInferenceState.status == LocalModelStatus.ready
-            ? '${localInferenceState.loadedModel?.name ?? "Ready"}'
+            ? (localInferenceState.loadedModel?.name ?? 'Ready')
             : (localInferenceState.status == LocalModelStatus.loading
                 ? 'Loading...'
                 : 'Stopped'))

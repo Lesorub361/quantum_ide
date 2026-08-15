@@ -2,9 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'build_diagnostics_service.dart';
 import 'editor_performance_service.dart';
 import 'microvm_service.dart';
-import 'wasm_plugin_runner.dart';
 import 'crdt_sync_service.dart';
-import 'ai_agent_orchestrator.dart';
 import 'docker_service.dart';
 import 'ssh_service.dart';
 import 'mlc_llm_service.dart';
@@ -35,26 +33,10 @@ final microvmServiceProvider = ChangeNotifierProvider<MicroVMService>((ref) {
   return service;
 });
 
-/// Provider for WasmPluginRunner
-final wasmPluginRunnerProvider = ChangeNotifierProvider<WasmPluginRunner>((ref) {
-  final runtime = ref.read(runtimeServiceProvider);
-  final service = WasmPluginRunner(runtime);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
 /// Provider for CrdtSyncService
 final crdtSyncServiceProvider = ChangeNotifierProvider<CrdtSyncService>((ref) {
   final collaboration = ref.read(collaborationProvider.notifier);
   final service = CrdtSyncService(collaboration);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for AiAgentOrchestrator
-final aiAgentOrchestratorProvider = ChangeNotifierProvider<AiAgentOrchestrator>((ref) {
-  final runtime = ref.read(runtimeServiceProvider);
-  final service = AiAgentOrchestrator(runtime, ref);
   ref.onDispose(() => service.dispose());
   return service;
 });

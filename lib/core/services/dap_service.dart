@@ -9,13 +9,15 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:path/path.dart' as p;
 
 final dapServiceProvider = Provider<DapService>((ref) {
-  final runtimeService = ref.watch(runtimeServiceProvider);
-  final dap = DapService(
-    ref,
-    runtimeService.appDirectory,
-    runtimeService.prootCommand,
-  );
+  final dap = DapService(ref, '', '');
   ref.onDispose(() => dap.stop());
+
+  ref.listen<RuntimeService>(runtimeServiceProvider, (previous, next) {
+    if (next.isInitialized && (previous == null || !previous.isInitialized)) {
+      dap.configure(next.appDirectory, next.prootCommand);
+    }
+  });
+
   return dap;
 });
 
@@ -77,8 +79,8 @@ class DapVariable {
 
 class DapService {
   final Ref ref;
-  final String appDirectory;
-  final String prootCommand;
+  String appDirectory;
+  String prootCommand;
   Process? _process;
   final Map<String, String> _stdoutBuffers = {};
   int _id = 1;
@@ -100,6 +102,11 @@ class DapService {
   List<DapBreakpoint> get breakpoints => List.unmodifiable(_breakpoints);
 
   DapService(this.ref, this.appDirectory, this.prootCommand);
+
+  void configure(String newAppDirectory, String newProotCommand) {
+    appDirectory = newAppDirectory;
+    prootCommand = newProotCommand;
+  }
 
   void _setState(DapState newState) {
     _state = newState;

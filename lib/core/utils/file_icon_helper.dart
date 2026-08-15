@@ -156,6 +156,7 @@ class FileIconHelper {
     final meta = iconSetMap[key]!;
     return FileIconInfo(
       IconData(
+        // ignore: non_const_argument_for_const_parameter
         meta.codePoint,
         fontFamily: 'Seti',
         fontPackage: 'file_icon',

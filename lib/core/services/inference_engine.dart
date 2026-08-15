@@ -603,7 +603,7 @@ class InferenceEngine {
       final response =
           await _liteConversation!.sendMultimodalMessage(contents);
       _liteConversationHasMessages = true;
-      var text = _cleanLiteRtChunk(response.text);
+      final text = _cleanLiteRtChunk(response.text);
       if (text.isEmpty) {
         finish('');
         return;

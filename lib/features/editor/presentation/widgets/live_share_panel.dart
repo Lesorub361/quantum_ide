@@ -40,6 +40,12 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
       final collabState = ref.read(collaborationProvider);
       _nameController.text = collabState.localUserName;
     });
+
+    ref.listen<CollaborationState>(collaborationProvider, (previous, next) {
+      if (previous?.chatMessages.length != next.chatMessages.length) {
+        _scrollToBottom();
+      }
+    });
   }
 
   @override
@@ -93,13 +99,6 @@ class _LiveSharePanelState extends ConsumerState<LiveSharePanel> {
   Widget build(BuildContext context) {
     final collabState = ref.watch(collaborationProvider);
     final l10n = AppLocalizations.of(context)!;
-
-    // Auto scroll chat when new messages arrive
-    ref.listen<CollaborationState>(collaborationProvider, (previous, next) {
-      if (previous?.chatMessages.length != next.chatMessages.length) {
-        _scrollToBottom();
-      }
-    });
 
     return Container(
       color: const Color(0xFF0F111A),

@@ -79,7 +79,7 @@ class InlineDiffWidget extends StatelessWidget {
       final lines = diff.text.split('\n');
       for (int i = 0; i < lines.length; i++) {
         if (i > 0) {
-          spans.add(TextSpan(text: '\n'));
+          spans.add(const TextSpan(text: '\n'));
         }
         
         Color bgColor;

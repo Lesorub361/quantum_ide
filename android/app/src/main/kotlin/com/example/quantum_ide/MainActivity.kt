@@ -177,8 +177,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "hide" -> {
                     runOnUiThread {
-                        val overlay = TerminalSelectionOverlay.getInstance(this, selectionChannel)
-                        overlay.hide()
+                        if (TerminalSelectionOverlay.isCreated()) {
+                            val overlay = TerminalSelectionOverlay.getInstance(this, selectionChannel)
+                            overlay.hide()
+                        }
                     }
                     result.success(true)
                 }

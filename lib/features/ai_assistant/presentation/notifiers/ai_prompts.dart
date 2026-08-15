@@ -214,7 +214,7 @@ You are operating in COMPOSE (REFACTOR) mode.
 """);
         break;
       case AiInteractionMode.autopilot:
-        buffer.writeln("""
+        buffer.writeln('''
 You are operating in BUILD (AUTOPILOT) mode — full autonomous agent.
 - You have complete autonomy: edit files, run commands, fix errors, iterate.
 - **EXECUTION PROTOCOL**:
@@ -227,8 +227,8 @@ You are operating in BUILD (AUTOPILOT) mode — full autonomous agent.
 - **SELF-CORRECTION LOOP**: If analyze shows errors → read_file → fix with `replace_code_block` → re-analyze → repeat (max 3x per file).
 - **API SAFETY**: Before using any class/method/package — grep_search or find_symbols to confirm it exists.
 - **NEVER STOP EARLY**: Do not ask user for confirmation mid-task unless truly blocked. Complete the full goal.
-- **TOKEN EFFICIENCY**: Always prefer `replace_code_block` over full `rewrite_whole_file` for fixes. Only rewrite a file if >50% is changing.
-""");
+ - **TOKEN EFFICIENCY**: Always prefer `replace_code_block` over full `rewrite_whole_file` for fixes. Only rewrite a file if >50% is changing.
+''');
         break;
     }
 

@@ -15,7 +15,7 @@ class BracketPair {
 
 class BracketColorizerService extends ChangeNotifier {
   final Map<int, int> _matchingBrackets = {};
-  List<BracketPair> _pairs = [];
+  final List<BracketPair> _pairs = <BracketPair>[];
 
   Map<int, int> get matchingBrackets => Map.unmodifiable(_matchingBrackets);
   List<BracketPair> get pairs => List.unmodifiable(_pairs);
@@ -49,7 +49,7 @@ class BracketColorizerService extends ChangeNotifier {
       if (openBrackets.containsKey(char)) {
         stack.add(MapEntry(char, i));
       } else if (closeBrackets.containsKey(char)) {
-        if (stack.isNotEmpty && stack.last.value == closeBrackets[char]) {
+        if (stack.isNotEmpty && stack.last.key == closeBrackets[char]) {
           final open = stack.removeLast();
           _matchingBrackets[open.key == '(' ? i : i] = open.value;
           _matchingBrackets[open.value] = i;

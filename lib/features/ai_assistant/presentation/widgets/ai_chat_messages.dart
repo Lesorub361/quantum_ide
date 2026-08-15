@@ -36,6 +36,8 @@ import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/inline_diff_widget.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
+final bool _kIsDesktop = !Platform.isAndroid && !Platform.isIOS;
+
 class CollapsibleConsole extends StatefulWidget {
   final String content;
   const CollapsibleConsole({super.key, required this.content});
@@ -203,72 +205,6 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
     );
   }
 
-  Widget _buildStreamingMessage(String content) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: Color(0xFFd0bcff),
-                  width: 3,
-                ),
-              ),
-            ),
-            child: GlassContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              blur: 20,
-              opacity: 0.15,
-              color: const Color(0xFF282A30),
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-                width: 0.8,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _renderMarkdown(content, context),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2, left: 4),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 8,
-                  height: 8,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: Colors.purpleAccent.withValues(alpha: 0.7),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Streaming...',
-                  style: GoogleFonts.inter(
-                    color: Colors.white24,
-                    fontSize: 9,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                const Spacer(),
-              ],
-            ),
-          ),
-        ],
-      ),
-
-    );
-  }
-
-
   Widget _buildStepSummary(ChatMessage message) {
     final workspacePath = ref.read(workspaceProvider).currentPath;
     final executed = message.executedActions ?? [];
@@ -309,7 +245,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          filter: ImageFilter.blur(sigmaX: _kIsDesktop ? 12 : 0, sigmaY: _kIsDesktop ? 12 : 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -2355,7 +2291,7 @@ class _GlowingAgentLoaderState extends State<_GlowingAgentLoader> with SingleTic
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          filter: ImageFilter.blur(sigmaX: _kIsDesktop ? 16 : 0, sigmaY: _kIsDesktop ? 16 : 0),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(

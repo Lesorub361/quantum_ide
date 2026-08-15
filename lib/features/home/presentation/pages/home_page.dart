@@ -1630,14 +1630,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 ],
                                 if (selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ...[
                                   const SizedBox(height: 24),
-                                  Text("PACKAGE NAME (APPLICATION ID)", style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                                  Text('PACKAGE NAME (APPLICATION ID)', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: sdkCtrl,
                                     keyboardType: TextInputType.text,
                                     style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
                                     decoration: InputDecoration(
-                                      hintText: "e.g. com.example.myapp",
+                                      hintText: 'e.g. com.example.myapp',
                                       hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                                       filled: true,
                                       fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
@@ -1790,7 +1790,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                          ),
                            child: Row(
                              children: [
-                               Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+                                const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
                              const SizedBox(width: 8),
                              Expanded(
                                child: Text(
@@ -2020,14 +2020,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ],
                     if (selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ...[
                       const SizedBox(height: 24),
-                      Text("PACKAGE NAME (APPLICATION ID)", style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      Text('PACKAGE NAME (APPLICATION ID)', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                       const SizedBox(height: 12),
                       TextField(
                         controller: sdkCtrl,
                         keyboardType: TextInputType.text,
                         style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
                         decoration: InputDecoration(
-                          hintText: "e.g. com.example.myapp",
+                          hintText: 'e.g. com.example.myapp',
                           hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                           filled: true,
                           fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
@@ -2187,7 +2187,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+                          const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(

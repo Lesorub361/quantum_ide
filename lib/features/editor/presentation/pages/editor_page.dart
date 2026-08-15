@@ -38,6 +38,7 @@ import 'package:quantum_ide/features/editor/presentation/widgets/editor_app_bar.
 import 'package:quantum_ide/features/editor/presentation/widgets/stable_editor_widget.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
+import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
 import 'package:quantum_ide/models/chat_message.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
@@ -459,6 +460,55 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   @override
   void initState() {
     super.initState();
+
+    ref.listen<WorkspaceState>(workspaceProvider, (prev, next) {
+      final newPath = next.currentPath;
+      if (newPath != null && newPath != prev?.currentPath) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _onWorkspaceChanged(newPath);
+        });
+      }
+    });
+
+    ref.listen<bool>(rightChatPanelOpenProvider, (previous, current) {
+      if (!mounted) return;
+      if (current && MediaQuery.of(context).size.width <= 800) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) {
+              return Container(
+                height: MediaQuery.of(context).size.height * 0.85,
+                margin: const EdgeInsets.only(top: 24),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF0F111A),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: const RightChatPanel(isInline: false),
+              );
+            },
+          ).whenComplete(() {
+            if (mounted && ref.read(rightChatPanelOpenProvider)) {
+              ref.read(rightChatPanelOpenProvider.notifier).state = false;
+            }
+          });
+        });
+      } else if (!current) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).popUntil((route) {
+            return route.settings.name != null || route.isFirst;
+          });
+        });
+      }
+    });
   }
 
   @override
@@ -525,60 +575,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     
     final isDesktop = MediaQuery.of(context).size.width > 800;
     final l10n = AppLocalizations.of(context)!;
-
-    // Слушаем смену workspace ОДИН РАЗ — не на каждый build()
-    ref.listen<WorkspaceState>(workspaceProvider, (prev, next) {
-      final newPath = next.currentPath;
-      if (newPath != null && newPath != prev?.currentPath) {
-        // Вызываем после окончания текущего кадра
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _onWorkspaceChanged(newPath);
-        });
-      }
-    });
-
-    ref.listen<bool>(rightChatPanelOpenProvider, (previous, current) {
-      if (current) {
-        if (!isDesktop) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            // Show bottom sheet instead of endDrawer
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) {
-                return Container(
-                  height: MediaQuery.of(context).size.height * 0.85,
-                  margin: const EdgeInsets.only(top: 24),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0F111A),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: const RightChatPanel(isInline: false),
-                );
-              },
-            ).whenComplete(() {
-              // Ensure provider is reset if user dismissed the sheet by swiping
-              if (ref.read(rightChatPanelOpenProvider)) {
-                ref.read(rightChatPanelOpenProvider.notifier).state = false;
-              }
-            });
-          });
-        }
-      } else {
-        if (!isDesktop) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-             Navigator.of(context).popUntil((route) {
-               return route.settings.name != null || route.isFirst;
-             });
-          });
-        }
-      }
-    });
 
     final allProjects = ref.watch(projectServiceProvider);
     final currentProjectIndex = allProjects.indexWhere((p) => p.path == workspacePath);
@@ -879,6 +875,21 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                             },
                           ),
+                          if (activeFile != null &&
+                              p.extension(activeFile.path).toLowerCase() == '.md')
+                            ActionIconButton(
+                              icon: LucideIcons.eye,
+                              color: Colors.cyanAccent,
+                              tooltip: 'Предпросмотр Markdown',
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => FilePreviewPage(filePath: activeFile.path),
+                                  ),
+                                );
+                              },
+                            ),
                           if (!isDesktop)
                             ActionIconButton(
                               icon: LucideIcons.house,
@@ -1827,7 +1838,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     _isImmersiveMode = enabled;
     if (enabled) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarBrightness: Brightness.dark,
         systemNavigationBarColor: Colors.black,
@@ -1836,8 +1847,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       ));
     } else {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual);
-      SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-        statusBarColor: const Color(0xFF0F1013),
+      SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF0F1013),
         statusBarBrightness: Brightness.dark,
         systemNavigationBarColor: Colors.black,
         systemNavigationBarDividerColor: Colors.white10,

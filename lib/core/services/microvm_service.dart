@@ -10,7 +10,7 @@ enum MicroVMState { unavailable, available, starting, running, stopping, stopped
 class MicroVMService extends ChangeNotifier {
   static const _channel = MethodChannel('com.example.quantum_ide/native');
 
-  final RuntimeService _runtime;
+  RuntimeService? _runtime;
   MicroVMState _state = MicroVMState.unavailable;
   bool _kvmAvailable = false;
   String _statusMessage = '';
@@ -18,6 +18,13 @@ class MicroVMService extends ChangeNotifier {
   String _error = '';
 
   MicroVMService(this._runtime);
+
+  void setRuntime(RuntimeService runtime) {
+    _runtime = runtime;
+    notifyListeners();
+  }
+
+  RuntimeService get runtime => _runtime!;
 
   MicroVMState get state => _state;
   bool get kvmAvailable => _kvmAvailable;
@@ -130,7 +137,7 @@ class MicroVMService extends ChangeNotifier {
     if (isRunning) {
       return await executeInVm(command);
     }
-    return _runtime.runCommand(command, workingDirectory: workingDirectory);
+    return runtime.runCommand(command, workingDirectory: workingDirectory);
   }
 
   void resetError() {
@@ -143,8 +150,14 @@ class MicroVMService extends ChangeNotifier {
 }
 
 final microvmServiceProvider = ChangeNotifierProvider<MicroVMService>((ref) {
-  final runtime = ref.watch(runtimeServiceProvider);
-  final service = MicroVMService(runtime);
+  final service = MicroVMService(null);
   ref.onDispose(() => service.dispose());
+
+  ref.listen<RuntimeService>(runtimeServiceProvider, (previous, next) {
+    if (next.isInitialized && (previous == null || !previous.isInitialized)) {
+      service.setRuntime(next);
+    }
+  });
+
   return service;
 });
