@@ -1,0 +1,106 @@
+name: Build APK
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      flutter_version:
+        description: Flutter version (leave default)
+        required: false
+        default: '3.44.9'
+      create_release:
+        description: 'Create a GitHub Release with the APK'
+        required: false
+        default: 'true'
+      version:
+        description: 'Release version, e.g. 1.1.9 (used as the git tag)'
+        required: false
+        default: ''
+      release_notes:
+        description: 'Release notes (markdown). Shown in the GitHub Release body.'
+        required: false
+        default: ''
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build-apk.yml'
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DEFAULT_NOTES: |
+        ## QuantumIDE v1.1.9
+
+        Bugfix release restoring stable baseline.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ github.event.inputs.flutter_version || '3.44.9' }}
+          cache: true
+
+      - name: Enable Gradle cache
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -e
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=release.keystore\n' \
+              "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+          else
+            echo "WARNING: no KEYSTORE_BASE64 secret — APK will be signed with the debug key."
+          fi
+
+      - name: Print tool versions
+        run: |
+          flutter --version
+          java -version 2>&1 | head -1
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: github.ref_type == 'tag' && (startsWith(github.ref_name, 'v') || github.event.inputs.create_release == 'true')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
+          name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
+          body: ${{ github.event.inputs.release_notes != '' && github.event.inputs.release_notes || env.DEFAULT_NOTES }}
+          files: build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
