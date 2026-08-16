@@ -168,7 +168,9 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         workingDirectory: Platform.isAndroid ? runtime.appDirectory : dir,
       );
 
-      final xtermVc = xt.TerminalController();
+      final xtermVc = xt.TerminalController(
+        pointerInputs: const xt.PointerInputs.all(),
+      );
       final xtermTerm = xt.Terminal(
         maxLines: 5000,
         platform: Platform.isAndroid

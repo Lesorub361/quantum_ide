@@ -1481,7 +1481,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _attachTerminalOutputListener(session);
       }
 
-      // МАГИЯ AUTO-COPY: Вешаем безопасный слушатель (только 1 раз на сессию)
       if (!_initializedSessions.contains(session)) {
         _initializedSessions.add(session);
         session.xtermViewController.addListener(() {
@@ -1489,47 +1488,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           if (selection != null) {
             final text = session.xtermTerminal.buffer.getText(selection);
             if (text.isNotEmpty && text.trim().isNotEmpty) {
-              // Тихо и мгновенно копируем в буфер обмена без надоедливых меню!
               Clipboard.setData(ClipboardData(text: text));
             }
           }
         });
       }
-    } else {
-      session.xtermTerminal.onOutput = (data) {
-        final hadCtrl = _activeModifiers.contains('CTRL');
-        final hadAlt = _activeModifiers.contains('ALT');
-        final hadShift = _activeModifiers.contains('SHIFT');
-        String sequence = '';
-        if (hadCtrl) {
-          if (data.length == 1) {
-            final int code = data.toUpperCase().codeUnitAt(0);
-            if (code >= 65 && code <= 90) {
-              sequence = String.fromCharCode(code - 64);
-            } else {
-              sequence = data;
-            }
-          } else {
-            sequence = data;
-          }
-        } else if (hadAlt) {
-          sequence = '\x1b$data';
-        } else if (hadShift) {
-          sequence = data.toUpperCase();
-        } else {
-          sequence = data;
-        }
-        if (sequence.isNotEmpty) {
-          session.pty.write(Uint8List.fromList(utf8.encode(sequence)));
-        }
-        if (hadCtrl || hadAlt || hadShift) {
-          setState(() {
-            _activeModifiers.remove('CTRL');
-            _activeModifiers.remove('ALT');
-            _activeModifiers.remove('SHIFT');
-          });
-        }
-      };
     }
 
     return Stack(
@@ -1545,24 +1508,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onLongPressStart: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
-                  onSecondaryTapDown: (details) => _showTerminalContextMenu(context, details.globalPosition, session),
-                  child: xt.TerminalView(
-                    session.xtermTerminal,
-                    controller: session.xtermViewController,
-                    autofocus: true,
-                    padding: const EdgeInsets.all(12),
-                    theme: theme,
-                    backgroundOpacity: 0,
-                    textStyle: xt.TerminalStyle(
-                      fontSize: terminalFontSize,
-                      fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                    ),
-                    keyboardType: TextInputType.visiblePassword,
-                    deleteDetection: true,
+                child: xt.TerminalView(
+                  session.xtermTerminal,
+                  controller: session.xtermViewController,
+                  autofocus: true,
+                  padding: const EdgeInsets.all(12),
+                  theme: theme,
+                  backgroundOpacity: 0,
+                  textStyle: xt.TerminalStyle(
+                    fontSize: terminalFontSize,
+                    fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
                   ),
+                  keyboardType: TextInputType.visiblePassword,
+                  deleteDetection: true,
+                  onSecondaryTapDown: (details, offset) =>
+                      _showTerminalContextMenu(context, details.globalPosition, session),
                 ),
               ),
             ),

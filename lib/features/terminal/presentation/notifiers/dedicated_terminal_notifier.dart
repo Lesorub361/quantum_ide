@@ -141,19 +141,25 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           : (Platform.isWindows ? 'cmd.exe' : (Platform.environment['SHELL'] ?? 'bash'));
       final List<String> args = Platform.isAndroid
           ? [runtime.prootCommand, runtime.appDirectory]
-          : [];
+          : Platform.isWindows
+          ? []
+          : ['-i'];
 
       final pty = Pty.start(
         shell,
         arguments: args,
         environment: env,
-        workingDirectory: Platform.isAndroid ? dir : dir,
+        workingDirectory: Platform.isAndroid ? runtime.appDirectory : dir,
       );
 
-      final xtermVc = xt.TerminalController();
+      final xtermVc = xt.TerminalController(
+        pointerInputs: const xt.PointerInputs.all(),
+      );
       final xtermTerm = xt.Terminal(
         maxLines: 2000,
-        platform: xt.TerminalTargetPlatform.android,
+        platform: Platform.isAndroid
+            ? xt.TerminalTargetPlatform.android
+            : xt.TerminalTargetPlatform.linux,
         onOutput: (data) {
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },
