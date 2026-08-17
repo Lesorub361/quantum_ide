@@ -37,9 +37,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## QuantumIDE v1.2.1
+        ## QuantumIDE v1.2.2
 
-        Stable release with improvements and bug fixes.
+        Performance optimizations and terminal fixes.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

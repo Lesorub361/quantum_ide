@@ -15,13 +15,6 @@ void main() async {
     final tempDir = await getTemporaryDirectory();
     await LogService.init(tempDir.path);
 
-    // Intercept debugPrint
-    debugPrint = (String? message, {int? wrapWidth}) {
-      if (message != null) {
-        LogService.log(message);
-      }
-    };
-
     // Global error handlers
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);

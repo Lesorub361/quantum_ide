@@ -748,12 +748,15 @@ fi
         ...Platform.environment,
         'TERM': 'xterm-256color',
         'COLORTERM': 'truecolor',
+        'LANG': 'en_US.UTF-8',
+        'LC_ALL': 'en_US.UTF-8',
       };
     }
     // Android/iOS: use PRoot-specific environment
     return {
       'HOME': '/root',
       'TERM': 'xterm-256color',
+      'COLORTERM': 'truecolor',
       'ANDROID_HOME': '/root/android-sdk',
       'ANDROID_SDK_ROOT': '/root/android-sdk',
       'PATH':
@@ -761,7 +764,8 @@ fi
       'JAVA_HOME': _detectedJavaHome,
       'FLUTTER_ROOT': '/root/flutter',
       'USER': 'root',
-      'LANG': 'C.UTF-8',
+      'LANG': 'en_US.UTF-8',
+      'LC_ALL': 'en_US.UTF-8',
       'FLUTTER_ALLOW_SU_ROOT': 'true',
       // Force IPv4 for Java/Gradle — Android PRoot routing of IPv6 sockets is broken
       '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true',

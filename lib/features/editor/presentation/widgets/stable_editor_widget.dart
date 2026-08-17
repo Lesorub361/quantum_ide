@@ -113,11 +113,18 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   late List<CodeDiagnostic> _diagnostics;
   late List<DiffMarker> _diffMarkers;
   late final CodeFindController _findController;
+  List<AIAction> _pendingActions = [];
+
+  static final Map<String, String> _fontCache = {};
+  static const int _autoCloseMaxLines = 500;
 
   String _getFontFamily(String fontName) {
     if (fontName == 'Monospace') return 'monospace';
+    if (_fontCache.containsKey(fontName)) return _fontCache[fontName]!;
     try {
-      return GoogleFonts.getFont(fontName).fontFamily ?? 'monospace';
+      final family = GoogleFonts.getFont(fontName).fontFamily ?? 'monospace';
+      _fontCache[fontName] = family;
+      return family;
     } catch (_) {
       return 'monospace';
     }
@@ -168,9 +175,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     final currentSelection = currentValue.selection;
     final previousSelection = previousValue.selection;
 
-    // We only care about collapsed, single line selections
     if (!currentSelection.isCollapsed || !previousSelection.isCollapsed) return;
     if (currentSelection.extentIndex != previousSelection.extentIndex) return;
+
+    if (currentValue.codeLines.length > _autoCloseMaxLines) return;
 
     final currentOffset = currentSelection.extentOffset;
     final previousOffset = previousSelection.extentOffset;
@@ -342,6 +350,35 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     _diffMarkers = widget.file.diffMarkers;
     _findController = CodeFindController(widget.file.controller);
     _setupControllerListener();
+
+    ref.listen<AiAutocompleteState>(aiAutocompleteServiceProvider, (previous, current) {
+      if (!current.isLoading && current.suggestion != null && current.suggestion!.isNotEmpty) {
+        if (current.filePath == widget.file.path) {
+          widget.file.controller.value = widget.file.controller.value;
+        }
+      }
+    });
+
+    ref.listen<LspAutocompleteState>(lspAutocompleteServiceProvider, (previous, current) {
+      if (!current.isLoading && current.items.isNotEmpty) {
+        if (current.filePath == widget.file.path) {
+          widget.file.controller.value = widget.file.controller.value;
+        }
+      }
+    });
+
+    ref.listen<AIState>(aiProvider, (previous, current) {
+      final pending = current.proposedActions
+          .where((a) => a.path == widget.file.path && (a.type == 'edit' || a.type == 'create'))
+          .toList();
+      if (pending != _pendingActions) {
+        if (mounted) {
+          setState(() {
+            _pendingActions = pending;
+          });
+        }
+      }
+    });
   }
 
   @override
@@ -671,26 +708,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AiAutocompleteState>(aiAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.suggestion != null && current.suggestion!.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
-    ref.listen<LspAutocompleteState>(lspAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.items.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
     final settings = widget.settings;
     final file = widget.file;
 
-    final aiState = ref.watch(aiProvider);
-    final List<AIAction> pendingActions = aiState.proposedActions.where((a) => a.path == file.path && (a.type == 'edit' || a.type == 'create')).toList();
-    final hasPendingAction = pendingActions.isNotEmpty;
+    final hasPendingAction = _pendingActions.isNotEmpty;
 
     if (file.isImage) {
       const sizeKb = '—';
@@ -1083,7 +1104,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     }
 
     if (hasPendingAction) {
-      final action = pendingActions.first;
+      final action = _pendingActions.first;
       final l10n = AppLocalizations.of(context)!;
       
       final hunks = DiffService.calculateHunks(file.originalContent, file.controller.text);

@@ -109,9 +109,8 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
 
   Future<void> deleteEntity(String path) async {
     try {
-      final entity = FileSystemEntity.typeSync(path) == FileSystemEntityType.directory 
-          ? Directory(path) 
-          : File(path);
+      final isDir = await Directory(path).exists();
+      final entity = isDir ? Directory(path) : File(path);
       await entity.delete(recursive: true);
       
       // Mirror deletion
@@ -127,9 +126,8 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
     try {
       final parentDir = Directory(oldPath).parent.path;
       final newPath = p.join(parentDir, newName);
-      final entity = FileSystemEntity.typeSync(oldPath) == FileSystemEntityType.directory 
-          ? Directory(oldPath) 
-          : File(oldPath);
+      final isDir = await Directory(oldPath).exists();
+      final entity = isDir ? Directory(oldPath) : File(oldPath);
       await entity.rename(newPath);
 
       // Mirror rename (delete old, mirror new)
@@ -198,12 +196,9 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
   Future<void> deleteMultipleEntities(List<String> paths) async {
     try {
       for (final path in paths) {
-        final isDir = FileSystemEntity.typeSync(path) == FileSystemEntityType.directory;
-        if (isDir) {
-          await Directory(path).delete(recursive: true);
-        } else {
-          await File(path).delete();
-        }
+        final isDir = await Directory(path).exists();
+        final entity = isDir ? Directory(path) : File(path);
+        await entity.delete(recursive: true);
         await _ref.read(projectServiceProvider.notifier).mirrorDelete(path);
       }
       await scanDirectory(state.currentPath);

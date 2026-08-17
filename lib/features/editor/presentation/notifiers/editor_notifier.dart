@@ -126,6 +126,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   Timer? _diffTimer;
   final Map<String, Timer> _autoSaveTimers = {};
   final DiffService _diffService = DiffService();
+  static const int _maxOpenFiles = 10;
 
   Pty? _agentPty;
   StreamSubscription<Uint8List>? _agentPtySubscription;
@@ -150,6 +151,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       if (next.currentPath == null) {
         clearWorkspace();
       } else if (previous?.currentPath != next.currentPath) {
+        clearWorkspace();
         loadWorkspaceFiles(next.currentPath!);
       }
     });
@@ -175,12 +177,14 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       updateDiagnostics(fileDiagnostics.path, fileDiagnostics.diagnostics);
     });
 
-    // Load saved files if a workspace is already active
-    final activeWorkspace = ref.read(workspaceProvider).currentPath;
-    if (activeWorkspace != null) {
-      _startWorkspaceWatcher(activeWorkspace);
-      loadWorkspaceFiles(activeWorkspace);
-    }
+    // Defer heavy workspace loading to avoid blocking initial UI render
+    Future.microtask(() {
+      final activeWorkspace = ref.read(workspaceProvider).currentPath;
+      if (activeWorkspace != null) {
+        _startWorkspaceWatcher(activeWorkspace);
+        loadWorkspaceFiles(activeWorkspace);
+      }
+    });
   }
 
 
@@ -255,29 +259,25 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     }
 
     try {
-      final file = File(path);
-      if (!await file.exists()) {
-        debugPrint('File does not exist: $path');
-        return;
-      }
-      final bytes = await file.readAsBytes();
-      
-      bool isBinary = false;
-      final checkLimit = bytes.length < 8192 ? bytes.length : 8192;
-      for (int i = 0; i < checkLimit; i++) {
-        if (bytes[i] == 0) {
-          isBinary = true;
-          break;
-        }
-      }
-
-      if (isBinary) {
+      final content = await _readTextFile(path);
+      if (content == null) {
         debugPrint('File $path is binary, attempting to open with system handler.');
         await OpenFilex.open(path);
         return;
       }
-
-      final content = utf8.decode(bytes, allowMalformed: true);
+      
+      // Enforce max open files limit
+      if (state.openFiles.length >= _maxOpenFiles) {
+        final oldestPath = state.openFiles[0].path;
+        _autoSaveTimers[oldestPath]?.cancel();
+        _autoSaveTimers.remove(oldestPath);
+        final newOpenFiles = state.openFiles.sublist(1);
+        final adjustedIndex = state.activeTabIndex > 0 ? state.activeTabIndex - 1 : 0;
+        state = state.copyWith(
+          openFiles: newOpenFiles,
+          activeTabIndex: adjustedIndex,
+        );
+      }
       
       // Load proposed AI content or original content
       final aiState = ref.read(aiProvider);
@@ -333,6 +333,27 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     }
   }
 
+  Future<String?> _readTextFile(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return null;
+      
+      final raf = file.openSync(mode: FileMode.read);
+      final checkLimit = raf.lengthSync() < 8192 ? raf.lengthSync() : 8192;
+      final buffer = Uint8List(checkLimit);
+      raf.readIntoSync(buffer);
+      raf.closeSync();
+      
+      for (int i = 0; i < buffer.length; i++) {
+        if (buffer[i] == 0) return null;
+      }
+      
+      return await file.readAsString();
+    } catch (_) {
+      return null;
+    }
+  }
+
   void setDiffView(String path, bool isDiffView) {
     final index = state.openFiles.indexWhere((f) => f.path == path);
     if (index == -1) return;
@@ -381,7 +402,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
     if (triggerAutoSave) {
       _autoSaveTimers[path]?.cancel();
-      _autoSaveTimers[path] = Timer(const Duration(seconds: 3), () {
+      _autoSaveTimers[path] = Timer(const Duration(seconds: 5), () {
         saveFileByPath(path);
         _autoSaveTimers.remove(path);
       });
@@ -691,7 +712,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
   Future<EditorFile?> _loadSingleFile(String path) async {
     try {
-      final file = File(path);
       final lowerPath = path.toLowerCase();
       final isImg = lowerPath.endsWith('.png') ||
           lowerPath.endsWith('.jpg') ||
@@ -711,18 +731,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         );
       }
 
-      final bytes = await file.readAsBytes();
-      bool isBinary = false;
-      final checkLimit = bytes.length < 8192 ? bytes.length : 8192;
-      for (int i = 0; i < checkLimit; i++) {
-        if (bytes[i] == 0) {
-          isBinary = true;
-          break;
-        }
-      }
-      if (isBinary) return null;
-      
-      final content = utf8.decode(bytes, allowMalformed: true);
+      final content = await _readTextFile(path);
+      if (content == null) return null;
       
       final aiState = ref.read(aiProvider);
       final pendingActions = aiState.proposedActions.where((a) => a.path == path && (a.type == 'edit' || a.type == 'create')).toList();
@@ -806,21 +816,9 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     if (index == -1) return;
 
     try {
-      final file = File(normalisedPath);
-      if (!await file.exists()) return;
+      final content = await _readTextFile(normalisedPath);
+      if (content == null) return;
 
-      final bytes = await file.readAsBytes();
-      bool isBinary = false;
-      final checkLimit = bytes.length < 8192 ? bytes.length : 8192;
-      for (int i = 0; i < checkLimit; i++) {
-        if (bytes[i] == 0) {
-          isBinary = true;
-          break;
-        }
-      }
-      if (isBinary) return;
-
-      final content = utf8.decode(bytes, allowMalformed: true);
       final openFile = state.openFiles[index];
       
       if (openFile.controller.text != content) {

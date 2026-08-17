@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
@@ -179,6 +180,7 @@ class AINotifier extends StateNotifier<AIState> {
   );
   String? _pendingRunPlanContent;
   String? _lastCheckpointRef;
+  Timer? _saveDebounceTimer;
 
   AINotifier(this._ref) : super(AIState()) {
     _ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
@@ -214,6 +216,13 @@ class AINotifier extends StateNotifier<AIState> {
     } catch (e) {
       debugPrint('[AINotifier] Error saving sessions: $e');
     }
+  }
+
+  void _debouncedSaveSessions() {
+    _saveDebounceTimer?.cancel();
+    _saveDebounceTimer = Timer(const Duration(milliseconds: 1500), () {
+      _saveSessions();
+    });
   }
 
   Future<void> _saveSessionsJson() async {
@@ -441,12 +450,12 @@ class AINotifier extends StateNotifier<AIState> {
       return s;
     }).toList();
 
-    state = state.copyWith(
-      messages: newMessages,
-      sessions: updatedSessions,
-    );
-    _saveSessions();
-  }
+      state = state.copyWith(
+        messages: newMessages,
+        sessions: updatedSessions,
+      );
+      _debouncedSaveSessions();
+    }
 
   void startNewSession() {
     final newSession = ChatSession(
@@ -460,7 +469,7 @@ class AINotifier extends StateNotifier<AIState> {
       currentSessionId: newSession.id,
       messages: [],
     );
-    _saveSessions();
+    _debouncedSaveSessions();
   }
 
   void selectSession(String sessionId) {
@@ -502,6 +511,7 @@ class AINotifier extends StateNotifier<AIState> {
         currentSessionId: nextActiveId,
         messages: nextMessages,
       );
+      _debouncedSaveSessions();
     }
     _saveSessions();
   }
@@ -2194,6 +2204,7 @@ $history
 
   @override
   void dispose() {
+    _saveDebounceTimer?.cancel();
     _dio.close(force: true);
     super.dispose();
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
@@ -22,7 +23,6 @@ import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dar
 import 'package:quantum_ide/core/services/workspace_service.dart';
 
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
-import 'package:flutter/services.dart';
 
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
@@ -35,6 +35,18 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
+
+class CopyTextIntent extends Intent {
+  const CopyTextIntent();
+}
+
+class PasteTextIntent extends Intent {
+  const PasteTextIntent();
+}
+
+class SelectAllTextIntent extends Intent {
+  const SelectAllTextIntent();
+}
 
 class TerminalPanelContent extends ConsumerStatefulWidget {
   final bool onlyTerminal;
@@ -1483,15 +1495,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
       if (!_initializedSessions.contains(session)) {
         _initializedSessions.add(session);
-        session.xtermViewController.addListener(() {
-          final selection = session.xtermViewController.selection;
-          if (selection != null) {
-            final text = session.xtermTerminal.buffer.getText(selection);
-            if (text.isNotEmpty && text.trim().isNotEmpty) {
-              Clipboard.setData(ClipboardData(text: text));
-            }
-          }
-        });
       }
     }
 
@@ -1508,21 +1511,48 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
                 ),
                 clipBehavior: Clip.antiAlias,
-                child: xt.TerminalView(
-                  session.xtermTerminal,
-                  controller: session.xtermViewController,
-                  autofocus: true,
-                  padding: const EdgeInsets.all(12),
-                  theme: theme,
-                  backgroundOpacity: 0,
-                  textStyle: xt.TerminalStyle(
-                    fontSize: terminalFontSize,
-                    fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                child: Actions(
+                  actions: <Type, Action<Intent>>{
+                    CopyTextIntent: CallbackAction<CopyTextIntent>(
+                      onInvoke: (intent) => _copySelection(session),
+                    ),
+                    PasteTextIntent: CallbackAction<PasteTextIntent>(
+                      onInvoke: (intent) => _pasteToTerminal(session),
+                    ),
+                    SelectAllTextIntent: CallbackAction<SelectAllTextIntent>(
+                      onInvoke: (intent) => _selectAllInTerminal(session),
+                    ),
+                  },
+                  child: Focus(
+                    autofocus: true,
+                    child: Shortcuts(
+                      shortcuts: <LogicalKeySet, Intent>{
+                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): CopyTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): CopyTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyV): PasteTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV): PasteTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): SelectAllTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): SelectAllTextIntent(),
+                      },
+                      child: xt.TerminalView(
+                        session.xtermTerminal,
+                        controller: session.xtermViewController,
+                        autofocus: true,
+                        padding: const EdgeInsets.all(12),
+                        theme: theme,
+                        backgroundOpacity: 0,
+                        textStyle: xt.TerminalStyle(
+                          fontSize: terminalFontSize,
+                          fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                          fontFamilyFallback: const ['Noto Sans Mono', 'DejaVu Sans Mono', 'monospace'],
+                        ),
+                        keyboardType: TextInputType.visiblePassword,
+                        deleteDetection: true,
+                        onSecondaryTapDown: (details, offset) =>
+                            _showTerminalContextMenu(context, details.globalPosition, session),
+                      ),
+                    ),
                   ),
-                  keyboardType: TextInputType.visiblePassword,
-                  deleteDetection: true,
-                  onSecondaryTapDown: (details, offset) =>
-                      _showTerminalContextMenu(context, details.globalPosition, session),
                 ),
               ),
             ),
@@ -2160,6 +2190,42 @@ Also explain what exactly went wrong and how you fixed it.
           return 'monospace';
         }
     }
+  }
+
+  Future<void> _copySelection(TerminalSession session) async {
+    final selection = session.xtermViewController.selection;
+    if (selection == null) return;
+    final text = session.xtermTerminal.buffer.getText(selection);
+    if (text.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: text));
+      session.xtermViewController.clearSelection();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.copiedToClipboard),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pasteToTerminal(TerminalSession session) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text != null && data!.text!.isNotEmpty) {
+      session.pty.write(Uint8List.fromList(utf8.encode(data.text!)));
+    }
+  }
+
+  void _selectAllInTerminal(TerminalSession session) {
+    final buffer = session.xtermTerminal.buffer;
+    if (buffer.height == 0) return;
+    final firstLine = buffer.lines[0];
+    final lastLine = buffer.lines[buffer.height - 1];
+    final base = xt.CellAnchor(0, owner: firstLine);
+    final extent = xt.CellAnchor(lastLine.length, owner: lastLine);
+    session.xtermViewController.setSelection(base, extent);
   }
 }
 
