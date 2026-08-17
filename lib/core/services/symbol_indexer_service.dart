@@ -416,9 +416,9 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       return log((totalDocs - n + 0.5) / (n + 0.5) + 1);
     }
 
-    double bm25(int tf, double docLen) {
+    double bm25(String term, int tf, double docLen) {
       if (avgDocLength == 0) return tf.toDouble();
-      final termIdf = idf;
+      final termIdf = idf(term);
       return termIdf * tf * (k1 + 1) / (tf + k1 * (1 - b + b * docLen / avgDocLength));
     }
 
@@ -434,7 +434,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       double score = 0;
       for (final term in matchedTerms) {
         final tf = matchedTerms.where((t) => t == term).length;
-        score += bm25(tf, nameLower.length.toDouble());
+          score += bm25(term, tf, nameLower.length.toDouble());
       }
       if (nameLower == normalized) score += 5.0;
       else if (nameLower.startsWith(normalized)) score += 3.0;
@@ -463,7 +463,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       final docLen = fileName.length.toDouble();
       for (final term in matchedTerms) {
         final tf = matchedTerms.where((t) => t == term).length;
-        score += bm25(tf, docLen);
+          score += bm25(term, tf, docLen);
       }
       if (fileName == normalized) score += 4.0;
       else if (fileName.startsWith(normalized)) score += 2.0;
@@ -504,7 +504,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
           final docLen = line.length.toDouble();
           for (final term in matchedTerms) {
             final tf = matchedTerms.where((t) => t == term).length;
-            score += bm25(tf, docLen) * 0.5;
+            score += bm25(term, tf, docLen) * 0.5;
           }
 
           results.add(_SearchResult(

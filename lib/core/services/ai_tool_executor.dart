@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/ai_tool_definitions.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:dio/dio.dart';
 
 final aiToolExecutorProvider = Provider<AIToolExecutor>((ref) {
@@ -230,7 +231,7 @@ class AIToolExecutor {
 
   Future<AIToolResult> _semanticSearch(AIToolCall toolCall) async {
     final query = toolCall.arguments['query'] as String;
-    final symbolIndexer = _ref.read(symbolIndexerProvider.notifier);
+    final symbolIndexer = ref.read(symbolIndexerProvider.notifier);
     final results = await symbolIndexer.semanticSearch(query, limit: 20);
 
     if (results.isEmpty) {

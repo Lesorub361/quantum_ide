@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 
 enum ActionType { createFile, editFile, runCommand, searchCode, readFile, semanticSearch }
 
