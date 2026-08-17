@@ -202,6 +202,18 @@ final List<AIToolDefinition> defaultAITools = [
     risk: AIToolRisk.low,
   ),
   const AIToolDefinition(
+    name: 'semantic_search',
+    description: 'Hybrid semantic search: search symbols, files, and code snippets by meaning. Prefer this over search_code for questions like "where is auth handled" or "find UserRepository".',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'query': {'type': 'string', 'description': 'Natural language query or symbol name'},
+      },
+      'required': ['query'],
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
     name: 'list_directory',
     description: 'List files and subdirectories in a directory.',
     inputSchema: {

@@ -300,6 +300,10 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
         modeLabel = isRu ? 'Чат' : 'Chat';
         modeIcon = LucideIcons.message_square;
         modeColor = Colors.cyanAccent;
+      case AiInteractionMode.ask:
+        modeLabel = isRu ? 'Запроc' : 'Ask';
+        modeIcon = LucideIcons.search;
+        modeColor = Colors.blueAccent;
       case AiInteractionMode.refactor:
         modeLabel = isRu ? 'Рефактор' : 'Refactor';
         modeIcon = LucideIcons.code;
@@ -312,6 +316,10 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
         modeLabel = isRu ? 'Планер' : 'Planner';
         modeIcon = LucideIcons.map;
         modeColor = Colors.tealAccent;
+      case AiInteractionMode.debug:
+        modeLabel = isRu ? 'Дебаг' : 'Debug';
+        modeIcon = LucideIcons.bug;
+        modeColor = Colors.redAccent;
     }
 
     return Padding(
@@ -334,9 +342,11 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
                     decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
                   ),
                   _buildModeOption(ctx, isRu ? 'Чат' : 'Chat', LucideIcons.message_square, Colors.cyanAccent, AiInteractionMode.chat, aiState.interactionMode),
+                  _buildModeOption(ctx, isRu ? 'Запроc' : 'Ask', LucideIcons.search, Colors.blueAccent, AiInteractionMode.ask, aiState.interactionMode),
                   _buildModeOption(ctx, isRu ? 'Рефактор' : 'Refactor', LucideIcons.code, Colors.purpleAccent, AiInteractionMode.refactor, aiState.interactionMode),
                   _buildModeOption(ctx, isRu ? 'Автопилот' : 'Autopilot', LucideIcons.zap, Colors.orangeAccent, AiInteractionMode.autopilot, aiState.interactionMode),
                   _buildModeOption(ctx, isRu ? 'Планер' : 'Planner', LucideIcons.map, Colors.tealAccent, AiInteractionMode.plan, aiState.interactionMode),
+                  _buildModeOption(ctx, isRu ? 'Дебаг' : 'Debug', LucideIcons.bug, Colors.redAccent, AiInteractionMode.debug, aiState.interactionMode),
                   const SizedBox(height: 8),
                 ],
               ),

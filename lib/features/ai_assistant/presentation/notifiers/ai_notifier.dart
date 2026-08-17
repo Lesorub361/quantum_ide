@@ -14,6 +14,8 @@ import 'package:quantum_ide/core/providers/locale_provider.dart';
 import 'package:quantum_ide/core/services/ai_permission_service.dart';
 import 'package:quantum_ide/core/services/ai_context_compressor.dart';
 import 'package:quantum_ide/core/services/analysis_service.dart';
+import 'package:quantum_ide/core/services/git_service.dart';
+import 'package:quantum_ide/core/services/plan_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
@@ -175,6 +177,8 @@ class AINotifier extends StateNotifier<AIState> {
       receiveTimeout: const Duration(seconds: 30),
     ),
   );
+  String? _pendingRunPlanContent;
+  String? _lastCheckpointRef;
 
   AINotifier(this._ref) : super(AIState()) {
     _ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
@@ -587,8 +591,10 @@ class AINotifier extends StateNotifier<AIState> {
     AiApprovalMode approval;
     switch (mode) {
       case AiInteractionMode.chat:
+      case AiInteractionMode.ask:
       case AiInteractionMode.refactor:
       case AiInteractionMode.plan:
+      case AiInteractionMode.debug:
         approval = AiApprovalMode.manual;
         break;
       case AiInteractionMode.autopilot:
@@ -605,11 +611,70 @@ class AINotifier extends StateNotifier<AIState> {
     state = state.copyWith(isLoading: false, activeAgentRole: null);
   }
 
+  Future<void> rollbackAgentChanges() async {
+    if (_lastCheckpointRef == null) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Нет активного checkpoint для отката.',
+          timestamp: DateTime.now(),
+        )
+      ]);
+      return;
+    }
+    try {
+      final gitService = _ref.read(gitServiceProvider);
+      final rolled = await gitService.rollbackAgentCheckpoint(_lastCheckpointRef);
+      if (rolled) {
+        _updateMessagesAndSync([
+          ...state.messages,
+          ChatMessage(
+            role: MessageRole.system,
+            content: '✅ Выполнен откат изменений агента к checkpoint.',
+            timestamp: DateTime.now(),
+          )
+        ]);
+      } else {
+        _updateMessagesAndSync([
+          ...state.messages,
+          ChatMessage(
+            role: MessageRole.system,
+            content: 'Не удалось выполнить откат. Checkpoint не найден.',
+            timestamp: DateTime.now(),
+          )
+        ]);
+      }
+    } catch (e) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Ошибка отката: $e',
+          timestamp: DateTime.now(),
+        )
+      ]);
+    } finally {
+      _lastCheckpointRef = null;
+      state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+    }
+  }
+
   Future<void> askAI(String prompt, {String? imageBase64, List<String>? contextFiles}) async {
     final l10n = _ref.read(localizationsProvider);
 
     if (prompt.trim() == '/dream') {
       await _executeDream();
+      return;
+    }
+    
+    if (prompt.trim() == '/init') {
+      await _executeInit();
+      return;
+    }
+    
+    if (prompt.trim() == '/runplan') {
+      await _executeRunPlan();
       return;
     }
     
@@ -629,13 +694,29 @@ class AINotifier extends StateNotifier<AIState> {
     final userTokens = _estimateTokens(prompt);
 
     final isAutopilot = state.interactionMode == AiInteractionMode.autopilot;
+    final isAsk = state.interactionMode == AiInteractionMode.ask;
+    final isDebug = state.interactionMode == AiInteractionMode.debug;
+
+    String? checkpointRef;
+    if (isAutopilot) {
+      try {
+        final gitService = _ref.read(gitServiceProvider);
+        checkpointRef = await gitService.createAgentCheckpoint();
+        _lastCheckpointRef = checkpointRef;
+        if (checkpointRef != null) {
+          debugPrint('[AINotifier] Created git checkpoint: $checkpointRef');
+        }
+      } catch (e) {
+        debugPrint('[AINotifier] Git checkpoint failed: $e');
+      }
+    }
 
     state = state.copyWith(
       isLoading: true,
       error: null,
       totalTokens: state.totalTokens + userTokens,
-      activeAgentRole: isAutopilot ? 'Planner' : null,
-      currentStatusMessage: isAutopilot ? l10n.analyzingTaskAndPlanning : null,
+      activeAgentRole: isAutopilot ? 'Planner' : (isDebug ? 'Debugger' : null),
+      currentStatusMessage: isAutopilot ? l10n.analyzingTaskAndPlanning : (isDebug ? 'Анализ бага...' : null),
     );
     _updateMessagesAndSync([...state.messages, userMessage]);
 
@@ -648,9 +729,13 @@ class AINotifier extends StateNotifier<AIState> {
     int currentStep = 0;
     const maxSteps = 50;
     String nextPrompt = prompt;
+    if (_pendingRunPlanContent != null) {
+      nextPrompt = _pendingRunPlanContent!;
+      _pendingRunPlanContent = null;
+    }
     // Anti-loop: track which files had errors and how many consecutive fix attempts
     int consecutiveErrorFixAttempts = 0;
-    const maxErrorFixAttempts = 2;
+    const maxErrorFixAttempts = 3;
     Set<String> lastErrorFiles = {};
 
     try {
@@ -724,6 +809,7 @@ class AINotifier extends StateNotifier<AIState> {
         final rulesFiles = [
           File(p.join(workspacePath, '.agentrules')),
           File(p.join(workspacePath, '.cursorrules')),
+          File(p.join(workspacePath, '.quantum', 'AGENTS.md')),
           File(p.join(workspacePath, '.quantum', 'memory.md')),
           File(p.join(workspacePath, '.quantum', 'checkpoint.md')),
           File(p.join(workspacePath, '.quantum', 'tasks.md')),
@@ -942,11 +1028,49 @@ class AINotifier extends StateNotifier<AIState> {
         );
         _updateMessagesAndSync([...state.messages, assistantMessage]);
 
+        // Plan → Build flow: save plan to file if in plan mode
+        if (state.interactionMode == AiInteractionMode.plan && cleanContent.isNotEmpty) {
+          try {
+            final planService = _ref.read(planServiceProvider);
+            final planPath = await planService.savePlan(
+              cleanContent,
+              title: state.messages.isNotEmpty ? state.messages.first.content : null,
+            );
+            if (planPath != null) {
+              // Open plan in editor
+              final editorNotifier = _ref.read(editorProvider.notifier);
+              await editorNotifier.openFile(planPath);
+              _updateMessagesAndSync([
+                ...state.messages,
+                ChatMessage(
+                  role: MessageRole.system,
+                  content: '📄 План сохранен в `.quantum/plans/` и открыт в редакторе.\n'
+                      'Нажмите **"▶ Выполнить план"** в редакторе или переключитесь в режим **Агент** и напишите "выполни план".',
+                  timestamp: DateTime.now(),
+                )
+              ]);
+            }
+          } catch (e) {
+            debugPrint('[PlanService] Failed to save plan: $e');
+          }
+        }
+
         if (!isAutopilot) {
           final readOnlyActions = actions.where(_isReadOnlyAction).toList();
           final modificationActions = actions.where((a) => !_isReadOnlyAction(a)).toList();
 
           if (modificationActions.isNotEmpty) {
+            if (isAsk) {
+              // Ask mode: do not propose modifications, ask user to switch mode
+              final askMsg = ChatMessage(
+                role: MessageRole.system,
+                content: 'Этот запрос требует изменения файлов. Переключитесь в режим **Редактор** или **Агент** для выполнения изменений.',
+                timestamp: DateTime.now(),
+              );
+              _updateMessagesAndSync([...state.messages, askMsg]);
+              state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+              break;
+            }
             // Modification actions (edit/create/delete/command/mcp) require user confirmation in Chat/Refactor modes
             state = state.copyWith(
               proposedActions: [...state.proposedActions, ...modificationActions],
@@ -1162,6 +1286,20 @@ class AINotifier extends StateNotifier<AIState> {
           await _ref.read(analysisServiceProvider).runAnalysis();
           // Убрана задержка 800мс — анализ уже завершён через await runAnalysis()
 
+          // Auto-run tests if available
+          final testOutput = await _runTestsIfAvailable(workspacePath);
+          if (testOutput != null) {
+            _updateMessagesAndSync([
+              ...state.messages,
+              ChatMessage(
+                role: MessageRole.system,
+                content: '🧪 **Результат тестов:**\n```\n$testOutput\n```',
+                timestamp: DateTime.now(),
+                isStepSummary: true,
+              )
+            ]);
+          }
+
           // Re-fetch errors in Validator phase to see if there are issues
           final allDiagnostics = _ref.read(editorProvider).allDiagnostics;
           final currentDiagnostics = <String, List<CodeDiagnostic>>{};
@@ -1221,8 +1359,46 @@ class AINotifier extends StateNotifier<AIState> {
           }
         }
       }
+      
+      // Clear checkpoint ref on successful completion
+      _lastCheckpointRef = null;
     } catch (e) {
+      if (_lastCheckpointRef != null) {
+        try {
+          final gitService = _ref.read(gitServiceProvider);
+          final rolled = await gitService.rollbackAgentCheckpoint(_lastCheckpointRef);
+          if (rolled) {
+            _updateMessagesAndSync([
+              ...state.messages,
+              ChatMessage(
+                role: MessageRole.system,
+                content: '⚠️ Ошибка агента. Выполнен откат изменений через Git checkpoint.',
+                timestamp: DateTime.now(),
+              )
+            ]);
+          }
+        } catch (rollbackErr) {
+          debugPrint('[AINotifier] Rollback failed: $rollbackErr');
+        }
+        _lastCheckpointRef = null;
+      }
       state = state.copyWith(isLoading: false, error: e.toString(), activeAgentRole: null, currentStatusMessage: null);
+    }
+  }
+
+  Future<String?> _runTestsIfAvailable(String workspacePath) async {
+    final pubspec = File(p.join(workspacePath, 'pubspec.yaml'));
+    if (!await pubspec.exists()) return null;
+    
+    final testDir = Directory(p.join(workspacePath, 'test'));
+    if (!await testDir.exists()) return null;
+    
+    try {
+      final runtime = _ref.read(runtimeServiceProvider);
+      final result = await runtime.runCommand('cd "$workspacePath" && flutter test 2>&1 || dart test 2>&1');
+      return result.isEmpty ? 'Tests passed (no output)' : result;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -1860,6 +2036,150 @@ $history
       ]);
     } finally {
       state = state.copyWith(isLoading: false, currentStatusMessage: null);
+    }
+  }
+
+  Future<void> _executeInit() async {
+    final workspacePath = _ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Ошибка: проект не открыт. Откройте папку проекта и повторите /init.',
+          timestamp: DateTime.now(),
+        )
+      ]);
+      return;
+    }
+
+    state = state.copyWith(isLoading: true, currentStatusMessage: 'Генерация .quantum/AGENTS.md...');
+
+    try {
+      final agentsFile = File(p.join(workspacePath, '.quantum', 'AGENTS.md'));
+      final existing = await agentsFile.exists();
+      if (existing) {
+        _updateMessagesAndSync([
+          ...state.messages,
+          ChatMessage(
+            role: MessageRole.system,
+            content: 'Файл `.quantum/AGENTS.md` уже существует. Удалите его вручную, если хотите перегенерировать.',
+            timestamp: DateTime.now(),
+          )
+        ]);
+        state = state.copyWith(isLoading: false, currentStatusMessage: null);
+        return;
+      }
+
+      final dir = Directory(workspacePath);
+      final entries = dir.listSync(recursive: true, followLinks: false);
+      final libDirs = entries.whereType<Directory>().map((d) => p.relative(d.path, from: workspacePath)).where((p) => p.startsWith('lib/')).toList();
+      final hasPubspec = File(p.join(workspacePath, 'pubspec.yaml')).existsSync();
+      final hasAndroid = Directory(p.join(workspacePath, 'android')).existsSync();
+      final hasIos = Directory(p.join(workspacePath, 'ios')).existsSync();
+      final hasWeb = Directory(p.join(workspacePath, 'web')).existsSync();
+      final isFlutter = hasPubspec && (hasAndroid || hasIos || hasWeb);
+
+      final buffer = StringBuffer();
+      buffer.writeln('# Quantum IDE — Project Rules');
+      buffer.writeln('> Generated by /init at ${DateTime.now().toLocal()}');
+      buffer.writeln('');
+      buffer.writeln('## Project Overview');
+      if (isFlutter) {
+        buffer.writeln('This is a Flutter/Dart project.');
+      } else {
+        buffer.writeln('Project type: general.');
+      }
+      buffer.writeln('');
+      buffer.writeln('## Structure');
+      buffer.writeln('```');
+      for (final d in libDirs.take(20)) {
+        buffer.writeln(d);
+      }
+      if (libDirs.length > 20) buffer.writeln('... and ${libDirs.length - 20} more');
+      buffer.writeln('```');
+      buffer.writeln('');
+      buffer.writeln('## Coding Standards');
+      buffer.writeln('- Use clean, type-safe code.');
+      buffer.writeln('- Follow the existing architecture and naming conventions.');
+      buffer.writeln('- Do not rewrite entire files unless necessary.');
+      buffer.writeln('- Run `flutter analyze` or `dart analyze` after changes.');
+      buffer.writeln('');
+      buffer.writeln('## AI Agent Behavior');
+      buffer.writeln('- Always read a file before editing it.');
+      buffer.writeln('- Use minimal diffs (replace_code_block) for fixes.');
+      buffer.writeln('- Do not modify files outside the workspace.');
+      buffer.writeln('');
+
+      await agentsFile.parent.create(recursive: true);
+      await agentsFile.writeAsString(buffer.toString());
+
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: '✅ Создан `.quantum/AGENTS.md`.\n\n'
+              'Теперь ИИ будет автоматически учитывать эти правила во всех режимах.',
+          timestamp: DateTime.now(),
+        )
+      ]);
+    } catch (e) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Ошибка создания AGENTS.md: $e',
+          timestamp: DateTime.now(),
+        )
+      ]);
+    } finally {
+      state = state.copyWith(isLoading: false, currentStatusMessage: null);
+    }
+  }
+
+  Future<void> _executeRunPlan() async {
+    final editorState = _ref.read(editorProvider);
+    final activePath = editorState.activeFilePath;
+    if (activePath == null || !activePath.contains('.quantum/plans/')) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Откройте файл плана из `.quantum/plans/` в редакторе и снова запустите `/runplan`.',
+          timestamp: DateTime.now(),
+        )
+      ]);
+      return;
+    }
+
+    try {
+      final planFile = File(activePath);
+      final planContent = await planFile.readAsString();
+      
+      state = state.copyWith(
+        interactionMode: AiInteractionMode.autopilot,
+        approvalMode: AiApprovalMode.semiAutonomous,
+        isLoading: true,
+        currentStatusMessage: 'Выполнение плана...',
+      );
+
+      _pendingRunPlanContent = 'Execute the following plan exactly as described:\n\n$planContent';
+
+      final userMessage = ChatMessage(
+        role: MessageRole.user,
+        content: '/runplan\n\nВыполни следующий план:\n\n$planContent',
+        timestamp: DateTime.now(),
+      );
+      _updateMessagesAndSync([...state.messages, userMessage]);
+    } catch (e) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Не удалось прочитать план: $e',
+          timestamp: DateTime.now(),
+        )
+      ]);
     }
   }
 

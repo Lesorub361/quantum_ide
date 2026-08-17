@@ -389,6 +389,7 @@ class EnhancedAIToolExecutor {
         case 'glob_search': return await _globSearch(toolCall);
         case 'grep_in_files': return await _grepInFiles(toolCall);
         case 'search_code': return await _searchCode(toolCall);
+        case 'semantic_search': return await _semanticSearch(toolCall);
         case 'list_directory': return await _listDirectory(toolCall);
         case 'get_file_info': return await _getFileInfo(toolCall);
         case 'get_pending_edits': return await _getPendingEdits(toolCall);

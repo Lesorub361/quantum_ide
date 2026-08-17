@@ -118,6 +118,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       {'cmd': '/explain', 'desc': 'Explain the active file or selected code'},
       {'cmd': '/fix', 'desc': 'Fix issues in the active file'},
       {'cmd': '/dream', 'desc': 'Generate a UI based on prompt'},
+      {'cmd': '/init', 'desc': 'Generate .quantum/AGENTS.md for the project'},
+      {'cmd': '/runplan', 'desc': 'Execute the currently open plan in Autopilot'},
     ];
     
     final query = _aiChatController.text.substring(1).toLowerCase();
@@ -340,6 +342,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   Widget _buildOptionsMenu(BuildContext context, WidgetRef ref) {
     final mcpService = ref.watch(mcpServiceProvider.notifier);
     final internetAccess = mcpService.internetAccess;
+    final aiState = ref.watch(aiProvider);
     final l10n = AppLocalizations.of(context)!;
 
     return PopupMenuButton<String>(
@@ -356,6 +359,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           );
         } else if (value == 'internet') {
           ref.read(mcpServiceProvider.notifier).setInternetAccess(!internetAccess);
+        } else if (value == 'rollback') {
+          ref.read(aiProvider.notifier).rollbackAgentChanges();
+        } else if (value == 'init') {
+          ref.read(aiProvider.notifier).askAI('/init');
         }
       },
       itemBuilder: (context) => [
@@ -384,6 +391,33 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               const SizedBox(width: 8),
               Text(
                 l10n.mcpServers,
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        if (aiState.isAutopilot || aiState.isLoading)
+          PopupMenuItem(
+            value: 'rollback',
+            child: Row(
+              children: [
+                const Icon(LucideIcons.rotate_ccw, size: 12, color: Colors.amberAccent),
+                const SizedBox(width: 8),
+                Text(
+                  'Откатить изменения агента',
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        PopupMenuItem(
+          value: 'init',
+          child: Row(
+            children: [
+              const Icon(LucideIcons.file_text, size: 12, color: Colors.tealAccent),
+              const SizedBox(width: 8),
+              Text(
+                'Создать .quantum/AGENTS.md',
                 style: const TextStyle(color: Colors.white, fontSize: 11),
               ),
             ],
@@ -444,7 +478,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       ],
                       Expanded(
                         child: Text(
-                          aiState.currentStatusMessage ?? (aiState.isAutopilot ? 'Autopilot running...' : 'Thinking...'),
+                          _getAgentStatusText(aiState),
                            style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -453,6 +487,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   )
                 : const SizedBox(),
           ),
+          
+          // Agent Pipeline Status (Autopilot only)
+          if (aiState.interactionMode == AiInteractionMode.autopilot || aiState.interactionMode == AiInteractionMode.debug)
+            _buildAgentPipelineBadge(aiState),
           
           // Token and System Stats Badges
           Row(
@@ -468,13 +506,57 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
+  String _getAgentStatusText(AIState aiState) {
+    final role = aiState.activeAgentRole;
+    if (role == null) return aiState.currentStatusMessage ?? (aiState.isAutopilot ? 'Autopilot running...' : 'Thinking...');
+    switch (role.toLowerCase()) {
+      case 'planner': return '🧠 Планирование...';
+      case 'coder': return '⚙️ Генерация кода...';
+      case 'validator': return '🔍 Валидация...';
+      case 'judge': return '✅ Проверка результата...';
+      case 'debugger': return '🐛 Диагностика...';
+      default: return aiState.currentStatusMessage ?? '$role...';
+    }
+  }
+
+  Widget _buildAgentPipelineBadge(AIState aiState) {
+    final role = aiState.activeAgentRole?.toLowerCase();
+    final steps = aiState.interactionMode == AiInteractionMode.debug
+        ? ['debugger']
+        : ['planner', 'coder', 'validator', 'judge'];
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int i = 0; i < steps.length; i++) ...[
+            _PipelineDot(step: steps[i], currentRole: role),
+            if (i < steps.length - 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Icon(LucideIcons.chevron_right, size: 8, color: Colors.white.withValues(alpha: 0.3)),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildTokenBadge(AIState aiState) {
     final prompt = aiState.lastPromptTokens;
     final completion = aiState.lastCompletionTokens;
     final hasRealTokens = prompt > 0 || completion > 0;
+    final total = aiState.totalTokens;
+    final cost = _estimateCost(prompt, completion);
     final displayText = hasRealTokens
         ? '$prompt↓ $completion↑'
-        : '${aiState.totalTokens}';
+        : '$total';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
@@ -489,8 +571,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           const SizedBox(width: 4),
           Tooltip(
             message: hasRealTokens
-                ? 'Prompt: $prompt tokens | Completion: $completion tokens'
-                : 'Estimated: ${aiState.totalTokens} tokens',
+                ? 'Prompt: $prompt | Completion: $completion\nОценка стоимости: $cost'
+                : 'Estimated: $total tokens',
             child: Text(
               displayText,
               style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
@@ -499,6 +581,16 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         ],
       ),
     );
+  }
+
+  String _estimateCost(int promptTokens, int completionTokens) {
+    const promptPricePer1k = 0.00015;
+    const completionPricePer1k = 0.0006;
+    final promptCost = (promptTokens / 1000) * promptPricePer1k;
+    final completionCost = (completionTokens / 1000) * completionPricePer1k;
+    final total = promptCost + completionCost;
+    if (total < 0.001) return '< 0.001 USD';
+    return '\$ ${total.toStringAsFixed(4)}';
   }
 
   Widget _buildSystemStatsBadge(WidgetRef ref) {
@@ -968,6 +1060,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       case AiInteractionMode.chat:
         dynamicHint = 'Спросите ИИ о коде... (#file:путь для контекста)';
         break;
+      case AiInteractionMode.ask:
+        dynamicHint = 'Спросите об архитектуре, логике или API...';
+        break;
       case AiInteractionMode.autopilot:
         dynamicHint = 'Опишите сложную задачу для агента...';
         break;
@@ -976,6 +1071,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         break;
       case AiInteractionMode.plan:
         dynamicHint = 'Опишите идею проекта — ИИ составит план...';
+        break;
+      case AiInteractionMode.debug:
+        dynamicHint = 'Вставьте лог ошибки или опишите баг...';
         break;
     }
 
@@ -1219,11 +1317,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                         onSelected: (mode) {
                           ref.read(aiProvider.notifier).setInteractionMode(mode);
                         },
-                        items: [
+                         items: [
                           _buildDropdownItem(AiInteractionMode.chat, 'Чат', LucideIcons.message_square, Colors.cyanAccent),
+                          _buildDropdownItem(AiInteractionMode.ask, 'Запроc', LucideIcons.search, Colors.blueAccent),
                           _buildDropdownItem(AiInteractionMode.autopilot, 'Агент', LucideIcons.bot, Colors.orangeAccent),
                           _buildDropdownItem(AiInteractionMode.refactor, 'Редактор', LucideIcons.code, Colors.purpleAccent),
                           _buildDropdownItem(AiInteractionMode.plan, 'Планер', LucideIcons.map, Colors.tealAccent),
+                          _buildDropdownItem(AiInteractionMode.debug, 'Дебаг', LucideIcons.bug, Colors.redAccent),
                         ],
                       ),
                     ),
@@ -1280,6 +1380,15 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                         lowerVal.contains('исправь');
 
     final shouldIncludeFile = (_attachActiveFile || isActionChip) && hasActiveFile;
+
+    final suggestedMode = _suggestMode(value, hasActiveFile, activeFile);
+    if (suggestedMode != null) {
+      final currentMode = ref.read(aiProvider.notifier).state.interactionMode;
+      if (suggestedMode != currentMode) {
+        _showModeSuggestionDialog(context, ref, suggestedMode, value);
+        return;
+      }
+    }
 
     String fullPrompt = value;
     if (shouldIncludeFile && currentCode.isNotEmpty) {
@@ -1368,27 +1477,33 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   String _getModeLabel(AiInteractionMode mode) {
     switch (mode) {
       case AiInteractionMode.chat: return 'Чат';
+      case AiInteractionMode.ask: return 'Запроc';
       case AiInteractionMode.autopilot: return 'Агент';
       case AiInteractionMode.refactor: return 'Редактор';
       case AiInteractionMode.plan: return 'Планер';
+      case AiInteractionMode.debug: return 'Дебаг';
     }
   }
 
   IconData _getModeIcon(AiInteractionMode mode) {
     switch (mode) {
       case AiInteractionMode.chat: return LucideIcons.message_square;
+      case AiInteractionMode.ask: return LucideIcons.search;
       case AiInteractionMode.autopilot: return LucideIcons.bot;
       case AiInteractionMode.refactor: return LucideIcons.code;
       case AiInteractionMode.plan: return LucideIcons.map;
+      case AiInteractionMode.debug: return LucideIcons.bug;
     }
   }
 
   Color _getModeColor(AiInteractionMode mode) {
     switch (mode) {
       case AiInteractionMode.chat: return Colors.cyanAccent;
+      case AiInteractionMode.ask: return Colors.blueAccent;
       case AiInteractionMode.autopilot: return Colors.orangeAccent;
       case AiInteractionMode.refactor: return Colors.purpleAccent;
       case AiInteractionMode.plan: return Colors.tealAccent;
+      case AiInteractionMode.debug: return Colors.redAccent;
     }
   }
 
@@ -1882,4 +1997,139 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
+  AiInteractionMode? _suggestMode(String prompt, bool hasActiveFile, dynamic activeFile) {
+    final lower = prompt.toLowerCase();
+    final hasSelection = activeFile != null && activeFile.controller.selection.isValid && !activeFile.controller.selection.isCollapsed;
+    
+    if (lower.contains('спроектируй') || lower.contains('архитектур') || lower.contains('планировщ') || lower.contains('plan') || lower.contains('design')) {
+      return AiInteractionMode.plan;
+    }
+    if (lower.contains('исправь') || lower.contains('fix') || lower.contains('ошибк') || lower.contains('bug')) {
+      return AiInteractionMode.refactor;
+    }
+    if (lower.contains('отлад') || lower.contains('debug') || lower.contains('падени') || lower.contains('trace')) {
+      return AiInteractionMode.debug;
+    }
+    if (lower.contains('сделай') || lower.contains('создай') || lower.contains('напиши') || lower.contains('build') || lower.contains('implement')) {
+      return AiInteractionMode.autopilot;
+    }
+    if (hasActiveFile && hasSelection && (lower.contains('что это') || lower.contains('объясни') || lower.contains('explain'))) {
+      return AiInteractionMode.ask;
+    }
+    return null;
+  }
+
+  void _showModeSuggestionDialog(BuildContext context, WidgetRef ref, AiInteractionMode suggestedMode, String originalPrompt) {
+    final l10n = AppLocalizations.of(context)!;
+    final modeLabel = _getModeLabel(suggestedMode);
+    final modeIcon = _getModeIcon(suggestedMode);
+    final modeColor = _getModeColor(suggestedMode);
+    
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E2230),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(modeIcon, color: modeColor, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Рекомендуемый режим: $modeLabel',
+              style: TextStyle(color: modeColor, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Text(
+          'Похоже, этот запрос лучше обработать в режиме "$modeLabel". Переключиться?',
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _sendMessage(context, ref);
+            },
+            child: Text(l10n.cancel, style: const TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(aiProvider.notifier).setInteractionMode(suggestedMode);
+              _sendMessage(context, ref);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: modeColor.withValues(alpha: 0.2),
+              foregroundColor: modeColor,
+            ),
+            child: Text('Переключить в $modeLabel'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PipelineDot extends StatelessWidget {
+  final String step;
+  final String? currentRole;
+
+  const _PipelineDot({required this.step, this.currentRole});
+
+  @override
+  Widget build(BuildContext context) {
+    final isActive = currentRole == step;
+    final isDone = currentRole != null && _isStepDone(step, currentRole!);
+    Color color;
+    String label;
+    switch (step) {
+      case 'planner':
+        color = Colors.tealAccent;
+        label = '🧠';
+        break;
+      case 'coder':
+        color = Colors.orangeAccent;
+        label = '⚙️';
+        break;
+      case 'validator':
+        color = Colors.cyanAccent;
+        label = '🔍';
+        break;
+      case 'judge':
+        color = Colors.greenAccent;
+        label = '✅';
+        break;
+      case 'debugger':
+        color = Colors.redAccent;
+        label = '🐛';
+        break;
+      default:
+        color = Colors.white30;
+        label = '•';
+    }
+
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        color: isActive ? color.withValues(alpha: 0.2) : (isDone ? color.withValues(alpha: 0.1) : Colors.transparent),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: isActive ? color : (isDone ? color.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.2)),
+          width: isActive ? 1.5 : 0.8,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          label,
+          style: TextStyle(fontSize: isActive ? 11 : 9),
+        ),
+      ),
+    );
+  }
+
+  bool _isStepDone(String step, String currentRole) {
+    final order = {'planner': 0, 'coder': 1, 'validator': 2, 'judge': 3, 'debugger': 0};
+    return (order[step] ?? 0) < (order[currentRole] ?? 0);
+  }
 }

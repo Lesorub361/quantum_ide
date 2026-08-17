@@ -1,8 +1,8 @@
 enum MessageRole { user, assistant, system }
-enum AiInteractionMode { chat, refactor, autopilot, plan }
+enum AiInteractionMode { chat, ask, refactor, autopilot, plan, debug }
 
 class AIAction {
-  final String type; // 'edit', 'create', 'delete', 'command', 'web_search', 'web_fetch', 'mcp', 'edit_patch'
+  final String type; // 'read_file', 'list_dir', 'grep_search', 'find_symbols', 'create', 'edit', 'rewrite_whole_file', 'replace_code_block', 'delete', 'command', 'web_search', 'web_fetch', 'mcp', 'insert_log', 'git_stash', 'git_commit'
   final String path;
   final String content;
   final String? description;

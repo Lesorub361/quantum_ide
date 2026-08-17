@@ -214,6 +214,51 @@ class GitService {
       debugPrint('Git discard failed: $e');
     }
   }
+
+  Future<String?> createAgentCheckpoint() async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return null;
+    final guestPath = await _getGuestPath(hostPath);
+    final runtime = ref.read(runtimeServiceProvider);
+    
+    try {
+      final status = await getStatus();
+      if (status == null || (status.modifiedFiles.isEmpty && status.untrackedFiles.isEmpty)) {
+        return null;
+      }
+      
+      await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
+      await runtime.runCommand('cd "$guestPath" && git add -A');
+      await runtime.runCommand('cd "$guestPath" && git stash push -m "quantum-ide-agent-checkpoint-${DateTime.now().millisecondsSinceEpoch}" --include-untracked');
+      invalidateCache();
+      return 'quantum-ide-agent-checkpoint-${DateTime.now().millisecondsSinceEpoch}';
+    } catch (e) {
+      debugPrint('Git checkpoint failed: $e');
+      return null;
+    }
+  }
+
+  Future<bool> rollbackAgentCheckpoint(String? stashRef) async {
+    if (stashRef == null) return false;
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return false;
+    final guestPath = await _getGuestPath(hostPath);
+    final runtime = ref.read(runtimeServiceProvider);
+    
+    try {
+      await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
+      final output = await runtime.runCommand('cd "$guestPath" && git stash list');
+      if (!output.contains(stashRef)) return false;
+      await runtime.runCommand('cd "$guestPath" && git stash pop "stash^{/$stashRef}"');
+      invalidateCache();
+      return true;
+    } catch (e) {
+      debugPrint('Git rollback failed: $e');
+      return false;
+    }
+  }
 }
 
 final gitServiceProvider = Provider((ref) => GitService(ref));

@@ -35,6 +35,8 @@ class AIToolExecutor {
           return await _runCommand(toolCall);
         case 'search_code':
           return await _searchCode(toolCall);
+        case 'semantic_search':
+          return await _semanticSearch(toolCall);
         case 'list_directory':
           return await _listDirectory(toolCall);
         case 'search_web':
@@ -223,6 +225,38 @@ class AIToolExecutor {
     return AIToolResult(
       toolCallId: toolCall.id,
       content: 'Found ${results.length} matches:\n${results.join('\n')}',
+    );
+  }
+
+  Future<AIToolResult> _semanticSearch(AIToolCall toolCall) async {
+    final query = toolCall.arguments['query'] as String;
+    final symbolIndexer = _ref.read(symbolIndexerProvider.notifier);
+    final results = await symbolIndexer.semanticSearch(query, limit: 20);
+
+    if (results.isEmpty) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'No semantic matches found for "$query"',
+      );
+    }
+
+    final buffer = StringBuffer();
+    buffer.writeln('Semantic search results for: $query');
+    buffer.writeln('');
+
+    for (final result in results) {
+      final relPath = p.isAbsolute(result.path)
+          ? p.relative(result.path, from: workspacePath)
+          : result.path;
+      buffer.writeln('[${result.type.toUpperCase()}] ${result.title}');
+      buffer.writeln('  Path: $relPath:${result.lineNumber}');
+      buffer.writeln('  ${result.subtitle}');
+      buffer.writeln('');
+    }
+
+    return AIToolResult(
+      toolCallId: toolCall.id,
+      content: buffer.toString().trim(),
     );
   }
 

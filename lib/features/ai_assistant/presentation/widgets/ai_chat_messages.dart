@@ -394,44 +394,62 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: readingActions.map((action) {
-                          final fileName = action.path.split('/').last;
-                          return Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: action.path.isNotEmpty
-                                  ? () => ref.read(editorProvider.notifier).openFile(action.path)
-                                  : null,
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: Colors.cyanAccent.withValues(alpha: 0.06),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.15)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(LucideIcons.file_text, size: 10, color: Colors.cyanAccent),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      fileName.isNotEmpty ? fileName : (action.description ?? 'Explored'),
-                                      style: GoogleFonts.inter(
-                                        color: Colors.white70,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
+                       Wrap(
+                         spacing: 6,
+                         runSpacing: 6,
+                         children: readingActions.map((action) {
+                           final fileName = action.path.split('/').last;
+                           final resultText = message.actionResults?[action.path.isNotEmpty ? action.path : action.content] ?? '';
+                           final preview = resultText.split('\n').take(2).join(' ').trim();
+                           final subtitle = preview.length > 60 ? '${preview.substring(0, 60)}...' : preview;
+                           return Material(
+                             color: Colors.transparent,
+                             child: InkWell(
+                               onTap: action.path.isNotEmpty
+                                   ? () => ref.read(editorProvider.notifier).openFile(action.path)
+                                   : null,
+                               borderRadius: BorderRadius.circular(6),
+                               child: Container(
+                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                 decoration: BoxDecoration(
+                                   color: Colors.cyanAccent.withValues(alpha: 0.06),
+                                   borderRadius: BorderRadius.circular(6),
+                                   border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.15)),
+                                 ),
+                                 child: Row(
+                                   mainAxisSize: MainAxisSize.min,
+                                   children: [
+                                     const Icon(LucideIcons.file_text, size: 10, color: Colors.cyanAccent),
+                                     const SizedBox(width: 4),
+                                     Column(
+                                       crossAxisAlignment: CrossAxisAlignment.start,
+                                       mainAxisSize: MainAxisSize.min,
+                                       children: [
+                                         Text(
+                                           fileName.isNotEmpty ? fileName : (action.description ?? 'Explored'),
+                                           style: GoogleFonts.inter(
+                                             color: Colors.white70,
+                                             fontSize: 10,
+                                             fontWeight: FontWeight.w500,
+                                           ),
+                                         ),
+                                         if (subtitle.isNotEmpty)
+                                           Text(
+                                             subtitle,
+                                             style: GoogleFonts.inter(
+                                               color: Colors.white38,
+                                               fontSize: 9,
+                                               fontWeight: FontWeight.w400,
+                                             ),
+                                           ),
+                                       ],
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                             ),
+                           );
+                         }).toList(),
                       ),
                       const SizedBox(height: 14),
                     ],

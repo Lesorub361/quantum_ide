@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/workspace_service.dart';
@@ -296,16 +297,22 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
     return symbols;
   }
 
-  List<IndexSymbol> searchSymbols(String query) {
+  List<IndexSymbol> searchSymbols(String query, {String? typeFilter}) {
     if (query.isEmpty) {
-      return state.symbols.take(50).toList();
+      var results = state.symbols.take(50).toList();
+      if (typeFilter != null) {
+        results = results.where((s) => s.type == typeFilter).toList();
+      }
+      return results;
     }
     final normalized = query.toLowerCase();
+    final terms = normalized.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
     
-    // Sort results by how close they match
     final matched = state.symbols.where((symbol) {
       final nameLower = symbol.name.toLowerCase();
-      return nameLower.contains(normalized);
+      if (typeFilter != null && symbol.type != typeFilter) return false;
+      if (terms.isEmpty) return true;
+      return terms.any((term) => nameLower.contains(term));
     }).toList();
 
     matched.sort((a, b) {
@@ -322,6 +329,11 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       if (aStartsWith && !bStartsWith) return -1;
       if (bStartsWith && !aStartsWith) return 1;
 
+      // More matching terms = higher rank
+      final aMatches = terms.where((t) => aLower.contains(t)).length;
+      final bMatches = terms.where((t) => bLower.contains(t)).length;
+      if (aMatches != bMatches) return bMatches.compareTo(aMatches);
+
       return a.name.compareTo(b.name);
     });
 
@@ -333,32 +345,209 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       return state.files.take(50).toList();
     }
     final normalized = query.toLowerCase();
+    final terms = normalized.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
     
     final matched = state.files.where((filePath) {
       final fileName = p.basename(filePath).toLowerCase();
-      return fileName.contains(normalized) || filePath.toLowerCase().contains(normalized);
+      final dirPath = p.dirname(filePath).toLowerCase();
+      if (terms.isEmpty) return true;
+      return terms.any((term) => fileName.contains(term) || dirPath.contains(term) || filePath.toLowerCase().contains(term));
     }).toList();
 
-    // Sort: files whose name starts with query first, then files whose name contains query
     matched.sort((a, b) {
       final aName = p.basename(a).toLowerCase();
       final bName = p.basename(b).toLowerCase();
       
-      final aStartsWith = aName.startsWith(normalized);
-      final bStartsWith = bName.startsWith(normalized);
+      final aStartsWith = terms.any((t) => aName.startsWith(t));
+      final bStartsWith = terms.any((t) => bName.startsWith(t));
       if (aStartsWith && !bStartsWith) return -1;
       if (bStartsWith && !aStartsWith) return 1;
 
-      final aNameContains = aName.contains(normalized);
-      final bNameContains = bName.contains(normalized);
-      if (aNameContains && !bNameContains) return -1;
-      if (bNameContains && !aNameContains) return 1;
+      final aContains = terms.where((t) => aName.contains(t)).length;
+      final bContains = terms.where((t) => bName.contains(t)).length;
+      if (aContains != bContains) return bContains.compareTo(aContains);
 
       return a.compareTo(b);
     });
 
     return matched.take(50).toList();
   }
+
+  Future<List<_SearchResult>> semanticSearch(String query, {int limit = 20}) async {
+    if (query.isEmpty || state.symbols.isEmpty) return [];
+    
+    final normalized = query.toLowerCase();
+    final terms = normalized.split(RegExp(r'\s+')).where((t) => t.isNotEmpty).toList();
+    if (terms.isEmpty) return [];
+
+    // Precompute document statistics for BM25
+    final Map<String, int> docFreq = {};
+    for (final term in terms) {
+      int count = 0;
+      for (final symbol in state.symbols) {
+        if (symbol.name.toLowerCase().contains(term)) count++;
+      }
+      for (final filePath in state.files) {
+        final fileName = p.basename(filePath).toLowerCase();
+        final dirPath = p.dirname(filePath).toLowerCase();
+        if (fileName.contains(term) || dirPath.contains(term)) count++;
+      }
+      docFreq[term] = count;
+    }
+
+    final totalDocs = state.symbols.length + state.files.length;
+    const k1 = 1.2;
+    const b = 0.75;
+
+    double avgDocLength = 0;
+    int docCount = 0;
+    for (final symbol in state.symbols) {
+      avgDocLength += symbol.name.length;
+      docCount++;
+    }
+    for (final filePath in state.files) {
+      avgDocLength += p.basename(filePath).length;
+      docCount++;
+    }
+    avgDocLength = docCount > 0 ? avgDocLength / docCount : 1.0;
+
+    double idf(String term) {
+      final n = docFreq[term] ?? 0;
+      return log((totalDocs - n + 0.5) / (n + 0.5) + 1);
+    }
+
+    double bm25(int tf, double docLen) {
+      if (avgDocLength == 0) return tf.toDouble();
+      final termIdf = idf;
+      return termIdf * tf * (k1 + 1) / (tf + k1 * (1 - b + b * docLen / avgDocLength));
+    }
+
+    final results = <_SearchResult>[];
+    final seenFiles = <String>{};
+
+    // 1. Symbol matches (high weight)
+    for (final symbol in state.symbols) {
+      final nameLower = symbol.name.toLowerCase();
+      final matchedTerms = terms.where((t) => nameLower.contains(t)).toList();
+      if (matchedTerms.isEmpty) continue;
+
+      double score = 0;
+      for (final term in matchedTerms) {
+        final tf = matchedTerms.where((t) => t == term).length;
+        score += bm25(tf, nameLower.length.toDouble());
+      }
+      if (nameLower == normalized) score += 5.0;
+      else if (nameLower.startsWith(normalized)) score += 3.0;
+
+      results.add(_SearchResult(
+        type: 'symbol',
+        title: symbol.name,
+        subtitle: '${symbol.type} in ${p.basename(symbol.filePath)}:${symbol.lineNumber}',
+        path: symbol.filePath,
+        lineNumber: symbol.lineNumber,
+        score: score,
+        matchedTerms: matchedTerms,
+      ));
+      seenFiles.add(symbol.filePath);
+    }
+
+    // 2. File name matches (medium weight)
+    for (final filePath in state.files) {
+      if (seenFiles.length >= limit * 2) break;
+      final fileName = p.basename(filePath).toLowerCase();
+      final dirPath = p.dirname(filePath).toLowerCase();
+      final matchedTerms = terms.where((t) => fileName.contains(t) || dirPath.contains(t)).toList();
+      if (matchedTerms.isEmpty) continue;
+
+      double score = 0;
+      final docLen = fileName.length.toDouble();
+      for (final term in matchedTerms) {
+        final tf = matchedTerms.where((t) => t == term).length;
+        score += bm25(tf, docLen);
+      }
+      if (fileName == normalized) score += 4.0;
+      else if (fileName.startsWith(normalized)) score += 2.0;
+
+      results.add(_SearchResult(
+        type: 'file',
+        title: p.basename(filePath),
+        subtitle: p.relative(filePath, from: state.files.isNotEmpty ? p.dirname(state.files.first) : ''),
+        path: filePath,
+        lineNumber: 1,
+        score: score,
+        matchedTerms: matchedTerms,
+      ));
+      seenFiles.add(filePath);
+    }
+
+    // 3. Content snippet matches (lower weight, but provides context)
+    final contentScanLimit = limit * 3;
+    int scanned = 0;
+    for (final filePath in state.files) {
+      if (results.length >= contentScanLimit) break;
+      scanned++;
+      if (scanned % 10 != 0) continue;
+
+      try {
+        final file = File(filePath);
+        if (!await file.exists()) continue;
+        final content = await file.readAsString();
+        final lines = content.split('\n');
+        
+        for (int i = 0; i < lines.length && results.length < contentScanLimit; i++) {
+          final line = lines[i];
+          final lineLower = line.toLowerCase();
+          final matchedTerms = terms.where((t) => lineLower.contains(t)).toList();
+          if (matchedTerms.isEmpty) continue;
+
+          double score = 0;
+          final docLen = line.length.toDouble();
+          for (final term in matchedTerms) {
+            final tf = matchedTerms.where((t) => t == term).length;
+            score += bm25(tf, docLen) * 0.5;
+          }
+
+          results.add(_SearchResult(
+            type: 'snippet',
+            title: '${p.basename(filePath)}:${i + 1}',
+            subtitle: line.trim().length > 80 ? '${line.trim().substring(0, 80)}...' : line.trim(),
+            path: filePath,
+            lineNumber: i + 1,
+            score: score,
+            matchedTerms: matchedTerms,
+          ));
+        }
+      } catch (_) {}
+    }
+
+    // Sort by score descending, then by path/line
+    results.sort((a, b) {
+      if (b.score != a.score) return b.score.compareTo(a.score);
+      return a.path.compareTo(b.path);
+    });
+
+    return results.take(limit).toList();
+  }
+}
+
+class _SearchResult {
+  final String type; // 'symbol', 'file', 'snippet'
+  final String title;
+  final String subtitle;
+  final String path;
+  final int lineNumber;
+  final double score;
+  final List<String> matchedTerms;
+
+  _SearchResult({
+    required this.type,
+    required this.title,
+    required this.subtitle,
+    required this.path,
+    required this.lineNumber,
+    required this.score,
+    required this.matchedTerms,
+  });
 }
 
 final symbolIndexerProvider = StateNotifierProvider<SymbolIndexerNotifier, SymbolIndexerState>((ref) {

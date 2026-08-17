@@ -7,7 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 
-enum ActionType { createFile, editFile, runCommand, searchCode, readFile }
+enum ActionType { createFile, editFile, runCommand, searchCode, readFile, semanticSearch }
 
 class AgentAction {
   final String id;
@@ -61,6 +61,10 @@ class AgentAction {
         break;
       case 'read_file':
         type = ActionType.readFile;
+        needsConfirm = false;
+        break;
+      case 'semantic_search':
+        type = ActionType.semanticSearch;
         needsConfirm = false;
         break;
       default:
@@ -204,6 +208,9 @@ class AiAgentOrchestrator extends ChangeNotifier {
         case ActionType.readFile:
           output = await _readFile(action);
           break;
+        case ActionType.semanticSearch:
+          output = await _semanticSearch(action);
+          break;
       }
     } catch (e) {
       success = false;
@@ -271,6 +278,32 @@ class AiAgentOrchestrator extends ChangeNotifier {
       'grep -rn "$query" "$directory" --include="*.dart" --include="*.js" --include="*.ts" 2>/dev/null | head -50',
     );
     return result.trim().isEmpty ? 'No matches found' : result;
+  }
+
+  Future<String> _semanticSearch(AgentAction action) async {
+    final query = action.params['query'] as String;
+    final symbolIndexer = _ref.read(symbolIndexerProvider.notifier);
+    final results = await symbolIndexer.semanticSearch(query, limit: 20);
+
+    if (results.isEmpty) {
+      return 'No semantic matches found for "$query"';
+    }
+
+    final buffer = StringBuffer();
+    buffer.writeln('Semantic search results for: $query');
+    buffer.writeln('');
+
+    for (final result in results) {
+      final relPath = p.isAbsolute(result.path)
+          ? p.relative(result.path, from: _workspacePath)
+          : result.path;
+      buffer.writeln('[${result.type.toUpperCase()}] ${result.title}');
+      buffer.writeln('  Path: $relPath:${result.lineNumber}');
+      buffer.writeln('  ${result.subtitle}');
+      buffer.writeln('');
+    }
+
+    return buffer.toString().trim();
   }
 
   Future<String> _readFile(AgentAction action) async {
