@@ -5,9 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:path/path.dart' as p;
-import 'package:xterm/xterm.dart' as xt;
 import 'package:image_picker/image_picker.dart';
-
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/ai_settings_dialog.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/mcp_servers_dialog.dart';
@@ -17,7 +15,6 @@ import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
-import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/core/services/local_inference_service.dart';
@@ -25,12 +22,10 @@ import 'package:quantum_ide/core/services/local_inference_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/models/chat_message.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
+import 'package:quantum_ide/core/models/agent_activity_item.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/agent_activity_widgets.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
-
-final activeAiModelProvider = StateProvider<String>((ref) {
-  final aiSvc = ref.read(aiServiceProvider);
-  return aiSvc.selectedModel;
-});
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
 
 final activeAiProviderIdProvider = StateProvider<String>((ref) {
   final aiSvc = ref.read(aiServiceProvider);
@@ -87,6 +82,20 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     super.dispose();
   }
 
+  String _getContextWindowLabel(String model) {
+    final lower = model.toLowerCase();
+    if (lower.contains('gemini')) return '1M';
+    if (lower.contains('claude')) return '200k';
+    if (lower.contains('deepseek')) return '128k';
+    return '128k';
+  }
+
+  String _formatTokenCount(int count) {
+    if (count >= 1000000) return '${(count / 1000000).toStringAsFixed(1)}M';
+    if (count >= 1000) return '${(count / 1000).toStringAsFixed(1)}k';
+    return '$count';
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final file = await picker.pickImage(
@@ -114,12 +123,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
   Widget _buildSlashCommands() {
     final commands = [
-      {'cmd': '/goal', 'desc': 'Set a long-running goal for Autopilot'},
-      {'cmd': '/explain', 'desc': 'Explain the active file or selected code'},
-      {'cmd': '/fix', 'desc': 'Fix issues in the active file'},
-      {'cmd': '/dream', 'desc': 'Generate a UI based on prompt'},
-      {'cmd': '/init', 'desc': 'Generate .quantum/AGENTS.md for the project'},
-      {'cmd': '/runplan', 'desc': 'Execute the currently open plan in Autopilot'},
+      {'cmd': '/plan', 'desc': 'Составить пошаговый план разработки'},
+      {'cmd': '/clear', 'desc': 'Сбросить контекст диалога и начать сначала'},
+      {'cmd': '/diff', 'desc': 'Показать diff текущих изменений файлов'},
+      {'cmd': '/rollback', 'desc': 'Откатить изменения проекта (Git)'},
+      {'cmd': '/explain', 'desc': 'Объяснить код открытого файла'},
+      {'cmd': '/fix', 'desc': 'Найти и исправить ошибки в активном файле'},
+      {'cmd': '/init', 'desc': 'Создать конфигурацию .quantum/AGENTS.md'},
     ];
     
     final query = _aiChatController.text.substring(1).toLowerCase();
@@ -185,139 +195,39 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   @override
   Widget build(BuildContext context) {
     final aiState = ref.watch(aiProvider);
-    final mode = ref.watch(aiPanelModeProvider);
-    final selectedAgent = ref.watch(selectedAgentProvider);
-    final packages = ref.watch(packageServiceProvider);
-    final editorState = ref.watch(editorProvider);
     final isMobile = MediaQuery.of(context).size.width < 800;
     final rightWidth = widget.isInline 
         ? ref.watch(rightPanelWidthProvider) 
-        : (isMobile ? double.infinity : 340.0);
-    final l10n = AppLocalizations.of(context)!;
-
-
+        : (isMobile ? double.infinity : 360.0);
     final content = SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header of the Chat
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              children: [
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Colors.purpleAccent, Colors.cyanAccent],
-                  ).createShader(bounds),
-                  child: const Icon(LucideIcons.bot, color: Colors.white, size: 15),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    l10n.chatWithAi,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                // Chat History Button
-                IconButton(
-                  icon: const Icon(LucideIcons.history, size: 14, color: Colors.cyanAccent),
-                  onPressed: () => _showChatHistoryDialog(context, ref),
-                  tooltip: l10n.chatHistory,
-                  padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                ),
-                const SizedBox(width: 4),
-                // New Chat Button
-                IconButton(
-                  icon: const Icon(LucideIcons.plus, size: 14, color: Colors.cyanAccent),
-                  onPressed: () {
-                    ref.read(aiProvider.notifier).startNewSession();
-                  },
-                  tooltip: l10n.newChat,
-                  padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                ),
-                const SizedBox(width: 4),
-                // Settings Button
-                IconButton(
-                  icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.cyanAccent),
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => const AISettingsDialog(),
-                    );
-                  },
-                  tooltip: l10n.settings,
-                  padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                ),
-                const SizedBox(width: 8),
-                // Options menu
-                _buildOptionsMenu(context, ref),
-                const SizedBox(width: 4),
-                // Close button
-                IconButton(
-                  icon: const Icon(LucideIcons.x, size: 14, color: Colors.white60),
-                  onPressed: () {
-                    ref.read(rightChatPanelOpenProvider.notifier).state = false;
-                  },
-                  padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: Colors.white10, indent: 8, endIndent: 8),
+          // 1. Top Bar: Title + Status + Settings + Close
+          _buildChatHeader(context, ref, aiState),
 
-          // Main View switcher
+          // 2. Visible Provider & Model Selector Bar
+          _buildProviderAndModelBar(context, ref, aiState),
+
+          const Divider(height: 1, color: Colors.white10),
+
+          // 3. Live Agent Process Banner (if running)
+          if (aiState.isLoading)
+            _buildLiveAgentStatusBanner(context, ref, aiState),
+
+          // 4. Main Chat Messages or Welcome Hero
           Expanded(
-            child: selectedAgent != null
-                ? _buildAgentTerminalView(selectedAgent, editorState)
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Mode Selector Tab (Chat vs Agents)
-                      Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            _buildAIModeTab(mode, AIPanelMode.chat, l10n.chat, LucideIcons.message_square),
-                            _buildAIModeTab(mode, AIPanelMode.cli, l10n.agents, LucideIcons.bot),
-                          ],
-                        ),
-                      ),
-
-                      // Messages / Agents Content
-                      Expanded(
-                        child: mode == AIPanelMode.chat
-                            ? Column(
-                                children: [
-                                  _buildStatusRow(context, ref, aiState),
-                                  Expanded(child: AIChatMessages(aiState: aiState)),
-                                ],
-                              )
-                            : _buildAIAgentsList(packages),
-                      ),
-
-                      // Proposed Actions & Input (Only in Chat Mode)
-                      if (mode == AIPanelMode.chat) ...[
-                        if (aiState.proposedActions.isNotEmpty)
-                          _buildProposedActionsStickyPanel(aiState),
-                        _buildAIChatInput(context, ref, aiState),
-                      ],
-                    ],
-                  ),
+            child: aiState.messages.isEmpty
+                ? _buildEmptyAgentHero(context, ref)
+                : AIChatMessages(aiState: aiState),
           ),
+
+          // 5. Proposed Actions Sticky Panel (if any)
+          if (aiState.proposedActions.isNotEmpty)
+            _buildProposedActionsStickyPanel(aiState),
+
+          // 6. Input Card
+          _buildChatInput(context, ref, aiState),
         ],
       ),
     );
@@ -336,6 +246,413 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       width: rightWidth,
       color: const Color(0xFF0D0F14),
       child: content,
+    );
+  }
+
+  Widget _buildChatHeader(BuildContext context, WidgetRef ref, AIState aiState) {
+    final l10n = AppLocalizations.of(context)!;
+    final isMobile = MediaQuery.of(context).size.width < 700;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: isMobile ? 4 : 6),
+      child: Row(
+        children: [
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Colors.purpleAccent, Colors.cyanAccent],
+            ).createShader(bounds),
+            child: const Icon(LucideIcons.sparkles, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Quantum AI',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4), width: 0.8),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.bot, size: 10, color: Color(0xFF8B5CF6)),
+                const SizedBox(width: 4),
+                Text(
+                  'Ассистент',
+                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFFD8B4FE)),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+          // New Chat Button
+          IconButton(
+            icon: const Icon(LucideIcons.plus, size: 14, color: Colors.cyanAccent),
+            onPressed: () => ref.read(aiProvider.notifier).startNewSession(),
+            tooltip: l10n.newChat,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          // History Button
+          IconButton(
+            icon: const Icon(LucideIcons.history, size: 14, color: Colors.white70),
+            onPressed: () => _showChatHistoryDialog(context, ref),
+            tooltip: l10n.chatHistory,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          // Settings Button (AISettingsDialog)
+          IconButton(
+            icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.white70),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const AISettingsDialog(),
+              );
+            },
+            tooltip: l10n.settings,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+          // Options menu
+          _buildOptionsMenu(context, ref),
+          // Close button
+          IconButton(
+            icon: const Icon(LucideIcons.x, size: 14, color: Colors.white60),
+            onPressed: () {
+              ref.read(rightChatPanelOpenProvider.notifier).state = false;
+            },
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderAndModelBar(BuildContext context, WidgetRef ref, AIState aiState) {
+    final activeProviderId = ref.watch(activeAiProviderIdProvider);
+    final activeModel = ref.watch(activeAiModelProvider);
+    final currentProvider = AiProviders.byId(activeProviderId);
+    final aiSvc = ref.watch(aiServiceProvider);
+
+    final String effectiveModel = activeModel.isNotEmpty 
+        ? activeModel 
+        : aiSvc.selectedModel;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131824),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.8),
+      ),
+      child: Row(
+        children: [
+          // 1. Universal Provider Selector Dropdown Chip with all providers
+          PopupMenuButton<String>(
+            tooltip: 'Сменить AI-провайдера',
+            color: const Color(0xFF1E2230),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(color: Colors.white12),
+            ),
+            onSelected: (pId) async {
+              await ref.read(aiServiceProvider).setProvider(pId);
+              ref.read(activeAiProviderIdProvider.notifier).state = pId;
+              final newModel = ref.read(aiServiceProvider).selectedModel;
+              ref.read(activeAiModelProvider.notifier).state = newModel;
+            },
+            itemBuilder: (ctx) => [
+              for (final p in AiProviders.all)
+                PopupMenuItem<String>(
+                  value: p.id,
+                  child: Row(
+                    children: [
+                      Text(p.logoEmoji, style: const TextStyle(fontSize: 13)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          p.displayName,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                            fontWeight: p.id == activeProviderId ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (p.id == activeProviderId) ...[
+                        const SizedBox(width: 4),
+                        const Icon(LucideIcons.check, size: 12, color: Colors.cyanAccent),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(currentProvider.logoEmoji, style: const TextStyle(fontSize: 11)),
+                  const SizedBox(width: 4),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 100),
+                    child: Text(
+                      currentProvider.displayName,
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFFD8B4FE),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  const Icon(LucideIcons.chevron_down, size: 10, color: Color(0xFF8B5CF6)),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+          Container(width: 1, height: 12, color: Colors.white12),
+          const SizedBox(width: 8),
+
+          // 2. Model Selector (Searchable, API discovery, Custom Model ID)
+          Text(
+            'Модель:',
+            style: GoogleFonts.inter(fontSize: 10, color: Colors.white38, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: InkWell(
+              onTap: () async {
+                final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
+                final selected = await showModelPickerModal(
+                  context,
+                  providerId: activeProviderId,
+                  currentModel: effectiveModel,
+                  apiKey: apiKey,
+                );
+                if (selected != null && selected.isNotEmpty) {
+                  ref.read(activeAiModelProvider.notifier).state = selected;
+                  await ref.read(aiServiceProvider).setModel(selected);
+                }
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        effectiveModel,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: effectiveModel.endsWith(':free') ? const Color(0xFF10B981) : Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    const Icon(LucideIcons.chevron_down, size: 10, color: Colors.white60),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 6),
+          // Status indicator dot
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: aiState.isLoading ? Colors.amberAccent : Colors.greenAccent,
+              boxShadow: [
+                BoxShadow(
+                  color: (aiState.isLoading ? Colors.amberAccent : Colors.greenAccent).withValues(alpha: 0.6),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+
+
+
+  Widget _buildLiveAgentStatusBanner(BuildContext context, WidgetRef ref, AIState aiState) {
+    final elapsedSec = aiState.taskStartedAt != null
+        ? DateTime.now().difference(aiState.taskStartedAt!).inSeconds
+        : 0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1528),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const AnimatedThinkingDots(dotColor: Colors.purpleAccent, size: 4),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              aiState.currentStatusMessage ?? 'AI Ассистент выполняет задачу...',
+              style: GoogleFonts.inter(fontSize: 11, color: Colors.purpleAccent, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (elapsedSec > 0) ...[
+            Text(
+              '${elapsedSec}s',
+              style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white38),
+            ),
+            const SizedBox(width: 8),
+          ],
+          InkWell(
+            onTap: () => ref.read(aiProvider.notifier).stopActiveAgent(),
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.square, size: 9, color: Colors.redAccent),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Остановить',
+                    style: GoogleFonts.inter(fontSize: 10, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyAgentHero(BuildContext context, WidgetRef ref) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF8B5CF6), Color(0xFF06B6D4)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                    blurRadius: 16,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(LucideIcons.sparkles, color: Colors.white, size: 28),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Quantum AI Ассистент',
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Интеллектуальный помощник для кодовой базы. Анализирует файлы, пишет код, исправляет ошибки и отвечает на вопросы.',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Colors.white54,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                _buildPromptChip('🧪 Запусти тесты и исправь ошибки', ref),
+                _buildPromptChip('🔍 Проанализируй проект и напиши план', ref),
+                _buildPromptChip('⚡ Оптимизируй код и удали неиспользуемое', ref),
+                _buildPromptChip('🐛 Найди возможные утечки памяти и баги', ref),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPromptChip(String label, WidgetRef ref) {
+    return InkWell(
+      onTap: () {
+        _aiChatController.text = label.substring(label.indexOf(' ') + 1);
+        _sendMessage(context, ref);
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white70),
+        ),
+      ),
     );
   }
 
@@ -634,319 +951,88 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     return Colors.redAccent;
   }
 
-  Widget _buildAIModeTab(AIPanelMode current, AIPanelMode target, String label, IconData icon) {
-    final isSelected = current == target;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => ref.read(aiPanelModeProvider.notifier).state = target,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 12, color: isSelected ? Colors.cyanAccent : Colors.white38),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  color: isSelected ? Colors.white : Colors.white38,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAIAgentsList(List<dynamic> packages) {
-    final agents = packages.where((p) => p.isInstalled && (p.id.contains('cli') || p.id.contains('ai'))).toList();
-
-    if (agents.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(LucideIcons.package_search, size: 36, color: Colors.white.withValues(alpha: 0.1)),
-              const SizedBox(height: 12),
-              Text(
-                AppLocalizations.of(context)!.agentsNotInstalled,
-                style: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                AppLocalizations.of(context)!.installGeminiCliInSettings,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(color: Colors.white24, fontSize: 10),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      itemCount: agents.length,
-      itemBuilder: (context, index) {
-        final pkg = agents[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          ),
-          child: ListTile(
-            dense: true,
-            visualDensity: VisualDensity.compact,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-            leading: const Icon(LucideIcons.bot, color: Colors.cyanAccent, size: 16),
-            title: Text(pkg.name, style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12)),
-            subtitle: Text(pkg.id, style: GoogleFonts.inter(fontSize: 9, color: Colors.white38)),
-            trailing: const Icon(LucideIcons.chevron_right, color: Colors.white24, size: 14),
-            onTap: () {
-              ref.read(selectedAgentProvider.notifier).state = pkg.name;
-              final String cmd = pkg.id == 'antigravity-cli' ? 'agy' : pkg.id;
-              ref.read(editorProvider.notifier).runAgentCommand(cmd);
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAgentTerminalView(String agentName, EditorState state) {
-    final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
-    final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
-    final theme = _getTerminalTheme(terminalThemeName);
-
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          color: Colors.black12,
-          child: Row(
-            children: [
-              Text(agentName, style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11)),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(LucideIcons.undo_2, size: 14, color: Colors.white60),
-                onPressed: () => ref.read(selectedAgentProvider.notifier).state = null,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.background,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: state.aiXtermTerminal == null
-                ? const Center(child: CircularProgressIndicator(color: Colors.purpleAccent))
-                : xt.TerminalView(
-                    state.aiXtermTerminal!,
-                    controller: state.aiXtermViewController,
-                    autofocus: true,
-                    theme: theme,
-                    backgroundOpacity: 0,
-                    textStyle: xt.TerminalStyle(
-                      fontSize: terminalFontSize * 0.9,
-                      fontFamily: 'jetBrainsMono',
-                    ),
-                    keyboardType: TextInputType.visiblePassword,
-                    deleteDetection: true,
-                  ),
-          ),
-        ),
-        if (state.isAgentRunning)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
-                      foregroundColor: Colors.redAccent,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
-                      ),
-                    ),
-                    onPressed: () => ref.read(editorProvider.notifier).stopAgent(),
-                    child: Text(AppLocalizations.of(context)!.stopAgent, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  xt.TerminalTheme _getTerminalTheme(String themeName) {
-    Color bg;
-    Color fg = Colors.white;
-    switch (themeName) {
-      case 'dracula':
-        bg = const Color(0xFF282A36);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'monokai':
-        bg = const Color(0xFF272822);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'dark':
-        bg = const Color(0xFF0D0F14);
-        fg = const Color(0xFFE0E0E0);
-        break;
-      case 'ubuntu':
-      default:
-        bg = const Color(0xFF300A24);
-        fg = Colors.white;
-        break;
-    }
-
-    return xt.TerminalTheme(
-      cursor: fg,
-      selection: fg.withValues(alpha: 0.25),
-      foreground: fg,
-      background: bg,
-      black: Colors.black,
-      red: const Color(0xFFCC0000),
-      green: const Color(0xFF4E9A06),
-      yellow: const Color(0xFFC4A000),
-      blue: const Color(0xFF3465A4),
-      magenta: const Color(0xFF75507B),
-      cyan: const Color(0xFF06989A),
-      white: const Color(0xFFD3D7CF),
-      brightBlack: const Color(0xFF555753),
-      brightRed: const Color(0xFFEF2929),
-      brightGreen: const Color(0xFF8AE234),
-      brightYellow: const Color(0xFFFCE94F),
-      brightBlue: const Color(0xFF729FCF),
-      brightMagenta: const Color(0xFFAD7FA8),
-      brightCyan: const Color(0xFF34E2E2),
-      brightWhite: const Color(0xFFEEEEEC),
-      searchHitBackground: Colors.yellow,
-      searchHitBackgroundCurrent: Colors.orange,
-      searchHitForeground: Colors.black,
-    );
+  String _formatRussianFilesCount(int count) {
+    final mod10 = count % 10;
+    final mod100 = count % 100;
+    if (mod100 >= 11 && mod100 <= 19) return '$count файлов с изменениями';
+    if (mod10 == 1) return '$count файл с изменениями';
+    if (mod10 >= 2 && mod10 <= 4) return '$count файла с изменениями';
+    return '$count файлов с изменениями';
   }
 
   Widget _buildProposedActionsStickyPanel(AIState aiState) {
     final l10n = AppLocalizations.of(context)!;
     final fileCount = aiState.proposedActions.where((a) => a.type != 'command').length;
-    
+    final label = _formatRussianFilesCount(fileCount > 0 ? fileCount : aiState.proposedActions.length);
+
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF12151F),
+        color: const Color(0xFF141724),
         border: Border(
           top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          // Header row — VS Code style
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+              color: const Color(0xFF1E6FE6).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFF1E6FE6).withValues(alpha: 0.3)),
             ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // File count badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.purpleAccent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    l10n.filesCount(fileCount),
-                    style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  l10n.withChanges,
-                  style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
-                ),
-                const Spacer(),
-                // Reject All
-                InkWell(
-                  onTap: () {
-                    for (final action in List<AIAction>.from(aiState.proposedActions)) {
-                      ref.read(aiProvider.notifier).removeAction(action);
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Text(
-                      l10n.rejectAll,
-                      style: GoogleFonts.inter(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ),
+                const Icon(LucideIcons.file_diff, size: 12, color: Color(0xFF58A6FF)),
                 const SizedBox(width: 6),
-                // Accept All — VS Code blue button
-                InkWell(
-                  onTap: () async {
-                    await ref.read(aiProvider.notifier).executeActionsManually(aiState.proposedActions);
-                  },
-                  borderRadius: BorderRadius.circular(6),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E6FE6),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      l10n.acceptAll,
-                      style: GoogleFonts.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF58A6FF),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
           ),
-          // File list
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 160),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: aiState.proposedActions.length,
-              itemBuilder: (context, index) {
-                final action = aiState.proposedActions[index];
-                return AIActionFileItem(
-                  action: action,
-                  onShowDiff: () => _showDiffDialog(action),
-                  onRemove: () => ref.read(aiProvider.notifier).removeAction(action),
-                );
-              },
+          const Spacer(),
+          // Reject All
+          TextButton(
+            onPressed: () {
+              for (final action in List<AIAction>.from(aiState.proposedActions)) {
+                ref.read(aiProvider.notifier).removeAction(action);
+              }
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white54,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(l10n.rejectAll, style: const TextStyle(fontSize: 11)),
+          ),
+          const SizedBox(width: 8),
+          // Accept All
+          ElevatedButton.icon(
+            onPressed: () async {
+              await ref.read(aiProvider.notifier).executeActionsManually(aiState.proposedActions);
+            },
+            icon: const Icon(LucideIcons.check, size: 13, color: Colors.white),
+            label: Text(
+              l10n.acceptAll,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E6FE6),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
           ),
         ],
@@ -998,96 +1084,22 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildQuickActionChips(BuildContext context, WidgetRef ref) {
-    final chips = [
-      {'label': '💡 Объяснить', 'prompt': '/explain Объясни выделенный код и данный файл'},
-      {'label': '🔧 Исправить', 'prompt': '/fix Найди и исправь возможные ошибки и баги'},
-      {'label': '⚡ Рефакторинг', 'prompt': '/refactor Проведи рефакторинг и оптимизируй этот код'},
-      {'label': '🧪 Тесты', 'prompt': '/tests Напиши юнит-тесты для функций данного файла'},
-      {'label': '📝 Документация', 'prompt': '/doc Добавь подробные docstring и комментарии'},
-    ];
-
-    return Container(
-      height: 28,
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        itemCount: chips.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 5),
-        itemBuilder: (context, index) {
-          final item = chips[index];
-          return InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: () {
-              final promptText = item['prompt']!;
-              _aiChatController.text = promptText;
-              _sendMessage(context, ref);
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-              decoration: BoxDecoration(
-                color: const Color(0xFF131824),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: Colors.cyanAccent.withValues(alpha: 0.25),
-                  width: 0.8,
-                ),
-              ),
-              child: Text(
-                item['label']!,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  color: Colors.cyanAccent,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildAIChatInput(BuildContext context, WidgetRef ref, AIState aiState) {
-    final l10n = AppLocalizations.of(context)!;
+  Widget _buildChatInput(BuildContext context, WidgetRef ref, AIState aiState) {
     final editor = ref.watch(editorProvider);
     final hasActiveFile = editor.activeFilePath != null;
     final currentFileName = editor.activeFilePath?.split('/').last ?? '';
-
-    String dynamicHint;
-    switch (aiState.interactionMode) {
-      case AiInteractionMode.chat:
-        dynamicHint = 'Спросите ИИ о коде... (#file:путь для контекста)';
-        break;
-      case AiInteractionMode.ask:
-        dynamicHint = 'Спросите об архитектуре, логике или API...';
-        break;
-      case AiInteractionMode.autopilot:
-        dynamicHint = 'Опишите сложную задачу для агента...';
-        break;
-      case AiInteractionMode.refactor:
-        dynamicHint = 'Что исправить в выделенном фрагменте?';
-        break;
-      case AiInteractionMode.plan:
-        dynamicHint = 'Опишите идею проекта — ИИ составит план...';
-        break;
-      case AiInteractionMode.debug:
-        dynamicHint = 'Вставьте лог ошибки или опишите баг...';
-        break;
-    }
-
     final isInternetEnabled = ref.watch(mcpServiceProvider.notifier).internetAccess;
+    final agentKind = aiState.activeAgentKind;
+    final isBusy = aiState.isLoading;
+    final isMobile = MediaQuery.of(context).size.width < 700;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      padding: EdgeInsets.fromLTRB(isMobile ? 6 : 8, 2, isMobile ? 6 : 8, isMobile ? 4 : 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildQuickActionChips(context, ref),
-          
-          // Active file attachment indicator (above input)
+          // Active file attachment indicator
           if (_attachActiveFile && hasActiveFile)
             Container(
               margin: const EdgeInsets.only(bottom: 6),
@@ -1098,13 +1110,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2)),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   const Icon(LucideIcons.file_code, size: 12, color: Colors.cyanAccent),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Файл прикреплен: $currentFileName',
+                      'Файл в контексте: $currentFileName',
                       style: GoogleFonts.inter(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w500),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1116,7 +1127,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 ],
               ),
             ),
-            
+
           // Attached image indicator
           if (_selectedImagePath != null)
             Container(
@@ -1152,50 +1163,42 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 ],
               ),
             ),
-          // Unified Premium Input Card
+
+          // Input Box
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF161B22).withValues(alpha: 0.8), // Glass panel background from Stitch
-              borderRadius: BorderRadius.circular(16),
+              color: const Color(0xFF161B22),
+              borderRadius: BorderRadius.circular(isMobile ? 10 : 14),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.1), // Stitch border
+                color: Colors.white.withValues(alpha: 0.12),
                 width: 0.8,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
-            padding: const EdgeInsets.all(8),
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8, vertical: isMobile ? 2 : 4),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
               children: [
                 if (_showSlashCommands) _buildSlashCommands(),
-                // Top Row: Attachments + TextField + Send
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // Attachment button (Add image / Add file)
+                    // Attachment button
                     PopupMenuButton<String>(
-                      tooltip: 'Прикрепить файл или фото',
-                      icon: const Icon(
-                        LucideIcons.plus, 
-                        size: 20, 
-                        color: Colors.white60,
-                      ),
+                      tooltip: 'Прикрепить контекст',
+                      icon: const Icon(LucideIcons.paperclip, size: 16, color: Colors.white60),
                       color: const Color(0xFF1E2230),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       onSelected: (value) {
                         if (value == 'image') {
                           _pickImage();
                         } else if (value == 'file' && hasActiveFile) {
-                          setState(() {
-                            _attachActiveFile = !_attachActiveFile;
-                          });
+                          setState(() => _attachActiveFile = !_attachActiveFile);
                         } else if (value == 'internet') {
                           ref.read(mcpServiceProvider.notifier).setInternetAccess(!isInternetEnabled);
                         }
@@ -1206,15 +1209,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                             value: 'file',
                             child: Row(
                               children: [
-                                Icon(LucideIcons.paperclip, size: 14, color: _attachActiveFile ? Colors.cyanAccent : Colors.white60),
+                                Icon(LucideIcons.file_code, size: 14, color: _attachActiveFile ? Colors.cyanAccent : Colors.white60),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'Активный файл: $currentFileName', 
-                                    style: TextStyle(
-                                      fontSize: 11, 
-                                      color: _attachActiveFile ? Colors.cyanAccent : Colors.white,
-                                    ),
+                                    'Файл: $currentFileName',
+                                    style: TextStyle(fontSize: 11, color: _attachActiveFile ? Colors.cyanAccent : Colors.white),
                                   ),
                                 ),
                               ],
@@ -1236,15 +1236,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                             children: [
                               Icon(isInternetEnabled ? LucideIcons.circle_check : LucideIcons.circle, size: 14, color: isInternetEnabled ? Colors.cyanAccent : Colors.white60),
                               const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  l10n.internetAccess, 
-                                  style: TextStyle(
-                                    fontSize: 11, 
-                                    color: isInternetEnabled ? Colors.cyanAccent : Colors.white,
-                                    fontWeight: isInternetEnabled ? FontWeight.bold : FontWeight.normal,
-                                  ),
-                                ),
+                              Text(
+                                'Доступ в Интернет',
+                                style: TextStyle(fontSize: 11, color: isInternetEnabled ? Colors.cyanAccent : Colors.white),
                               ),
                             ],
                           ),
@@ -1252,15 +1246,19 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       ],
                     ),
                     const SizedBox(width: 4),
-                    // Borderless Text Field
+                    // Input TextField
                     Expanded(
                       child: TextField(
                         controller: _aiChatController,
                         style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
                         maxLines: 4,
                         minLines: 1,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) {
+                          if (!isBusy) _sendMessage(context, ref);
+                        },
                         decoration: InputDecoration(
-                          hintText: dynamicHint,
+                          hintText: 'Задача для ${agentKind.title}... (#file:путь, @codebase)',
                           hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 11.5),
                           border: InputBorder.none,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
@@ -1268,92 +1266,148 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    // Send Button
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Colors.purpleAccent, Colors.cyanAccent],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.purpleAccent.withValues(alpha: 0.25),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2),
+                    // Send or Stop Button
+                    if (isBusy)
+                      InkWell(
+                        onTap: () => ref.read(aiProvider.notifier).stopActiveAgent(),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: const BoxDecoration(
+                            color: Colors.redAccent,
+                            shape: BoxShape.circle,
                           ),
-                        ],
+                          child: const Icon(LucideIcons.square, color: Colors.white, size: 12),
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [agentKind.brandColor, Colors.cyanAccent],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: agentKind.brandColor.withValues(alpha: 0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: IconButton(
+                          icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _sendMessage(context, ref),
+                        ),
                       ),
-                      child: IconButton(
-                        icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () => _sendMessage(context, ref),
-                      ),
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 4),
-                const Divider(color: Colors.white10, height: 1),
-                const SizedBox(height: 6),
-
-                // Provider & Status Row
-                _buildProviderRow(context, ref, aiState),
-                const SizedBox(height: 4),
-                // Bottom Row: Dropdowns (Mode, Model, Autonomy)
-                Row(
-                  children: [
-                    // 1. Bot Mode selector
-                    Expanded(
-                      child: _buildInputPillDropdown<AiInteractionMode>(
-                        context: context,
-                        label: _getModeLabel(aiState.interactionMode),
-                        icon: _getModeIcon(aiState.interactionMode),
-                        accentColor: _getModeColor(aiState.interactionMode),
-                        onSelected: (mode) {
-                          ref.read(aiProvider.notifier).setInteractionMode(mode);
-                        },
-                         items: [
-                          _buildDropdownItem(AiInteractionMode.chat, 'Чат', LucideIcons.message_square, Colors.cyanAccent),
-                          _buildDropdownItem(AiInteractionMode.ask, 'Запроc', LucideIcons.search, Colors.blueAccent),
-                          _buildDropdownItem(AiInteractionMode.autopilot, 'Агент', LucideIcons.bot, Colors.orangeAccent),
-                          _buildDropdownItem(AiInteractionMode.refactor, 'Редактор', LucideIcons.code, Colors.purpleAccent),
-                          _buildDropdownItem(AiInteractionMode.plan, 'Планер', LucideIcons.map, Colors.tealAccent),
-                          _buildDropdownItem(AiInteractionMode.debug, 'Дебаг', LucideIcons.bug, Colors.redAccent),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    // 2. Model Selector
-                    Expanded(
-                      flex: 2,
-                      child: _buildModelSelectorDropdown(context, ref),
-                    ),
-                    const SizedBox(width: 6),
-                    // 3. Autonomy selector
-                    Expanded(
-                      child: _buildInputPillDropdown<AiApprovalMode>(
-                        context: context,
-                        label: _getApprovalLabel(aiState.approvalMode),
-                        icon: _getApprovalIcon(aiState.approvalMode),
-                        accentColor: _getApprovalColor(aiState.approvalMode),
-                        onSelected: (mode) {
-                          ref.read(aiProvider.notifier).setApprovalMode(mode);
-                        },
-                        items: [
-                          _buildDropdownItem(AiApprovalMode.manual, 'Ручной', LucideIcons.sliders_horizontal, Colors.greenAccent),
-                          _buildDropdownItem(AiApprovalMode.semiAutonomous, 'Полу-авто', LucideIcons.shield_check, Colors.amberAccent),
-                          _buildDropdownItem(AiApprovalMode.fullAutonomous, 'Автономно', LucideIcons.zap, Colors.redAccent),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
               ],
+            ),
+          ),
+
+          // Token & Context Counter Bar
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 2, left: 2, right: 2),
+            child: Row(
+              children: [
+                // Context window badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(LucideIcons.cpu, size: 10, color: Colors.cyanAccent),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Контекст: ${_getContextWindowLabel(ref.watch(activeAiModelProvider))}',
+                        style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.white70),
+                      ),
+                    ],
+                  ),
+                ),
+                if (aiState.totalTokens > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: agentKind.brandColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: agentKind.brandColor.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(LucideIcons.sparkles, size: 9, color: agentKind.brandColor),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Токены: ${_formatTokenCount(aiState.totalTokens)}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                Text(
+                  '${aiState.messages.length} сообщ.',
+                  style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white30),
+                ),
+              ],
+            ),
+          ),
+
+          // Quick Command Chips
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 2),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: ['/fix', '/explain', '/plan', '/diff', '/clear'].map((cmd) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () {
+                        _aiChatController.text = cmd;
+                        _sendMessage(context, ref);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 0.6),
+                        ),
+                        child: Text(
+                          cmd,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
           ),
         ],
@@ -1372,6 +1426,52 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     final currentCode = activeFile?.controller.text ?? '';
 
     final lowerVal = value.toLowerCase();
+
+    if (lowerVal == '/clear') {
+      _aiChatController.clear();
+      ref.read(aiProvider.notifier).startNewSession();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Контекст очищен. Начата новая сессия.'), duration: Duration(seconds: 1)),
+      );
+      return;
+    }
+
+    if (lowerVal == '/model' || lowerVal == '/models') {
+      _aiChatController.clear();
+      final activeProviderId = ref.read(activeAiProviderIdProvider);
+      final activeModel = ref.read(activeAiModelProvider);
+      final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
+      final selected = await showModelPickerModal(
+        context,
+        providerId: activeProviderId,
+        currentModel: activeModel,
+        apiKey: apiKey,
+      );
+      if (selected != null && selected.isNotEmpty) {
+        ref.read(activeAiModelProvider.notifier).state = selected;
+        await ref.read(aiServiceProvider).setModel(selected);
+      }
+      return;
+    }
+
+    if (lowerVal == '/stats') {
+      _aiChatController.clear();
+      final aiState = ref.read(aiProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Токены сессии: ${aiState.totalTokens} | Вход: ${aiState.lastPromptTokens} | Выход: ${aiState.lastCompletionTokens} | Сообщений: ${aiState.messages.length}'),
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    if (lowerVal == '/rollback') {
+      _aiChatController.clear();
+      ref.read(aiProvider.notifier).rollbackAgentChanges();
+      return;
+    }
+
     final isActionChip = lowerVal.startsWith('/fix') || 
                         lowerVal.startsWith('/refactor') || 
                         lowerVal.startsWith('/explain') || 
@@ -1383,7 +1483,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
     final suggestedMode = _suggestMode(value, hasActiveFile, activeFile);
     if (suggestedMode != null) {
-      final currentMode = ref.read(aiProvider.notifier).state.interactionMode;
+      final currentMode = ref.read(aiProvider).interactionMode;
       if (suggestedMode != currentMode) {
         _showModeSuggestionDialog(context, ref, suggestedMode, value);
         return;
@@ -1398,7 +1498,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           'ОБЯЗАТЕЛЬНО: Предложи рабочий код и внеси исправления!';
     }
 
-    List<String> contextFiles = [];
+    final List<String> contextFiles = [];
     if (shouldIncludeFile && editor.activeFilePath != null) {
       contextFiles.add(editor.activeFilePath!);
     }
@@ -1507,396 +1607,6 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     }
   }
 
-  String _getApprovalLabel(AiApprovalMode mode) {
-    switch (mode) {
-      case AiApprovalMode.manual: return 'Ручной';
-      case AiApprovalMode.semiAutonomous: return 'Полу-авто';
-      case AiApprovalMode.fullAutonomous: return 'Автономно';
-    }
-  }
-
-  IconData _getApprovalIcon(AiApprovalMode mode) {
-    switch (mode) {
-      case AiApprovalMode.manual: return LucideIcons.sliders_horizontal;
-      case AiApprovalMode.semiAutonomous: return LucideIcons.shield_check;
-      case AiApprovalMode.fullAutonomous: return LucideIcons.zap;
-    }
-  }
-
-  Color _getApprovalColor(AiApprovalMode mode) {
-    switch (mode) {
-      case AiApprovalMode.manual: return Colors.greenAccent;
-      case AiApprovalMode.semiAutonomous: return Colors.amberAccent;
-      case AiApprovalMode.fullAutonomous: return Colors.redAccent;
-    }
-  }
-
-  Widget _buildInputPillDropdown<T>({
-    required BuildContext context,
-    required String label,
-    required IconData icon,
-    required Color accentColor,
-    required ValueChanged<T> onSelected,
-    required List<PopupMenuEntry<T>> items,
-  }) {
-    return PopupMenuButton<T>(
-      tooltip: '',
-      color: const Color(0xFF1E2230),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      onSelected: onSelected,
-      itemBuilder: (context) => items,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 0.8,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 11, color: accentColor),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const Icon(LucideIcons.chevron_down, size: 10, color: Colors.white30),
-          ],
-        ),
-      ),
-    );
-  }
-
-  PopupMenuItem<T> _buildDropdownItem<T>(T value, String label, IconData icon, Color color) {
-    return PopupMenuItem<T>(
-      value: value,
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: GoogleFonts.inter(fontSize: 11, color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProviderRow(BuildContext context, WidgetRef ref, AIState aiState) {
-    final activeProviderId = ref.watch(activeAiProviderIdProvider);
-    final currentProvider = AiProviders.byId(activeProviderId);
-    final localInferenceState = ref.watch(localInferenceProvider);
-    final isLocalEdge = activeProviderId == 'local_edge';
-    
-    final statusColor = isLocalEdge
-        ? (localInferenceState.status == LocalModelStatus.ready
-            ? Colors.greenAccent
-            : (localInferenceState.status == LocalModelStatus.loading
-                ? Colors.amberAccent
-                : Colors.white30))
-        : Colors.cyanAccent;
-    
-    final statusText = isLocalEdge
-        ? (localInferenceState.status == LocalModelStatus.ready
-            ? '${localInferenceState.loadedModel?.name ?? "Ready"}'
-            : (localInferenceState.status == LocalModelStatus.loading
-                ? 'Loading...'
-                : 'Stopped'))
-        : currentProvider.displayName;
-    
-    final contextInfo = isLocalEdge && localInferenceState.status == LocalModelStatus.ready
-        ? '${localInferenceState.contextTokensUsed}/${localInferenceState.contextTokensTotal} ctx'
-        : '';
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.8),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: statusColor,
-              boxShadow: [BoxShadow(color: statusColor, blurRadius: 4, spreadRadius: 1)],
-            ),
-          ),
-          const SizedBox(width: 6),
-          Icon(currentProvider.logoEmoji.runes.first > 0x10000 ? LucideIcons.cpu : LucideIcons.cpu, size: 11, color: statusColor),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              statusText,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: statusColor,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          // Context info badge
-          if (contextInfo.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.greenAccent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                contextInfo,
-                style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.greenAccent, fontWeight: FontWeight.w600),
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
-          // Provider switcher
-          PopupMenuButton<String>(
-            tooltip: '',
-            color: const Color(0xFF1E2230),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onSelected: (providerId) async {
-              final aiSvc = ref.read(aiServiceProvider);
-              await aiSvc.setProvider(providerId);
-              ref.read(activeAiProviderIdProvider.notifier).state = providerId;
-              final model = aiSvc.selectedModel;
-              ref.read(activeAiModelProvider.notifier).state = model;
-            },
-            itemBuilder: (context) {
-              final items = <PopupMenuEntry<String>>[];
-              for (final p in AiProviders.all) {
-                final isSelected = p.id == activeProviderId;
-                items.add(PopupMenuItem<String>(
-                  value: p.id,
-                  child: Row(
-                    children: [
-                      Icon(isSelected ? LucideIcons.circle_check : LucideIcons.circle, size: 11, color: isSelected ? Colors.cyanAccent : Colors.white30),
-                      const SizedBox(width: 8),
-                      Text(p.displayName, style: GoogleFonts.inter(fontSize: 11, color: Colors.white, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                    ],
-                  ),
-                ));
-              }
-              return items;
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: statusColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    currentProvider.displayName,
-                    style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w600, color: statusColor),
-                  ),
-                  const SizedBox(width: 2),
-                  Icon(LucideIcons.chevron_down, size: 9, color: statusColor),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildModelSelectorDropdown(BuildContext context, WidgetRef ref) {
-    final activeModel = ref.watch(activeAiModelProvider);
-    final activeProviderId = ref.watch(activeAiProviderIdProvider);
-    final localInferenceState = ref.watch(localInferenceProvider);
-    
-    final currentProvider = AiProviders.byId(activeProviderId);
-    final isLocalEdge = activeProviderId == 'local_edge';
-    
-    String displayName = activeModel;
-    if (displayName.startsWith('gemini-')) {
-      displayName = displayName.replaceAll('gemini-', 'Gemini ');
-    } else if (displayName.startsWith('gpt-')) {
-      displayName = displayName.toUpperCase();
-    } else if (displayName.startsWith('claude-')) {
-      displayName = displayName.replaceAll('claude-', 'Claude ');
-    }
-
-    // Build combined model list: cloud models + native inference models
-    final availableModelsAsync = ref.watch(availableModelsProvider(activeProviderId));
-    final defaultModels = currentProvider.defaultModels;
-    final List<String> cloudModels = availableModelsAsync.maybeWhen(
-      data: (list) => list.isNotEmpty ? list : defaultModels,
-      orElse: () => defaultModels,
-    );
-    
-    final List<String> nativeModels = [];
-    if (isLocalEdge) {
-      for (final m in localInferenceState.availableModels) {
-        nativeModels.add(m.filename);
-      }
-    }
-    
-    final hasNative = nativeModels.isNotEmpty;
-    final isNativeActive = isLocalEdge && localInferenceState.loadedModel != null && localInferenceState.status == LocalModelStatus.ready;
-    
-    return PopupMenuButton<String>(
-      tooltip: 'Выбрать модель',
-      color: const Color(0xFF1E2230),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      onSelected: (val) async {
-        final aiSvc = ref.read(aiServiceProvider);
-        await aiSvc.setModel(val);
-        ref.read(activeAiModelProvider.notifier).state = val;
-        
-        // If selecting a native model, load it
-        if (isLocalEdge && nativeModels.contains(val)) {
-          final model = localInferenceState.availableModels.firstWhere((x) => x.filename == val);
-          final isDownloaded = localInferenceState.downloadedFiles.contains(model.filename);
-          if (!isDownloaded) {
-            await ref.read(localInferenceProvider.notifier).downloadModel(model);
-          } else {
-            await ref.read(localInferenceProvider.notifier).loadModel(model);
-          }
-        }
-      },
-      itemBuilder: (context) {
-        final List<PopupMenuEntry<String>> items = [];
-        
-        // Native inference models section
-        if (hasNative) {
-          items.add(PopupMenuItem<String>(
-            enabled: false,
-            child: Row(
-              children: [
-                Icon(LucideIcons.smartphone, size: 10, color: Colors.greenAccent.shade100),
-                const SizedBox(width: 6),
-                Text(
-                  'НА ТЕЛЕФОНЕ',
-                  style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.greenAccent.shade100),
-                ),
-              ],
-            ),
-          ));
-          
-          for (final m in nativeModels) {
-            final modelInfo = localInferenceState.availableModels.firstWhere((x) => x.filename == m);
-            final isLoaded = localInferenceState.loadedModel?.filename == m && isNativeActive;
-            items.add(PopupMenuItem<String>(
-              value: m,
-              child: Row(
-                children: [
-                  Icon(isLoaded ? LucideIcons.circle_check : LucideIcons.circle, size: 11, color: isLoaded ? Colors.greenAccent : Colors.white30),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(modelInfo.name, style: GoogleFonts.inter(fontSize: 11, color: isLoaded ? Colors.greenAccent.shade100 : Colors.white70, fontWeight: isLoaded ? FontWeight.bold : FontWeight.normal)),
-                        Text('${modelInfo.size} · ${modelInfo.description}', style: GoogleFonts.inter(fontSize: 8, color: Colors.white30), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ));
-          }
-          
-          if (cloudModels.isNotEmpty) {
-            items.add(const PopupMenuDivider(height: 8));
-          }
-        }
-        
-        // Cloud/server models section
-        if (cloudModels.isNotEmpty) {
-          items.add(PopupMenuItem<String>(
-            enabled: false,
-            child: Text(
-              'МОДЕЛИ: ${currentProvider.displayName.toUpperCase()}',
-              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.purpleAccent.shade100),
-            ),
-          ));
-          
-          for (final m in cloudModels) {
-            final isSelected = m == activeModel && !isNativeActive;
-            items.add(PopupMenuItem<String>(
-              value: m,
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.cpu, size: 11, color: Colors.purpleAccent),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(m, style: GoogleFonts.inter(fontSize: 11, color: isSelected ? Colors.purpleAccent.shade100 : Colors.white70, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal), overflow: TextOverflow.ellipsis),
-                  ),
-                  if (isSelected) ...[
-                    const SizedBox(width: 4),
-                    const Icon(LucideIcons.check, size: 12, color: Colors.purpleAccent),
-                  ],
-                ],
-              ),
-            ));
-          }
-        }
-        
-        return items;
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        decoration: BoxDecoration(
-          color: isNativeActive ? Colors.greenAccent.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isNativeActive ? Colors.greenAccent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.08),
-            width: 0.8,
-          ),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(isNativeActive ? LucideIcons.smartphone : LucideIcons.cpu, size: 11, color: isNativeActive ? Colors.greenAccent : Colors.cyanAccent),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                displayName,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const Icon(LucideIcons.chevron_down, size: 10, color: Colors.white30),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _showChatHistoryDialog(BuildContext context, WidgetRef ref) {
     showDialog(
       context: context,
@@ -1999,7 +1709,15 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
   AiInteractionMode? _suggestMode(String prompt, bool hasActiveFile, dynamic activeFile) {
     final lower = prompt.toLowerCase();
-    final hasSelection = activeFile != null && activeFile.controller.selection.isValid && !activeFile.controller.selection.isCollapsed;
+    bool hasSelection = false;
+    if (activeFile != null) {
+      try {
+        final sel = activeFile.controller.selection;
+        hasSelection = !sel.isCollapsed;
+      } catch (_) {
+        hasSelection = false;
+      }
+    }
     
     if (lower.contains('спроектируй') || lower.contains('архитектур') || lower.contains('планировщ') || lower.contains('plan') || lower.contains('design')) {
       return AiInteractionMode.plan;

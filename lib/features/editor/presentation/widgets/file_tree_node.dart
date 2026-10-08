@@ -482,7 +482,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
 
 
   Widget _buildGitBadge(Color color, WidgetRef ref) {
-    final gitState = ref.read(gitProvider);
+    final gitState = ref.watch(gitProvider);
     final status = gitState.status;
     if (status == null) return const SizedBox.shrink();
 
@@ -490,6 +490,8 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     if (currentWorkspace == null) return const SizedBox.shrink();
     final relativePath = p.relative(widget.path, from: currentWorkspace);
     String letter = '';
+    int additions = 0;
+    int deletions = 0;
     
     if (widget.isDirectory) {
       if (status.modifiedFiles.any((f) => f.startsWith('$relativePath/'))) {
@@ -499,6 +501,12 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       } else if (status.untrackedFiles.any((f) => f.startsWith('$relativePath/'))) {
         letter = 'U';
       }
+      for (final entry in status.diffStats.entries) {
+        if (entry.key.startsWith('$relativePath/')) {
+          additions += entry.value.additions;
+          deletions += entry.value.deletions;
+        }
+      }
     } else {
       if (status.modifiedFiles.contains(relativePath)) {
         letter = 'M';
@@ -507,37 +515,76 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       } else if (status.untrackedFiles.contains(relativePath)) {
         letter = 'U';
       }
+      final stat = status.diffStats[relativePath];
+      if (stat != null) {
+        additions = stat.additions;
+        deletions = stat.deletions;
+      }
     }
 
-    if (letter.isEmpty) return const SizedBox.shrink();
+    final hasAi = _hasAIPending(ref);
+    final showDiffStats = !hasAi && (additions > 0 || deletions > 0);
+
+    if (letter.isEmpty && !showDiffStats) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(right: 12.0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 1.0),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
-        ),
-        child: Text(
-          letter,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-            color: color,
-          ),
-        ),
+      padding: const EdgeInsets.only(right: 8.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showDiffStats && additions > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 3.0),
+              child: Text(
+                '+$additions',
+                style: const TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4EC994),
+                ),
+              ),
+            ),
+          if (showDiffStats && deletions > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 3.0),
+              child: Text(
+                '-$deletions',
+                style: const TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFF6B6B),
+                ),
+              ),
+            ),
+          if (letter.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 1.0),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+              ),
+              child: Text(
+                letter,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildFileNameText(String name, String searchQuery, Color gitColor) {
+  Widget _buildFileNameText(String name, String searchQuery, Color gitColor, {bool isMobile = false}) {
+    final fontSize = isMobile ? 11.5 : 12.5;
     if (searchQuery.isEmpty) {
       return Text(
         name,
         style: TextStyle(
-          fontSize: 12.5,
+          fontSize: fontSize,
           fontWeight: widget.isDirectory ? FontWeight.w500 : FontWeight.normal,
           color: gitColor,
         ),
@@ -550,7 +597,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       return Text(
         name,
         style: TextStyle(
-          fontSize: 12.5,
+          fontSize: fontSize,
           fontWeight: widget.isDirectory ? FontWeight.w500 : FontWeight.normal,
           color: gitColor,
         ),
@@ -567,7 +614,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       overflow: TextOverflow.ellipsis,
       text: TextSpan(
         style: TextStyle(
-          fontSize: 12.5,
+          fontSize: fontSize,
           fontWeight: widget.isDirectory ? FontWeight.w500 : FontWeight.normal,
           color: gitColor,
           fontFamily: GoogleFonts.inter().fontFamily,
@@ -1377,6 +1424,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
 
   Widget _buildNode(Color gitColor, bool isSelected, bool isExpanded) {
     final searchQuery = ref.watch(fileSearchQueryProvider);
+    final isMobile = MediaQuery.of(context).size.width < 700;
     final indentGuides = <Widget>[];
     if (widget.depth > 0) {
       for (int i = 0; i < widget.depth; i++) {
@@ -1384,7 +1432,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
         final showLine = isNodeConnector ? true : !widget.ancestorIsLast[i];
         indentGuides.add(
           _GuideSegment(
-            width: 12,
+            width: isMobile ? 9 : 12,
             height: 20,
             lineColor: Colors.white.withValues(alpha: 0.08),
             showVertical: showLine,
@@ -1491,7 +1539,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
             : (_hasAIPending(ref) && !widget.isDirectory)
                 ? Colors.purpleAccent.withValues(alpha: 0.06)
                 : Colors.transparent,
-        padding: const EdgeInsets.symmetric(vertical: 1.5, horizontal: 6.0),
+        padding: EdgeInsets.symmetric(vertical: 1.0, horizontal: isMobile ? 4.0 : 6.0),
         child: Row(
           children: [
             if (widget.depth > 0)
@@ -1500,19 +1548,19 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                 children: indentGuides,
               ),
             if (widget.isDirectory)
-              Icon(isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right, size: 14, color: Colors.grey)
+              Icon(isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right, size: isMobile ? 13 : 14, color: Colors.grey)
             else
-              const SizedBox(width: 12),
+              SizedBox(width: isMobile ? 10 : 12),
             const SizedBox(width: 3),
             () {
               final iconInfo = FileIconHelper.getIconInfo(widget.visualName ?? widget.name, widget.isDirectory, isExpanded);
               return Icon(
                 iconInfo.icon,
-                size: 15,
+                size: isMobile ? 14 : 15,
                 color: iconInfo.color,
               );
             }(),
-            const SizedBox(width: 6),
+            SizedBox(width: isMobile ? 5 : 6),
             Expanded(
               child: _isRenaming
                   ? _buildInlineRenameField()
@@ -1524,6 +1572,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                             widget.visualName ?? widget.name,
                             searchQuery,
                             _hasAIPending(ref) ? Colors.purpleAccent : gitColor,
+                            isMobile: isMobile,
                           ),
                         ),
                         if (!widget.isDirectory && ref.watch(bookmarksProvider).contains(widget.path)) ...[

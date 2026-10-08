@@ -10,6 +10,9 @@ import 'package:quantum_ide/models/pub_package.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/features/home/presentation/widgets/package_install_dialog.dart';
+import 'package:quantum_ide/core/models/agent_activity_item.dart';
+import 'package:quantum_ide/core/services/cli_installer_service.dart';
 
 class PackagePage extends ConsumerStatefulWidget {
   const PackagePage({super.key});
@@ -77,14 +80,25 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
 
     final theme = Theme.of(context);
     
+    final showCliAgentsHero = (tabType == 'all' || tabType == 'languages_ai') && _searchQuery.isEmpty;
     final showSdkHero = (tabType == 'all' || tabType == 'build_system') && 
         allPackages.any((p) => p.id == 'android-sdk' && !p.isInstalled) &&
         _searchQuery.isEmpty;
-    
     final showFixHero = (tabType == 'all' || tabType == 'build_system') &&
         _searchQuery.isEmpty;
 
-    if (filtered.isEmpty && !showSdkHero && !showFixHero) {
+    final List<Widget> headers = [];
+    if (showCliAgentsHero) {
+      headers.add(_buildCliAgentsHeroCard(context, ref));
+    }
+    if (showSdkHero) {
+      headers.add(_buildSDKHeroCard(context, ref));
+    }
+    if (showFixHero) {
+      headers.add(_buildBuildFixHeroCard(context, ref));
+    }
+
+    if (filtered.isEmpty && headers.isEmpty) {
       return Center(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -127,38 +141,29 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
       );
     }
 
-    return ListView.builder(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      itemCount: filtered.length + (showSdkHero ? 1 : 0) + (showFixHero ? 1 : 0),
-      itemBuilder: (context, index) {
-        int adjustedIndex = index;
-        if (showSdkHero) {
-          if (index == 0) {
-            return Column(
-              children: [
-                _buildSDKHeroCard(context, ref),
-                const SizedBox(height: 16),
-              ],
-            );
-          }
-          adjustedIndex--;
-        }
-        if (showFixHero) {
-          if ((showSdkHero && index == 1) || (!showSdkHero && index == 0)) {
-            return Column(
-              children: [
-                _buildBuildFixHeroCard(context, ref),
-                const SizedBox(height: 16),
-              ],
-            );
-          }
-          adjustedIndex--;
-        }
-        
-        final pkg = filtered[adjustedIndex];
-        return _buildPackageCard(context, ref, pkg);
+    return RefreshIndicator(
+      onRefresh: () async {
+        await ref.read(packageServiceProvider.notifier).checkActualInstallation();
       },
+      color: theme.colorScheme.primary,
+      backgroundColor: theme.colorScheme.surface,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        itemCount: filtered.length + headers.length,
+        itemBuilder: (context, index) {
+          if (index < headers.length) {
+            return Column(
+              children: [
+                headers[index],
+                const SizedBox(height: 16),
+              ],
+            );
+          }
+          final pkg = filtered[index - headers.length];
+          return _buildPackageCard(context, ref, pkg);
+        },
+      ),
     );
   }
 
@@ -241,7 +246,45 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                           ),
                         ),
                       ),
-                      const SizedBox(width: 48), // Spacer to balance leading button
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.03),
+                          child: IconButton(
+                            icon: Icon(LucideIcons.refresh_cw, color: theme.colorScheme.primary, size: 18),
+                            tooltip: 'Проверить обновления пакетов',
+                            onPressed: () async {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  content: Text(
+                                    'Проверка наличия обновлений для пакетов и CLI-агентов...',
+                                    style: GoogleFonts.inter(color: theme.colorScheme.onSurface),
+                                  ),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                              await ref.read(packageServiceProvider.notifier).checkActualInstallation();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    content: Text(
+                                      'Список пакетов проверен и обновлен.',
+                                      style: GoogleFonts.inter(color: Colors.greenAccent),
+                                    ),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -340,6 +383,316 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCliAgentsHeroCard(BuildContext context, WidgetRef ref) {
+    final allPackages = ref.watch(packageServiceProvider);
+    final cliInstaller = ref.watch(cliInstallerProvider);
+
+    final agyPkg = allPackages.where((p) => p.id == 'antigravity-cli').firstOrNull ??
+        defaultPackages.firstWhere((p) => p.id == 'antigravity-cli');
+    final claudePkg = allPackages.where((p) => p.id == 'claude-code').firstOrNull ??
+        defaultPackages.firstWhere((p) => p.id == 'claude-code');
+    final dshPkg = allPackages.where((p) => p.id == 'deepseek-harness').firstOrNull ??
+        defaultPackages.firstWhere((p) => p.id == 'deepseek-harness');
+
+    final agents = [
+      (pkg: agyPkg, kind: AgentKind.antigravity),
+      (pkg: claudePkg, kind: AgentKind.claudeCode),
+      (pkg: dshPkg, kind: AgentKind.deepseekHarness),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1E1035), Color(0xFF101C38)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purpleAccent.withValues(alpha: 0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.purpleAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.4)),
+                ),
+                child: const Icon(LucideIcons.bot, color: Colors.purpleAccent, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'CLI-Агенты разработки',
+                          style: GoogleFonts.outfit(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
+                          ),
+                          child: Text(
+                            'Mobile-Harness',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9,
+                              color: Colors.cyanAccent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Автономные терминальные агенты Antigravity CLI, Claude Code и DeepSeek Harness',
+                      style: GoogleFonts.inter(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              InkWell(
+                onTap: cliInstaller.isCheckingUpdates
+                    ? null
+                    : () async {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Проверка официальных обновлений для CLI агентов...'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                        await ref.read(cliInstallerProvider.notifier).checkCliUpdates();
+                      },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (cliInstaller.isCheckingUpdates)
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.purpleAccent),
+                        )
+                      else
+                        const Icon(LucideIcons.refresh_cw, size: 12, color: Colors.purpleAccent),
+                      const SizedBox(width: 6),
+                      Text(
+                        cliInstaller.isCheckingUpdates ? 'Проверка...' : 'Обновления',
+                        style: GoogleFonts.inter(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...agents.map((item) {
+            final agent = item.pkg;
+            final kind = item.kind;
+            final installedVersion = cliInstaller.installedVersions[kind];
+            final isInstalled = agent.isInstalled || (installedVersion != null && installedVersion.isNotEmpty);
+            final updateInfo = cliInstaller.availableUpdates[kind];
+            final hasUpdate = updateInfo?.hasUpdate ?? false;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: hasUpdate
+                      ? Colors.amberAccent.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    agent.icon,
+                    size: 18,
+                    color: agent.id == 'antigravity-cli'
+                        ? Colors.purpleAccent
+                        : agent.id == 'claude-code'
+                            ? Colors.amberAccent
+                            : Colors.cyanAccent,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              agent.name,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (installedVersion != null && installedVersion.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'v$installedVersion',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasUpdate
+                              ? 'Доступна новая версия v${updateInfo!.latestVersion}! Нажмите для обновления'
+                              : agent.description,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            color: hasUpdate ? Colors.amberAccent : Colors.white60,
+                            fontWeight: hasUpdate ? FontWeight.w500 : FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  if (isInstalled)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (hasUpdate)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.amberAccent.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.5)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.sparkles, size: 11, color: Colors.amberAccent),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Обновить',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.amberAccent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.check, size: 12, color: Colors.greenAccent),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Актуален',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.greenAccent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          icon: Icon(
+                            hasUpdate ? LucideIcons.arrow_up : LucideIcons.refresh_cw,
+                            size: 15,
+                            color: hasUpdate ? Colors.amberAccent : Colors.cyanAccent,
+                          ),
+                          tooltip: hasUpdate ? 'Обновить до v${updateInfo!.latestVersion}' : 'Обновить или переустановить',
+                          onPressed: () => PackageInstallDialog.show(context, agent, isUpdate: true),
+                        ),
+                      ],
+                    )
+                  else
+                    ElevatedButton(
+                      onPressed: () => PackageInstallDialog.show(context, agent),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purpleAccent,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'Установить',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -596,15 +949,26 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
 
   Widget _buildPackageCard(BuildContext context, WidgetRef ref, OptionalPackage pkg) {
     final theme = Theme.of(context);
-    // Determine gradient for icon background depending on package status
-    final Color accentColor = pkg.isInstalled ? theme.colorScheme.primary : theme.colorScheme.secondary;
+    final Color accentColor = pkg.isInstalled ? const Color(0xFF10B981) : theme.colorScheme.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.02),
+        color: const Color(0xFF111520),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.05)),
+        border: Border.all(
+          color: pkg.isInstalled
+              ? const Color(0xFF10B981).withValues(alpha: 0.25)
+              : Colors.white.withValues(alpha: 0.08),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -620,9 +984,16 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     width: 52,
                     height: 52,
                     decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.06),
+                      gradient: LinearGradient(
+                        colors: [
+                          accentColor.withValues(alpha: 0.18),
+                          accentColor.withValues(alpha: 0.05),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: accentColor.withValues(alpha: 0.15)),
+                      border: Border.all(color: accentColor.withValues(alpha: 0.3)),
                     ),
                     child: Icon(pkg.icon, color: accentColor, size: 24),
                   ),
@@ -639,7 +1010,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.inter(
-                                  color: theme.colorScheme.onSurface,
+                                  color: Colors.white,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 15,
                                 ),
@@ -648,22 +1019,23 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                             if (pkg.isInstalled) ...[
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(LucideIcons.badge_check, color: theme.colorScheme.primary, size: 12),
+                                    const Icon(LucideIcons.badge_check, color: Color(0xFF10B981), size: 12),
                                     const SizedBox(width: 4),
                                     Text(
                                       AppLocalizations.of(context)!.statusInstalledCaps,
                                       style: GoogleFonts.inter(
-                                        fontSize: 8,
+                                        fontSize: 8.5,
                                         fontWeight: FontWeight.w900,
-                                        color: theme.colorScheme.primary,
+                                        color: const Color(0xFF10B981),
                                       ),
                                     ),
                                   ],
@@ -678,7 +1050,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            color: theme.colorScheme.onSurfaceVariant,
+                            color: Colors.white60,
                             fontSize: 12,
                             height: 1.3,
                           ),
@@ -703,28 +1075,30 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          IconButton(
-            icon: Icon(LucideIcons.refresh_cw, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5), size: 16),
-            tooltip: AppLocalizations.of(context)!.reinstallOrUpdateTooltip,
-            onPressed: () {
-              ref.read(packageServiceProvider.notifier).installPackage(pkg);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  backgroundColor: theme.colorScheme.surfaceContainerHigh,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  content: Text(
-                    AppLocalizations.of(context)!.updatingPackage(pkg.name),
-                    style: GoogleFonts.inter(color: theme.colorScheme.onSurface),
-                  ),
-                  action: SnackBarAction(
-                    label: AppLocalizations.of(context)!.viewAction,
-                    textColor: theme.colorScheme.primary,
-                    onPressed: () => context.push('/terminal'),
-                  ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.greenAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.check, size: 12, color: Colors.greenAccent),
+                const SizedBox(width: 4),
+                Text(
+                  'Установлен',
+                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.greenAccent),
                 ),
-              );
-            },
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: Icon(LucideIcons.refresh_cw, color: theme.colorScheme.primary, size: 15),
+            tooltip: 'Обновить или переустановить',
+            onPressed: () => PackageInstallDialog.show(context, pkg, isUpdate: true),
           ),
         ],
       );
@@ -732,56 +1106,20 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         gradient: LinearGradient(
           colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: theme.colorScheme.primary.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: ElevatedButton(
-        onPressed: () {
-          ref.read(packageServiceProvider.notifier).installPackage(pkg);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: theme.colorScheme.surfaceContainerHigh,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              content: Row(
-                children: [
-                  SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    AppLocalizations.of(context)!.installingPackage(pkg.name),
-                    style: GoogleFonts.inter(color: theme.colorScheme.onSurface),
-                  ),
-                ],
-              ),
-              action: SnackBarAction(
-                label: AppLocalizations.of(context)!.viewAction,
-                textColor: theme.colorScheme.primary,
-                onPressed: () => context.push('/terminal'),
-              ),
-            ),
-          );
-        },
+        onPressed: () => PackageInstallDialog.show(context, pkg),
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.transparent,
-          foregroundColor: theme.colorScheme.onPrimary,
           shadowColor: Colors.transparent,
+          foregroundColor: theme.colorScheme.onPrimary,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          minimumSize: const Size(80, 36),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         child: Text(
           AppLocalizations.of(context)!.installAction,

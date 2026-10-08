@@ -1,3 +1,5 @@
+import 'package:quantum_ide/core/models/agent_activity_item.dart';
+
 enum MessageRole { user, assistant, system }
 enum AiInteractionMode { chat, ask, refactor, autopilot, plan, debug }
 
@@ -37,8 +39,8 @@ class AIAction {
       server: json['server'],
       tool: json['tool'],
       arguments: json['arguments'] != null ? Map<String, dynamic>.from(json['arguments']) : null,
-      oldText: json['old_text'],
-      newText: json['new_text'],
+      oldText: json['old_text'] ?? json['search_block'],
+      newText: json['new_text'] ?? json['replace_block'],
       additions: json['additions'],
       deletions: json['deletions'],
     );
@@ -83,6 +85,10 @@ class ChatMessage {
   final String? actionStepPath;
   final String? actionStepResult;
   final Map<String, String?>? fileBackups;
+  final List<ActivityItem> workItems;
+  final int workedMillis;
+  final String? thinkingContent;
+  final bool isThinking;
 
   ChatMessage({
     required this.role,
@@ -103,6 +109,10 @@ class ChatMessage {
     this.actionStepPath,
     this.actionStepResult,
     this.fileBackups,
+    this.workItems = const [],
+    this.workedMillis = 0,
+    this.thinkingContent,
+    this.isThinking = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -123,6 +133,10 @@ class ChatMessage {
       if (actionStepType != null) 'actionStepType': actionStepType,
       if (actionStepPath != null) 'actionStepPath': actionStepPath,
       if (actionStepResult != null) 'actionStepResult': actionStepResult,
+      'workItems': workItems.map((w) => w.toJson()).toList(),
+      'workedMillis': workedMillis,
+      if (thinkingContent != null) 'thinkingContent': thinkingContent,
+      'isThinking': isThinking,
     };
   }
 
@@ -153,7 +167,64 @@ class ChatMessage {
       actionStepType: json['actionStepType'],
       actionStepPath: json['actionStepPath'],
       actionStepResult: json['actionStepResult'],
+      workItems: json['workItems'] != null
+          ? (json['workItems'] as List).map((w) => ActivityItem.fromJson(w)).toList()
+          : const [],
+      workedMillis: json['workedMillis'] ?? 0,
+      thinkingContent: json['thinkingContent'],
+      isThinking: json['isThinking'] ?? false,
     );
+  }
+
+  ChatMessage copyWith({
+    MessageRole? role,
+    String? content,
+    DateTime? timestamp,
+    List<AIAction>? actions,
+    String? imageBase64,
+    String? imagePath,
+    List<String>? contextFiles,
+    String? sessionId,
+    String? taskName,
+    int? stepNumber,
+    int? totalSteps,
+    List<AIAction>? executedActions,
+    Map<String, String>? actionResults,
+    bool? isStepSummary,
+    bool? isActionStep,
+    String? actionStepType,
+    String? actionStepPath,
+    String? actionStepResult,
+    Map<String, String?>? fileBackups,
+    List<ActivityItem>? workItems,
+    int? workedMillis,
+    String? thinkingContent,
+    bool? isThinking,
+  }) {
+    return ChatMessage(
+      role: role ?? this.role,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      actions: actions ?? this.actions,
+      imageBase64: imageBase64 ?? this.imageBase64,
+      imagePath: imagePath ?? this.imagePath,
+      contextFiles: contextFiles ?? this.contextFiles,
+      taskName: taskName ?? this.taskName,
+      stepNumber: stepNumber ?? this.stepNumber,
+      totalSteps: totalSteps ?? this.totalSteps,
+      executedActions: executedActions ?? this.executedActions,
+      actionResults: actionResults ?? this.actionResults,
+      isStepSummary: isStepSummary ?? this.isStepSummary,
+      isActionStep: isActionStep ?? this.isActionStep,
+      actionStepType: actionStepType ?? this.actionStepType,
+      actionStepPath: actionStepPath ?? this.actionStepPath,
+      actionStepResult: actionStepResult ?? this.actionStepResult,
+      fileBackups: fileBackups ?? this.fileBackups,
+      workItems: workItems ?? this.workItems,
+      workedMillis: workedMillis ?? this.workedMillis,
+      thinkingContent: thinkingContent ?? this.thinkingContent,
+      isThinking: isThinking ?? this.isThinking,
+    )..sessionId = sessionId ?? this.sessionId;
   }
 }
 

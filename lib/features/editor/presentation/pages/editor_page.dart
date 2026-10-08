@@ -800,9 +800,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           children: [
                             IconButton(
                               icon: const Icon(LucideIcons.arrow_left, size: 16),
-                              onPressed: () {
-                                ref.read(workspaceProvider.notifier).closeWorkspace();
-                                context.go('/');
+                              onPressed: () async {
+                                await ref.read(workspaceProvider.notifier).closeWorkspace();
+                                if (context.mounted) {
+                                  context.go('/');
+                                }
                               },
                               tooltip: AppLocalizations.of(context)!.back,
                               padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -831,67 +833,156 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       const Expanded(
                         child: EditorAppBarTitle(),
                       ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ActionIconButton(
-                            icon: LucideIcons.play,
-                            color: Colors.greenAccent,
-                            tooltip: 'Запустить / Скомпилировать проект (F5)',
-                            onTap: () {
-                              if (currentProject != null) {
-                                ref.read(projectServiceProvider.notifier).runProject(currentProject);
-                                panelNotifier.selectTab(PanelTab.terminal);
-                                panelNotifier.openPanel();
-                              } else {
-                                panelNotifier.selectTab(PanelTab.terminal);
-                                panelNotifier.openPanel();
-                              }
-                            },
-                          ),
-                          ActionIconButton(
-                            icon: LucideIcons.save,
-                            tooltip: AppLocalizations.of(context)!.saveTooltip,
-                            onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
-                          ),
-                          ActionIconButton(
-                            icon: LucideIcons.puzzle,
-                            tooltip: AppLocalizations.of(context)!.runWasmPlugin,
-                            onTap: () => _showWasmActionSelector(context, ref, safeActiveIndex),
-                          ),
-                          ActionIconButton(
-                            icon: LucideIcons.terminal,
-                            tooltip: AppLocalizations.of(context)!.terminal,
-                            onTap: () {
-                              if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
-                                panelNotifier.closePanel();
-                              } else {
-                                panelNotifier.selectTab(PanelTab.terminal);
-                                panelNotifier.openPanel();
-                              }
-                            },
-                          ),
-                          ActionIconButton(
-                            icon: LucideIcons.message_square,
-                            tooltip: AppLocalizations.of(context)!.aiChat,
-                            onTap: () {
-                              ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                            },
-                          ),
-                          if (!isDesktop)
+                      if (isDesktop)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                             ActionIconButton(
-                              icon: LucideIcons.house,
-                              tooltip: l10n.home,
-                              onTap: () async {
-                                await ref.read(workspaceProvider.notifier).closeWorkspace();
-                                if (context.mounted) {
-                                  context.go('/');
+                              icon: LucideIcons.play,
+                              color: Colors.greenAccent,
+                              tooltip: 'Запустить / Скомпилировать проект (F5)',
+                              onTap: () {
+                                if (currentProject != null) {
+                                  ref.read(projectServiceProvider.notifier).runProject(currentProject);
+                                  panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
                                 }
                               },
                             ),
-                          const SizedBox(width: 8),
-                        ],
-                      ),
+                            ActionIconButton(
+                              icon: LucideIcons.save,
+                              tooltip: AppLocalizations.of(context)!.saveTooltip,
+                              onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.puzzle,
+                              tooltip: AppLocalizations.of(context)!.runWasmPlugin,
+                              onTap: () => _showWasmActionSelector(context, ref, safeActiveIndex),
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.terminal,
+                              tooltip: AppLocalizations.of(context)!.terminal,
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.message_square,
+                              tooltip: AppLocalizations.of(context)!.aiChat,
+                              onTap: () {
+                                ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        )
+                      else
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ActionIconButton(
+                              icon: LucideIcons.play,
+                              color: Colors.greenAccent,
+                              tooltip: 'Запустить / Скомпилировать проект (F5)',
+                              onTap: () {
+                                if (currentProject != null) {
+                                  ref.read(projectServiceProvider.notifier).runProject(currentProject);
+                                  panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.save,
+                              tooltip: AppLocalizations.of(context)!.saveTooltip,
+                              onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.terminal,
+                              tooltip: AppLocalizations.of(context)!.terminal,
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                            PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert, size: 20, color: Colors.white70),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              color: const Color(0xFF1E1E2E),
+                              elevation: 8,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                              ),
+                              onSelected: (value) async {
+                                switch (value) {
+                                  case 'chat':
+                                    ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
+                                    break;
+                                  case 'wasm':
+                                    _showWasmActionSelector(context, ref, safeActiveIndex);
+                                    break;
+                                  case 'home':
+                                    await ref.read(workspaceProvider.notifier).closeWorkspace();
+                                    if (context.mounted) {
+                                      context.go('/');
+                                    }
+                                    break;
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'chat',
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.message_square, size: 16, color: Colors.cyanAccent),
+                                      const SizedBox(width: 10),
+                                      Text(AppLocalizations.of(context)!.aiChat, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'wasm',
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.puzzle, size: 16, color: Colors.purpleAccent),
+                                      const SizedBox(width: 10),
+                                      Text(AppLocalizations.of(context)!.runWasmPlugin, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                                PopupMenuItem(
+                                  value: 'home',
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.house, size: 16, color: Colors.white70),
+                                      const SizedBox(width: 10),
+                                      Text(l10n.home, style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                        ),
                     ],
                   ),
                 ),
@@ -1079,7 +1170,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildPanelHeader(context, panelState, panelNotifier, maxAllowedPanelHeight),
+            _buildPanelHeader(context, panelState, panelNotifier, maxAllowedPanelHeight, diagnosticsCount, gitChangesCount),
             Expanded(
               child: panelState.panelHeight > 60
                   ? const TerminalPanelContent(onlyTerminal: false)
@@ -1205,6 +1296,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     PanelState panelState,
     PanelNotifier panelNotifier,
     double maxAllowedPanelHeight,
+    int diagnosticsCount,
+    int gitChangesCount,
   ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1229,35 +1322,35 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       },
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF161925),
+          color: Color(0xFF141722),
           borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
           ),
           border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: 5),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // Drag pill
             Container(
-              width: 40,
-              height: 4,
+              width: 36,
+              height: 3,
               decoration: BoxDecoration(
-                color: Colors.white30,
-                borderRadius: BorderRadius.circular(2),
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(1.5),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
                     child: SizedBox(
-                      height: 38,
+                      height: 30,
                       child: Builder(
                         builder: (context) {
                           final isMobile = MediaQuery.of(context).size.width <= 800;
@@ -1269,29 +1362,37 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               final tab = PanelTab.values[index];
                               final isSelected = panelState.selectedTab == tab;
                               final tabColor = _getTabColor(tab);
+
+                              int? badgeCount;
+                              if (tab == PanelTab.problems && diagnosticsCount > 0) {
+                                badgeCount = diagnosticsCount;
+                              } else if (tab == PanelTab.git && gitChangesCount > 0) {
+                                badgeCount = gitChangesCount;
+                              }
+
                               return Padding(
-                                padding: EdgeInsets.only(right: isMobile ? 8.0 : 6.0),
+                                padding: const EdgeInsets.only(right: 5.0),
                                 child: Material(
                                   color: Colors.transparent,
                                   child: InkWell(
                                     onTap: () => panelNotifier.selectTab(tab),
-                                    borderRadius: BorderRadius.circular(isMobile ? 12 : 8),
+                                    borderRadius: BorderRadius.circular(6),
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 150),
+                                      duration: const Duration(milliseconds: 140),
                                       padding: EdgeInsets.symmetric(
-                                        horizontal: isMobile ? 14 : 10,
-                                        vertical: isMobile ? 8 : 6,
+                                        horizontal: isMobile ? (isSelected ? 9 : 7) : 8,
+                                        vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
                                         color: isSelected
-                                            ? tabColor.withValues(alpha: 0.12)
+                                            ? tabColor.withValues(alpha: 0.15)
                                             : Colors.white.withValues(alpha: 0.02),
-                                        borderRadius: BorderRadius.circular(isMobile ? 12 : 8),
+                                        borderRadius: BorderRadius.circular(6),
                                         border: Border.all(
                                           color: isSelected
-                                              ? tabColor.withValues(alpha: 0.35)
-                                              : Colors.white.withValues(alpha: 0.05),
-                                          width: 0.8,
+                                              ? tabColor.withValues(alpha: 0.4)
+                                              : Colors.white.withValues(alpha: 0.04),
+                                          width: 0.7,
                                         ),
                                       ),
                                       child: Row(
@@ -1299,19 +1400,39 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         children: [
                                           Icon(
                                             _getTabIcon(tab),
-                                            size: isMobile ? 18 : 13,
+                                            size: 13,
                                             color: isSelected ? tabColor : Colors.white54,
                                           ),
-                                          if (!isMobile) ...[
-                                            const SizedBox(width: 6),
+                                          if (!isMobile || isSelected) ...[
+                                            const SizedBox(width: 5),
                                             Text(
                                               _getTabTitle(context, tab),
                                               style: GoogleFonts.inter(
-                                                color: isSelected ? Colors.white : Colors.white54,
-                                                fontSize: 11,
+                                                color: isSelected ? Colors.white : Colors.white60,
+                                                fontSize: 10.5,
                                                 fontWeight: isSelected
                                                     ? FontWeight.w700
-                                                    : FontWeight.normal,
+                                                    : FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                          if (badgeCount != null) ...[
+                                            const SizedBox(width: 4),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: tab == PanelTab.problems ? Colors.redAccent : Colors.purpleAccent,
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                                              child: Text(
+                                                '$badgeCount',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 7.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                                textAlign: TextAlign.center,
                                               ),
                                             ),
                                           ],
@@ -1327,31 +1448,31 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   SizedBox(
-                    width: 28,
-                    height: 28,
+                    width: 26,
+                    height: 26,
                     child: IconButton(
                       icon: Icon(
                         panelState.isMaximized
                             ? LucideIcons.minimize_2
                             : LucideIcons.maximize_2,
-                        size: 14,
+                        size: 13,
                         color: Colors.white60,
                       ),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
                       onPressed: () => panelNotifier.toggleMaximized(),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   SizedBox(
-                    width: 28,
-                    height: 28,
+                    width: 26,
+                    height: 26,
                     child: IconButton(
-                      icon: const Icon(LucideIcons.x, size: 14, color: Colors.white60),
+                      icon: const Icon(LucideIcons.x, size: 13, color: Colors.white60),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
                       onPressed: () => panelNotifier.closePanel(),
                     ),
                   ),
@@ -1841,6 +1962,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         initiallyStaged: false,
         originalOverride: file.originalContent,
         previewContent: action.content,
+        onClose: () {
+          ref.read(editorProvider.notifier).setDiffView(file.path, false);
+        },
       );
     }
 

@@ -2890,4 +2890,83 @@ class AppLocalizationsEn extends AppLocalizations {
   String sessionRestoredDetail(int count, int files) {
     return 'Loaded $count messages from `.quantum/chat_history.json`.\nAgent memory: $files files in context.\nContinue where you left off.';
   }
+
+  @override
+  String get signInWithGitHub => 'Sign in with GitHub';
+
+  @override
+  String get gitHubToken => 'GitHub Personal Access Token';
+
+  @override
+  String get gitHubTokenHint =>
+      'Paste GitHub Personal Access Token (classic or fine-grained with repo scope)';
+
+  @override
+  String get connectGitHubDesc =>
+      'Log in to browse your repositories, clone projects, and trigger automated cloud builds.';
+
+  @override
+  String get cloneAndOpen => 'Clone & Open';
+
+  @override
+  String get cloningRepository => 'Cloning repository...';
+
+  @override
+  String repoClonedSuccess(String path) {
+    return 'Repository cloned successfully to $path';
+  }
+
+  @override
+  String get cloneFailed =>
+      'Failed to clone repository. Check connection or token permissions.';
+
+  @override
+  String get cloudBuildApk => 'Release & Cloud Build APK';
+
+  @override
+  String get cloudBuildApkDesc =>
+      'Tag this version, push changes, and trigger GitHub Actions to build an APK and publish a release.';
+
+  @override
+  String get releaseTagName => 'Release Tag';
+
+  @override
+  String get releaseTagNameHint => 'e.g. v1.0.0';
+
+  @override
+  String get releaseCommitMsg => 'Commit Message';
+
+  @override
+  String get releaseCommitMsgHint => 'e.g. chore: prepare release v1.0.0';
+
+  @override
+  String get releaseNotes => 'Release Notes / What\'s New';
+
+  @override
+  String get releaseNotesHint =>
+      'Describe what was added, fixed or improved...';
+
+  @override
+  String get publishReleaseBtn => 'Publish Release & Build APK';
+
+  @override
+  String get releasingAndPushing =>
+      'Creating release tag & pushing to GitHub Actions...';
+
+  @override
+  String releaseTriggeredSuccess(String tag) {
+    return 'Release $tag created and pushed! Cloud APK build started on GitHub Actions.';
+  }
+
+  @override
+  String releaseTriggerFailed(String error) {
+    return 'Failed to push release: $error';
+  }
+
+  @override
+  String get setupCiCdWorkflow => 'Add Cloud Build CI/CD Workflow';
+
+  @override
+  String get setupCiCdWorkflowSuccess =>
+      'GitHub Actions APK workflow added (.github/workflows/build-apk.yml)!';
 }

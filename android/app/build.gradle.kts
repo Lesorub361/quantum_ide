@@ -72,7 +72,7 @@ android {
             } else {
                 signingConfig = signingConfigs.getByName("debug")
             }
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -89,5 +89,5 @@ flutter {
 dependencies {
     implementation("org.apache.commons:commons-compress:1.26.1")
     implementation("org.tukaani:xz:1.9")
-    implementation("com.github.luben:zstd-jni:1.5.5-11")
+    implementation("com.github.luben:zstd-jni:1.5.6-9@aar")
 }

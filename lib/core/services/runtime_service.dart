@@ -20,20 +20,39 @@ class RuntimeService extends ChangeNotifier {
   double _progress = 0;
   double get progress => _progress;
 
-  late String _filesDir;
+  String _filesDir = () {
+    final homeDir = Platform.environment['HOME'] ?? Directory.current.path;
+    final dir = Directory(p.join(homeDir, '.quantum_ide'));
+    if (!dir.existsSync()) {
+      try { dir.createSync(recursive: true); } catch (_) {}
+    }
+    return dir.path;
+  }();
   String get filesDir => _filesDir;
-  late String _nativeLibDir;
+  String _nativeLibDir = '';
   final _dio = Dio();
 
   static const int _maxConcurrentCommands = 1;
   int _runningCommands = 0;
   final List<Completer<void>> _commandQueue = [];
 
-  // URL for rootfs (Ubuntu 24.04.4 Noble Numbat)
+  // High-performance pre-built ARM64 Core rootfs (Ubuntu + Node.js 24 + Git + npm)
   static const _rootfsUrl =
-      'https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.4-base-arm64.tar.gz';
+      'https://github.com/techjarves/Mobile-Harness/releases/download/runtime-2026.09.4/pocketdev-core-arm64-2026.09.5.tar.zst';
 
   bool _isInitializing = false;
+
+  Future<bool> isBootstrapComplete() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      try {
+        final bool? complete = await _channel.invokeMethod('isBootstrapComplete');
+        return complete ?? false;
+      } catch (_) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   Future<void> init() async {
     if (_isInitialized || _isInitializing) return;
@@ -151,6 +170,152 @@ class RuntimeService extends ChangeNotifier {
     } finally {
       _releaseCommandSlot();
     }
+  }
+
+  /// Desktop environment with a PATH that also covers user-local tool dirs
+  /// (~/.local/bin, any ~/.nvm or ~/.config/nvm Node version, ~/.npm-global, cargo).
+  Map<String, String> get desktopEnv {
+    final env = Map<String, String>.from(Platform.environment);
+    final home = env['HOME'] ?? '';
+    final extra = <String>[
+      '$home/.local/bin',
+      '$home/.npm-global/bin',
+      '$home/.cargo/bin',
+      '$home/bin',
+    ];
+    for (final nvmRoot in ['$home/.nvm/versions/node', '$home/.config/nvm/versions/node']) {
+      try {
+        final dir = Directory(nvmRoot);
+        if (dir.existsSync()) {
+          final versions = dir.listSync().whereType<Directory>().map((d) => d.path).toList()
+            ..sort((a, b) => b.compareTo(a));
+          for (final v in versions) {
+            extra.add('$v/bin');
+          }
+        }
+      } catch (_) {}
+    }
+    final current = env['PATH'] ?? '/usr/local/bin:/usr/bin:/bin';
+    env['PATH'] = [...extra.where((e) => Directory(e).existsSync()), current].join(':');
+    env['TERM'] = 'xterm-256color';
+    env.putIfAbsent('LANG', () => 'C.UTF-8');
+    return env;
+  }
+
+  /// Runs [command] and streams its output line by line while it runs.
+  ///
+  /// [onLine] receives each line. `isError` is true for stderr; `replace` is
+  /// true for progress updates (text after a carriage return) that should
+  /// overwrite the previous progress line instead of being appended.
+  /// [stdinData] (optional) is written to stdin right after start (e.g. sudo password).
+  StreamingCommand runCommandStream(
+    String command, {
+    String? workingDirectory,
+    required void Function(String line, {bool isError, bool replace}) onLine,
+    String? stdinData,
+  }) {
+    final handle = StreamingCommand._();
+    handle._exitCode = _startStreaming(handle, command, workingDirectory, onLine, stdinData);
+    return handle;
+  }
+
+  Future<int> _startStreaming(
+    StreamingCommand handle,
+    String command,
+    String? workingDirectory,
+    void Function(String line, {bool isError, bool replace}) onLine,
+    String? stdinData,
+  ) async {
+    Process process;
+    if (Platform.isAndroid || Platform.isIOS) {
+      final initHost = p.join(_filesDir, 'bin', 'init-host');
+      if (!Platform.isAndroid || !await File(initHost).exists()) {
+        // No PRoot launcher available: fall back to the blocking native channel.
+        try {
+          final String out = await _channel.invokeMethod('runCommand', {'command': command});
+          for (final l in const LineSplitter().convert(out)) {
+            onLine(l);
+          }
+          return 0;
+        } catch (e) {
+          onLine('$e', isError: true);
+          return 1;
+        }
+      }
+      final guestCwd = workingDirectory != null
+          ? PathMapper.mapToGuest(workingDirectory, _filesDir)
+          : '/root';
+      process = await Process.start('sh', [initHost, _filesDir, guestCwd, '/bin/bash', '-c', command]);
+    } else {
+      process = await Process.start(
+        Platform.isWindows ? 'cmd' : 'bash',
+        Platform.isWindows ? ['/c', command] : ['-c', command],
+        workingDirectory: workingDirectory,
+        environment: desktopEnv,
+      );
+    }
+    handle._process = process;
+
+    if (stdinData != null) {
+      process.stdin.writeln(stdinData);
+    }
+    try {
+      await process.stdin.flush();
+      await process.stdin.close();
+    } catch (_) {}
+
+    final outDone = _pipeLines(process.stdout, (l, {bool replace = false}) => onLine(l, isError: false, replace: replace));
+    final errDone = _pipeLines(process.stderr, (l, {bool replace = false}) => onLine(l, isError: true, replace: replace));
+    final code = await process.exitCode;
+    await Future.wait([outDone, errDone]).timeout(const Duration(seconds: 2), onTimeout: () => []);
+    return code;
+  }
+
+  static final _ansiRegex = RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07|[()][A-Za-z0-9])');
+
+  /// Splits a byte stream into lines. Text following a lone `\r` (curl/apt/npm
+  /// progress bars) is reported with `replace: true`.
+  Future<void> _pipeLines(Stream<List<int>> stream, void Function(String, {bool replace}) emit) {
+    final done = Completer<void>();
+    var buffer = '';
+    var lastWasProgress = false;
+    stream.transform(const Utf8Decoder(allowMalformed: true)).listen((chunk) {
+      buffer += chunk;
+      while (true) {
+        final nl = buffer.indexOf('\n');
+        if (nl < 0) break;
+        var line = buffer.substring(0, nl);
+        buffer = buffer.substring(nl + 1);
+        if (line.endsWith('\r')) line = line.substring(0, line.length - 1);
+        final cr = line.lastIndexOf('\r');
+        if (cr >= 0) line = line.substring(cr + 1);
+        if (line.isEmpty && lastWasProgress) {
+          // The newline just finalizes the last progress line.
+          lastWasProgress = false;
+          continue;
+        }
+        emit(line.replaceAll(_ansiRegex, ''), replace: lastWasProgress);
+        lastWasProgress = false;
+      }
+      final cr = buffer.lastIndexOf('\r');
+      if (cr >= 0) {
+        final progress = buffer.substring(cr + 1).replaceAll(_ansiRegex, '');
+        final before = buffer.substring(0, cr);
+        final prevCr = before.lastIndexOf('\r');
+        final shown = progress.trim().isNotEmpty ? progress : before.substring(prevCr + 1);
+        if (shown.trim().isNotEmpty) {
+          emit(shown.replaceAll(_ansiRegex, ''), replace: lastWasProgress);
+          lastWasProgress = true;
+        }
+        buffer = progress;
+      }
+    }, onDone: () {
+      if (buffer.trim().isNotEmpty) emit(buffer.replaceAll(_ansiRegex, ''), replace: lastWasProgress);
+      done.complete();
+    }, onError: (_) {
+      if (!done.isCompleted) done.complete();
+    }, cancelOnError: false);
+    return done.future;
   }
 
   Future<void> _prepareFileSystem() async {
@@ -280,7 +445,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '8';
+    const bashrcVersion = '9';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -299,7 +464,7 @@ class RuntimeService extends ChangeNotifier {
 
     if (needsWrite) {
       const bashrcContent = r'''
-# BASHRC_VERSION=8
+# BASHRC_VERSION=9
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest
@@ -344,6 +509,15 @@ alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
 alias cls='clear'
 
+# gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage
+gradlew() {
+    if [ -f "./gradlew" ]; then
+        bash ./gradlew "$@"
+    else
+        command gradlew "$@"
+    fi
+}
+
 # Create which shim if missing (inside guest)
 if ! command -v which > /dev/null 2>&1; then
     mkdir -p /usr/bin
@@ -351,30 +525,32 @@ if ! command -v which > /dev/null 2>&1; then
     chmod 755 /usr/bin/which
 fi
 
-# Ubuntu Greeting
+# Ubuntu Greeting & Cyberpunk Banner
 if [ -z "$VTE_VERSION" ]; then
     clear
-    echo -e '\e[38;5;51m   ___                  __              \e[0m'
-    echo -e '\e[38;5;45m  / _ \__ _____ ____  / /___ ____ _     \e[0m'
-    echo -e '\e[38;5;39m / // / // / _ `/ _ \/ __/ // /  ` \    \e[0m'
-    echo -e '\e[38;5;33m/____/\_,_/\_,_/_//_/\__/\_,_/_/_/_/    \e[0m'
-    echo -e '\e[38;5;27m                                        \e[0m'
-    echo -e '\e[38;5;93m  ___   ___     ___                     \e[0m'
-    echo -e '\e[38;5;129m |_ _| |   \   | __|                    \e[0m'
-    echo -e '\e[38;5;165m  | |  | |) |  | _|                     \e[0m'
-    echo -e '\e[38;5;201m |___| |___/   |___|                    \e[0m'
+    if [ -x /usr/local/bin/term-fetch ]; then
+        /usr/local/bin/term-fetch
+    else
+        echo -e '\e[38;5;51m   QUANTUM IDE TERMINAL \e[0m'
+    fi
+    echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
+    echo -e '    \e[38;5;141mll\e[0m             → ls -la'
+    echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
+    echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
+    echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
     echo
-    echo -e '\e[38;5;213m   Welcome to Ubuntu 24.04 LTS (Quantum Edition v8)   \e[0m'
-    echo -e '\e[38;5;248m   Powered by Quantum IDE — Your Mobile Dev Environment\e[0m'
-    echo
-    echo -e '\e[1;34m  Useful aliases:\e[0m'
-    echo -e '\e[0;37m    ll           = ls -la\e[0m'
-    echo -e '\e[0;37m    fb-apk       = flutter build apk --debug\e[0m'
-    echo -e '\e[0;37m    fb-apk-release = flutter build apk --release\e[0m'
-    echo -e '\e[0;37m    f-clean      = flutter clean && pub get\e[0m'
-    echo
-    echo -e '\e[1;31m  TIP:\e[0m If "Permission denied" on gradlew: move project to /root/projects'
-    echo
+fi
+
+alias fetch="/usr/local/bin/term-fetch"
+alias fd="fdfind"
+alias mem="free -m"
+alias clean-apt="apt-get clean && apt-get autoremove -y"
+alias kill-node="killall -9 node 2>/dev/null || true"
+alias disk="df -h /"
+
+# Starship prompt if available
+if command -v starship >/dev/null 2>&1; then
+    eval "$(starship init bash)"
 fi
 ''';
       try {
@@ -499,18 +675,23 @@ mkdir -p "\$SHADOW_DIR"
 rm -f "\$TMPDIR/proot_binds"
 
 # ONLY find gradlew files in QuantumIDE folder on SD card (much faster)
-find "/storage/emulated/0/QuantumIDE" -maxdepth 4 -name "gradlew" 2>/dev/null | while read f; do
+find "/storage/emulated/0/QuantumIDE" -maxdepth 4 -name "gradlew" 2>/dev/null | while read -r f; do
+    [ -f "\$f" ] || continue
+    # Skip paths containing spaces to prevent proot CLI option parsing crashes
+    case "\$f" in
+        *" "*) continue ;;
+    esac
     SAFE_NAME=\$(echo "\$f" | tr '/' '_')
     SHADOW_PATH="\$SHADOW_DIR/\$SAFE_NAME"
-    cp "\$f" "\$SHADOW_PATH"
-    chmod 755 "\$SHADOW_PATH"
+    cp "\$f" "\$SHADOW_PATH" 2>/dev/null
+    chmod 755 "\$SHADOW_PATH" 2>/dev/null
     GUEST_F=\$(echo "\$f" | sed "s|/storage/emulated/0/QuantumIDE|/root/projects/external|g" | sed "s|/storage/emulated/0|/sdcard|g")
     echo "--bind=\$SHADOW_PATH:\$GUEST_F" >> "\$TMPDIR/proot_binds"
 done
 
 if [ -f "\$TMPDIR/proot_binds" ]; then
     BIND_OVERLAYS=\$(cat "\$TMPDIR/proot_binds" | tr '\n' ' ')
-    rm "\$TMPDIR/proot_binds"
+    rm -f "\$TMPDIR/proot_binds"
 fi
 
 if [ ! -f "\$PROOT" ]; then
@@ -530,7 +711,7 @@ export PROOT_TMP_DIR="\$TMPDIR"
 export PROOT_LOADER="\$PROOT_LIB_DIR/libprootloader.so"
 export PROOT_LOADER_32="\$PROOT_LIB_DIR/libprootloader32.so"
 export LD_LIBRARY_PATH="\$FILES_DIR/lib:\$PROOT_LIB_DIR"
-export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/local/sbin:/root/flutter/bin:\$PATH"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin:\$PATH"
 
 # Prefer /root/jdk-17 if available
 if [ -d "\$ROOTFS/root/jdk-17" ]; then
@@ -570,13 +751,11 @@ if [ -L "\$TMPDIR/resolv.conf" ] || [ ! -f "\$TMPDIR/resolv.conf" ]; then
     printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "\$TMPDIR/resolv.conf"
 fi
 
-# Build fd bindings only if /proc/self/fd exists (avoids proot warnings)
+# Proot handles stdio pipes automatically; avoid binding individual /proc/self/fd/0,1,2
+# as Android PRoot cannot canonicalize them and outputs warnings
 FD_BINDS=""
 if [ -d /proc/self/fd ]; then
     FD_BINDS="--bind=/proc/self/fd:/dev/fd"
-    [ -e /proc/self/fd/0 ] && FD_BINDS="\$FD_BINDS --bind=/proc/self/fd/0:/dev/stdin"
-    [ -e /proc/self/fd/1 ] && FD_BINDS="\$FD_BINDS --bind=/proc/self/fd/1:/dev/stdout"
-    [ -e /proc/self/fd/2 ] && FD_BINDS="\$FD_BINDS --bind=/proc/self/fd/2:/dev/stderr"
 fi
 
 # shellcheck disable=SC2086
@@ -603,8 +782,9 @@ if [ \$# -gt 2 ]; then
         --bind="/storage/emulated/0/QuantumIDE:/root/projects/external" \\
         --bind="\$FILES_DIR/tmp:/tmp" \\
         --bind="\$ROOTFS/tmp:/dev/shm" \\
-        \$BIND_OVERLAYS -0 /usr/bin/env TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
+        \$BIND_OVERLAYS -0 /usr/bin/env HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
         JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
+        LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 DEBIAN_FRONTEND=noninteractive \\
         FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
         "\$@"
 else
@@ -639,8 +819,9 @@ else
         --bind="/storage/emulated/0/QuantumIDE:/root/projects/external" \\
         --bind="\$FILES_DIR/tmp:/tmp" \\
         --bind="\$ROOTFS/tmp:/dev/shm" \\
-        \$BIND_OVERLAYS -0 /usr/bin/env TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
+        \$BIND_OVERLAYS -0 /usr/bin/env HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
         JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
+        LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 DEBIAN_FRONTEND=noninteractive \\
         FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
         /bin/bash --rcfile /root/.bashrc
 fi
@@ -648,25 +829,35 @@ fi
   }
 
   Future<void> _bootstrapRootfs() async {
-    _status = 'Downloading Ubuntu 24.04...';
+    _status = 'Downloading Ubuntu Core Runtime (ARM64)...';
     notifyListeners();
 
     final tmpDir = Directory(p.join(_filesDir, 'tmp'));
     if (!await tmpDir.exists()) await tmpDir.create(recursive: true);
 
-    final archivePath = p.join(_filesDir, 'tmp', 'rootfs.tar.gz');
+    final archivePath = p.join(_filesDir, 'tmp', 'rootfs.tar.zst');
+    final file = File(archivePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
+
     await _dio.download(
       _rootfsUrl,
       archivePath,
       onReceiveProgress: (count, total) {
+        final mb = (count / 1048576).toStringAsFixed(1);
         if (total > 0) {
           _progress = count / total * 0.7;
-          notifyListeners();
+          final totalMb = (total / 1048576).toStringAsFixed(1);
+          _status = 'Скачивание Ubuntu: $mb / $totalMb МБ (${(count * 100 / total).toStringAsFixed(0)}%)';
+        } else {
+          _status = 'Скачивание Ubuntu: $mb МБ';
         }
+        notifyListeners();
       },
     );
 
-    _status = 'Extracting system (Native)...';
+    _status = 'Распаковка Ubuntu (zstd)… это может занять 1–3 минуты';
     _progress = 0.7;
     notifyListeners();
 
@@ -1169,8 +1360,77 @@ if "defaultConfig {" in content and "abiFilters" not in content:
 done
 ''';
   }
+
+  Future<void> startForegroundSession({String title = 'Quantum IDE', String content = 'Терминал и сессия активны в фоне'}) async {
+    if (Platform.isAndroid) {
+      try {
+        await _channel.invokeMethod('startForegroundSession', {
+          'title': title,
+          'content': content,
+        });
+      } catch (e) {
+        debugPrint('startForegroundSession error: $e');
+      }
+    }
+  }
+
+  Future<void> stopForegroundSession() async {
+    if (Platform.isAndroid) {
+      try {
+        await _channel.invokeMethod('stopForegroundSession');
+      } catch (e) {
+        debugPrint('stopForegroundSession error: $e');
+      }
+    }
+  }
 }
 
 final runtimeServiceProvider = ChangeNotifierProvider(
   (ref) => RuntimeService(),
 );
+
+/// Handle returned by [RuntimeService.runCommandStream].
+class StreamingCommand {
+  StreamingCommand._();
+
+  Process? _process;
+  late final Future<int> _exitCode;
+  bool _cancelled = false;
+
+  /// Completes with the process exit code (130 if cancelled).
+  Future<int> get exitCode => _exitCode.then((c) => _cancelled ? 130 : c);
+
+  bool get isCancelled => _cancelled;
+
+  /// Stops the command, including child processes (apt, npm, curl…).
+  Future<void> cancel() async {
+    _cancelled = true;
+    final proc = _process;
+    if (proc == null) return;
+    final tree = Platform.isWindows ? <int>[] : await _descendants(proc.pid);
+    for (final pid in tree.reversed) {
+      Process.killPid(pid, ProcessSignal.sigterm);
+    }
+    proc.kill(ProcessSignal.sigterm);
+    await Future.delayed(const Duration(milliseconds: 600));
+    for (final pid in tree.reversed) {
+      Process.killPid(pid, ProcessSignal.sigkill);
+    }
+    proc.kill(ProcessSignal.sigkill);
+  }
+
+  static Future<List<int>> _descendants(int pid) async {
+    final result = <int>[];
+    try {
+      final r = await Process.run('pgrep', ['-P', '$pid']);
+      for (final s in r.stdout.toString().split(RegExp(r'\s+'))) {
+        final child = int.tryParse(s);
+        if (child != null) {
+          result.add(child);
+          result.addAll(await _descendants(child));
+        }
+      }
+    } catch (_) {}
+    return result;
+  }
+}

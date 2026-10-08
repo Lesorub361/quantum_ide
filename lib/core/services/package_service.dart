@@ -32,6 +32,13 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
 
   bool _hasCommand(String cmd) {
     try {
+      final home = Platform.environment['HOME'] ?? '';
+      if (home.isNotEmpty && File(p.join(home, '.local', 'bin', cmd)).existsSync()) {
+        return true;
+      }
+      if (File('/usr/local/bin/$cmd').existsSync() || File('/usr/bin/$cmd').existsSync()) {
+        return true;
+      }
       final res = Process.runSync('which', [cmd]);
       return res.exitCode == 0;
     } catch (_) {
@@ -40,16 +47,26 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
   }
 
   String _getAndroidSdkPath() {
+    if (Directory('/root/android-sdk').existsSync()) {
+      return '/root/android-sdk';
+    }
     final runtime = _ref.read(runtimeServiceProvider);
-    if (Platform.isAndroid) {
-      return p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk');
+    if (Platform.isAndroid && runtime.filesDir.isNotEmpty) {
+      final prootPath = p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk');
+      if (Directory(prootPath).existsSync()) return prootPath;
     }
     return Platform.environment['ANDROID_HOME'] ?? 
            Platform.environment['ANDROID_SDK_ROOT'] ?? 
-           p.join(Platform.environment['HOME'] ?? '/home/lesorub', 'Android', 'Sdk');
+           p.join(Platform.environment['HOME'] ?? '/root', 'android-sdk');
   }
 
   String _translateCommandForPC(String cmd) {
+    // If running as root (e.g. inside Linux chroot/PRoot or root container), keep root paths and do not use sudo
+    final isRoot = (Platform.environment['USER'] == 'root') || (Platform.environment['HOME'] == '/root');
+    if (isRoot) {
+      return cmd;
+    }
+
     String translated = cmd;
     // Strip Android-specific apt/dpkg lock clearing prefix
     if (translated.contains('pgrep -x "apt|apt-get|dpkg|dpkg-deb"')) {
@@ -59,8 +76,8 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
       }
     }
     
-    // 2. Prepend sudo to apt commands
-    translated = translated.replaceAll('apt update', 'sudo apt update');
+    // 2. Prepend sudo to apt commands with resilient fallback
+    translated = translated.replaceAll('apt update', '(sudo apt-get update -o Acquire::Retries=1 2>/dev/null || sudo apt update 2>/dev/null || true)');
     translated = translated.replaceAll('apt install', 'sudo apt install');
     
     // 3. Replace paths /root/ with ~/ or appropriate home paths
@@ -70,8 +87,11 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     translated = translated.replaceAll('/root/projects', '~/projects');
     translated = translated.replaceAll('/root/', '~/');
     
-    // 4. Adapt architectures
-    translated = translated.replaceAll('arm64', 'x64');
+    // 4. Adapt architectures only if on x86_64
+    final arch = Platform.version.toLowerCase();
+    if (!arch.contains('arm') && !arch.contains('aarch64')) {
+      translated = translated.replaceAll('arm64', 'x64');
+    }
     
     // 5. Prepend sudo to global npm installs if npm is used
     translated = translated.replaceAll('npm install -g', 'sudo npm install -g');
@@ -146,6 +166,12 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'antigravity-cli':
               exists = _hasCommand('agy') || _hasCommand('antigravity');
               break;
+            case 'claude-code':
+              exists = _hasCommand('claude');
+              break;
+            case 'deepseek-harness':
+              exists = _hasCommand('dsh') || _hasCommand('deepseek-harness');
+              break;
             case 'ollama-cli':
               exists = _hasCommand('ollama');
               break;
@@ -210,6 +236,16 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'antigravity')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'antigravity')).exists();
               break;
+            case 'claude-code':
+              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'claude')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'claude')).exists();
+              break;
+            case 'deepseek-harness':
+              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'dsh')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'dsh')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'deepseek-harness')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'deepseek-harness')).exists();
+              break;
             case 'ollama-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'ollama')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'ollama')).exists();
@@ -232,7 +268,11 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                     p.basename(entity.path).startsWith('java-') &&
                     p.basename(entity.path).endsWith('-openjdk-arm64'));
               }
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'java')).exists() || hasJvm;
+              final hasJava = await File(p.join(rootfsPath, 'usr', 'bin', 'java')).exists() || hasJvm;
+              final hasSdkManager = await File(p.join(sdkPath, 'cmdline-tools', 'latest', 'bin', 'sdkmanager')).exists() ||
+                                   await File(p.join(sdkPath, 'cmdline-tools', 'bin', 'sdkmanager')).exists() ||
+                                   await File(p.join(rootfsPath, 'usr', 'bin', 'sdkmanager')).exists();
+              exists = hasJava && hasSdkManager;
               break;
             case 'java-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'jdtls')).exists();
@@ -309,16 +349,11 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
 
     terminal.sendCommand(command);
 
-    // Wait for the command to propagate, then mark installed
-    await Future.delayed(const Duration(seconds: 2));
-    state = [for (final p in state) if (p.id == package.id) p..isInstalling = false..isInstalled = true else p];
-
-    final prefs = await SharedPreferences.getInstance();
-    final installedIds = state
-        .where((p) => p.isInstalled)
-        .map((p) => p.id)
-        .toList();
-    await prefs.setStringList(_key, installedIds);
+    // After command dispatched to terminal, reset installing indicator
+    // Actual installation status will be picked up by checkActualInstallation()
+    await Future.delayed(const Duration(seconds: 3));
+    state = [for (final p in state) if (p.id == package.id) p..isInstalling = false else p];
+    await checkActualInstallation();
   }
 
   @override

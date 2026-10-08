@@ -6,3 +6,12 @@
 -dontwarn com.songhieu.flutter_litert_lm.**
 -keep class com.write4me.llama_flutter_android.** { *; }
 -dontwarn com.write4me.llama_flutter_android.**
+
+# Keep compression libraries and app native bridge
+-keep class com.github.luben.zstd.** { *; }
+-dontwarn com.github.luben.zstd.**
+-keep class org.apache.commons.compress.** { *; }
+-dontwarn org.apache.commons.compress.**
+-keep class com.example.quantum_ide.** { *; }
+-dontwarn com.example.quantum_ide.**
+

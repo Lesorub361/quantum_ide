@@ -44,3 +44,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .quantum/
+*.zip
+android/gradle-8.0-bin.zip
+android/gradle-wrapper.zip

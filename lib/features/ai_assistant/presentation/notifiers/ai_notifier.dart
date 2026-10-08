@@ -16,10 +16,10 @@ import 'package:quantum_ide/core/services/ai_permission_service.dart';
 import 'package:quantum_ide/core/services/ai_context_compressor.dart';
 import 'package:quantum_ide/core/services/analysis_service.dart';
 import 'package:quantum_ide/core/services/git_service.dart';
+import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/core/services/plan_service.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'ai_prompts.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/json_chat_service.dart';
@@ -28,6 +28,9 @@ import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
 import 'package:quantum_ide/core/services/local_inference_service.dart';
+import 'package:quantum_ide/core/models/agent_activity_item.dart';
+import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
+import 'package:quantum_ide/core/services/cli_auth_service.dart';
 import 'package:quantum_ide/core/services/local_action_translator.dart';
 
 // ─── Top-level функция для Isolate — не должна быть методом класса ───
@@ -101,6 +104,9 @@ class AIState {
   final String? sessionGoal;
   final int lastPromptTokens;
   final int lastCompletionTokens;
+  final List<ActivityItem> liveActivityItems;
+  final AgentKind activeAgentKind;
+  final DateTime? taskStartedAt;
 
   AIState({
     this.isLoading = false,
@@ -108,8 +114,8 @@ class AIState {
     this.error,
     this.totalTokens = 0,
     this.proposedActions = const [],
-    this.approvalMode = AiApprovalMode.manual,
-    this.interactionMode = AiInteractionMode.chat,
+    this.approvalMode = AiApprovalMode.fullAutonomous,
+    this.interactionMode = AiInteractionMode.autopilot,
     this.activeAgentRole,
     this.agentReadFiles = const [],
     this.currentStatusMessage,
@@ -119,6 +125,9 @@ class AIState {
     this.sessionGoal,
     this.lastPromptTokens = 0,
     this.lastCompletionTokens = 0,
+    this.liveActivityItems = const [],
+    this.activeAgentKind = AgentKind.native,
+    this.taskStartedAt,
   });
 
   bool get isAutopilot => approvalMode != AiApprovalMode.manual;
@@ -141,6 +150,9 @@ class AIState {
     String? sessionGoal,
     int? lastPromptTokens,
     int? lastCompletionTokens,
+    List<ActivityItem>? liveActivityItems,
+    AgentKind? activeAgentKind,
+    DateTime? taskStartedAt,
   }) {
     return AIState(
       isLoading: isLoading ?? this.isLoading,
@@ -162,6 +174,9 @@ class AIState {
       sessionGoal: sessionGoal ?? this.sessionGoal,
       lastPromptTokens: lastPromptTokens ?? this.lastPromptTokens,
       lastCompletionTokens: lastCompletionTokens ?? this.lastCompletionTokens,
+      liveActivityItems: liveActivityItems ?? this.liveActivityItems,
+      activeAgentKind: activeAgentKind ?? this.activeAgentKind,
+      taskStartedAt: taskStartedAt ?? this.taskStartedAt,
     );
   }
 }
@@ -181,6 +196,8 @@ class AINotifier extends StateNotifier<AIState> {
   String? _pendingRunPlanContent;
   String? _lastCheckpointRef;
   Timer? _saveDebounceTimer;
+  final Map<AgentKind, List<ChatMessage>> _agentMessages = {};
+  final Map<AgentKind, String?> _agentSessions = {};
 
   AINotifier(this._ref) : super(AIState()) {
     _ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
@@ -197,6 +214,227 @@ class AINotifier extends StateNotifier<AIState> {
     final initPath = _ref.read(workspaceProvider).currentPath;
     if (initPath != null) {
       loadSessionsForWorkspace(initPath);
+    }
+  }
+
+  void setAgentKind(AgentKind kind) {
+    if (state.activeAgentKind == kind) return;
+
+    // Save previous agent's messages & session
+    _agentMessages[state.activeAgentKind] = List<ChatMessage>.from(state.messages);
+    _agentSessions[state.activeAgentKind] = state.currentSessionId;
+
+    // Restore new agent's messages & session
+    final restoredMessages = _agentMessages[kind] ?? <ChatMessage>[];
+    final restoredSessionId = _agentSessions[kind] ?? state.currentSessionId;
+
+    state = state.copyWith(
+      activeAgentKind: kind,
+      messages: restoredMessages,
+      currentSessionId: restoredSessionId,
+      liveActivityItems: [],
+      currentStatusMessage: null,
+      currentThought: null,
+      isLoading: false,
+    );
+
+    switch (kind) {
+      case AgentKind.native:
+        _ref.read(activeAiModelProvider.notifier).state = 'google/gemma-4-31b-it:free';
+        break;
+      case AgentKind.antigravity:
+        _ref.read(activeAiModelProvider.notifier).state = 'gemini-3.8-flash-high';
+        break;
+      case AgentKind.claudeCode:
+        _ref.read(activeAiModelProvider.notifier).state = 'claude-3-7-sonnet-20250219';
+        break;
+      case AgentKind.deepseekHarness:
+        _ref.read(activeAiModelProvider.notifier).state = 'deepseek-chat';
+        break;
+    }
+  }
+
+  void addLiveActivity(ActivityItem item) {
+    state = state.copyWith(
+      liveActivityItems: [...state.liveActivityItems, item],
+    );
+  }
+
+  void updateLiveActivity(ActivityItem item) {
+    final list = List<ActivityItem>.from(state.liveActivityItems);
+    final idx = list.lastIndexWhere((a) => a.title == item.title);
+    if (idx != -1) {
+      list[idx] = item;
+    } else {
+      list.add(item);
+    }
+    state = state.copyWith(liveActivityItems: list);
+  }
+
+  void clearLiveActivities() {
+    state = state.copyWith(liveActivityItems: []);
+  }
+
+  void stopActiveAgent() {
+    try {
+      _ref.read(cliAgentBridgeProvider).stopActiveSession();
+    } catch (_) {}
+    stopAutopilot();
+    addLiveActivity(const ActivityItem(
+      title: 'Остановлено',
+      detail: 'Выполнение остановлено пользователем',
+      isComplete: true,
+    ));
+    state = state.copyWith(
+      isLoading: false,
+      isAutopilot: false,
+      taskStartedAt: null,
+      currentStatusMessage: null,
+      activeAgentRole: null,
+    );
+  }
+
+  Future<void> executeCliTask(
+    String prompt, {
+    String? imageBase64,
+    List<String>? contextFiles,
+  }) async {
+    final workspacePath = _ref.read(workspaceProvider).currentPath ?? '';
+    final agentKind = state.activeAgentKind;
+    final bridge = _ref.read(cliAgentBridgeProvider);
+    final auth = _ref.read(cliAuthProvider);
+
+    // 1. Add User message
+    final userMsg = ChatMessage(
+      role: MessageRole.user,
+      content: prompt,
+      timestamp: DateTime.now(),
+      imageBase64: imageBase64,
+      contextFiles: contextFiles,
+    );
+
+    // Initial assistant streaming message
+    final assistantMsg = ChatMessage(
+      role: MessageRole.assistant,
+      content: '',
+      timestamp: DateTime.now(),
+      isThinking: true,
+      thinkingContent: 'Запуск ${agentKind.title}...',
+    );
+
+    state = state.copyWith(
+      messages: [...state.messages, userMsg, assistantMsg],
+      isLoading: true,
+      taskStartedAt: DateTime.now(),
+      currentStatusMessage: '${agentKind.title} выполняет задачу...',
+      liveActivityItems: [],
+    );
+
+    String accumulatedText = '';
+    String? apiKey;
+    if (agentKind == AgentKind.antigravity) {
+      apiKey = auth.geminiApiKey;
+    } else if (agentKind == AgentKind.claudeCode) {
+      apiKey = auth.claudeProviderType == 'openrouter'
+          ? (auth.openRouterApiKey ?? auth.anthropicApiKey)
+          : (auth.anthropicApiKey ?? auth.openRouterApiKey);
+    } else if (agentKind == AgentKind.deepseekHarness) {
+      apiKey = auth.deepseekProviderType == 'openrouter'
+          ? (auth.openRouterApiKey ?? auth.deepseekApiKey)
+          : (auth.deepseekApiKey ?? auth.openRouterApiKey);
+    }
+
+    final activeModel = _ref.read(activeAiModelProvider);
+    final effectiveModel = activeModel.isNotEmpty
+        ? activeModel
+        : (agentKind == AgentKind.antigravity
+            ? 'gemini-3.8-flash-high'
+            : (agentKind == AgentKind.claudeCode
+                ? (auth.claudeProviderType == 'openrouter'
+                    ? 'anthropic/claude-3.7-sonnet'
+                    : 'claude-3-7-sonnet-20250219')
+                : (auth.deepseekProviderType == 'openrouter'
+                    ? 'google/gemma-4-31b-it:free'
+                    : 'deepseek-chat')));
+
+    final binaryPath = bridge.resolveBinary(agentKind);
+    if (binaryPath == null || agentKind == AgentKind.native) {
+      // Direct call to internal autonomous agent engine (EnhancedAiToolExecutor)
+      // which has full project reading/writing/bash capabilities via API
+      setInteractionMode(AiInteractionMode.autopilot);
+      await askAI(prompt, imageBase64: imageBase64, contextFiles: contextFiles);
+      return;
+    }
+
+    await bridge.startSession(
+      projectId: p.basename(workspacePath),
+      projectPath: workspacePath,
+      prompt: prompt,
+      agentKind: agentKind,
+      model: effectiveModel,
+      apiKey: apiKey,
+      onActivity: (activity) {
+        addLiveActivity(activity);
+      },
+      onDeltaText: (delta) {
+        accumulatedText += delta;
+        _updateLastAssistantMessage(accumulatedText, isDone: false);
+      },
+      onThinking: (thinking) {
+        state = state.copyWith(
+          currentStatusMessage: thinking,
+        );
+      },
+      onUsage: (usage) {
+        final total = usage['total_tokens'] as int? ?? 0;
+        final input = usage['input_tokens'] as int? ?? 0;
+        final output = usage['output_tokens'] as int? ?? 0;
+        state = state.copyWith(
+          totalTokens: total > 0 ? total : state.totalTokens,
+          lastPromptTokens: input > 0 ? input : state.lastPromptTokens,
+          lastCompletionTokens: output > 0 ? output : state.lastCompletionTokens,
+        );
+      },
+      onComplete: (durationMillis) {
+        _updateLastAssistantMessage(
+          accumulatedText.isNotEmpty ? accumulatedText : 'Задача выполнена.',
+          isDone: true,
+          durationMillis: durationMillis,
+        );
+        state = state.copyWith(
+          isLoading: false,
+          currentStatusMessage: null,
+        );
+        _saveSessions();
+      },
+      onError: (error) {
+        if (accumulatedText.isEmpty) {
+          accumulatedText = '⚠️ $error';
+        } else {
+          accumulatedText += '\n\n⚠️ $error';
+        }
+        _updateLastAssistantMessage(accumulatedText, isDone: true);
+        state = state.copyWith(
+          isLoading: false,
+          currentStatusMessage: null,
+        );
+        _saveSessions();
+      },
+    );
+  }
+
+  void _updateLastAssistantMessage(String text, {required bool isDone, int durationMillis = 0}) {
+    if (state.messages.isEmpty) return;
+    final list = List<ChatMessage>.from(state.messages);
+    final lastIdx = list.lastIndexWhere((m) => m.role == MessageRole.assistant);
+    if (lastIdx != -1) {
+      list[lastIdx] = list[lastIdx].copyWith(
+        content: text,
+        isThinking: !isDone,
+        workedMillis: durationMillis > 0 ? durationMillis : list[lastIdx].workedMillis,
+        workItems: state.liveActivityItems,
+      );
+      state = state.copyWith(messages: list);
     }
   }
 
@@ -225,65 +463,6 @@ class AINotifier extends StateNotifier<AIState> {
     });
   }
 
-  Future<void> _saveSessionsJson() async {
-    final workspacePath = _ref.read(workspaceProvider).currentPath;
-    try {
-      final String saveDir;
-      if (workspacePath != null) {
-        saveDir = p.join(workspacePath, '.quantum');
-      } else {
-        final appDir = await _getAppDataDir();
-        saveDir = p.join(appDir, '.quantum');
-      }
-      final dir = Directory(saveDir);
-      if (!dir.existsSync()) {
-        dir.createSync(recursive: true);
-      }
-      final file = File(p.join(dir.path, 'chat_history.json'));
-      final trimmedSessions = state.sessions.map((s) {
-        final trimmedMessages = s.messages.map((m) {
-          final json = m.toJson();
-          if (json['executedActions'] != null) {
-            final actions = (json['executedActions'] as List).map((a) {
-              final action = Map<String, dynamic>.from(a);
-              if (action['content'] != null && (action['content'] as String).length > 500) {
-                action['content'] = '(truncated)';
-              }
-              return action;
-            }).toList();
-            json['executedActions'] = actions;
-          }
-          if (json['actionResults'] != null) {
-            final results = Map<String, String>.from(json['actionResults']);
-            final trimmed = <String, String>{};
-            for (final entry in results.entries) {
-              trimmed[entry.key] = entry.value.length > 500
-                  ? '${entry.value.substring(0, 500)}...'
-                  : entry.value;
-            }
-            json['actionResults'] = trimmed;
-          }
-          json.remove('imageBase64');
-          return json;
-        }).toList();
-        return {
-          'id': s.id,
-          'title': s.title,
-          'messages': trimmedMessages,
-          'createdAt': s.createdAt.toIso8601String(),
-        };
-      }).toList();
-      final jsonStr = jsonEncode(trimmedSessions);
-      await file.writeAsString(jsonStr);
-      debugPrint('[AINotifier] Saved ${state.sessions.length} session(s) via JSON fallback');
-      
-      if (workspacePath != null) {
-        await _saveMemory(workspacePath);
-      }
-    } catch (e) {
-      debugPrint('[AINotifier] Error saving via JSON: $e');
-    }
-  }
 
   Future<void> _saveMemory(String workspacePath) async {
     try {
@@ -460,14 +639,19 @@ class AINotifier extends StateNotifier<AIState> {
   void startNewSession() {
     final newSession = ChatSession(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      title: 'New Chat',
+      title: '${state.activeAgentKind.title} Chat',
       messages: [],
       createdAt: DateTime.now(),
     );
+    _agentMessages[state.activeAgentKind] = [];
+    _agentSessions[state.activeAgentKind] = newSession.id;
     state = state.copyWith(
       sessions: [...state.sessions, newSession],
       currentSessionId: newSession.id,
       messages: [],
+      liveActivityItems: [],
+      currentStatusMessage: null,
+      currentThought: null,
     );
     _debouncedSaveSessions();
   }
@@ -618,7 +802,13 @@ class AINotifier extends StateNotifier<AIState> {
   }
 
   void stopAutopilot() {
-    state = state.copyWith(isLoading: false, activeAgentRole: null);
+    state = state.copyWith(
+      isLoading: false,
+      isAutopilot: false,
+      taskStartedAt: null,
+      currentStatusMessage: null,
+      activeAgentRole: null,
+    );
   }
 
   Future<void> rollbackAgentChanges() async {
@@ -721,9 +911,18 @@ class AINotifier extends StateNotifier<AIState> {
       }
     }
 
+    final taskStart = DateTime.now();
+    clearLiveActivities();
+    addLiveActivity(ActivityItem(
+      title: 'Think',
+      detail: isAutopilot ? l10n.analyzingTaskAndPlanning : (isDebug ? 'Анализ бага...' : 'Analyzing prompt'),
+      isComplete: false,
+    ));
+
     state = state.copyWith(
       isLoading: true,
       error: null,
+      taskStartedAt: taskStart,
       totalTokens: state.totalTokens + userTokens,
       activeAgentRole: isAutopilot ? 'Planner' : (isDebug ? 'Debugger' : null),
       currentStatusMessage: isAutopilot ? l10n.analyzingTaskAndPlanning : (isDebug ? 'Анализ бага...' : null),
@@ -963,16 +1162,64 @@ class AINotifier extends StateNotifier<AIState> {
              responseTokens = 0;
            }
         } else {
-           final chatResponse = await _aiService.sendChatMessage(
-             nextPrompt,
-             history,
-             systemInstruction: systemInstruction,
-             imageBase64: imageBase64,
+           // Add assistant placeholder message to stream tokens into
+           final tempAssistantMsg = ChatMessage(
+             role: MessageRole.assistant,
+             content: '',
+             timestamp: DateTime.now(),
+             isThinking: true,
            );
-           responseText = chatResponse.text;
-           promptTokens = chatResponse.tokenUsage?.promptTokens ?? 0;
-           completionTokens = chatResponse.tokenUsage?.completionTokens ?? 0;
-           responseTokens = chatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
+           _updateMessagesAndSync([...state.messages, tempAssistantMsg]);
+
+           String streamAccumulator = '';
+           ChatResponse? streamChatResponse;
+           try {
+             streamChatResponse = await _aiService.streamChatMessage(
+               nextPrompt,
+               history,
+               systemInstruction: systemInstruction,
+               onToken: (token) {
+                 streamAccumulator += token;
+                 // Filter raw action and thought tags from streaming display
+                 final displayContent = streamAccumulator
+                     .replaceAll(RegExp(r'<thought>[\s\S]*?(?:</thought>|$)', caseSensitive: false), '')
+                     .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
+                     .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+                     .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*$'), '')
+                     .trimLeft();
+
+                 if (state.messages.isNotEmpty) {
+                   final msgs = List<ChatMessage>.from(state.messages);
+                   if (msgs.last.role == MessageRole.assistant) {
+                     msgs[msgs.length - 1] = msgs.last.copyWith(
+                       content: displayContent,
+                       isThinking: false,
+                     );
+                     state = state.copyWith(messages: msgs);
+                   }
+                 }
+               },
+             );
+           } catch (_) {
+             streamChatResponse = await _aiService.sendChatMessage(
+               nextPrompt,
+               history,
+               systemInstruction: systemInstruction,
+               imageBase64: imageBase64,
+             );
+           }
+
+           responseText = streamChatResponse.text.isNotEmpty ? streamChatResponse.text : streamAccumulator;
+           promptTokens = streamChatResponse.tokenUsage?.promptTokens ?? 0;
+           completionTokens = streamChatResponse.tokenUsage?.completionTokens ?? 0;
+           responseTokens = streamChatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
+
+           // Remove placeholder before adding finalized assistantMessage
+           if (state.messages.isNotEmpty && state.messages.last.role == MessageRole.assistant) {
+             final msgs = List<ChatMessage>.from(state.messages);
+             msgs.removeLast();
+             state = state.copyWith(messages: msgs);
+           }
         }
 
         // Parse proposed actions from <actions> blocks
@@ -1013,7 +1260,11 @@ class AINotifier extends StateNotifier<AIState> {
           // Clean the actions tags from the response before continuing
           responseText = responseText
               .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
-              .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '');
+              .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+              .replaceAll(RegExp(r'<dots_function_call>[\s\S]*?(?:</dots_function_call>|$)', caseSensitive: false), '')
+              .replaceAll(RegExp(r'<function_call\b[\s\S]*?(?:</function_call>|$)', caseSensitive: false), '')
+              .replaceAll(RegExp(r'<tool_call>[\s\S]*?(?:</tool_call>|$)', caseSensitive: false), '')
+              .replaceAll(RegExp(r'<invoke\b[\s\S]*?(?:</invoke>|$)', caseSensitive: false), '');
           
           continue;
         }
@@ -1021,14 +1272,21 @@ class AINotifier extends StateNotifier<AIState> {
         final cleanContent = responseText
             .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
             .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'<dots_function_call>[\s\S]*?(?:</dots_function_call>|$)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'<function_call\b[\s\S]*?(?:</function_call>|$)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'<tool_call>[\s\S]*?(?:</tool_call>|$)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'<invoke\b[\s\S]*?(?:</invoke>|$)', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*(?:\]|$)'), '')
             .trim();
 
+        final duration = DateTime.now().difference(taskStart).inMilliseconds;
         final assistantMessage = ChatMessage(
           role: MessageRole.assistant,
           content: cleanContent,
           timestamp: DateTime.now(),
           actions: actions.isNotEmpty ? actions : null,
+          workItems: List<ActivityItem>.from(state.liveActivityItems),
+          workedMillis: duration,
         );
 
         state = state.copyWith(
@@ -1167,16 +1425,75 @@ class AINotifier extends StateNotifier<AIState> {
         }
 
         if (actions.isEmpty) {
-          // If no actions returned in Coder/Validator phases, or task is done
-          if (state.activeAgentRole == 'Coder') {
-            // Check if we should validate
-            state = state.copyWith(
-              activeAgentRole: 'Validator',
-              currentStatusMessage: l10n.verifyingImplementation,
-            );
-            nextPrompt = 'Please verify the implementation. Are there any compilation or analyzer errors?';
-            continue;
+          if (isAutopilot) {
+            final lowerClean = cleanContent.toLowerCase();
+            final mentionsCheck = lowerClean.contains('провер') || 
+                lowerClean.contains('анализ') || 
+                lowerClean.contains('check') || 
+                lowerClean.contains('verify') || 
+                lowerClean.contains('analyze');
+
+            final mentionsIntent = lowerClean.contains('сейчас') || 
+                lowerClean.contains('перехожу') || 
+                lowerClean.contains('начинаю') || 
+                lowerClean.contains('буду') || 
+                lowerClean.contains('шаг') || 
+                lowerClean.contains('следующ') || 
+                lowerClean.contains('исправл') || 
+                lowerClean.contains('создам') || 
+                lowerClean.contains('добавлю') || 
+                lowerClean.contains('will') || 
+                lowerClean.contains('next step');
+
+            if (mentionsCheck) {
+              // Model intended to check for errors/analysis — auto-run static analysis and feed results
+              state = state.copyWith(
+                activeAgentRole: 'Validator',
+                currentStatusMessage: l10n.runningStaticAnalysis,
+              );
+              await _ref.read(analysisServiceProvider).runAnalysis();
+              
+              final allDiagnostics = _ref.read(editorProvider).allDiagnostics;
+              final currentDiagnostics = <String, List<CodeDiagnostic>>{};
+              allDiagnostics.forEach((filePath, list) {
+                if (workspacePath.isNotEmpty && filePath.startsWith(workspacePath)) {
+                  currentDiagnostics[filePath] = list;
+                }
+              });
+              final hasErrors = currentDiagnostics.values.any(
+                (list) => list.any((d) => d.severity == CodeDiagnosticSeverity.error)
+              );
+
+              if (hasErrors) {
+                final errorReport = _formatDiagnosticsForPrompt(currentDiagnostics, workspacePath);
+                nextPrompt = 'Статический анализ выявил ошибки компиляции:\n\n$errorReport\n\n'
+                    'Исправь проблемные места точечными хирургическими правками (replace_code_block). Обязательно выведи блок <actions>!';
+              } else {
+                nextPrompt = 'Статический анализ завершен: ОШИБОК КОМПИЛЯЦИИ НЕТ (0 ошибок).\n\n'
+                    'Продолжай автономное выполнение задачи по плану: переходи к реализации следующего шага и обязательно выведи действия в блоке <actions>!';
+              }
+              continue;
+            } else if (mentionsIntent) {
+              state = state.copyWith(
+                activeAgentRole: 'Coder',
+                currentStatusMessage: l10n.generatingCodeChanges,
+              );
+              nextPrompt = 'Ты сообщил: "$cleanContent".\n\n'
+                  'Не останавливайся! Сразу выполни это действие: выведи команды или изменения файлов в формате <actions>.';
+              continue;
+            } else if (state.activeAgentRole == 'Coder') {
+              state = state.copyWith(
+                activeAgentRole: 'Validator',
+                currentStatusMessage: l10n.verifyingImplementation,
+              );
+              nextPrompt = 'Please verify the implementation. Are there any compilation or analyzer errors? If all is good, write "Task completed".';
+              continue;
+            }
           }
+
+          // Task has completed. Finish turn and stop loop.
+          state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+          break;
         }
 
         // We have actions to execute. Evaluate risk and security.
@@ -1249,6 +1566,14 @@ class AINotifier extends StateNotifier<AIState> {
         if (allowedActions.isNotEmpty) {
           final results = <String>[];
           for (final action in allowedActions) {
+            final emoji = _getActionEmoji(action.type);
+            final label = _getActionLabel(action.type);
+            final target = action.path.isNotEmpty ? p.basename(action.path) : action.content;
+            addLiveActivity(ActivityItem(
+              title: '$emoji $label',
+              detail: target,
+              isComplete: false,
+            ));
             final res = await applyAction(action, runInBackground: true);
             results.add(res);
           }
@@ -1286,7 +1611,18 @@ class AINotifier extends StateNotifier<AIState> {
             )
           ]);
 
-          // Transition to Validator to verify the compile state
+          final isReadOnlyBatch = allowedActions.every(_isReadOnlyAction);
+          if (isReadOnlyBatch) {
+            final resultsText = allowedActions
+                .asMap()
+                .map((idx, act) => MapEntry(idx, '[Результат действия ${act.type} для ${act.path.isNotEmpty ? act.path : act.content}]\n${results[idx]}'))
+                .values
+                .join('\n\n');
+            nextPrompt = '$nextPrompt\n\n$resultsText\n\nПожалуйста, ответь на вопрос пользователя или продолжи анализ задачи на основе полученных данных.';
+            continue;
+          }
+
+          // Transition to Validator to verify the compile state for modifications
           state = state.copyWith(
             activeAgentRole: 'Validator',
             currentStatusMessage: l10n.runningStaticAnalysis,
@@ -1294,7 +1630,6 @@ class AINotifier extends StateNotifier<AIState> {
           
           // Trigger compiler analysis first and await it
           await _ref.read(analysisServiceProvider).runAnalysis();
-          // Убрана задержка 800мс — анализ уже завершён через await runAnalysis()
 
           // Auto-run tests if available
           final testOutput = await _runTestsIfAvailable(workspacePath);
@@ -1360,12 +1695,18 @@ class AINotifier extends StateNotifier<AIState> {
               activeAgentRole: 'Coder',
               currentStatusMessage: l10n.fixingCompilationErrors,
             );
-            nextPrompt = 'Validation found compilation errors (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n**Exact analyzer errors:**\n$errorReport\n\nFor each error:\n1. Read the file via read_file if you need context\n2. Fix only the lines with errors, avoid rewriting entire file unnecessarily';
+            nextPrompt = 'Validation found compilation errors (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n'
+                '**Exact analyzer errors:**\n$errorReport\n\n'
+                'CRITICAL RULES FOR FIXING ERRORS:\n'
+                '1. NEVER rewrite the whole file (DO NOT use "rewrite_whole_file")!\n'
+                '2. Use surgical fixes: use "replace_code_block" with exact "search_block" and "replace_block" for ONLY the broken lines.\n'
+                '3. If needed, read the file first with "read_file" to see the exact context before editing.';
           } else {
             consecutiveErrorFixAttempts = 0;
             lastErrorFiles = {};
-            state = state.copyWith(currentStatusMessage: null);
-            nextPrompt = 'All changes applied successfully. No compilation errors. Verify logic correctness or report completion.';
+            // Code applied and verified cleanly without any compilation errors.
+            state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+            break;
           }
         }
       }
@@ -1501,6 +1842,92 @@ class AINotifier extends StateNotifier<AIState> {
         debugPrint('Error parsing AI actions: $e');
       }
     }
+
+    // XML-style tool calls (<invoke name="..."> inside <dots_function_call>, <function_call>, etc.)
+    if (actions.isEmpty) {
+      final invokeRegExp = RegExp(
+        r'<invoke\s+name=["'']([^"'']+)["'']>([\s\S]*?)</invoke>',
+        caseSensitive: false,
+      );
+      for (final match in invokeRegExp.allMatches(cleanText)) {
+        final toolName = match.group(1)?.trim() ?? '';
+        final body = match.group(2) ?? '';
+
+        String? extractTag(String tag) {
+          final m = RegExp('<$tag>([\\s\\S]*?)<\\/$tag>', caseSensitive: false).firstMatch(body);
+          return m?.group(1)?.trim();
+        }
+
+        String actionType = toolName.toLowerCase();
+        if (actionType == 'bash' || actionType == 'terminal' || actionType == 'run_command' || actionType == 'sh') {
+          actionType = 'command';
+        }
+
+        String rawPath = extractTag('path') ?? extractTag('file') ?? '';
+        String content = extractTag('content') ?? extractTag('command') ?? extractTag('cmd') ?? extractTag('query') ?? '';
+        String description = extractTag('description') ?? '';
+        final searchBlock = extractTag('search_block') ?? extractTag('search');
+        final replaceBlock = extractTag('replace_block') ?? extractTag('replace');
+
+        if (actionType == 'command' && content.isEmpty) {
+          content = body.replaceAll(RegExp(r'<description>[\s\S]*?<\/description>', caseSensitive: false), '').trim();
+        }
+
+        if (rawPath.isNotEmpty && workspacePath != null && !p.isAbsolute(rawPath)) {
+          rawPath = p.join(workspacePath, rawPath);
+        }
+
+        final actionMap = <String, dynamic>{
+          'type': actionType,
+          'path': rawPath,
+          'content': content,
+          'description': description.isNotEmpty ? description : 'Вызов инструмента $toolName',
+        };
+        if (searchBlock != null) actionMap['search_block'] = searchBlock;
+        if (replaceBlock != null) actionMap['replace_block'] = replaceBlock;
+
+        try {
+          final action = AIAction.fromJson(actionMap);
+          actions.add(action);
+        } catch (e) {
+          debugPrint('Error parsing XML action ($toolName): $e');
+        }
+      }
+    }
+
+    // Also support <tool_call> JSON format
+    if (actions.isEmpty) {
+      final toolCallRegExp = RegExp(r'<tool_call>([\s\S]*?)<\/tool_call>', caseSensitive: false);
+      for (final match in toolCallRegExp.allMatches(cleanText)) {
+        final raw = match.group(1)?.trim() ?? '';
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map<String, dynamic>) {
+            final name = (decoded['name'] ?? decoded['type'] ?? '').toString();
+            final args = decoded['arguments'] ?? decoded['params'] ?? {};
+            if (name.isNotEmpty && args is Map) {
+              String type = name.toLowerCase();
+              if (type == 'bash' || type == 'terminal' || type == 'run_command' || type == 'sh') type = 'command';
+              String path = (args['path'] ?? args['file'] ?? '').toString();
+              String content = (args['content'] ?? args['command'] ?? args['cmd'] ?? args['query'] ?? '').toString();
+              String desc = (args['description'] ?? 'Инструмент $name').toString();
+              if (path.isNotEmpty && workspacePath != null && !p.isAbsolute(path)) {
+                path = p.join(workspacePath, path);
+              }
+              actions.add(AIAction(
+                type: type,
+                path: path,
+                content: content,
+                description: desc,
+                oldText: args['search_block']?.toString() ?? args['old_text']?.toString(),
+                newText: args['replace_block']?.toString() ?? args['new_text']?.toString(),
+              ));
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
     return actions;
   }
 
@@ -1537,6 +1964,29 @@ class AINotifier extends StateNotifier<AIState> {
     return lines.isEmpty ? '(no errors)' : lines.join('\n');
   }
 
+  String _mapActionToActivityTitle(String type) {
+    switch (type) {
+      case 'command':
+        return 'Bash';
+      case 'edit':
+      case 'create':
+      case 'rewrite_whole_file':
+      case 'replace_code_block':
+      case 'delete':
+        return 'Write';
+      case 'read_file':
+        return 'Read';
+      case 'grep_search':
+      case 'list_dir':
+      case 'find_symbols':
+      case 'web_search':
+      case 'web_fetch':
+        return 'Search';
+      default:
+        return 'Action';
+    }
+  }
+
   Future<String> applyAction(AIAction action, {bool runInBackground = true}) async {
     final l10n = _ref.read(localizationsProvider);
     final workspacePath = _ref.read(workspaceProvider).currentPath;
@@ -1545,12 +1995,19 @@ class AINotifier extends StateNotifier<AIState> {
         ? p.relative(action.path, from: workspacePath)
         : action.path;
 
-    final actionEmoji = _getActionEmoji(action.type);
-    final actionLabel = _getActionLabel(action.type);
-    
+    final activityTitle = _mapActionToActivityTitle(action.type);
+    final activityDetail = action.type == 'command' ? action.content : (relPath.isNotEmpty ? relPath : action.content);
+    final actItem = ActivityItem(
+      title: activityTitle,
+      detail: activityDetail,
+      isComplete: false,
+      isCommand: action.type == 'command',
+    );
+    addLiveActivity(actItem);
+
     final actionStepMessage = ChatMessage(
       role: MessageRole.system,
-      content: '$actionEmoji $actionLabel `${relPath.isNotEmpty ? relPath : action.content}`',
+      content: _getActionFriendlyLogText(action, workspacePath ?? ''),
       timestamp: DateTime.now(),
       isActionStep: true,
       actionStepType: action.type,
@@ -1649,11 +2106,10 @@ class AINotifier extends StateNotifier<AIState> {
           await file.parent.create(recursive: true);
           // Write new content to disk
           await file.writeAsString(action.content);
-          // Open in editor with diff view, passing original content for proper diff
+          // Open in editor in normal view with the applied content
           await _ref.read(editorProvider.notifier).openFile(
             action.path,
-            isDiffView: true,
-            overrideOriginalContent: originalContent,
+            isDiffView: false,
           );
           _refreshFileExplorer(action.path);
           removeAction(action);
@@ -1813,6 +2269,8 @@ class AINotifier extends StateNotifier<AIState> {
       final errMsg = l10n.failedToApplyActionWithError(e.toString());
       state = state.copyWith(error: errMsg);
       return errMsg;
+    } finally {
+      updateLiveActivity(actItem.copyWith(isComplete: true));
     }
   }
 
@@ -1904,27 +2362,30 @@ class AINotifier extends StateNotifier<AIState> {
       ),
     ]);
 
-    if (commandResult.isNotEmpty && lastCommand.isNotEmpty) {
+    // Refresh git status so explorer and git view show modified/added files immediately
+    try {
+      await _ref.read(gitProvider.notifier).refreshStatus();
+    } catch (_) {}
+
+    if (state.interactionMode == AiInteractionMode.autopilot) {
+      if (commandResult.isNotEmpty && lastCommand.isNotEmpty) {
+        final analysisPrompt = 'Результат выполнения команды "$lastCommand":\n$commandResult\n\n'
+            'Проанализируй результат. Если возникли ошибки, исправь только проблемные места точечными правками (replace_code_block). '
+            'Если все успешно, переходи к следующим шагам плана.';
+        await askAI(analysisPrompt);
+      } else {
+        final continuePrompt = 'Изменения успешно применены (${executedActions.length} действий).\n'
+            'Продолжай выполнение задачи по плану: запусти в терминале проверку (dart analyze или тесты), '
+            'проверь отсутствие ошибок компиляции и переходи к реализации следующих шагов. '
+            'ВАЖНО: Если обнаружены ошибки, исправляй их только точечно через "replace_code_block", не переписывай файлы целиком!';
+        await askAI(continuePrompt);
+      }
+    } else if (commandResult.isNotEmpty && lastCommand.isNotEmpty) {
       final analysisPrompt = 'Result of running command "$lastCommand":\n$commandResult\n\nAnalyze the result. If errors occurred, fix them.';
       await askAI(analysisPrompt);
     }
   }
 
-  Future<String> _getAppDataDir() async {
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      final quantumDir = Directory(p.join(dir.path, '.quantum_ide'));
-      if (!quantumDir.existsSync()) {
-        await quantumDir.create(recursive: true);
-      }
-      return quantumDir.path;
-    } catch (e) {
-      debugPrint('[AINotifier] Fallback dir error: $e');
-      final tmp = p.join(Directory.systemTemp.path, 'quantum_ide');
-      await Directory(tmp).create(recursive: true);
-      return tmp;
-    }
-  }
 
   void _refreshFileExplorer(String filePath) {
     final workspacePath = _ref.read(workspaceProvider).currentPath;

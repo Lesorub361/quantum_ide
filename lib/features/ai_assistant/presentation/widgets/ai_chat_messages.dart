@@ -11,7 +11,6 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
 
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/git_service.dart';
 import 'package:quantum_ide/core/services/ai_permission_service.dart';
@@ -35,6 +34,7 @@ import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/inline_diff_widget.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/agent_activity_widgets.dart';
 
 class CollapsibleConsole extends StatefulWidget {
   final String content;
@@ -922,44 +922,39 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
 
     final visibleMessages = widget.aiState.messages.where((m) {
       final text = m.content.trim();
-      if (text.isEmpty) return false;
+      if (text.isEmpty) {
+        if (widget.aiState.isLoading &&
+            m.role == MessageRole.assistant &&
+            widget.aiState.messages.isNotEmpty &&
+            m == widget.aiState.messages.last) {
+          return true;
+        }
+        return false;
+      }
       if (m.isStepSummary || m.isActionStep) return false;
       return true;
     }).toList();
 
-    final itemCount = visibleMessages.length + (widget.aiState.isLoading ? 1 : 0);
+    final hasActiveAssistant = visibleMessages.isNotEmpty &&
+        visibleMessages.last.role == MessageRole.assistant &&
+        widget.aiState.isLoading;
+    final itemCount = visibleMessages.length + (widget.aiState.isLoading && !hasActiveAssistant ? 1 : 0);
+
+    final isMobile = MediaQuery.of(context).size.width < 700;
 
     return ListView.builder(
       controller: _scroll,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 16, vertical: 6),
       itemCount: itemCount,
       addAutomaticKeepAlives: false,
       addRepaintBoundaries: true,
       itemBuilder: (context, index) {
         if (index == visibleMessages.length) {
-          final role = widget.aiState.activeAgentRole ?? 'Agent';
-          final status = widget.aiState.currentStatusMessage ?? 
-              AppLocalizations.of(context)!.thinking;
-          
-          Color roleColor;
-          switch (role.toLowerCase()) {
-            case 'planner':
-              roleColor = Colors.cyanAccent;
-              break;
-            case 'coder':
-              roleColor = Colors.purpleAccent;
-              break;
-            case 'validator':
-              roleColor = Colors.orangeAccent;
-              break;
-            default:
-              roleColor = Colors.blueAccent;
-          }
-
-          return _GlowingAgentLoader(
-            color: roleColor,
-            status: status,
-            role: role,
+          return LiveAgentProcessCard(
+            liveItems: widget.aiState.liveActivityItems,
+            isRunning: true,
+            startedAt: widget.aiState.taskStartedAt ?? DateTime.now(),
+            onStop: () => ref.read(aiProvider.notifier).stopActiveAgent(),
           );
         }
 
@@ -1009,7 +1004,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                                 }()))
                 else if (isUser)
                   GlassContainer(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 8 : 12),
                     blur: 8,
                     opacity: 0.2,
                     color: const Color(0xFFa078ff), // Stitch primary violet color
@@ -1123,33 +1118,107 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                           ),
                   )
                 else
-                  Container(
-                    decoration: const BoxDecoration(
-                      border: Border(
-                        left: BorderSide(
-                          color: Color(0xFFd0bcff), // Stitch violet left line
-                          width: 3,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isLastMessage && widget.aiState.isLoading) ...[
+                        LiveAgentProcessCard(
+                          liveItems: widget.aiState.liveActivityItems,
+                          isRunning: true,
+                          startedAt: widget.aiState.taskStartedAt ?? DateTime.now(),
+                          onStop: () => ref.read(aiProvider.notifier).stopActiveAgent(),
                         ),
-                      ),
-                    ),
-                    child: GlassContainer(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      blur: 20,
-                      opacity: 0.15,
-                      color: const Color(0xFF282A30), // Stitch dark bg
-                      borderRadius: const BorderRadius.only(
-                        topRight: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
-                      ),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        width: 0.8,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _renderMarkdown(message.content, context),
-                      ),
-                    ),
+                        if (message.content.trim().isNotEmpty) const SizedBox(height: 6),
+                      ] else if (message.workItems.isNotEmpty) ...[
+                        WorkBlockCard(message: message),
+                        if (message.content.trim().isNotEmpty) const SizedBox(height: 6),
+                      ],
+                      if (message.content.trim().isNotEmpty)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF141724),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(0xFF8B5CF6).withValues(alpha: 0.22),
+                              width: 0.8,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.025),
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.white.withValues(alpha: 0.06),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(3.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.18),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(LucideIcons.sparkles, size: 10, color: Color(0xFFC084FC)),
+                                      ),
+                                      const SizedBox(width: 7),
+                                      Text(
+                                        widget.aiState.activeAgentKind.title,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                      if (message.workedMillis > 0) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.05),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            '${(message.workedMillis / 1000).toStringAsFixed(1)}s',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 9.5,
+                                              color: Colors.white38,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      const Spacer(),
+                                      _CopyMessageButton(content: message.content),
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: _renderMarkdown(message.content, context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 Padding(
                   padding: const EdgeInsets.only(top: 2, left: 4, right: 4),
@@ -1161,10 +1230,8 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                             ? l10n.you 
                             : (isSystem 
                                 ? AppLocalizations.of(context)!.system 
-                                : (ref.read(aiServiceProvider).settings.currentProvider.id == 'local_edge'
-                                    ? l10n.localAiDisplayName
-                                    : ref.read(aiServiceProvider).settings.currentProvider.displayName)),
-                        style: GoogleFonts.inter(color: Colors.white12, fontSize: 9),
+                                : widget.aiState.activeAgentKind.title),
+                        style: GoogleFonts.inter(color: Colors.white24, fontSize: 9.5),
                       ),
                     ],
                   ),
@@ -1182,6 +1249,15 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
         );
       },
     );
+  }
+
+  String _formatRussianFilesCount(int count) {
+    final mod10 = count % 10;
+    final mod100 = count % 100;
+    if (mod100 >= 11 && mod100 <= 19) return '$count файлов с изменениями';
+    if (mod10 == 1) return '$count файл с изменениями';
+    if (mod10 >= 2 && mod10 <= 4) return '$count файла с изменениями';
+    return '$count файлов с изменениями';
   }
 
   Widget _buildMessageActionsCard(List<AIAction> actions, bool isLastMessage) {
@@ -1231,7 +1307,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${l10n.filesCount(pendingActions.length)} ${l10n.withChanges}',
+                    _formatRussianFilesCount(pendingActions.length),
                     style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
                   ),
                   Row(
@@ -1357,6 +1433,12 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
       }
       processedText = processedText.replaceFirst(match.group(0)!, '');
     }
+
+    // Strip out raw <actions>...</actions> tags so user never sees messy raw JSON blobs
+    processedText = processedText.replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '').trim();
+    if (processedText.isEmpty) {
+      return widgets;
+    }
     
     // Now process remaining text for code blocks
     final regex = RegExp(r'```([a-zA-Z0-9_\-+]*)\n([\s\S]*?)```');
@@ -1410,29 +1492,49 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
   }
 
   Widget _buildTextSection(String text, BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+    final baseFontSize = isMobile ? 12.0 : 13.0;
+    final codeFontSize = isMobile ? 10.5 : 11.5;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 6.0),
       child: MarkdownBody(
         data: text,
         selectable: true,
         styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-          p: GoogleFonts.inter(color: Colors.white.withValues(alpha: 0.95), fontSize: 13.5, height: 1.5),
-          strong: GoogleFonts.inter(color: Colors.cyanAccent.withValues(alpha: 0.9), fontWeight: FontWeight.bold, fontSize: 13.5),
-          em: GoogleFonts.inter(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 13.5),
-          h1: GoogleFonts.inter(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-          h2: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-          h3: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-          listBullet: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 13.5),
+          p: GoogleFonts.inter(color: const Color(0xFFE2E8F0), fontSize: baseFontSize, height: 1.45),
+          strong: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: baseFontSize),
+          em: GoogleFonts.inter(color: const Color(0xFFCBD5E1), fontStyle: FontStyle.italic, fontSize: baseFontSize),
+          h1: GoogleFonts.inter(color: Colors.white, fontSize: isMobile ? 15.0 : 17.0, fontWeight: FontWeight.bold, height: 1.35),
+          h2: GoogleFonts.inter(color: const Color(0xFF93C5FD), fontSize: isMobile ? 13.5 : 15.0, fontWeight: FontWeight.w600, height: 1.35),
+          h3: GoogleFonts.inter(color: const Color(0xFFC4B5FD), fontSize: baseFontSize, fontWeight: FontWeight.w600, height: 1.35),
+          listBullet: GoogleFonts.inter(color: const Color(0xFF06B6D4), fontSize: baseFontSize, fontWeight: FontWeight.bold),
           code: GoogleFonts.jetBrainsMono(
-            backgroundColor: Colors.white.withValues(alpha: 0.1),
-            color: Colors.orangeAccent.shade100,
-            fontSize: 12.0,
+            backgroundColor: const Color(0xFF1E2235),
+            color: const Color(0xFF38BDF8),
+            fontSize: codeFontSize,
+            fontWeight: FontWeight.w500,
           ),
-          tableBody: GoogleFonts.inter(color: Colors.white70, fontSize: 12),
-          tableHead: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-          tableBorder: TableBorder.all(color: Colors.white24, width: 0.5),
-          tableCellsPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          blockSpacing: 10,
+          codeblockDecoration: BoxDecoration(
+            color: const Color(0xFF0D0F18),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          blockquoteDecoration: BoxDecoration(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(6),
+            border: const Border(left: BorderSide(color: Color(0xFF8B5CF6), width: 3.0)),
+          ),
+          blockquote: GoogleFonts.inter(color: const Color(0xFFCBD5E1), fontSize: baseFontSize, fontStyle: FontStyle.italic, height: 1.4),
+          blockquotePadding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 12, vertical: isMobile ? 4 : 8),
+          tableBody: GoogleFonts.inter(color: const Color(0xFFCBD5E1), fontSize: isMobile ? 11.0 : 12.0),
+          tableHead: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: isMobile ? 11.0 : 12.0),
+          tableBorder: TableBorder.all(color: Colors.white.withValues(alpha: 0.12), width: 0.8),
+          tableCellsPadding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 10, vertical: isMobile ? 4 : 7),
+          horizontalRuleDecoration: BoxDecoration(
+            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1)),
+          ),
+          blockSpacing: isMobile ? 6.0 : 10.0,
         ),
       ),
     );
@@ -1561,6 +1663,56 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
   }
 }
 
+class _CopyMessageButton extends StatefulWidget {
+  final String content;
+  const _CopyMessageButton({required this.content});
+
+  @override
+  State<_CopyMessageButton> createState() => _CopyMessageButtonState();
+}
+
+class _CopyMessageButtonState extends State<_CopyMessageButton> {
+  bool _copied = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Скопировать ответ',
+      child: InkWell(
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: widget.content));
+          setState(() => _copied = true);
+          Future.delayed(const Duration(milliseconds: 1500), () {
+            if (mounted) setState(() => _copied = false);
+          });
+        },
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                _copied ? LucideIcons.check : LucideIcons.copy,
+                size: 11,
+                color: _copied ? const Color(0xFF34D399) : Colors.white38,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _copied ? 'Скопировано' : 'Копировать',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: _copied ? const Color(0xFF34D399) : Colors.white38,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class CollapsibleCodeBlock extends StatefulWidget {
   final String code;
   final String language;
@@ -1585,7 +1737,51 @@ class CollapsibleCodeBlock extends StatefulWidget {
 
 class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
   bool _isExpanded = false;
+  bool _isCopied = false;
   late final CodeLineEditingController _controller;
+
+  static Color _getLanguageColor(String lang) {
+    switch (lang.toLowerCase()) {
+      case 'dart':
+      case 'flutter':
+        return const Color(0xFF00B4AB);
+      case 'js':
+      case 'javascript':
+        return const Color(0xFFF7DF1E);
+      case 'ts':
+      case 'typescript':
+        return const Color(0xFF3178C6);
+      case 'py':
+      case 'python':
+        return const Color(0xFF3776AB);
+      case 'bash':
+      case 'sh':
+      case 'shell':
+      case 'zsh':
+        return const Color(0xFF4EAA25);
+      case 'json':
+        return const Color(0xFFCBCB41);
+      case 'yaml':
+      case 'yml':
+        return const Color(0xFFCB171E);
+      case 'cpp':
+      case 'c':
+        return const Color(0xFF00599C);
+      case 'html':
+      case 'xml':
+        return const Color(0xFFE34F26);
+      case 'css':
+        return const Color(0xFF1572B6);
+      default:
+        return const Color(0xFF8B5CF6);
+    }
+  }
+
+  static IconData _getLanguageIcon(String lang) {
+    const terminalLangs = {'bash', 'sh', 'shell', 'zsh', 'cmd', 'terminal', 'powershell'};
+    if (terminalLangs.contains(lang.toLowerCase())) return LucideIcons.terminal;
+    return LucideIcons.code;
+  }
 
   static final CodeHighlightTheme _highlightTheme = CodeHighlightTheme(
     languages: {
@@ -1639,20 +1835,22 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
   @override
   Widget build(BuildContext context) {
     final lines = widget.code.trim().split('\n');
-    final isLongCode = lines.length > 10;
+    final isLongCode = lines.length > 12;
     final isTerminalCommand = _isTerminalCommand(widget.language, widget.code);
+    final langColor = _getLanguageColor(widget.language);
+    final langIcon = _getLanguageIcon(widget.language);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6.0),
       width: double.infinity,
       decoration: BoxDecoration(
-        color: const Color(0xFF0F111A),
+        color: const Color(0xFF0A0C14),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 6,
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
             offset: const Offset(0, 3),
           ),
         ],
@@ -1660,130 +1858,204 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Mac-style window header
           Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
+              color: Colors.white.withValues(alpha: 0.025),
               borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+              border: Border(
+                bottom: BorderSide(
+                  color: Colors.white.withValues(alpha: 0.06),
+                  width: 0.8,
+                ),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                // Mac traffic lights
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 8.5, height: 8.5, decoration: const BoxDecoration(color: Color(0xFFFF5F56), shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Container(width: 8.5, height: 8.5, decoration: const BoxDecoration(color: Color(0xFFFFBD2E), shape: BoxShape.circle)),
+                    const SizedBox(width: 5),
+                    Container(width: 8.5, height: 8.5, decoration: const BoxDecoration(color: Color(0xFF27C93F), shape: BoxShape.circle)),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                // Language badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: langColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: langColor.withValues(alpha: 0.3), width: 0.8),
+                  ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(LucideIcons.code, size: 12, color: Colors.cyanAccent),
-                      const SizedBox(width: 6),
+                      Icon(langIcon, size: 10, color: langColor),
+                      const SizedBox(width: 4),
                       Text(
                         widget.language.isEmpty ? 'CODE' : widget.language.toUpperCase(),
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          color: Colors.cyanAccent,
+                          fontSize: 9.5,
+                          color: langColor,
                           fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (isTerminalCommand) ...[
-                        Tooltip(
-                          message: 'Запустить команду в терминале',
-                          child: InkWell(
-                            onTap: () {
-                              final command = widget.code.trim();
-                              widget.ref.read(terminalTabsProvider.notifier).sendCommand(command);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('▶ Запуск в терминале: $command'),
-                                  backgroundColor: const Color(0xFF1E2230),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(LucideIcons.play, size: 11, color: Colors.greenAccent),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Run in Terminal',
-                                    style: GoogleFonts.inter(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ] else if (widget.hasActiveFile) ...[
-                        Tooltip(
-                          message: 'Replace code in ${widget.currentFileName}',
-                          child: InkWell(
-                            onTap: () {
-                              widget.ref.read(editorProvider.notifier).updateFileContentFromAI(
-                                widget.activeFilePath,
-                                widget.code.trim(),
-                              );
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('File ${widget.currentFileName} updated!'),
-                                  backgroundColor: const Color(0xFF1E2230),
-                                ),
-                              );
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(LucideIcons.pencil, size: 11, color: Colors.cyanAccent),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Apply to ${widget.currentFileName}',
-                                    style: GoogleFonts.inter(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
-                      InkWell(
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: widget.code));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(AppLocalizations.of(context)!.codeCopied),
-                              duration: const Duration(seconds: 1),
-                              backgroundColor: const Color(0xFF1E2230),
-                            ),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(LucideIcons.copy, size: 11, color: Colors.white38),
-                              const SizedBox(width: 4),
-                              Text(
-                                AppLocalizations.of(context)!.copy,
-                                style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                Container(
-                  height: 0.5,
-                  color: Colors.white.withValues(alpha: 0.06),
+                if (widget.currentFileName.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.file_code, size: 10, color: Colors.white38),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              widget.currentFileName,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                color: Colors.white60,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                const Spacer(),
+                if (isTerminalCommand) ...[
+                  Tooltip(
+                    message: 'Запустить команду в терминале',
+                    child: InkWell(
+                      onTap: () {
+                        final command = widget.code.trim();
+                        widget.ref.read(terminalTabsProvider.notifier).sendCommand(command);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('▶ Запуск в терминале: $command'),
+                            backgroundColor: const Color(0xFF1E2230),
+                            duration: const Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35), width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.play, size: 10, color: Color(0xFF34D399)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Run',
+                              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF34D399), fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ] else if (widget.hasActiveFile) ...[
+                  Tooltip(
+                    message: 'Replace code in ${widget.currentFileName}',
+                    child: InkWell(
+                      onTap: () {
+                        widget.ref.read(editorProvider.notifier).updateFileContentFromAI(
+                          widget.activeFilePath,
+                          widget.code.trim(),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('File ${widget.currentFileName} updated!'),
+                            backgroundColor: const Color(0xFF1E2230),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.35), width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.zap, size: 10, color: Color(0xFF38BDF8)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Apply',
+                              style: GoogleFonts.inter(fontSize: 10, color: const Color(0xFF38BDF8), fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: widget.code));
+                    setState(() => _isCopied = true);
+                    Future.delayed(const Duration(milliseconds: 1500), () {
+                      if (mounted) setState(() => _isCopied = false);
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(5),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: _isCopied ? const Color(0xFF10B981).withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: _isCopied ? const Color(0xFF10B981).withValues(alpha: 0.35) : Colors.white10,
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _isCopied ? LucideIcons.check : LucideIcons.copy,
+                          size: 10,
+                          color: _isCopied ? const Color(0xFF34D399) : Colors.white54,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _isCopied ? 'Copied!' : 'Copy',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: _isCopied ? const Color(0xFF34D399) : Colors.white70,
+                            fontWeight: _isCopied ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1791,7 +2063,7 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: SizedBox(
-              height: (widget.code.trim().split('\n').length * 19.0 + 16.0).clamp(42.0, (_isExpanded || !isLongCode) ? 450.0 : 160.0),
+              height: (widget.code.trim().split('\n').length * 19.0 + 16.0).clamp(42.0, (_isExpanded || !isLongCode) ? 450.0 : 170.0),
               child: CodeEditor(
                 controller: _controller,
                 readOnly: true,
@@ -1799,7 +2071,7 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
                 style: CodeEditorStyle(
                   fontSize: 11.5,
                   fontFamily: 'jetBrainsMono',
-                  backgroundColor: const Color(0xFF0F111A),
+                  backgroundColor: const Color(0xFF0A0C14),
                   codeTheme: _highlightTheme,
                 ),
               ),
@@ -1817,24 +2089,24 @@ class _CollapsibleCodeBlockState extends State<CollapsibleCodeBlock> {
                 });
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 7),
                 alignment: Alignment.center,
-                color: Colors.white.withValues(alpha: 0.01),
+                color: Colors.white.withValues(alpha: 0.015),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
                       _isExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down,
                       size: 11,
-                      color: Colors.cyanAccent,
+                      color: const Color(0xFF38BDF8),
                     ),
                     const SizedBox(width: 6),
                     Text(
                       _isExpanded ? 'Свернуть код' : 'Развернуть код (${lines.length} строк)',
                       style: GoogleFonts.inter(
-                        fontSize: 10,
-                        color: Colors.cyanAccent,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 10.5,
+                        color: const Color(0xFF38BDF8),
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],

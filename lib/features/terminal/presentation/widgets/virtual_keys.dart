@@ -36,68 +36,55 @@ class VirtualKeysView extends ConsumerStatefulWidget {
 class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
   @override
   Widget build(BuildContext context) {
-    final row1 = [
+    final keys = [
+      VirtualKey(label: 'ESC', value: '\x1b'),
+      VirtualKey(label: 'TAB', value: '\t'),
       VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true),
       VirtualKey(label: 'ALT', value: 'ALT', isToggle: true),
-      VirtualKey(label: 'TAB', value: '\t'),
+      VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true),
       VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up),
       VirtualKey(label: '↓', value: '\x1b[B', icon: LucideIcons.arrow_down),
-    ];
-
-    final row2 = [
-      VirtualKey(label: 'ESC', value: '\x1b'),
-      VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true),
       VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left),
       VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right),
+      VirtualKey(label: 'COPY', value: 'copy', icon: LucideIcons.copy),
+      VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste),
+      VirtualKey(label: 'SEL', value: 'select_all'),
+      VirtualKey(label: 'C-C', value: 'ctrl+c'),
+      VirtualKey(label: 'C-D', value: 'ctrl+d'),
+      VirtualKey(label: 'C-Z', value: 'ctrl+z'),
+      VirtualKey(label: 'CLR', value: 'ctrl+l'),
       VirtualKey(label: '/', value: '/'),
-    ];
-
-    final row3 = [
-      VirtualKey(label: '~', value: '~'),
       VirtualKey(label: '-', value: '-'),
       VirtualKey(label: '_', value: '_'),
+      VirtualKey(label: '~', value: '~'),
       VirtualKey(label: '|', value: '|'),
       VirtualKey(label: '>', value: '>'),
+      VirtualKey(label: '<', value: '<'),
+      VirtualKey(label: '\$', value: '\$'),
     ];
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.07))),
+        color: const Color(0xFF0D0F14).withValues(alpha: 0.95),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5)),
       ),
-      child: SafeArea(
-        top: false,
-        bottom: true,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildKeyRow(row1),
-            const SizedBox(height: 4),
-            _buildKeyRow(row2),
-            const SizedBox(height: 4),
-            _buildKeyRow(row3),
-          ],
-        ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: keys.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 3),
+        itemBuilder: (context, index) {
+          final key = keys[index];
+          final isActive = widget.activeKeys.contains(key.label);
+          return _VirtualKeyButton(
+            keyData: key,
+            isActive: isActive,
+            onTap: () => widget.onKeyTap(key.value ?? key.label),
+          );
+        },
       ),
-    );
-  }
-
-  Widget _buildKeyRow(List<VirtualKey> keys) {
-    return Row(
-      children: keys.map((key) {
-        final isActive = widget.activeKeys.contains(key.label);
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: _VirtualKeyButton(
-              keyData: key,
-              isActive: isActive,
-              onTap: () => widget.onKeyTap(key.value ?? key.label),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }
@@ -115,47 +102,58 @@ class _VirtualKeyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color buttonColor = Colors.white.withValues(alpha: 0.05);
-    Color borderColor = Colors.white.withValues(alpha: 0.03);
+    Color buttonColor = Colors.white.withValues(alpha: 0.06);
+    Color borderColor = Colors.white.withValues(alpha: 0.08);
     Color themeColor = Colors.white70;
 
     if (isActive) {
-      buttonColor = Colors.cyanAccent.withValues(alpha: 0.2);
-      borderColor = Colors.cyanAccent.withValues(alpha: 0.3);
+      buttonColor = Colors.cyanAccent.withValues(alpha: 0.25);
+      borderColor = Colors.cyanAccent.withValues(alpha: 0.5);
       themeColor = Colors.cyanAccent;
-    } else if (keyData.value == 'ctrl+c') {
-      buttonColor = Colors.redAccent.withValues(alpha: 0.1);
-      borderColor = Colors.redAccent.withValues(alpha: 0.2);
-      themeColor = Colors.redAccent;
-    } else if (keyData.value == 'paste') {
-      buttonColor = Colors.purpleAccent.withValues(alpha: 0.1);
-      borderColor = Colors.purpleAccent.withValues(alpha: 0.2);
-      themeColor = Colors.purpleAccent;
+    } else if (keyData.value == 'ctrl+c' || keyData.value == 'ctrl+z') {
+      buttonColor = Colors.redAccent.withValues(alpha: 0.12);
+      borderColor = Colors.redAccent.withValues(alpha: 0.25);
+      themeColor = const Color(0xFFFF6B6B);
+    } else if (keyData.value == 'copy' || keyData.value == 'paste' || keyData.value == 'select_all') {
+      buttonColor = const Color(0xFF8B5CF6).withValues(alpha: 0.15);
+      borderColor = const Color(0xFF8B5CF6).withValues(alpha: 0.3);
+      themeColor = const Color(0xFFC084FC);
     }
 
     return Material(
       color: buttonColor,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(4),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(4),
         child: Container(
-          height: 36,
+          height: 24,
+          constraints: const BoxConstraints(minWidth: 26),
+          padding: const EdgeInsets.symmetric(horizontal: 5),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: borderColor, width: 0.5),
           ),
-          child: keyData.icon != null
-              ? Icon(keyData.icon, size: 14, color: themeColor)
-              : Text(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (keyData.icon != null) ...[
+                Icon(keyData.icon, size: 11, color: themeColor),
+                if (keyData.label.isNotEmpty && keyData.label != '↑' && keyData.label != '↓' && keyData.label != '←' && keyData.label != '→')
+                  const SizedBox(width: 3),
+              ],
+              if (keyData.icon == null || (keyData.label.isNotEmpty && keyData.label != '↑' && keyData.label != '↓' && keyData.label != '←' && keyData.label != '→'))
+                Text(
                   keyData.label,
                   style: GoogleFonts.jetBrainsMono(
                     color: themeColor,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
+            ],
+          ),
         ),
       ),
     );

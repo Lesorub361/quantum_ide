@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/stable_editor_widget.dart';
 import 'package:quantum_ide/features/editor/presentation/pages/editor_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -8,7 +7,6 @@ import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
-import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
@@ -72,21 +70,23 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     );
   }
 
-  Widget _buildActivityIcon(WidgetRef ref, int index, IconData icon, String tooltip, bool isActive, {int badgeCount = 0}) {
+  Widget _buildActivityIcon(WidgetRef ref, int index, IconData icon, String tooltip, bool isActive, {int badgeCount = 0, bool isMobile = false}) {
     const activeColor = Color(0xFF4CD7F6);
     final iconWidget = Icon(
       icon,
-      size: 16,
+      size: isMobile ? 14 : 16,
       color: isActive ? activeColor : Colors.white38,
     );
+
+    final itemSize = isMobile ? 32.0 : 36.0;
 
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: () => ref.read(drawerTabProvider.notifier).state = index,
         child: Container(
-          width: 36,
-          height: 36,
+          width: itemSize,
+          height: itemSize,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: isActive ? activeColor.withValues(alpha: 0.1) : Colors.transparent,
@@ -139,7 +139,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     ref.watch(fileSearchWatcher);
     final workspacePath = ref.watch(workspaceProvider.select((s) => s.currentPath ?? ''));
     final selectedTab = ref.watch(drawerTabProvider);
-    final panelState = ref.watch(panelProvider);
 
     // Оптимизировано: считываем только количество проблем через select() — не ребилдимся при каждом нажатии клавиши!
     final totalProblems = ref.watch(editorProvider.select((s) {
@@ -158,9 +157,11 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
       (s.status?.conflictedFiles.length ?? 0)
     ));
 
+    final isMobile = MediaQuery.of(context).size.width < 700;
+
     // Activity bar on the left
     final activityBar = Container(
-      width: 36,
+      width: isMobile ? 32 : 36,
       decoration: BoxDecoration(
         color: const Color(0xFF090B0F),
         border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)),
@@ -172,20 +173,20 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                  _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0),
-                  _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1),
-                  _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2),
-                  _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3),
-                  _buildActivityIcon(ref, 4, LucideIcons.circle_alert, AppLocalizations.of(context)!.problems, selectedTab == 4, badgeCount: totalProblems),
-                  _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount),
-                  _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6),
-                  _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7),
-                  _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8),
-                  _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9),
-                  _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10),
-                  _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11),
-                  _buildActivityIcon(ref, 12, LucideIcons.cpu, 'AI Models', selectedTab == 12),
-                  _buildActivityIcon(ref, 13, LucideIcons.terminal, 'App Logs', selectedTab == 13),
+                  _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0, isMobile: isMobile),
+                  _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1, isMobile: isMobile),
+                  _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2, isMobile: isMobile),
+                  _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3, isMobile: isMobile),
+                  _buildActivityIcon(ref, 4, LucideIcons.circle_alert, AppLocalizations.of(context)!.problems, selectedTab == 4, badgeCount: totalProblems, isMobile: isMobile),
+                  _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount, isMobile: isMobile),
+                  _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6, isMobile: isMobile),
+                  _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7, isMobile: isMobile),
+                  _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8, isMobile: isMobile),
+                  _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9, isMobile: isMobile),
+                  _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10, isMobile: isMobile),
+                  _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11, isMobile: isMobile),
+                  _buildActivityIcon(ref, 12, LucideIcons.cpu, 'AI Models', selectedTab == 12, isMobile: isMobile),
+                  _buildActivityIcon(ref, 13, LucideIcons.terminal, 'App Logs', selectedTab == 13, isMobile: isMobile),
                 ],
               ),
             ),
@@ -260,7 +261,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
             Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 6 : 12),
                   child: Column(
                     children: [
                       Row(
@@ -269,11 +270,11 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                             shaderCallback: (bounds) => const LinearGradient(
                               colors: [Colors.blue, Colors.cyan],
                             ).createShader(bounds),
-                            child: const Icon(LucideIcons.folder, color: Colors.white, size: 18),
+                            child: Icon(LucideIcons.folder, color: Colors.white, size: isMobile ? 15 : 18),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(AppLocalizations.of(context)!.explorer, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                            child: Text(AppLocalizations.of(context)!.explorer, style: TextStyle(fontSize: isMobile ? 13 : 15, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                           ),
                         ],
                       ),
@@ -290,9 +291,14 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
                               DrawerActionIcon(
-                                icon: LucideIcons.wrench,
-                                tooltip: AppLocalizations.of(context)!.environment,
-                                onPressed: () => showEnvironmentBottomSheet(context, ref),
+                                icon: LucideIcons.file_plus,
+                                tooltip: AppLocalizations.of(context)!.newFile,
+                                onPressed: () => showCreateDialog(context, ref, workspacePath, false),
+                              ),
+                              DrawerActionIcon(
+                                icon: LucideIcons.folder_plus,
+                                tooltip: AppLocalizations.of(context)!.newFolder,
+                                onPressed: () => showCreateDialog(context, ref, workspacePath, true),
                               ),
                               DrawerActionIcon(
                                 icon: LucideIcons.folder_closed,
@@ -305,6 +311,11 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                                 icon: LucideIcons.arrow_up_down,
                                 tooltip: AppLocalizations.of(context)!.sortByDate.split(' ').first,
                                 onPressed: () => showSortMenu(context, ref),
+                              ),
+                              DrawerActionIcon(
+                                icon: LucideIcons.wrench,
+                                tooltip: AppLocalizations.of(context)!.environment,
+                                onPressed: () => showEnvironmentBottomSheet(context, ref),
                               ),
                             ],
                           ),
@@ -411,7 +422,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                                 if (ref.watch(bookmarksProvider).isNotEmpty)
                                   const Divider(height: 1, color: Colors.white10, indent: 14, endIndent: 14),
                                 FileDrawerTree(workspacePath: workspacePath),
-                                const SizedBox(height: 80),
+                                const SizedBox(height: 16),
                               ],
                             ),
                           ),
@@ -421,72 +432,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                   )
                 else
                   Expanded(child: Center(child: Text(AppLocalizations.of(context)!.projectNotOpened, style: const TextStyle(color: Colors.grey)))),
-                const DrawerStatsPanel(),
-                const SizedBox(height: 80),
+                const SizedBox(height: 12),
               ],
             ),
-            if (workspacePath.isNotEmpty)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: GlassContainer(
-                  blur: 20,
-                  opacity: 0.9,
-                  color: const Color(0xFF1E2230),
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              FloatingCapsuleButton(
-                            icon: LucideIcons.file_plus,
-                            label: AppLocalizations.of(context)!.newFile.toUpperCase(),
-                            onPressed: () => showCreateDialog(context, ref, workspacePath, false),
-                          ),
-                          const SizedBox(width: 16),
-                              FloatingCapsuleButton(
-                                icon: LucideIcons.folder_plus,
-                                label: AppLocalizations.of(context)!.newFolder.toUpperCase(),
-                                onPressed: () => showCreateDialog(context, ref, workspacePath, true),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        height: 24,
-                        width: 1,
-                        color: Colors.white10,
-                      ),
-                      IconButton(
-                        icon: const Icon(LucideIcons.terminal, size: 18),
-                        color: const Color(0xFF4CD7F6),
-                        style: IconButton.styleFrom(
-                          backgroundColor: const Color(0xFF03B5D3).withValues(alpha: 0.2),
-                          padding: const EdgeInsets.all(8),
-                        ),
-                        onPressed: () {
-                          final panelNotifier = ref.read(panelProvider.notifier);
-                          if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
-                            panelNotifier.closePanel();
-                          } else {
-                            panelNotifier.selectTab(PanelTab.terminal);
-                            panelNotifier.openPanel();
-                          }
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
           ],
         );
     }

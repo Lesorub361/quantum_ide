@@ -36,7 +36,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
     DedicatedTerminalType type,
     String command, {
     bool interrupt = false,
-    bool clear = true,
+    bool clear = false,
   }) {
     final session = state.sessions[type];
 
@@ -156,7 +156,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         pointerInputs: const xt.PointerInputs.all(),
       );
       final xtermTerm = xt.Terminal(
-        maxLines: 2000,
+        maxLines: 10000,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : xt.TerminalTargetPlatform.linux,

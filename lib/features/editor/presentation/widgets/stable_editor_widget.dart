@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -114,6 +116,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   late List<DiffMarker> _diffMarkers;
   late final CodeFindController _findController;
   List<AIAction> _pendingActions = [];
+
+  final Map<int, Offset> _pinchPointers = {};
+  double _pinchInitialDistance = 0.0;
+  double _pinchInitialFontSize = 14.0;
 
   static final Map<String, String> _fontCache = {};
   static const int _autoCloseMaxLines = 500;
@@ -350,35 +356,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     _diffMarkers = widget.file.diffMarkers;
     _findController = CodeFindController(widget.file.controller);
     _setupControllerListener();
-
-    ref.listen<AiAutocompleteState>(aiAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.suggestion != null && current.suggestion!.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
-
-    ref.listen<LspAutocompleteState>(lspAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.items.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
-
-    ref.listen<AIState>(aiProvider, (previous, current) {
-      final pending = current.proposedActions
-          .where((a) => a.path == widget.file.path && (a.type == 'edit' || a.type == 'create'))
-          .toList();
-      if (pending != _pendingActions) {
-        if (mounted) {
-          setState(() {
-            _pendingActions = pending;
-          });
-        }
-      }
-    });
   }
 
   @override
@@ -708,6 +685,35 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AiAutocompleteState>(aiAutocompleteServiceProvider, (previous, current) {
+      if (!current.isLoading && current.suggestion != null && current.suggestion!.isNotEmpty) {
+        if (current.filePath == widget.file.path) {
+          widget.file.controller.value = widget.file.controller.value;
+        }
+      }
+    });
+
+    ref.listen<LspAutocompleteState>(lspAutocompleteServiceProvider, (previous, current) {
+      if (!current.isLoading && current.items.isNotEmpty) {
+        if (current.filePath == widget.file.path) {
+          widget.file.controller.value = widget.file.controller.value;
+        }
+      }
+    });
+
+    ref.listen<AIState>(aiProvider, (previous, current) {
+      final pending = current.proposedActions
+          .where((a) => a.path == widget.file.path && (a.type == 'edit' || a.type == 'create'))
+          .toList();
+      if (pending != _pendingActions) {
+        if (mounted) {
+          setState(() {
+            _pendingActions = pending;
+          });
+        }
+      }
+    });
+
     final settings = widget.settings;
     final file = widget.file;
 
@@ -1316,11 +1322,47 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       );
     }
 
-    return GestureDetector(
-      onSecondaryTapDown: (details) {
-        _showDesktopContextMenu(context, details.globalPosition);
+    return Listener(
+      onPointerDown: (e) {
+        _pinchPointers[e.pointer] = e.position;
+        if (_pinchPointers.length == 2) {
+          final pts = _pinchPointers.values.toList();
+          _pinchInitialDistance = (pts[0] - pts[1]).distance;
+          _pinchInitialFontSize = widget.settings.fontSize;
+        }
       },
-      child: editorWidget,
+      onPointerMove: (e) {
+        _pinchPointers[e.pointer] = e.position;
+        if (_pinchPointers.length == 2 && _pinchInitialDistance > 10) {
+          final pts = _pinchPointers.values.toList();
+          final currentDist = (pts[0] - pts[1]).distance;
+          final scale = currentDist / _pinchInitialDistance;
+          final target = (_pinchInitialFontSize * scale).clamp(8.0, 32.0);
+          final rounded = (target * 2).round() / 2.0;
+          if ((rounded - widget.settings.fontSize).abs() >= 0.5) {
+            ref.read(settingsProvider.notifier).setFontSize(rounded);
+          }
+        }
+      },
+      onPointerUp: (e) {
+        _pinchPointers.remove(e.pointer);
+      },
+      onPointerCancel: (e) {
+        _pinchPointers.remove(e.pointer);
+      },
+      onPointerSignal: (e) {
+        if (e is PointerScrollEvent && HardwareKeyboard.instance.isControlPressed) {
+          final delta = e.scrollDelta.dy < 0 ? 1.0 : -1.0;
+          final newSize = (widget.settings.fontSize + delta).clamp(8.0, 32.0);
+          ref.read(settingsProvider.notifier).setFontSize(newSize);
+        }
+      },
+      child: GestureDetector(
+        onSecondaryTapDown: (details) {
+          _showDesktopContextMenu(context, details.globalPosition);
+        },
+        child: editorWidget,
+      ),
     );
   }
 }
@@ -1338,11 +1380,12 @@ class ActionIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      icon: Icon(icon, size: 15, color: color ?? Colors.white70),
+      icon: Icon(icon, size: 14, color: color ?? Colors.white70),
       onPressed: onTap,
       tooltip: tooltip,
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      padding: const EdgeInsets.all(5),
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      splashRadius: 18,
     );
   }
 }

@@ -23,7 +23,7 @@ class SidebarRunPanel extends ConsumerStatefulWidget {
 }
 
 class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
-  bool _showBeautifulLogs = true;
+  bool _showBeautifulLogs = false;
 
   ProjectType _detectProjectType(String? path, ProjectType registeredType) {
     if (registeredType != ProjectType.other) return registeredType;
@@ -52,7 +52,10 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
   }
 
   void _runDedicatedCommand(String? workspacePath, String cmd) {
-    final finalCmd = workspacePath != null ? 'cd "$workspacePath" && clear && $cmd' : 'clear && $cmd';
+    final cdCmd = workspacePath != null ? 'cd "$workspacePath"' : '';
+    final safeCmd = cmd.replaceAll('"', '\\"');
+    final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
+    final finalCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.run, finalCmd, interrupt: true, clear: false);
   }
 
@@ -206,9 +209,9 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         title = l10n.androidProject;
         actions.addAll([
           _buildActionButton(l10n.buildAPK, LucideIcons.box, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x gradlew && ./gradlew assembleDebug')),
+              () => _runDedicatedCommand(workspaceState.currentPath, 'bash ./gradlew assembleDebug')),
           _buildActionButton(l10n.install, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x gradlew && ./gradlew installDebug')),
+              () => _runDedicatedCommand(workspaceState.currentPath, 'bash ./gradlew installDebug')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
         ]);
@@ -276,6 +279,14 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                         textStyle: xt.TerminalStyle(
                           fontSize: terminalFontSize * 0.9,
                           fontFamily: 'jetBrainsMono',
+                          fontFamilyFallback: const [
+                            'cascadia',
+                            'dejaVuSansMono',
+                            'firaCode',
+                            'Noto Sans Mono',
+                            'DejaVu Sans Mono',
+                            'monospace',
+                          ],
                         ),
                         keyboardType: TextInputType.visiblePassword,
                         deleteDetection: true,
@@ -432,10 +443,13 @@ class SidebarBuildPanel extends ConsumerStatefulWidget {
 
 class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   int _buildSubTab = 0;
-  bool _showBeautifulLogs = true;
+  bool _showBeautifulLogs = false;
 
   void _runDedicatedCommand(String? workspacePath, String cmd) {
-    final finalCmd = workspacePath != null ? 'cd "$workspacePath" && clear && $cmd' : 'clear && $cmd';
+    final cdCmd = workspacePath != null ? 'cd "$workspacePath"' : '';
+    final safeCmd = cmd.replaceAll('"', '\\"');
+    final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
+    final finalCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.build, finalCmd, interrupt: true, clear: false);
   }
 
@@ -581,16 +595,16 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x gradlew && ./gradlew assembleDebug && echo "✓ Debug APK: app/build/outputs/apk/debug/app-debug.apk"')),
+                  'bash ./gradlew assembleDebug && echo "✓ Debug APK: app/build/outputs/apk/debug/app-debug.apk"')),
           _buildActionButton('Release APK', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x gradlew && ./gradlew assembleRelease && echo "✓ Release APK: app/build/outputs/apk/release/"')),
+                  'bash ./gradlew assembleRelease && echo "✓ Release APK: app/build/outputs/apk/release/"')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x gradlew && ./gradlew clean')),
+                  'bash ./gradlew clean')),
           _buildActionButton('Sync', LucideIcons.refresh_cw, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x gradlew && ./gradlew dependencies')),
+                  'bash ./gradlew dependencies')),
         ];
         break;
 
@@ -715,6 +729,14 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                     textStyle: xt.TerminalStyle(
                                       fontSize: terminalFontSize * 0.9,
                                       fontFamily: 'jetBrainsMono',
+                                      fontFamilyFallback: const [
+                                        'cascadia',
+                                        'dejaVuSansMono',
+                                        'firaCode',
+                                        'Noto Sans Mono',
+                                        'DejaVu Sans Mono',
+                                        'monospace',
+                                      ],
                                     ),
                                     keyboardType: TextInputType.visiblePassword,
                                     deleteDetection: true,

@@ -1263,5 +1263,42 @@
       "count": { "type": "int" },
       "files": { "type": "int" }
     }
-  }
+  },
+  "signInWithGitHub": "Se connecter avec GitHub",
+  "gitHubToken": "Jeton d'accès personnel GitHub",
+  "gitHubTokenHint": "Collez le GitHub Personal Access Token (avec autorisations repo)",
+  "connectGitHubDesc": "Connectez-vous pour parcourir vos dépôts, cloner des projets et lancer la compilation cloud.",
+  "cloneAndOpen": "Cloner et ouvrir",
+  "cloningRepository": "Clonage du dépôt...",
+  "repoClonedSuccess": "Dépôt cloné avec succès dans {path}",
+  "@repoClonedSuccess": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "cloneFailed": "Échec du clonage du dépôt. Vérifiez la connexion ou les autorisations du jeton.",
+  "cloudBuildApk": "Publier & Compiler l'APK dans le Cloud",
+  "cloudBuildApkDesc": "Créez une étiquette de version, poussez les modifications et déclenchez GitHub Actions pour compiler l'APK.",
+  "releaseTagName": "Étiquette de version",
+  "releaseTagNameHint": "ex. v1.0.0",
+  "releaseCommitMsg": "Message de commit",
+  "releaseCommitMsgHint": "ex. chore: préparer la version v1.0.0",
+  "releaseNotes": "Notes de version / Quoi de neuf",
+  "releaseNotesHint": "Décrivez ce qui a été ajouté, corrigé ou amélioré...",
+  "publishReleaseBtn": "Publier la version & compiler l'APK",
+  "releasingAndPushing": "Création du tag et envoi vers GitHub Actions...",
+  "releaseTriggeredSuccess": "Version {tag} créée et envoyée ! Compilation APK lancée sur GitHub Actions.",
+  "@releaseTriggeredSuccess": {
+    "placeholders": {
+      "tag": { "type": "String" }
+    }
+  },
+  "releaseTriggerFailed": "Échec de l'envoi de la version : {error}",
+  "@releaseTriggerFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "setupCiCdWorkflow": "Ajouter le workflow CI/CD de compilation Cloud",
+  "setupCiCdWorkflowSuccess": "Workflow APK GitHub Actions ajouté (.github/workflows/build-apk.yml) !"
 }

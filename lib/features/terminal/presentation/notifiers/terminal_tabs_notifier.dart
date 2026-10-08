@@ -173,7 +173,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         pointerInputs: const xt.PointerInputs.all(),
       );
       final xtermTerm = xt.Terminal(
-        maxLines: 5000,
+        maxLines: 10000,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : xt.TerminalTargetPlatform.linux,
@@ -228,6 +228,12 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
 
       state = [...state, session];
       _currentIndex = state.length - 1;
+
+      // Ensure foreground service is running to prevent OS termination
+      runtime.startForegroundSession(
+        title: 'Quantum IDE: Терминал активен',
+        content: 'Сессия $sessionTitle выполняется в фоне',
+      );
 
       // Initialize session with Ubuntu-style prompt and greeting
       _initializeUbuntuSession(session);
@@ -412,6 +418,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
     }
     _currentIndex = 0;
     state = [];
+    _ref.read(runtimeServiceProvider).stopForegroundSession();
     // Do NOT auto-create a session here. When the next workspace opens,
     // the workspaceProvider listener will create one automatically.
   }

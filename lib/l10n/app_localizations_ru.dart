@@ -2893,4 +2893,84 @@ class AppLocalizationsRu extends AppLocalizations {
   String sessionRestoredDetail(int count, int files) {
     return 'Загружено $count сообщений из `.quantum/chat_history.json`.\nПамять агента: $files файлов в контексте.\nПродолжайте с того места, где остановились.';
   }
+
+  @override
+  String get signInWithGitHub => 'Войти через GitHub';
+
+  @override
+  String get gitHubToken => 'Личный токен GitHub';
+
+  @override
+  String get gitHubTokenHint =>
+      'Вставьте Personal Access Token GitHub (с правами repo)';
+
+  @override
+  String get connectGitHubDesc =>
+      'Войдите, чтобы просматривать репозитории, клонировать проекты и запускать облачную сборку.';
+
+  @override
+  String get cloneAndOpen => 'Клонировать и открыть';
+
+  @override
+  String get cloningRepository => 'Клонирование репозитория...';
+
+  @override
+  String repoClonedSuccess(String path) {
+    return 'Репозиторий успешно клонирован в $path';
+  }
+
+  @override
+  String get cloneFailed =>
+      'Не удалось клонировать репозиторий. Проверьте соединение и токен.';
+
+  @override
+  String get cloudBuildApk => 'Релиз и облачная сборка APK';
+
+  @override
+  String get cloudBuildApkDesc =>
+      'Создает тег релиза, отправляет изменения в Git и запускает сборку APK через GitHub Actions.';
+
+  @override
+  String get releaseTagName => 'Тег релиза';
+
+  @override
+  String get releaseTagNameHint => 'например, v1.0.0';
+
+  @override
+  String get releaseCommitMsg => 'Сообщение коммита';
+
+  @override
+  String get releaseCommitMsgHint =>
+      'например, chore: подготовка релиза v1.0.0';
+
+  @override
+  String get releaseNotes => 'Что нового / Описание релиза';
+
+  @override
+  String get releaseNotesHint =>
+      'Опишите, что было добавлено, исправлено или улучшено...';
+
+  @override
+  String get publishReleaseBtn => 'Опубликовать релиз и собрать APK';
+
+  @override
+  String get releasingAndPushing =>
+      'Создание тега и отправка в GitHub Actions...';
+
+  @override
+  String releaseTriggeredSuccess(String tag) {
+    return 'Релиз $tag создан и отправлен! Облачная сборка APK запущена на GitHub Actions.';
+  }
+
+  @override
+  String releaseTriggerFailed(String error) {
+    return 'Ошибка отправки релиза: $error';
+  }
+
+  @override
+  String get setupCiCdWorkflow => 'Добавить CI/CD сценарий облачной сборки';
+
+  @override
+  String get setupCiCdWorkflowSuccess =>
+      'Сценарий сборки APK добавлен (.github/workflows/build-apk.yml)!';
 }

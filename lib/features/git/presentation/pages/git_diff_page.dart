@@ -32,6 +32,7 @@ class GitDiffPage extends ConsumerStatefulWidget {
   final bool initiallyStaged;
   final String? previewContent;
   final String? originalOverride;
+  final VoidCallback? onClose;
 
   const GitDiffPage({
     super.key,
@@ -39,6 +40,7 @@ class GitDiffPage extends ConsumerStatefulWidget {
     required this.initiallyStaged,
     this.previewContent,
     this.originalOverride,
+    this.onClose,
   });
 
   @override
@@ -76,15 +78,19 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
       
       // 1. Get original content
       String originalContent = '';
-      if (widget.originalOverride != null) {
+      if (widget.originalOverride != null && widget.originalOverride!.isNotEmpty) {
         originalContent = widget.originalOverride!;
       } else {
-        originalContent = await gitService.getFileContentFromGit(widget.relativePath);
+        try {
+          originalContent = await gitService.getFileContentFromGit(widget.relativePath);
+        } catch (_) {
+          originalContent = '';
+        }
       }
 
       // 2. Get modified content
       String modifiedContent = '';
-      if (widget.previewContent != null) {
+      if (widget.previewContent != null && widget.previewContent!.isNotEmpty) {
         modifiedContent = widget.previewContent!;
       } else {
         final localFilePath = p.join(workspacePath, widget.relativePath);
@@ -92,6 +98,17 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
         if (await file.exists()) {
           modifiedContent = await file.readAsString();
         }
+      }
+
+      // Fallback: If original and modified are identical (e.g. action already applied),
+      // compare against Git HEAD so the user can inspect what actually changed!
+      if (originalContent == modifiedContent && modifiedContent.isNotEmpty) {
+        try {
+          final gitHeadContent = await gitService.getFileContentFromGit(widget.relativePath);
+          if (gitHeadContent != modifiedContent) {
+            originalContent = gitHeadContent;
+          }
+        } catch (_) {}
       }
 
       // 3. Compute unified line-by-line diff
@@ -299,7 +316,13 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
           children: [
             IconButton(
               icon: const Icon(LucideIcons.arrow_left, color: Colors.white70),
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () {
+                if (widget.onClose != null) {
+                  widget.onClose!();
+                } else if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop();
+                }
+              },
             ),
             const SizedBox(width: 8),
             Expanded(

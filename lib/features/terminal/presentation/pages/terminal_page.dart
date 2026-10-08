@@ -13,11 +13,20 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 class TerminalPage extends ConsumerWidget {
   const TerminalPage({super.key});
 
+  void _navigateBack(BuildContext context, String? workspacePath) {
+    if (context.canPop()) {
+      context.pop();
+    } else if (workspacePath != null && workspacePath.isNotEmpty) {
+      context.go('/editor');
+    } else {
+      context.go('/');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     final workspacePath = ref.watch(workspaceProvider).currentPath;
-    final targetRoute = workspacePath == null ? '/' : '/editor';
 
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
     Color bg;
@@ -44,7 +53,7 @@ class TerminalPage extends ConsumerWidget {
         if (isKeyboardOpen) {
           FocusManager.instance.primaryFocus?.unfocus();
         } else {
-          context.go(targetRoute);
+          _navigateBack(context, workspacePath);
         }
       },
       child: Scaffold(
@@ -52,7 +61,7 @@ class TerminalPage extends ConsumerWidget {
         appBar: GlassAppBar(
           leading: IconButton(
             icon: const Icon(LucideIcons.arrow_left, size: 20, color: Colors.cyanAccent),
-            onPressed: () => context.go(targetRoute),
+            onPressed: () => _navigateBack(context, workspacePath),
           ),
           title: Text(
             AppLocalizations.of(context)!.terminal,

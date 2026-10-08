@@ -100,6 +100,11 @@ class AiContextCompressor {
     buffer.writeln('Имя проекта (Project Name): $projectName');
     buffer.writeln('Тип проекта (Project Type): $projectType');
     buffer.writeln('Путь к проекту (Project Root): $workspaceRoot');
+    buffer.writeln('Окружение (Environment): Linux PRoot container (ARM64), user: root');
+    buffer.writeln('Доступные команды в терминале: flutter, dart, git, python3, pip, node, npm, bash');
+    buffer.writeln('Android SDK: /root/android-sdk');
+    buffer.writeln('ВАЖНО: Выполняй команды БЕЗ sudo (ты уже root)!');
+    buffer.writeln('Ты имеешь ПОЛНЫЙ ДОСТУП: читай любые файлы (read_file), смотри любые папки (list_dir), правь код (replace_code_block), выполняй команды (command).');
 
     if (openFiles.isNotEmpty) {
       buffer.writeln('Открытые файлы (Open Tabs): ${openFiles.join(", ")}');

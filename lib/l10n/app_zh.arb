@@ -891,5 +891,42 @@
       "count": { "type": "int" },
       "files": { "type": "int" }
     }
-  }
+  },
+  "signInWithGitHub": "通过 GitHub 登录",
+  "gitHubToken": "GitHub 个人访问令牌",
+  "gitHubTokenHint": "粘贴 GitHub Personal Access Token（需要 repo 权限）",
+  "connectGitHubDesc": "登录以浏览代码库、克隆项目并触发自动化云端构建。",
+  "cloneAndOpen": "克隆并打开",
+  "cloningRepository": "正在克隆代码仓库...",
+  "repoClonedSuccess": "代码仓库已成功克隆到 {path}",
+  "@repoClonedSuccess": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "cloneFailed": "克隆代码仓库失败，请检查网络或令牌权限。",
+  "cloudBuildApk": "发布并云端构建 APK",
+  "cloudBuildApkDesc": "创建版本标签，推送更改并触发 GitHub Actions 构建 APK 并发布。",
+  "releaseTagName": "版本标签",
+  "releaseTagNameHint": "例如 v1.0.0",
+  "releaseCommitMsg": "提交说明",
+  "releaseCommitMsgHint": "例如 chore: prepare release v1.0.0",
+  "releaseNotes": "发布说明 / 更新内容",
+  "releaseNotesHint": "描述本次发布添加、修复或改进的内容...",
+  "publishReleaseBtn": "发布版本并构建 APK",
+  "releasingAndPushing": "正在创建标签并推送到 GitHub Actions...",
+  "releaseTriggeredSuccess": "版本 {tag} 已创建并推送！GitHub Actions 已开始云端构建 APK。",
+  "@releaseTriggeredSuccess": {
+    "placeholders": {
+      "tag": { "type": "String" }
+    }
+  },
+  "releaseTriggerFailed": "推送发布失败：{error}",
+  "@releaseTriggerFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "setupCiCdWorkflow": "添加云端构建 CI/CD 工作流",
+  "setupCiCdWorkflowSuccess": "已添加 GitHub Actions APK 构建工作流 (.github/workflows/build-apk.yml)！"
 }

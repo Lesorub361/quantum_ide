@@ -81,11 +81,29 @@ class GitService {
           modified.add(file);
         } else if (status[0] != ' ' && status[1] == ' ') {
           staged.add(file);
-        } else if (status[0] != ' ' && status[1] != ' ') {
-          staged.add(file);
-          modified.add(file);
         }
       }
+
+      final diffStats = <String, GitFileDiffStats>{};
+      try {
+        final numstat = await runtime.runCommand('cd "$guestPath" && git diff --numstat 2>/dev/null; git diff --cached --numstat 2>/dev/null');
+        for (final line in numstat.split('\n')) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty) continue;
+          final parts = trimmed.split(RegExp(r'\s+'));
+          if (parts.length >= 3) {
+            final add = int.tryParse(parts[0]) ?? 0;
+            final del = int.tryParse(parts[1]) ?? 0;
+            final file = parts.sublist(2).join(' ').trim();
+            final existing = diffStats[file];
+            if (existing != null) {
+              diffStats[file] = GitFileDiffStats(existing.additions + add, existing.deletions + del);
+            } else {
+              diffStats[file] = GitFileDiffStats(add, del);
+            }
+          }
+        }
+      } catch (_) {}
 
       final result = GitStatus(
         modifiedFiles: modified,
@@ -93,6 +111,7 @@ class GitService {
         untrackedFiles: untracked,
         conflictedFiles: conflicted,
         currentBranch: branch,
+        diffStats: diffStats,
       );
       _cachedStatus = result;
       _cachedPath = hostPath;
@@ -161,6 +180,40 @@ class GitService {
     final guestPath = await _getGuestPath(hostPath);
     
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git push');
+  }
+
+  Future<void> createTag(String tagName, String message) async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git tag -a "$tagName" -m "$message"');
+    invalidateCache();
+  }
+
+  Future<void> pushWithTags() async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git push && git push --tags');
+    invalidateCache();
+  }
+
+  Future<String?> getRemoteUrl() async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return null;
+    final guestPath = await _getGuestPath(hostPath);
+    
+    try {
+      final out = await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git config --get remote.origin.url');
+      return out.trim().isNotEmpty ? out.trim() : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> pull() async {

@@ -2818,4 +2818,77 @@ class AppLocalizationsZh extends AppLocalizations {
   String sessionRestoredDetail(int count, int files) {
     return '已从 `.quantum/chat_history.json` 加载 $count 条消息。\n代理记忆：上下文中有 $files 个文件。\n继续之前的工作。';
   }
+
+  @override
+  String get signInWithGitHub => '通过 GitHub 登录';
+
+  @override
+  String get gitHubToken => 'GitHub 个人访问令牌';
+
+  @override
+  String get gitHubTokenHint => '粘贴 GitHub Personal Access Token（需要 repo 权限）';
+
+  @override
+  String get connectGitHubDesc => '登录以浏览代码库、克隆项目并触发自动化云端构建。';
+
+  @override
+  String get cloneAndOpen => '克隆并打开';
+
+  @override
+  String get cloningRepository => '正在克隆代码仓库...';
+
+  @override
+  String repoClonedSuccess(String path) {
+    return '代码仓库已成功克隆到 $path';
+  }
+
+  @override
+  String get cloneFailed => '克隆代码仓库失败，请检查网络或令牌权限。';
+
+  @override
+  String get cloudBuildApk => '发布并云端构建 APK';
+
+  @override
+  String get cloudBuildApkDesc => '创建版本标签，推送更改并触发 GitHub Actions 构建 APK 并发布。';
+
+  @override
+  String get releaseTagName => '版本标签';
+
+  @override
+  String get releaseTagNameHint => '例如 v1.0.0';
+
+  @override
+  String get releaseCommitMsg => '提交说明';
+
+  @override
+  String get releaseCommitMsgHint => '例如 chore: prepare release v1.0.0';
+
+  @override
+  String get releaseNotes => '发布说明 / 更新内容';
+
+  @override
+  String get releaseNotesHint => '描述本次发布添加、修复或改进的内容...';
+
+  @override
+  String get publishReleaseBtn => '发布版本并构建 APK';
+
+  @override
+  String get releasingAndPushing => '正在创建标签并推送到 GitHub Actions...';
+
+  @override
+  String releaseTriggeredSuccess(String tag) {
+    return '版本 $tag 已创建并推送！GitHub Actions 已开始云端构建 APK。';
+  }
+
+  @override
+  String releaseTriggerFailed(String error) {
+    return '推送发布失败：$error';
+  }
+
+  @override
+  String get setupCiCdWorkflow => '添加云端构建 CI/CD 工作流';
+
+  @override
+  String get setupCiCdWorkflowSuccess =>
+      '已添加 GitHub Actions APK 构建工作流 (.github/workflows/build-apk.yml)！';
 }

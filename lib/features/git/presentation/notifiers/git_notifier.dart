@@ -78,6 +78,32 @@ class GitNotifier extends StateNotifier<GitState> {
     await _gitService.initRepo();
     await refreshStatus();
   }
+
+  Future<void> releaseAndBuildApk({
+    required String tagName,
+    required String commitMessage,
+    required String releaseNotes,
+  }) async {
+    state = state.copyWith(isLoading: true);
+    try {
+      // 1. Stage all changes if any
+      final status = await _gitService.getStatus();
+      if (status != null && status.hasChanges) {
+        await _gitService.add('.');
+        await _gitService.commit(commitMessage.isNotEmpty ? commitMessage : 'Release $tagName');
+      }
+
+      // 2. Create annotated git tag
+      await _gitService.createTag(tagName, releaseNotes.isNotEmpty ? releaseNotes : 'Release $tagName');
+
+      // 3. Push commit and tag to remote
+      await _gitService.pushWithTags();
+      await refreshStatus();
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      rethrow;
+    }
+  }
 }
 
 final StateNotifierProvider<GitNotifier, GitState> gitProvider = StateNotifierProvider<GitNotifier, GitState>((ref) {

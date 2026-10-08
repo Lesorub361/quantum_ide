@@ -26,13 +26,13 @@ import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_t
 
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
-import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_text_selection_modal.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 
@@ -61,6 +61,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   bool _isSidebarOpen = false;
   bool _isTerminalSplit = false;
   int _buildSubTab = 0;
+  double _pinchBaseFontSize = 13.0;
 
   String _currentInput = '';
   final ValueNotifier<List<String>?> _suggestionsNotifier = ValueNotifier(null);
@@ -358,9 +359,20 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
       return;
     }
-    
+    if (value == 'copy') {
+      await _copySelection(session);
+      return;
+    }
+    if (value == 'select_all' || value == 'sel') {
+      _selectAllInTerminal(session);
+      return;
+    }
     if (value == 'ctrl+c') {
       session.pty.write(Uint8List.fromList([3])); 
+      return;
+    }
+    if (value == 'ctrl+z') {
+      session.pty.write(Uint8List.fromList([26])); 
       return;
     }
     if (value == 'ctrl+d') {
@@ -1055,7 +1067,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   Widget _buildActionHeader(String title, List<Widget> actions) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.02),
         border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
@@ -1063,22 +1075,22 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             decoration: BoxDecoration(
               color: Colors.cyanAccent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
             ),
             child: Text(
               title.toUpperCase(), 
               style: GoogleFonts.inter(
                 color: Colors.cyanAccent, 
-                fontSize: 9, 
+                fontSize: 8.5, 
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1.1
+                letterSpacing: 1.0
               )
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -1102,15 +1114,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.circular(4),
             child: Container(
-              padding: const EdgeInsets.all(5),
+              padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(5),
+                borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: color.withValues(alpha: 0.2)),
               ),
-              child: Icon(icon, size: 14, color: color.withValues(alpha: 0.9)),
+              child: Icon(icon, size: 12, color: color.withValues(alpha: 0.9)),
             ),
           ),
         ),
@@ -1122,8 +1134,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final workspace = ref.read(workspaceProvider);
     final path = workspace.currentPath;
     
-    final finalCmd = path != null ? 'cd "$path" && clear && $cmd' : 'clear && $cmd';
-    ref.read(dedicatedTerminalProvider.notifier).sendCommand(type, finalCmd, interrupt: true, clear: false);
+    final cdCmd = path != null ? 'cd "$path"' : '';
+    final safeCmd = cmd.replaceAll('"', '\\"');
+    final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m--------------------------------------------------\\033[0m\\n" "$safeCmd"';
+    final fullCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
+    ref.read(dedicatedTerminalProvider.notifier).sendCommand(type, fullCmd, interrupt: true, clear: false);
   }
 
   void _sendRawKeyToDedicatedTerminal(DedicatedTerminalType type, String key) {
@@ -1156,20 +1171,253 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     }
   }
 
-  Widget _buildZoomButton(IconData icon, VoidCallback onTap, {Color? color}) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(4),
+  Future<void> _copyTerminalOutputDirect(TerminalSession session) async {
+    final text = _extractTerminalText(session.xtermTerminal);
+    if (text.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(LucideIcons.check, color: Colors.greenAccent, size: 15),
+                const SizedBox(width: 8),
+                Text(AppLocalizations.of(context)!.copiedToClipboard),
+              ],
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 1),
           ),
-          child: Icon(icon, size: 12, color: color ?? Colors.white38),
+        );
+      }
+    }
+  }
+
+  Widget _buildTerminalActionButton(IconData icon, String tooltip, VoidCallback onTap, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: (color ?? Colors.white).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: (color ?? Colors.white).withValues(alpha: 0.1), width: 0.5),
+              ),
+              child: Icon(icon, size: 12, color: color ?? Colors.white70),
+            ),
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSessionsSidebarList(List<TerminalSession> sessions, TerminalTabsNotifier notifier, {bool isOverlay = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF131722).withValues(alpha: 0.95),
+        border: Border(
+          right: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.terminal, size: 14, color: Colors.cyanAccent),
+                const SizedBox(width: 8),
+                Text(
+                  'СЕССИИ',
+                  style: GoogleFonts.inter(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: Colors.cyanAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${sessions.length}',
+                    style: const TextStyle(
+                      color: Colors.cyanAccent,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => notifier.createNewSession(),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: Colors.cyanAccent.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2), width: 0.8),
+                      ),
+                      child: const Icon(LucideIcons.plus, size: 13, color: Colors.cyanAccent),
+                    ),
+                  ),
+                ),
+                if (isOverlay) ...[
+                  const SizedBox(width: 6),
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => setState(() => _isSidebarOpen = false),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        child: const Icon(LucideIcons.x, size: 14, color: Colors.white54),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Colors.white10),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              itemCount: sessions.length,
+              itemBuilder: (context, index) {
+                final isActive = index == notifier.currentIndex;
+                final session = sessions[index];
+                final isExited = session.isExited;
+                final statusColor = isExited ? Colors.redAccent : Colors.greenAccent;
+
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.only(bottom: 6),
+                  decoration: BoxDecoration(
+                    color: isActive 
+                        ? Colors.cyanAccent.withValues(alpha: 0.1) 
+                        : Colors.white.withValues(alpha: 0.02),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isActive 
+                          ? Colors.cyanAccent.withValues(alpha: 0.4) 
+                          : Colors.white.withValues(alpha: 0.04),
+                      width: isActive ? 1.0 : 0.6,
+                    ),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () {
+                        notifier.currentIndex = index;
+                        if (isOverlay) {
+                          setState(() => _isSidebarOpen = false);
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: statusColor,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: statusColor.withValues(alpha: 0.6),
+                                    blurRadius: 4,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    session.title,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: isActive ? Colors.white : Colors.white70,
+                                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    isExited ? 'Остановлен' : 'Работает',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 8.5,
+                                      color: statusColor.withValues(alpha: 0.7),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isActive || sessions.length > 1)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: () => notifier.restartSession(index),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Icon(
+                                          isExited ? LucideIcons.play : LucideIcons.refresh_cw,
+                                          size: 11,
+                                          color: isExited ? Colors.greenAccent : Colors.white54,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: () => notifier.closeSession(index),
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: const Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Icon(LucideIcons.trash_2, size: 11, color: Colors.redAccent),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1178,305 +1426,250 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     if (sessions.isEmpty) return const Center(child: CircularProgressIndicator());
     final currentSession = sessions[notifier.currentIndex];
 
-    return Row(
+    return LayoutBuilder(
       key: key,
-      children: [
-        if (_isSidebarOpen)
-          GlassContainer(
-            blur: 15,
-            opacity: 0.08,
-            borderRadius: BorderRadius.zero,
-            border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
-            child: SizedBox(
-              width: 200,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
-                    child: Row(
-                      children: [
-                        Text('SESSIONS', style: GoogleFonts.inter(
-                          color: Colors.white24, 
-                          fontSize: 10, 
-                          fontWeight: FontWeight.bold, 
-                          letterSpacing: 1.2
-                        )),
-                        const Spacer(),
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => notifier.createNewSession(),
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              padding: const EdgeInsets.all(4),
-                              child: const Icon(LucideIcons.plus, size: 14, color: Colors.cyanAccent),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      itemCount: sessions.length,
-                      itemBuilder: (context, index) {
-                        final isActive = index == notifier.currentIndex;
-                        return AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          margin: const EdgeInsets.only(bottom: 4),
-                          decoration: BoxDecoration(
-                            color: isActive ? Colors.cyanAccent.withValues(alpha: 0.08) : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isActive ? Colors.cyanAccent.withValues(alpha: 0.1) : Colors.transparent
-                            ),
-                          ),
-                          child: ListTile(
-                            dense: true,
-                            visualDensity: VisualDensity.compact,
-                            leading: Icon(
-                              LucideIcons.terminal, 
-                              size: 14, 
-                              color: isActive ? Colors.cyanAccent : Colors.white24
-                            ),
-                            title: Text(
-                              sessions[index].title,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: isActive ? Colors.white : Colors.white38,
-                                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              sessions[index].isExited ? 'Stopped' : 'Running',
-                              style: GoogleFonts.inter(
-                                fontSize: 9,
-                                color: sessions[index].isExited ? Colors.redAccent.withValues(alpha: 0.5) : Colors.greenAccent.withValues(alpha: 0.5),
-                              ),
-                            ),
-                            onTap: () => notifier.currentIndex = index,
-                            trailing: isActive ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    sessions[index].isExited ? LucideIcons.play : LucideIcons.refresh_cw,
-                                    size: 12,
-                                    color: sessions[index].isExited ? Colors.greenAccent : Colors.white38,
-                                  ),
-                                  onPressed: () => notifier.restartSession(index),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                                  tooltip: sessions[index].isExited 
-                                      ? AppLocalizations.of(context)!.start 
-                                      : AppLocalizations.of(context)!.restartTerminalTooltip,
-                                ),
-                                const SizedBox(width: 4),
-                                IconButton(
-                                  icon: const Icon(LucideIcons.trash_2, size: 12, color: Colors.redAccent),
-                                  onPressed: () => notifier.closeSession(index),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                                  tooltip: AppLocalizations.of(context)!.delete,
-                                ),
-                              ],
-                            ) : null,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 650;
+
+        final terminalContent = Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F1219),
+                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
               ),
-            ),
-          ),
-        Expanded(
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-                ),
-                child: Row(
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        InkWell(
-                          onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Icon(
-                              LucideIcons.menu,
-                              size: 16,
-                              color: _isSidebarOpen ? Colors.cyanAccent : Colors.white54,
-                            ),
-                          ),
+              child: Row(
+                children: [
+                  InkWell(
+                    onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _isSidebarOpen 
+                            ? Colors.cyanAccent.withValues(alpha: 0.15) 
+                            : Colors.white.withValues(alpha: 0.04),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _isSidebarOpen 
+                              ? Colors.cyanAccent.withValues(alpha: 0.3) 
+                              : Colors.white.withValues(alpha: 0.08),
+                          width: 0.6,
                         ),
-                        if (sessions.isNotEmpty)
-                          Positioned(
-                            right: -2,
-                            top: -2,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: Colors.purpleAccent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
-                              child: Text(
-                                '${sessions.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            LucideIcons.terminal,
+                            size: 13,
+                            color: _isSidebarOpen ? Colors.cyanAccent : Colors.white70,
+                          ),
+                          if (sessions.length > 1) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${sessions.length}',
+                              style: TextStyle(
+                                color: _isSidebarOpen ? Colors.cyanAccent : Colors.white60,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: currentSession.isExited ? Colors.redAccent : Colors.greenAccent,
+                      boxShadow: [
+                        BoxShadow(
+                          color: (currentSession.isExited ? Colors.redAccent : Colors.greenAccent).withValues(alpha: 0.5),
+                          blurRadius: 4,
+                        ),
                       ],
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      currentSession.title,
-                      style: GoogleFonts.inter(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    currentSession.title,
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      ref.watch(workspaceProvider).currentPath?.split('/').last ?? 'workspace',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: Colors.white30,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      width: 3,
-                      height: 3,
-                      decoration: const BoxDecoration(
-                        color: Colors.white24,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        ref.watch(workspaceProvider).currentPath?.split('/').last ?? 'root',
-                        style: GoogleFonts.jetBrainsMono(
-                          color: Colors.white38,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    _buildZoomButton(LucideIcons.zoom_out, () {
-                      final size = ref.read(settingsProvider).terminalFontSize;
-                      ref.read(settingsProvider.notifier).setTerminalFontSize((size - 1).clamp(8.0, 24.0));
-                    }),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${ref.watch(settingsProvider).terminalFontSize.toInt()}',
-                      style: GoogleFonts.jetBrainsMono(color: Colors.white38, fontSize: 9.5, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(width: 4),
-                    _buildZoomButton(LucideIcons.zoom_in, () {
-                      final size = ref.read(settingsProvider).terminalFontSize;
-                      ref.read(settingsProvider.notifier).setTerminalFontSize((size + 1).clamp(8.0, 24.0));
-                    }),
-                    const SizedBox(width: 8),
-                    _buildZoomButton(LucideIcons.plus, () {
-                      notifier.createNewSession();
-                    }, color: Colors.cyanAccent),
-                    const SizedBox(width: 8),
-                    _buildZoomButton(_isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2, () {
+                  ),
+                  _buildTerminalActionButton(
+                    LucideIcons.text_cursor_input,
+                    'Режим выделения текста курсором',
+                    () => TerminalTextSelectionModal.show(context, currentSession.xtermTerminal, currentSession.title),
+                    color: Colors.cyanAccent,
+                  ),
+                  const SizedBox(width: 3),
+                  _buildTerminalActionButton(
+                    LucideIcons.copy,
+                    AppLocalizations.of(context)!.copyAll,
+                    () => _copyTerminalOutputDirect(currentSession),
+                  ),
+                  const SizedBox(width: 3),
+                  _buildTerminalActionButton(
+                    _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
+                    _isTerminalSplit ? 'Объединить' : 'Разделить экран',
+                    () {
                       setState(() {
                         _isTerminalSplit = !_isTerminalSplit;
                         if (_isTerminalSplit && sessions.length < 2) {
                           notifier.createNewSession();
                         }
                       });
-                    }),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => notifier.sendCommand('clear\n'),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          child: Text('CLR', style: GoogleFonts.inter(
-                            color: Colors.white24, 
-                            fontSize: 9, 
+                    },
+                  ),
+                  const SizedBox(width: 3),
+                  _buildTerminalActionButton(
+                    LucideIcons.plus,
+                    'Новая сессия',
+                    () => notifier.createNewSession(),
+                    color: Colors.cyanAccent,
+                  ),
+                  const SizedBox(width: 4),
+                  Material(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(4),
+                    child: InkWell(
+                      onTap: () {
+                        currentSession.xtermTerminal.eraseDisplay();
+                        currentSession.xtermTerminal.eraseScrollbackOnly();
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                        child: Text(
+                          'CLR',
+                          style: GoogleFonts.jetBrainsMono(
+                            color: Colors.white60,
+                            fontSize: 9,
                             fontWeight: FontWeight.bold,
-                          )),
+                          ),
                         ),
                       ),
                     ),
-                  ],
+                  ),
+                  const SizedBox(width: 2),
+                  _buildTerminalActionButton(
+                    LucideIcons.ellipsis_vertical,
+                    'Меню терминала',
+                    () => _showTerminalContextMenu(context, Offset.zero, currentSession, fromToolbar: true),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: (_isTerminalSplit && sessions.length >= 2)
+                  ? Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                                color: Colors.white.withValues(alpha: 0.02),
+                                width: double.infinity,
+                                child: Text(
+                                  '${AppLocalizations.of(context)!.panel1}: ${sessions[notifier.currentIndex].title}',
+                                  style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Expanded(child: _buildTerminalWidget(sessions[notifier.currentIndex])),
+                            ],
+                          ),
+                        ),
+                        Container(width: 1, color: Colors.white.withValues(alpha: 0.08)),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                                color: Colors.white.withValues(alpha: 0.02),
+                                width: double.infinity,
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      '${AppLocalizations.of(context)!.panel2}: ${sessions[(notifier.currentIndex + 1) % sessions.length].title}',
+                                      style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent.withValues(alpha: 0.7), fontWeight: FontWeight.bold),
+                                    ),
+                                    const Spacer(),
+                                    InkWell(
+                                      onTap: () => setState(() => _isTerminalSplit = false),
+                                      child: const Icon(LucideIcons.x, size: 10, color: Colors.white38),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(child: _buildTerminalWidget(sessions[(notifier.currentIndex + 1) % sessions.length], isSecondary: true)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : _buildTerminalWidget(currentSession),
+            ),
+          ],
+        );
+
+        if (!isCompact) {
+          return Row(
+            children: [
+              if (_isSidebarOpen)
+                SizedBox(
+                  width: 220,
+                  child: _buildSessionsSidebarList(sessions, notifier, isOverlay: false),
+                ),
+              Expanded(child: terminalContent),
+            ],
+          );
+        }
+
+        return Stack(
+          children: [
+            terminalContent,
+            if (_isSidebarOpen) ...[
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _isSidebarOpen = false),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.65),
+                  ),
                 ),
               ),
-              Expanded(
-                child: (_isTerminalSplit && sessions.length >= 2)
-                    ? Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                                  color: Colors.white.withValues(alpha: 0.02),
-                                  width: double.infinity,
-                                  child: Text(
-                                    '${AppLocalizations.of(context)!.panel1}: ${sessions[notifier.currentIndex].title}',
-                                    style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                                Expanded(child: _buildTerminalWidget(sessions[notifier.currentIndex])),
-                              ],
-                            ),
-                          ),
-                          Container(width: 1, color: Colors.white.withValues(alpha: 0.08)),
-                          Expanded(
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                                  color: Colors.white.withValues(alpha: 0.02),
-                                  width: double.infinity,
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        '${AppLocalizations.of(context)!.panel2}: ${sessions[(notifier.currentIndex + 1) % sessions.length].title}',
-                                        style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent.withValues(alpha: 0.7), fontWeight: FontWeight.bold),
-                                      ),
-                                      const Spacer(),
-                                      InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _isTerminalSplit = false;
-                                          });
-                                        },
-                                        child: const Icon(LucideIcons.x, size: 10, color: Colors.white38),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(child: _buildTerminalWidget(sessions[(notifier.currentIndex + 1) % sessions.length], isSecondary: true)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    : _buildTerminalWidget(currentSession),
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 230,
+                child: _buildSessionsSidebarList(sessions, notifier, isOverlay: true),
               ),
             ],
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 
@@ -1504,7 +1697,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           children: [
             Expanded(
               child: Container(
-                margin: const EdgeInsets.all(8),
+                margin: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: theme.background,
                   borderRadius: BorderRadius.circular(8),
@@ -1534,22 +1727,51 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): SelectAllTextIntent(),
                         LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): SelectAllTextIntent(),
                       },
-                      child: xt.TerminalView(
-                        session.xtermTerminal,
-                        controller: session.xtermViewController,
-                        autofocus: true,
-                        padding: const EdgeInsets.all(12),
-                        theme: theme,
-                        backgroundOpacity: 0,
-                        textStyle: xt.TerminalStyle(
-                          fontSize: terminalFontSize,
-                          fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                          fontFamilyFallback: const ['Noto Sans Mono', 'DejaVu Sans Mono', 'monospace'],
-                        ),
-                        keyboardType: TextInputType.visiblePassword,
-                        deleteDetection: true,
-                        onSecondaryTapDown: (details, offset) =>
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onScaleStart: (details) {
+                          if (details.pointerCount >= 2) {
+                            _pinchBaseFontSize = ref.read(settingsProvider).terminalFontSize;
+                          }
+                        },
+                        onScaleUpdate: (details) {
+                          if (details.pointerCount >= 2) {
+                            final newSize = (_pinchBaseFontSize * details.scale).clamp(8.0, 32.0);
+                            if ((newSize - ref.read(settingsProvider).terminalFontSize).abs() >= 0.5) {
+                              ref.read(settingsProvider.notifier).setTerminalFontSize(newSize);
+                            }
+                          }
+                        },
+                        onDoubleTap: () {
+                          TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+                        },
+                        onLongPressStart: (details) =>
                             _showTerminalContextMenu(context, details.globalPosition, session),
+                        onSecondaryTapDown: (details) =>
+                            _showTerminalContextMenu(context, details.globalPosition, session),
+                        child: xt.TerminalView(
+                          session.xtermTerminal,
+                          controller: session.xtermViewController,
+                          autofocus: true,
+                          padding: const EdgeInsets.all(10),
+                          theme: theme,
+                          backgroundOpacity: 0,
+                          textStyle: xt.TerminalStyle(
+                            fontSize: terminalFontSize,
+                            fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                            fontFamilyFallback: const [
+                              'cascadia',
+                              'dejaVuSansMono',
+                              'jetBrainsMono',
+                              'firaCode',
+                              'Noto Sans Mono',
+                              'DejaVu Sans Mono',
+                              'monospace',
+                            ],
+                          ),
+                          keyboardType: TextInputType.visiblePassword,
+                          deleteDetection: true,
+                        ),
                       ),
                     ),
                   ),
@@ -2046,78 +2268,108 @@ Also explain what exactly went wrong and how you fixed it.
   }
 
   // ОБНОВЛЕННОЕ ХАКЕРСКОЕ КОНТЕКСТНОЕ МЕНЮ (Как в Termux)
-  void _showTerminalContextMenu(BuildContext context, Offset position, TerminalSession session) async {
+  void _showTerminalContextMenu(BuildContext context, Offset position, TerminalSession session, {bool fromToolbar = false}) async {
     HapticFeedback.mediumImpact();
-    
+    final isMobile = MediaQuery.of(context).size.width < 700;
+
+    if (isMobile || fromToolbar) {
+      _showMobileTerminalBottomSheet(context, session);
+      return;
+    }
+
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final hasSelection = session.xtermViewController.selection != null;
-    
+
     final result = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx,
-        position.dy - 60, 
+        position.dy - 60,
         overlay.size.width - position.dx,
         overlay.size.height - position.dy,
       ),
-      color: const Color(0xFF25252D), 
+      color: const Color(0xFF1E2230),
       elevation: 12,
       useRootNavigator: true,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8), 
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.1))
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
       ),
       items: [
+        PopupMenuItem(
+          value: 'selection_mode',
+          height: 38,
+          child: Row(
+            children: const [
+              Icon(LucideIcons.text_cursor_input, size: 15, color: Colors.cyanAccent),
+              SizedBox(width: 10),
+              Text('Режим выделения (курсоры)', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
+            ],
+          ),
+        ),
         if (hasSelection)
           PopupMenuItem(
             value: 'copy',
-            height: 40,
+            height: 38,
             child: Row(
               children: [
-                const Icon(LucideIcons.copy, size: 16, color: Colors.cyanAccent),
-                const SizedBox(width: 12),
-                Text(AppLocalizations.of(context)!.copy, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                const Icon(LucideIcons.copy, size: 15, color: Colors.white70),
+                const SizedBox(width: 10),
+                Text(AppLocalizations.of(context)!.copy, style: const TextStyle(color: Colors.white, fontSize: 13)),
               ],
             ),
           ),
         PopupMenuItem(
-          value: 'paste',
-          height: 40,
+          value: 'copy_all',
+          height: 38,
           child: Row(
             children: [
-              const Icon(LucideIcons.clipboard_paste, size: 16, color: Colors.white70),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!.paste, style: const TextStyle(color: Colors.white, fontSize: 14)),
+              const Icon(LucideIcons.files, size: 15, color: Colors.white70),
+              const SizedBox(width: 10),
+              Text(AppLocalizations.of(context)!.copyAll, style: const TextStyle(color: Colors.white, fontSize: 13)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'paste',
+          height: 38,
+          child: Row(
+            children: [
+              const Icon(LucideIcons.clipboard_paste, size: 15, color: Colors.white70),
+              const SizedBox(width: 10),
+              Text(AppLocalizations.of(context)!.paste, style: const TextStyle(color: Colors.white, fontSize: 13)),
             ],
           ),
         ),
         const PopupMenuDivider(height: 1),
         PopupMenuItem(
-          value: 'copy_all',
-          height: 40,
+          value: 'ctrl_c',
+          height: 38,
           child: Row(
-            children: [
-              const Icon(LucideIcons.files, size: 16, color: Colors.white54),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!.copyAll, style: const TextStyle(color: Colors.white54, fontSize: 14)),
+            children: const [
+              Icon(LucideIcons.square, size: 15, color: Colors.redAccent),
+              SizedBox(width: 10),
+              Text('Прервать (Ctrl+C)', style: TextStyle(color: Colors.redAccent, fontSize: 13)),
             ],
           ),
         ),
         PopupMenuItem(
           value: 'clear',
-          height: 40,
+          height: 38,
           child: Row(
             children: [
-              const Icon(LucideIcons.trash_2, size: 16, color: Colors.redAccent),
-              const SizedBox(width: 12),
-              Text(AppLocalizations.of(context)!.clearTerminal, style: const TextStyle(color: Colors.redAccent, fontSize: 14)),
+              const Icon(LucideIcons.trash_2, size: 15, color: Colors.orangeAccent),
+              const SizedBox(width: 10),
+              Text(AppLocalizations.of(context)!.clearTerminal, style: const TextStyle(color: Colors.orangeAccent, fontSize: 13)),
             ],
           ),
         ),
       ],
     );
 
-    if (result == 'copy') {
+    if (result == 'selection_mode') {
+      TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+    } else if (result == 'copy') {
       final selectedText = session.xtermViewController.selection != null
           ? session.xtermTerminal.buffer.getText(session.xtermViewController.selection!)
           : '';
@@ -2129,41 +2381,218 @@ Also explain what exactly went wrong and how you fixed it.
               content: Text(AppLocalizations.of(context)!.copiedToClipboard),
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 1),
-            )
+            ),
           );
         }
       }
       session.xtermViewController.clearSelection();
     } else if (result == 'copy_all') {
-      final text = _extractTerminalText(session.xtermTerminal);
-      if (text.isNotEmpty) {
-        await Clipboard.setData(ClipboardData(text: text));
-      }
+      _copyTerminalOutputDirect(session);
     } else if (result == 'paste') {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      if (data?.text != null) {
-        session.pty.write(Uint8List.fromList(utf8.encode(data!.text!)));
-      }
-      session.xtermViewController.clearSelection();
+      _pasteToTerminal(session);
+    } else if (result == 'ctrl_c') {
+      session.pty.write(Uint8List.fromList([3]));
     } else if (result == 'clear') {
-       session.xtermTerminal.eraseDisplay();
-       session.xtermTerminal.eraseScrollbackOnly();
+      session.xtermTerminal.eraseDisplay();
+      session.xtermTerminal.eraseScrollbackOnly();
     }
+  }
+
+  void _showMobileTerminalBottomSheet(BuildContext context, TerminalSession session) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.only(top: 8, bottom: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF131722),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: session.isExited ? Colors.redAccent : Colors.greenAccent,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        session.title,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                        onPressed: () => Navigator.pop(ctx),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 12, color: Colors.white10),
+                _buildMenuTile(
+                  icon: LucideIcons.text_cursor_input,
+                  iconColor: Colors.cyanAccent,
+                  title: 'Режим выделения курсором',
+                  subtitle: 'Выбор текста курсорами, поиск и копирование',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+                  },
+                ),
+                _buildMenuTile(
+                  icon: LucideIcons.copy,
+                  iconColor: Colors.greenAccent,
+                  title: 'Копировать всё',
+                  subtitle: 'Скопировать весь вывод терминала в буфер',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _copyTerminalOutputDirect(session);
+                  },
+                ),
+                _buildMenuTile(
+                  icon: LucideIcons.clipboard_paste,
+                  iconColor: Colors.blueAccent,
+                  title: 'Вставить',
+                  subtitle: 'Вставить текст из буфера обмена в терминал',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pasteToTerminal(session);
+                  },
+                ),
+                _buildMenuTile(
+                  icon: LucideIcons.square,
+                  iconColor: Colors.redAccent,
+                  title: 'Прервать процесс (Ctrl+C)',
+                  subtitle: 'Отправить сигнал SIGINT активной программе',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    session.pty.write(Uint8List.fromList([3]));
+                  },
+                ),
+                _buildMenuTile(
+                  icon: LucideIcons.trash_2,
+                  iconColor: Colors.orangeAccent,
+                  title: 'Очистить экран (Clear)',
+                  subtitle: 'Очистить видимый экран и буфер прокрутки',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    session.xtermTerminal.eraseDisplay();
+                    session.xtermTerminal.eraseScrollbackOnly();
+                  },
+                ),
+                _buildMenuTile(
+                  icon: LucideIcons.refresh_cw,
+                  iconColor: Colors.purpleAccent,
+                  title: 'Перезапустить сессию',
+                  subtitle: 'Перезапустить оболочку терминала',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    final tabsNotifier = ref.read(terminalTabsProvider.notifier);
+                    final idx = ref.read(terminalTabsProvider).indexOf(session);
+                    if (idx != -1) {
+                      tabsNotifier.restartSession(idx);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMenuTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 16, color: iconColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.inter(
+                        color: Colors.white38,
+                        fontSize: 9.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(LucideIcons.chevron_right, size: 14, color: Colors.white24),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildVirtualKeys(List<TerminalSession> sessions, TerminalTabsNotifier notifier) {
     if (sessions.isEmpty) return const SizedBox();
     final currentSession = sessions[notifier.currentIndex];
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.4),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-      ),
-      child: VirtualKeysView(
-        activeKeys: _activeModifiers,
-        onKeyTap: (value) => _onKeyTap(value, currentSession),
-      ),
+    return VirtualKeysView(
+      activeKeys: _activeModifiers,
+      onKeyTap: (value) => _onKeyTap(value, currentSession),
     );
   }
 
@@ -2194,15 +2623,21 @@ Also explain what exactly went wrong and how you fixed it.
 
   Future<void> _copySelection(TerminalSession session) async {
     final selection = session.xtermViewController.selection;
-    if (selection == null) return;
-    final text = session.xtermTerminal.buffer.getText(selection);
+    String text = '';
+    bool hasSel = false;
+    if (selection != null) {
+      text = session.xtermTerminal.buffer.getText(selection);
+      session.xtermViewController.clearSelection();
+      hasSel = true;
+    } else {
+      text = _extractTerminalText(session.xtermTerminal);
+    }
     if (text.isNotEmpty) {
       await Clipboard.setData(ClipboardData(text: text));
-      session.xtermViewController.clearSelection();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context)!.copiedToClipboard),
+            content: Text(hasSel ? AppLocalizations.of(context)!.copiedToClipboard : AppLocalizations.of(context)!.copyAll),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 1),
           ),

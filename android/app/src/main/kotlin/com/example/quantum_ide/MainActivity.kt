@@ -60,8 +60,8 @@ class MainActivity : FlutterActivity() {
                             try {
                                 bootstrapManager.extractRootfs(tarPath)
                                 runOnUiThread { result.success(true) }
-                            } catch (e: Exception) {
-                                runOnUiThread { result.error("EXTRACT_ERROR", e.message, null) }
+                            } catch (e: Throwable) {
+                                runOnUiThread { result.error("EXTRACT_ERROR", e.message ?: e.toString(), null) }
                             }
                         }.start()
                     } else result.error("INVALID_ARGS", "tarPath required", null)
@@ -93,6 +93,24 @@ class MainActivity : FlutterActivity() {
                         result.success("$manufacturer $model")
                     } catch (e: Exception) {
                         result.success("")
+                    }
+                }
+                "startForegroundSession" -> {
+                    try {
+                        val title = call.argument<String>("title") ?: "Quantum IDE"
+                        val content = call.argument<String>("content") ?: "Терминал и сессия активны в фоне"
+                        IdeSessionService.start(applicationContext, title, content)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SERVICE_ERROR", e.message, null)
+                    }
+                }
+                "stopForegroundSession" -> {
+                    try {
+                        IdeSessionService.stop(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("SERVICE_ERROR", e.message, null)
                     }
                 }
                 else -> result.notImplemented()

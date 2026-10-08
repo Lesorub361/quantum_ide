@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
+import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
 
 class WorkspaceState {
@@ -12,9 +13,13 @@ class WorkspaceState {
 
   WorkspaceState({this.currentPath, this.recentProjects = const []});
 
-  WorkspaceState copyWith({String? currentPath, List<String>? recentProjects}) {
+  WorkspaceState copyWith({
+    String? currentPath,
+    bool clearCurrentPath = false,
+    List<String>? recentProjects,
+  }) {
     return WorkspaceState(
-      currentPath: currentPath ?? this.currentPath,
+      currentPath: clearCurrentPath ? null : (currentPath ?? this.currentPath),
       recentProjects: recentProjects ?? this.recentProjects,
     );
   }
@@ -122,9 +127,10 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyCurrentPath);
     await LogService.setWorkspace(null);
-    state = state.copyWith(currentPath: null);
+    state = state.copyWith(clearCurrentPath: true);
     
     // Perform centralized cleanup of other modules
+    ref.read(editorProvider.notifier).clearWorkspace();
     ref.read(terminalTabsProvider.notifier).closeAllSessions();
     ref.read(gitProvider.notifier).refreshStatus();
   }

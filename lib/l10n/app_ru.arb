@@ -1591,5 +1591,42 @@
       "count": { "type": "int" },
       "files": { "type": "int" }
     }
-  }
+  },
+  "signInWithGitHub": "Войти через GitHub",
+  "gitHubToken": "Личный токен GitHub",
+  "gitHubTokenHint": "Вставьте Personal Access Token GitHub (с правами repo)",
+  "connectGitHubDesc": "Войдите, чтобы просматривать репозитории, клонировать проекты и запускать облачную сборку.",
+  "cloneAndOpen": "Клонировать и открыть",
+  "cloningRepository": "Клонирование репозитория...",
+  "repoClonedSuccess": "Репозиторий успешно клонирован в {path}",
+  "@repoClonedSuccess": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "cloneFailed": "Не удалось клонировать репозиторий. Проверьте соединение и токен.",
+  "cloudBuildApk": "Релиз и облачная сборка APK",
+  "cloudBuildApkDesc": "Создает тег релиза, отправляет изменения в Git и запускает сборку APK через GitHub Actions.",
+  "releaseTagName": "Тег релиза",
+  "releaseTagNameHint": "например, v1.0.0",
+  "releaseCommitMsg": "Сообщение коммита",
+  "releaseCommitMsgHint": "например, chore: подготовка релиза v1.0.0",
+  "releaseNotes": "Что нового / Описание релиза",
+  "releaseNotesHint": "Опишите, что было добавлено, исправлено или улучшено...",
+  "publishReleaseBtn": "Опубликовать релиз и собрать APK",
+  "releasingAndPushing": "Создание тега и отправка в GitHub Actions...",
+  "releaseTriggeredSuccess": "Релиз {tag} создан и отправлен! Облачная сборка APK запущена на GitHub Actions.",
+  "@releaseTriggeredSuccess": {
+    "placeholders": {
+      "tag": { "type": "String" }
+    }
+  },
+  "releaseTriggerFailed": "Ошибка отправки релиза: {error}",
+  "@releaseTriggerFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "setupCiCdWorkflow": "Добавить CI/CD сценарий облачной сборки",
+  "setupCiCdWorkflowSuccess": "Сценарий сборки APK добавлен (.github/workflows/build-apk.yml)!"
 }

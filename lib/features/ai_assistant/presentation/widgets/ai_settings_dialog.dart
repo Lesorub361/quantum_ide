@@ -7,6 +7,7 @@ import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/local_ai_service.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/right_chat_panel.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
 
 class AISettingsDialog extends ConsumerStatefulWidget {
   const AISettingsDialog({super.key});
@@ -101,6 +102,70 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
         _isLoadingModels = false;
       });
     }
+  }
+
+  void _showManualModelInputDialog() {
+    final controller = TextEditingController(text: _selectedModel);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E2230),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Text(
+          'Ввод модели вручную',
+          style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Укажите точный идентификатор модели (например: dots-studio/dots-3-note-preview:free):',
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: Colors.cyanAccent),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.05),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.white24),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.cyanAccent),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.cyanAccent,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isNotEmpty) {
+                setState(() => _selectedModel = text);
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Применить'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -387,7 +452,38 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
               ],
 
               // Model Selector
-              Text(l10n.model, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(l10n.model, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final selected = await showModelPickerModal(
+                        context,
+                        providerId: _selectedProviderId,
+                        currentModel: _selectedModel,
+                        apiKey: _keyController.text.trim(),
+                        baseUrl: _urlController.text.trim(),
+                      );
+                      if (selected != null && selected.isNotEmpty) {
+                        setState(() {
+                          _selectedModel = selected;
+                        });
+                      }
+                    },
+                    icon: const Icon(LucideIcons.list_filter, size: 12, color: Colors.cyanAccent),
+                    label: Text(
+                      'Каталог моделей',
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.cyanAccent),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 6),
 
               // Ollama not running warning
@@ -414,58 +510,63 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
                   ),
                 ),
 
+              // Interactive Model Display & Input Card
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.white10),
                 ),
-                child: _isLoadingModels
-                    ? const Padding(
-                        padding: EdgeInsets.all(12.0),
-                        child: Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () async {
+                          final selected = await showModelPickerModal(
+                            context,
+                            providerId: _selectedProviderId,
+                            currentModel: _selectedModel,
+                            apiKey: _keyController.text.trim(),
+                            baseUrl: _urlController.text.trim(),
+                          );
+                          if (selected != null && selected.isNotEmpty) {
+                            setState(() {
+                              _selectedModel = selected;
+                            });
+                          }
+                        },
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          child: Row(
+                            children: [
+                              const Icon(LucideIcons.bot, size: 15, color: Colors.cyanAccent),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _selectedModel.isEmpty ? 'Выберите модель...' : _selectedModel,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    color: Colors.cyanAccent,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const Icon(LucideIcons.chevron_down, size: 14, color: Colors.white38),
+                            ],
                           ),
                         ),
-                      )
-                    : _availableModels.isEmpty
-                        ? Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Text(
-                              isOllamaEngine
-                                  ? 'Нет доступных моделей. Установите модели через: ollama pull <model>'
-                                  : 'Нет доступных моделей',
-                              style: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedModel.isNotEmpty && _availableModels.contains(_selectedModel)
-                                  ? _selectedModel
-                                  : null,
-                              dropdownColor: const Color(0xFF1E2230),
-                              isExpanded: true,
-                              style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontSize: 12),
-                              items: _availableModels.map((m) {
-                                return DropdownMenuItem<String>(
-                                  value: m,
-                                  child: Text(m),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() {
-                                    _selectedModel = val;
-                                  });
-                                }
-                              },
-                            ),
-                          ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(LucideIcons.pencil, size: 13, color: Colors.white54),
+                      tooltip: 'Ввести ID модели вручную',
+                      onPressed: () => _showManualModelInputDialog(),
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 

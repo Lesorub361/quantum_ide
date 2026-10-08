@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
+import 'package:quantum_ide/features/home/presentation/widgets/package_install_dialog.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class PackagesManagerView extends ConsumerStatefulWidget {
@@ -55,6 +56,22 @@ class _PackagesManagerViewState extends ConsumerState<PackagesManagerView> {
                 ),
               ),
               const Spacer(),
+              IconButton(
+                icon: const Icon(LucideIcons.refresh_cw, size: 12, color: Colors.cyanAccent),
+                tooltip: 'Проверить обновления пакетов',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                onPressed: () async {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Проверка установленных пакетов и обновлений...'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  await ref.read(packageServiceProvider.notifier).checkActualInstallation();
+                },
+              ),
+              const SizedBox(width: 6),
               Text(
                 l10n.packagesInstalledCount(installedCount, packages.length),
                 style: GoogleFonts.inter(
@@ -266,24 +283,15 @@ class _PackagesManagerViewState extends ConsumerState<PackagesManagerView> {
                                 icon: const Icon(LucideIcons.refresh_cw, size: 11, color: Colors.white38),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                tooltip: 'Обновить пакет',
                                 onPressed: () {
-                                  ref.read(packageServiceProvider.notifier).installPackage(pkg);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(l10n.updatingPackage(pkg.name)),
-                                    ),
-                                  );
+                                  PackageInstallDialog.show(context, pkg, isUpdate: true);
                                 },
                               ),
                             ] else
                               ElevatedButton(
                                 onPressed: () {
-                                  ref.read(packageServiceProvider.notifier).installPackage(pkg);
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(l10n.installingPackage(pkg.name)),
-                                    ),
-                                  );
+                                  PackageInstallDialog.show(context, pkg, isUpdate: false);
                                 },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.cyanAccent.withValues(alpha: 0.1),

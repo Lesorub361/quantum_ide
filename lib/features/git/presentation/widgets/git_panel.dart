@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:quantum_ide/core/services/github_service.dart';
+import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
@@ -214,6 +216,26 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showCloudBuildDialog(context),
+                            icon: const Icon(LucideIcons.rocket, size: 14),
+                            label: Text(
+                              l10n.cloudBuildApk,
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amberAccent.withValues(alpha: 0.15),
+                              foregroundColor: Colors.amberAccent,
+                              elevation: 0,
+                              side: BorderSide(color: Colors.amberAccent.withValues(alpha: 0.35)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(vertical: 9),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -344,4 +366,195 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
       ),
     );
   }
+
+  void _showCloudBuildDialog(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final tagController = TextEditingController(text: 'v1.0.0');
+    final commitController = TextEditingController(text: 'chore: release v1.0.0');
+    final notesController = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF161B22),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amberAccent.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(LucideIcons.rocket, color: Colors.amberAccent, size: 20),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    l10n.cloudBuildApk,
+                    style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.cloudBuildApkDesc,
+                      style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white60, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.releaseTagName,
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: tagController,
+                      enabled: !isSubmitting,
+                      style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: l10n.releaseTagNameHint,
+                        hintStyle: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white24),
+                        filled: true,
+                        fillColor: Colors.black.withValues(alpha: 0.3),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.releaseCommitMsg,
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: commitController,
+                      enabled: !isSubmitting,
+                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: l10n.releaseCommitMsgHint,
+                        hintStyle: GoogleFonts.inter(fontSize: 11.5, color: Colors.white24),
+                        filled: true,
+                        fillColor: Colors.black.withValues(alpha: 0.3),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.releaseNotes,
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: notesController,
+                      enabled: !isSubmitting,
+                      maxLines: 4,
+                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: l10n.releaseNotesHint,
+                        hintStyle: GoogleFonts.inter(fontSize: 11.5, color: Colors.white24),
+                        filled: true,
+                        fillColor: Colors.black.withValues(alpha: 0.3),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.all(10),
+                      ),
+                    ),
+                    if (isSubmitting) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amberAccent),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              l10n.releasingAndPushing,
+                              style: GoogleFonts.inter(fontSize: 11.5, color: Colors.amberAccent),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
+                child: Text(AppLocalizations.of(context)!.cancel, style: const TextStyle(color: Colors.white60)),
+              ),
+              FilledButton.icon(
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final tag = tagController.text.trim();
+                        if (tag.isEmpty) return;
+
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
+                        setDialogState(() => isSubmitting = true);
+
+                        try {
+                          final currentWorkspace = ref.read(workspaceProvider).currentPath;
+                          if (currentWorkspace != null) {
+                            // Ensure workflow exists
+                            await GitHubService().setupCloudApkWorkflow(currentWorkspace);
+                          }
+
+                          await ref.read(gitProvider.notifier).releaseAndBuildApk(
+                                tagName: tag,
+                                commitMessage: commitController.text.trim(),
+                                releaseNotes: notesController.text.trim(),
+                              );
+
+                          if (dialogCtx.mounted) {
+                            Navigator.pop(dialogCtx);
+                          }
+
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text(l10n.releaseTriggeredSuccess(tag)),
+                              backgroundColor: const Color(0xFF238636),
+                              duration: const Duration(seconds: 5),
+                            ),
+                          );
+                        } catch (e) {
+                          setDialogState(() => isSubmitting = false);
+                          scaffoldMessenger.showSnackBar(
+                            SnackBar(
+                              content: Text(l10n.releaseTriggerFailed(e.toString())),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                        }
+
+                      },
+                icon: const Icon(LucideIcons.send, size: 14),
+                label: Text(l10n.publishReleaseBtn),
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF238636),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
+

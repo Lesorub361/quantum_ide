@@ -158,15 +158,15 @@ class ProjectDetector {
       case ProjectType.androidKotlin:
         return RunConfig(
           label: 'Gradle Build (Debug APK)',
-          command: 'cd "$guestPath" && chmod +x gradlew && ./gradlew assembleDebug',
+          command: 'cd "$guestPath" && bash ./gradlew assembleDebug',
           port: null,
           supportsPreview: false,
           icon: '🤖',
           color: 0xFF3DDC84,
           extraCommands: [
-            RunCommand('Install Debug APK', 'cd "$guestPath" && chmod +x gradlew && ./gradlew installDebug'),
-            RunCommand('Clean Project', 'cd "$guestPath" && chmod +x gradlew && ./gradlew clean'),
-            RunCommand('Build Release APK', 'cd "$guestPath" && chmod +x gradlew && ./gradlew assembleRelease'),
+            RunCommand('Install Debug APK', 'cd "$guestPath" && bash ./gradlew installDebug'),
+            RunCommand('Clean Project', 'cd "$guestPath" && bash ./gradlew clean'),
+            RunCommand('Build Release APK', 'cd "$guestPath" && bash ./gradlew assembleRelease'),
           ],
         );
       case ProjectType.rust:

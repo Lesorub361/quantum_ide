@@ -58,12 +58,16 @@ class EditorAppBarTitle extends ConsumerWidget {
       children: [
         Icon(iconInfo.icon, size: 14, color: iconInfo.color),
         const SizedBox(width: 8),
-        Text(
-          activeFile.name,
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+        Flexible(
+          child: Text(
+            activeFile.name,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
           ),
         ),
         if (activeFile.isModified) ...[

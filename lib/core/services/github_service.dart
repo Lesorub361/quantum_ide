@@ -94,12 +94,52 @@ class GitHubService {
 
   Future<String?> cloneRepository(String url, String destinationPath) async {
     try {
-      final result = await Process.run('git', ['clone', url, destinationPath]);
-      if (result.exitCode == 0) return destinationPath;
+      String cloneUrl = url;
+      if (_accessToken != null && _accessToken!.isNotEmpty && cloneUrl.startsWith('https://')) {
+        // Inject token for private or authenticated repo cloning
+        final stripped = cloneUrl.replaceFirst('https://', '');
+        cloneUrl = 'https://$_accessToken@$stripped';
+      }
+      
+      // Ensure destination directory parent exists
+      final dir = Directory(destinationPath);
+      if (await dir.exists()) {
+        final contents = dir.listSync();
+        if (contents.isNotEmpty) {
+          throw Exception('Destination directory is not empty');
+        }
+      } else {
+        await dir.create(recursive: true);
+      }
+
+      final result = await Process.run('git', ['clone', cloneUrl, destinationPath]);
+      if (result.exitCode == 0) {
+        // Configure safe directory and author details if logged in
+        await Process.run('git', ['config', '--global', '--add', 'safe.directory', '*']);
+        if (_currentUser != null) {
+          final name = _currentUser!['name'] ?? _currentUser!['login'] ?? 'Quantum Developer';
+          final email = _currentUser!['email'] ?? '${_currentUser!['login']}@users.noreply.github.com';
+          await Process.run('git', ['config', 'user.name', name], workingDirectory: destinationPath);
+          await Process.run('git', ['config', 'user.email', email], workingDirectory: destinationPath);
+        }
+        return destinationPath;
+      }
       return null;
     } catch (e) {
       return null;
     }
+  }
+
+  Future<void> configureGitUser(String projectPath) async {
+    try {
+      await Process.run('git', ['config', '--global', '--add', 'safe.directory', '*']);
+      if (_currentUser != null) {
+        final name = _currentUser!['name'] ?? _currentUser!['login'] ?? 'Quantum Developer';
+        final email = _currentUser!['email'] ?? '${_currentUser!['login']}@users.noreply.github.com';
+        await Process.run('git', ['config', 'user.name', name], workingDirectory: projectPath);
+        await Process.run('git', ['config', 'user.email', email], workingDirectory: projectPath);
+      }
+    } catch (_) {}
   }
 
   Future<List<Map<String, dynamic>>> listBranches(String owner, String repo) async {
@@ -125,6 +165,91 @@ class GitHubService {
       return resp.data;
     } catch (e) {
       return null;
+    }
+  }
+
+  /// Create a GitHub Release via REST API
+  Future<Map<String, dynamic>?> createRelease({
+    required String owner,
+    required String repo,
+    required String tagName,
+    required String releaseName,
+    required String body,
+    bool isDraft = false,
+    bool isPrerelease = false,
+  }) async {
+    try {
+      final resp = await _dio.post('/repos/$owner/$repo/releases', data: {
+        'tag_name': tagName,
+        'name': releaseName,
+        'body': body,
+        'draft': isDraft,
+        'prerelease': isPrerelease,
+      });
+      return resp.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Setup Cloud APK GitHub Actions workflow file in the given project
+  Future<bool> setupCloudApkWorkflow(String projectPath) async {
+    try {
+      final workflowDir = Directory('$projectPath/.github/workflows');
+      if (!await workflowDir.exists()) {
+        await workflowDir.create(recursive: true);
+      }
+      final workflowFile = File('${workflowDir.path}/build-apk.yml');
+      const workflowContent = '''name: Build & Release Android APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build APK (Release)
+        run: flutter build apk --release
+
+      - name: Create GitHub Release and Upload APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: build/app/outputs/flutter-apk/app-release.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+''';
+      await workflowFile.writeAsString(workflowContent);
+      return true;
+    } catch (e) {
+      return false;
     }
   }
 }

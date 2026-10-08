@@ -5155,6 +5155,138 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Loaded {count} messages from `.quantum/chat_history.json`.\nAgent memory: {files} files in context.\nContinue where you left off.'**
   String sessionRestoredDetail(int count, int files);
+
+  /// No description provided for @signInWithGitHub.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with GitHub'**
+  String get signInWithGitHub;
+
+  /// No description provided for @gitHubToken.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Personal Access Token'**
+  String get gitHubToken;
+
+  /// No description provided for @gitHubTokenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste GitHub Personal Access Token (classic or fine-grained with repo scope)'**
+  String get gitHubTokenHint;
+
+  /// No description provided for @connectGitHubDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to browse your repositories, clone projects, and trigger automated cloud builds.'**
+  String get connectGitHubDesc;
+
+  /// No description provided for @cloneAndOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Clone & Open'**
+  String get cloneAndOpen;
+
+  /// No description provided for @cloningRepository.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloning repository...'**
+  String get cloningRepository;
+
+  /// No description provided for @repoClonedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Repository cloned successfully to {path}'**
+  String repoClonedSuccess(String path);
+
+  /// No description provided for @cloneFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to clone repository. Check connection or token permissions.'**
+  String get cloneFailed;
+
+  /// No description provided for @cloudBuildApk.
+  ///
+  /// In en, this message translates to:
+  /// **'Release & Cloud Build APK'**
+  String get cloudBuildApk;
+
+  /// No description provided for @cloudBuildApkDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag this version, push changes, and trigger GitHub Actions to build an APK and publish a release.'**
+  String get cloudBuildApkDesc;
+
+  /// No description provided for @releaseTagName.
+  ///
+  /// In en, this message translates to:
+  /// **'Release Tag'**
+  String get releaseTagName;
+
+  /// No description provided for @releaseTagNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. v1.0.0'**
+  String get releaseTagNameHint;
+
+  /// No description provided for @releaseCommitMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Commit Message'**
+  String get releaseCommitMsg;
+
+  /// No description provided for @releaseCommitMsgHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. chore: prepare release v1.0.0'**
+  String get releaseCommitMsgHint;
+
+  /// No description provided for @releaseNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'Release Notes / What\'s New'**
+  String get releaseNotes;
+
+  /// No description provided for @releaseNotesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what was added, fixed or improved...'**
+  String get releaseNotesHint;
+
+  /// No description provided for @publishReleaseBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Publish Release & Build APK'**
+  String get publishReleaseBtn;
+
+  /// No description provided for @releasingAndPushing.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating release tag & pushing to GitHub Actions...'**
+  String get releasingAndPushing;
+
+  /// No description provided for @releaseTriggeredSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Release {tag} created and pushed! Cloud APK build started on GitHub Actions.'**
+  String releaseTriggeredSuccess(String tag);
+
+  /// No description provided for @releaseTriggerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to push release: {error}'**
+  String releaseTriggerFailed(String error);
+
+  /// No description provided for @setupCiCdWorkflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Cloud Build CI/CD Workflow'**
+  String get setupCiCdWorkflow;
+
+  /// No description provided for @setupCiCdWorkflowSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Actions APK workflow added (.github/workflows/build-apk.yml)!'**
+  String get setupCiCdWorkflowSuccess;
 }
 
 class _AppLocalizationsDelegate

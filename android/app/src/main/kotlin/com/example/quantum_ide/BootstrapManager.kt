@@ -46,12 +46,13 @@ class BootstrapManager(
     fun isBootstrapComplete(): Boolean {
         val rootfs = File(rootfsDir)
         val binBash = File("$rootfsDir/bin/bash")
-        return rootfs.exists() && binBash.exists()
+        val usrBinBash = File("$rootfsDir/usr/bin/bash")
+        return rootfs.exists() && (binBash.exists() || usrBinBash.exists())
     }
 
     fun getBootstrapStatus(): Map<String, Any> {
         val rootfsExists = File(rootfsDir).exists()
-        val binBashExists = File("$rootfsDir/bin/bash").exists()
+        val binBashExists = File("$rootfsDir/bin/bash").exists() || File("$rootfsDir/usr/bin/bash").exists()
 
         return mapOf(
             "rootfsExists" to rootfsExists,
@@ -61,77 +62,132 @@ class BootstrapManager(
         )
     }
 
-    fun extractRootfs(tarPath: String) {
+    fun ensureRootfsCompatibilityLinks(): Boolean {
         val rootfs = File(rootfsDir)
-        if (rootfs.exists()) deleteRecursively(rootfs)
-        rootfs.mkdirs()
+        if (!rootfs.isDirectory) return false
+        val links = mapOf(
+            "bin" to "usr/bin",
+            "lib" to "usr/lib",
+            "sbin" to "usr/sbin",
+        )
+        return runCatching {
+            links.forEach { (name, destination) ->
+                val link = File(rootfs, name)
+                val path = link.toPath()
+                if (java.nio.file.Files.isSymbolicLink(path)) {
+                    if (java.nio.file.Files.readSymbolicLink(path).toString() != destination) {
+                        java.nio.file.Files.delete(path)
+                        Os.symlink(destination, link.absolutePath)
+                    }
+                } else if (link.exists()) {
+                    if (!link.isDirectory) {
+                        link.delete()
+                        Os.symlink(destination, link.absolutePath)
+                    }
+                } else {
+                    Os.symlink(destination, link.absolutePath)
+                }
+            }
+            val bash = File(rootfs, "usr/bin/bash")
+            if (bash.exists()) bash.setExecutable(true, false)
+            val binBash = File(rootfs, "bin/bash")
+            if (binBash.exists()) binBash.setExecutable(true, false)
+            true
+        }.onFailure {
+            android.util.Log.e("BootstrapManager", "Could not repair compatibility links", it)
+        }.getOrDefault(false)
+    }
 
-        val deferredSymlinks = mutableListOf<Pair<String, String>>()
+    fun extractRootfs(tarPath: String) {
+        val archive = File(tarPath)
+        val rootfs = File(rootfsDir)
+        val staging = File("$rootfsDir.installing")
+        if (staging.exists()) deleteRecursively(staging)
+        staging.mkdirs()
+
+        val deferredLinks = mutableListOf<Pair<File, File>>()
+        val isZstd = tarPath.endsWith(".zst") || tarPath.endsWith(".zstandard")
 
         try {
-            FileInputStream(tarPath).use { fis ->
-                BufferedInputStream(fis, 256 * 1024).use { bis ->
-                    GZIPInputStream(bis).use { gis ->
-                        TarArchiveInputStream(gis).use { tis ->
-                            var entry: TarArchiveEntry? = tis.nextEntry
-                            while (entry != null) {
-                                val name = entry.name.removePrefix("./").removePrefix("/")
-                                if (name.isEmpty() || name.startsWith("dev/") || name == "dev") {
-                                    entry = tis.nextEntry
-                                    continue
-                                }
+            val fileStream = BufferedInputStream(FileInputStream(archive), 256 * 1024)
+            val compressorStream: InputStream = if (isZstd) {
+                ZstdCompressorInputStream(fileStream)
+            } else {
+                GZIPInputStream(fileStream)
+            }
 
-                                val outFile = File(rootfsDir, name)
-                                when {
-                                    entry.isDirectory -> outFile.mkdirs()
-                                    entry.isSymbolicLink -> deferredSymlinks.add(Pair(entry.linkName, outFile.absolutePath))
-                                    entry.isLink -> {
-                                        val target = entry.linkName.removePrefix("./").removePrefix("/")
-                                        val targetFile = File(rootfsDir, target)
-                                        outFile.parentFile?.mkdirs()
-                                        if (targetFile.exists()) {
-                                            targetFile.copyTo(outFile, overwrite = true)
-                                            if (targetFile.canExecute()) outFile.setExecutable(true, false)
-                                        }
-                                    }
-                                    else -> {
-                                        outFile.parentFile?.mkdirs()
-                                        FileOutputStream(outFile).use { fos ->
-                                            val buf = ByteArray(65536)
-                                            var len: Int
-                                            while (tis.read(buf).also { len = it } != -1) {
-                                                fos.write(buf, 0, len)
-                                            }
-                                        }
-                                        outFile.setReadable(true, false)
-                                        outFile.setWritable(true, false)
-                                        if (entry.mode == 0 || entry.mode and 0b001_001_001 != 0 ||
-                                            name.contains("/bin/") || name.contains("/sbin/")) {
-                                            outFile.setExecutable(true, false)
-                                        }
+            TarArchiveInputStream(compressorStream).use { tar ->
+                var entry: TarArchiveEntry? = tar.nextEntry
+                while (entry != null) {
+                    val cleanName = entry.name.removePrefix("./").trimStart('/')
+                    if (cleanName.isNotBlank() && !cleanName.startsWith("dev/") && cleanName != "dev") {
+                        val target = File(staging, cleanName)
+                        when {
+                            entry.isDirectory -> target.mkdirs()
+                            entry.isSymbolicLink -> {
+                                target.parentFile?.mkdirs()
+                                if (target.exists() || java.nio.file.Files.isSymbolicLink(target.toPath())) {
+                                    target.delete()
+                                }
+                                try {
+                                    Os.symlink(entry.linkName, target.absolutePath)
+                                } catch (_: Exception) {}
+                            }
+                            entry.isLink -> {
+                                target.parentFile?.mkdirs()
+                                val linkTarget = File(staging, entry.linkName.removePrefix("./").trimStart('/'))
+                                if (linkTarget.exists()) {
+                                    linkTarget.inputStream().use { input -> FileOutputStream(target).use { input.copyTo(it) } }
+                                    if (linkTarget.canExecute()) target.setExecutable(true, false)
+                                } else {
+                                    deferredLinks.add(target to linkTarget)
+                                }
+                            }
+                            entry.isFile -> {
+                                target.parentFile?.mkdirs()
+                                FileOutputStream(target).use { output ->
+                                    val buf = ByteArray(65536)
+                                    var len: Int
+                                    while (tar.read(buf).also { len = it } != -1) {
+                                        output.write(buf, 0, len)
                                     }
                                 }
-                                entry = tis.nextEntry
+                                target.setReadable(true, false)
+                                target.setWritable(true, false)
+                                if (entry.mode == 0 || entry.mode and 0b001_001_001 != 0 ||
+                                    cleanName.contains("/bin/") || cleanName.contains("/sbin/") ||
+                                    cleanName.endsWith("/bash") || cleanName.endsWith("/sh") ||
+                                    cleanName.endsWith("/node") || cleanName.endsWith("/git")) {
+                                    target.setExecutable(true, false)
+                                }
                             }
                         }
                     }
+                    entry = tar.nextEntry
                 }
             }
-        } catch (e: Exception) {
+
+            deferredLinks.forEach { (target, linkTarget) ->
+                if (linkTarget.exists()) {
+                    target.parentFile?.mkdirs()
+                    linkTarget.inputStream().use { input -> FileOutputStream(target).use { input.copyTo(it) } }
+                    if (linkTarget.canExecute()) target.setExecutable(true, false)
+                }
+            }
+
+            if (rootfs.exists()) deleteRecursively(rootfs)
+            if (!staging.renameTo(rootfs)) {
+                staging.copyRecursively(rootfs, overwrite = true)
+                deleteRecursively(staging)
+            }
+        } catch (e: Throwable) {
+            deleteRecursively(staging)
             throw RuntimeException("Extraction error: ${e.message}")
         }
 
-        deferredSymlinks.forEach { (target, path) ->
-            try {
-                val file = File(path)
-                if (file.exists()) file.delete()
-                file.parentFile?.mkdirs()
-                Os.symlink(target, path)
-            } catch (_: Exception) {}
-        }
-
+        ensureRootfsCompatibilityLinks()
         configureRootfs()
-        File(tarPath).delete()
+        archive.delete()
     }
 
     private fun configureRootfs() {

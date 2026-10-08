@@ -1840,5 +1840,42 @@
       "count": { "type": "int" },
       "files": { "type": "int" }
     }
-  }
+  },
+  "signInWithGitHub": "Sign in with GitHub",
+  "gitHubToken": "GitHub Personal Access Token",
+  "gitHubTokenHint": "Paste GitHub Personal Access Token (classic or fine-grained with repo scope)",
+  "connectGitHubDesc": "Log in to browse your repositories, clone projects, and trigger automated cloud builds.",
+  "cloneAndOpen": "Clone & Open",
+  "cloningRepository": "Cloning repository...",
+  "repoClonedSuccess": "Repository cloned successfully to {path}",
+  "@repoClonedSuccess": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "cloneFailed": "Failed to clone repository. Check connection or token permissions.",
+  "cloudBuildApk": "Release & Cloud Build APK",
+  "cloudBuildApkDesc": "Tag this version, push changes, and trigger GitHub Actions to build an APK and publish a release.",
+  "releaseTagName": "Release Tag",
+  "releaseTagNameHint": "e.g. v1.0.0",
+  "releaseCommitMsg": "Commit Message",
+  "releaseCommitMsgHint": "e.g. chore: prepare release v1.0.0",
+  "releaseNotes": "Release Notes / What's New",
+  "releaseNotesHint": "Describe what was added, fixed or improved...",
+  "publishReleaseBtn": "Publish Release & Build APK",
+  "releasingAndPushing": "Creating release tag & pushing to GitHub Actions...",
+  "releaseTriggeredSuccess": "Release {tag} created and pushed! Cloud APK build started on GitHub Actions.",
+  "@releaseTriggeredSuccess": {
+    "placeholders": {
+      "tag": { "type": "String" }
+    }
+  },
+  "releaseTriggerFailed": "Failed to push release: {error}",
+  "@releaseTriggerFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "setupCiCdWorkflow": "Add Cloud Build CI/CD Workflow",
+  "setupCiCdWorkflowSuccess": "GitHub Actions APK workflow added (.github/workflows/build-apk.yml)!"
 }

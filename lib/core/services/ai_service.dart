@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
@@ -330,36 +331,205 @@ class AIService {
 
   // ─── Загрузка доступных моделей ──────────────────────────────────────────
 
-  Future<List<String>> fetchAvailableModels([String? providerId]) async {
-    final pid = providerId ?? _settings.selectedProviderId;
-    switch (pid) {
-      case 'google':
-        return await _fetchGoogleModels();
-      case 'openai':
-      case 'deepseek':
-      case 'groq':
-      case 'openrouter':
-      case 'grok':
-      case 'together':
-      case 'perplexity':
-      case 'fireworks':
-      case 'kimi':
-      case 'nvidia':
-        return await _fetchOpenAiCompatModels(pid);
-      case 'anthropic':
-        return _anthropicModels(); // API не отдаёт список
-      case 'local_edge':
+  final Map<String, List<DiscoveredModel>> _discoveredModelsCache = {};
+
+  List<DiscoveredModel> getCachedDiscoveredModels(String providerId) {
+    if (_discoveredModelsCache.containsKey(providerId) &&
+        _discoveredModelsCache[providerId]!.isNotEmpty) {
+      return _discoveredModelsCache[providerId]!;
+    }
+    return AiProviders.getRecommendedDiscoveredModels(providerId);
+  }
+
+  Future<List<DiscoveredModel>> discoverModels(
+    String providerId, {
+    String? customBaseUrl,
+    String? customApiKey,
+  }) async {
+    final pid = providerId;
+    final key = customApiKey ?? _settings.apiKeys[pid] ?? '';
+    final baseUrl = customBaseUrl ?? getBaseUrl(pid);
+
+    if (pid == 'claude_subscription') {
+      final models = [
+        const DiscoveredModel(
+          id: 'default',
+          displayName: 'Claude Default',
+          providerId: 'claude_subscription',
+        ),
+      ];
+      _discoveredModelsCache[pid] = models;
+      return models;
+    }
+
+    if (pid == 'anthropic') {
+      final models = AiProviders.getRecommendedDiscoveredModels('anthropic');
+      _discoveredModelsCache[pid] = models;
+      return models;
+    }
+
+    if (pid == 'openrouter') {
+      try {
+        final endpoint = baseUrl.endsWith('/models')
+            ? baseUrl
+            : (baseUrl.endsWith('/v1') ? '$baseUrl/models' : '$baseUrl/v1/models');
+        final resp = await _dio.get(
+          endpoint,
+          options: Options(
+            headers: {
+              if (key.isNotEmpty) 'Authorization': 'Bearer $key',
+            },
+            receiveTimeout: const Duration(seconds: 15),
+          ),
+        );
+        if (resp.statusCode == 200 && resp.data is Map) {
+          final data = resp.data['data'] as List?;
+          if (data != null && data.isNotEmpty) {
+            final List<DiscoveredModel> list = [];
+            for (final item in data) {
+              if (item is Map) {
+                final id = item['id'] as String?;
+                if (id == null || id.isEmpty) continue;
+                final name = item['name'] as String? ?? id;
+                final pricing = item['pricing'] as Map?;
+                final isFree = id.endsWith(':free') || (pricing != null &&
+                    pricing['prompt']?.toString() == '0' &&
+                    pricing['completion']?.toString() == '0');
+                list.add(DiscoveredModel(
+                  id: id,
+                  displayName: name,
+                  isFree: isFree,
+                  providerId: 'openrouter',
+                ));
+              }
+            }
+            if (list.isNotEmpty) {
+              list.sort((a, b) {
+                if (a.isFree != b.isFree) return a.isFree ? -1 : 1;
+                return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+              });
+              _discoveredModelsCache[pid] = list;
+              return list;
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('OpenRouter model discovery error: $e');
+      }
+      final fallback = AiProviders.getRecommendedDiscoveredModels('openrouter');
+      _discoveredModelsCache[pid] = fallback;
+      return fallback;
+    }
+
+    if (pid == 'google') {
+      try {
+        final raw = await _fetchGoogleModels();
+        if (raw.isNotEmpty) {
+          final list = raw.map((m) => DiscoveredModel(
+            id: m,
+            displayName: m,
+            isFree: false,
+            providerId: 'google',
+          )).toList();
+          _discoveredModelsCache[pid] = list;
+          return list;
+        }
+      } catch (e) {
+        debugPrint('Google model discovery error: $e');
+      }
+      final fallback = AiProviders.getRecommendedDiscoveredModels('google');
+      _discoveredModelsCache[pid] = fallback;
+      return fallback;
+    }
+
+    if (pid == 'local_edge') {
+      try {
+        final List<String> raw;
         switch (_settings.selectedLocalEngine) {
           case LocalAiEngine.llamaServer:
-            return await _fetchLocalEdgeModels();
+            raw = await _fetchLocalEdgeModels();
+            break;
           case LocalAiEngine.ollama:
-            return await _fetchOllamaModels();
+            raw = await _fetchOllamaModels();
+            break;
           case LocalAiEngine.lmStudio:
-            return await _fetchLmStudioModels();
+            raw = await _fetchLmStudioModels();
+            break;
         }
-      default:
-        return AiProviders.byId(pid).defaultModels;
+        final list = raw.map((m) => DiscoveredModel(id: m, providerId: 'local_edge')).toList();
+        _discoveredModelsCache[pid] = list;
+        return list;
+      } catch (_) {
+        return AiProviders.getRecommendedDiscoveredModels('local_edge');
+      }
     }
+
+    // Generic OpenAI-compatible discovery (deepseek, opencode_zen, kimi, nvidia, openai, groq, etc.)
+    try {
+      final cleansed = _cleanseBaseUrl(baseUrl);
+      final candidates = [
+        '$cleansed/models',
+        if (!cleansed.endsWith('/v1')) '$cleansed/v1/models',
+        if (cleansed.endsWith('/anthropic')) '${cleansed.replaceAll('/anthropic', '')}/v1/models',
+        if (cleansed.endsWith('/anthropic')) '${cleansed.replaceAll('/anthropic', '')}/models',
+      ];
+      for (final endpoint in candidates) {
+        try {
+          final resp = await _dio.get(
+            endpoint,
+            options: Options(
+              headers: {
+                if (key.isNotEmpty) 'Authorization': 'Bearer $key',
+                if (key.isNotEmpty && (pid == 'kimi' || pid == 'deepseek')) 'x-api-key': key,
+              },
+              receiveTimeout: const Duration(seconds: 12),
+            ),
+          );
+          if (resp.statusCode == 200 && resp.data is Map) {
+            final data = (resp.data['data'] ?? resp.data['models']) as List?;
+            if (data != null && data.isNotEmpty) {
+              final List<DiscoveredModel> list = [];
+              for (final item in data) {
+                if (item is Map) {
+                  final id = (item['id'] ?? item['name']) as String?;
+                  if (id != null && id.isNotEmpty) {
+                    final name = item['name'] as String? ?? id;
+                    list.add(DiscoveredModel(
+                      id: id,
+                      displayName: name,
+                      isFree: id.endsWith(':free'),
+                      providerId: pid,
+                    ));
+                  }
+                } else if (item is String && item.isNotEmpty) {
+                  list.add(DiscoveredModel(
+                    id: item,
+                    displayName: item,
+                    isFree: item.endsWith(':free'),
+                    providerId: pid,
+                  ));
+                }
+              }
+              if (list.isNotEmpty) {
+                list.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+                _discoveredModelsCache[pid] = list;
+                return list;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    final fallback = AiProviders.getRecommendedDiscoveredModels(pid);
+    _discoveredModelsCache[pid] = fallback;
+    return fallback;
+  }
+
+  Future<List<String>> fetchAvailableModels([String? providerId]) async {
+    final pid = providerId ?? _settings.selectedProviderId;
+    final models = await discoverModels(pid);
+    return models.map((m) => m.id).toList();
   }
 
   Future<List<String>> _fetchGoogleModels() async {
@@ -628,6 +798,11 @@ class AIService {
           pid == 'together' ||
           pid == 'perplexity' ||
           pid == 'fireworks' ||
+          pid == 'kimi' ||
+          pid == 'nvidia' ||
+          pid == 'opencode_zen' ||
+          pid == 'mistral' ||
+          pid == 'custom' ||
           pid == 'lmstudio' ||
           pid == 'local_edge') {
         final key = _settings.apiKeys[pid] ?? '';
@@ -675,6 +850,9 @@ class AIService {
       case 'fireworks':
       case 'kimi':
       case 'nvidia':
+      case 'opencode_zen':
+      case 'mistral':
+      case 'custom':
         return await _openAiCompatCompletion(prompt);
       case 'local_edge':
         if (_settings.selectedLocalEngine == LocalAiEngine.ollama) {
@@ -805,6 +983,9 @@ class AIService {
       case 'fireworks':
       case 'kimi':
       case 'nvidia':
+      case 'opencode_zen':
+      case 'mistral':
+      case 'custom':
         return await _openAiChatMessage(
           message,
           history,
@@ -846,12 +1027,22 @@ class AIService {
     void Function(String token)? onToken,
   }) async {
     final pid = _settings.selectedProviderId;
+
+    if (pid == 'google') {
+      return await _streamGeminiChat(
+        message,
+        history,
+        systemInstruction: systemInstruction,
+        onToken: onToken,
+      );
+    }
     
     // For OpenAI-compatible providers, use streaming
     if (pid == 'openai' || pid == 'deepseek' || pid == 'groq' || 
         pid == 'openrouter' || pid == 'grok' || pid == 'together' ||
         pid == 'perplexity' || pid == 'fireworks' ||
         pid == 'kimi' || pid == 'nvidia' ||
+        pid == 'opencode_zen' || pid == 'mistral' || pid == 'custom' ||
         pid == 'local_edge') {
       return await _streamOpenAICompatibleChat(
         message,
@@ -1014,7 +1205,7 @@ class AIService {
     String? systemInstruction,
     String? imageBase64,
   }) async {
-    if (_geminiModel == null) return ChatResponse('Error: Set Gemini API key.');
+    if (_geminiModel == null) return const ChatResponse('Error: Set Gemini API key.');
     try {
       var model = _geminiModel!;
       if (systemInstruction != null) {
@@ -1052,6 +1243,68 @@ class AIService {
       }
       return ChatResponse(
         text,
+        tokenUsage: TokenUsage(
+          promptTokens: promptTokens,
+          completionTokens: completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        ),
+      );
+    } catch (e) {
+      return ChatResponse('Error: $e');
+    }
+  }
+
+  Future<ChatResponse> _streamGeminiChat(
+    String message,
+    List<Map<String, String>> history, {
+    String? systemInstruction,
+    String? imageBase64,
+    void Function(String token)? onToken,
+  }) async {
+    if (_geminiModel == null) return const ChatResponse('Error: Set Gemini API key.');
+    try {
+      var model = _geminiModel!;
+      if (systemInstruction != null) {
+        final key = _settings.apiKeys['google'] ?? '';
+        model = GenerativeModel(
+          model: _settings.selectedModel,
+          apiKey: key,
+          systemInstruction: Content.system(systemInstruction),
+        );
+      }
+
+      final parts = <Part>[TextPart(message)];
+      if (imageBase64 != null) {
+        parts.insert(0, DataPart('image/jpeg', base64Decode(imageBase64)));
+      }
+
+      final geminiHistory = history
+          .map(
+            (m) => m['role'] == 'user'
+                ? Content('user', [TextPart(m['content'] ?? '')])
+                : Content.model([TextPart(m['content'] ?? '')]),
+          )
+          .toList();
+      final session = model.startChat(history: geminiHistory);
+      final stream = session.sendMessageStream(Content('user', parts));
+      final buffer = StringBuffer();
+      int promptTokens = 0;
+      int completionTokens = 0;
+
+      await for (final chunk in stream) {
+        final text = chunk.text;
+        if (text != null && text.isNotEmpty) {
+          buffer.write(text);
+          onToken?.call(text);
+        }
+        if (chunk.usageMetadata != null) {
+          promptTokens = chunk.usageMetadata?.promptTokenCount ?? promptTokens;
+          completionTokens = chunk.usageMetadata?.candidatesTokenCount ?? completionTokens;
+        }
+      }
+
+      return ChatResponse(
+        buffer.toString(),
         tokenUsage: TokenUsage(
           promptTokens: promptTokens,
           completionTokens: completionTokens,
@@ -1254,3 +1507,8 @@ class AIService {
 }
 
 final aiServiceProvider = Provider<AIService>((ref) => AIService());
+
+final activeAiModelProvider = StateProvider<String>((ref) {
+  final aiSvc = ref.watch(aiServiceProvider);
+  return aiSvc.selectedModel;
+});

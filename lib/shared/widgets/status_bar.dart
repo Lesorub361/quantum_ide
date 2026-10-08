@@ -9,6 +9,7 @@ import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class StatusBar extends ConsumerStatefulWidget {
@@ -70,8 +71,8 @@ class _StatusBarState extends ConsumerState<StatusBar> {
 
     return RepaintBoundary(
       child: Container(
-        height: 26,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        height: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           color: const Color(0xFF090B10),
           border: Border(
@@ -106,6 +107,25 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                       color: totalErrors > 0 ? Colors.redAccent : Colors.white38,
                       onTap: () {
                         ref.read(panelProvider.notifier).selectTab(PanelTab.problems);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final stats = ref.watch(systemStatsProvider);
+                        final cpuPercent = (stats.cpuUsage * 100).toStringAsFixed(0);
+                        final ramGB = stats.ramUsedGB.toStringAsFixed(1);
+                        final isHigh = stats.cpuUsage > 0.85 || stats.ramUsage > 0.85;
+                        final isMed = stats.cpuUsage > 0.6 || stats.ramUsage > 0.6;
+                        final color = isHigh ? const Color(0xFFFF6B6B) : (isMed ? Colors.amberAccent : Colors.cyanAccent);
+                        return _StatusBarPill(
+                          icon: LucideIcons.cpu,
+                          label: 'CPU $cpuPercent%  RAM ${ramGB}G',
+                          color: color,
+                          onTap: () {
+                            ref.read(panelProvider.notifier).selectTab(PanelTab.run);
+                          },
+                        );
                       },
                     ),
                   ],
@@ -226,22 +246,22 @@ class _StatusBarPill extends StatelessWidget {
       borderRadius: BorderRadius.circular(4),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
         decoration: BoxDecoration(
           color: (color ?? Colors.white54).withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 11, color: color ?? Colors.white54),
-              const SizedBox(width: 4),
+              Icon(icon, size: 9.5, color: color ?? Colors.white54),
+              const SizedBox(width: 3),
             ],
             Text(
               label,
               style: GoogleFonts.inter(
-                fontSize: 11,
+                fontSize: 10,
                 color: color ?? Colors.white60,
                 fontWeight: FontWeight.w500,
               ),

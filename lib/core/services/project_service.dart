@@ -1510,7 +1510,7 @@ dev_dependencies:
         break;
       case ProjectType.androidJava:
       case ProjectType.androidKotlin:
-        command = 'cd "$guestPath" && chmod +x gradlew && ./gradlew installDebug || ./gradlew assembleDebug';
+        command = 'cd "$guestPath" && (bash ./gradlew installDebug || bash ./gradlew assembleDebug)';
         break;
       case ProjectType.rust:
         command = 'cd "$guestPath" && cargo run';
@@ -1562,8 +1562,7 @@ dev_dependencies:
     } else if (project.type == ProjectType.androidJava || project.type == ProjectType.androidKotlin) {
       final buildCmd = [
         'cd "$guestPath"',
-        'chmod +x gradlew',
-        './gradlew assembleRelease 2>&1',
+        'bash ./gradlew assembleRelease 2>&1',
       ].join(' && ');
       terminal.sendCommand(buildCmd);
     } else {

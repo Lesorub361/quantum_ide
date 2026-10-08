@@ -69,23 +69,59 @@ extension LocalAiEngineExtension on LocalAiEngine {
   }
 }
 
+/// Информация о модели ИИ (включая флаг бесплатности и отображаемое имя)
+class DiscoveredModel {
+  final String id;
+  final String displayName;
+  final bool isFree;
+  final String? providerId;
+
+  const DiscoveredModel({
+    required this.id,
+    String? displayName,
+    this.isFree = false,
+    this.providerId,
+  }) : displayName = displayName ?? id;
+}
+
 /// Все доступные AI провайдеры
 class AiProviders {
   static const google = AiProviderConfig(
     id: 'google',
-    displayName: 'Antigravity',
+    displayName: 'Google Antigravity',
     logoEmoji: '✨',
-    apiKeyHint: 'AIza...',
+    apiKeyHint: 'Не требуется (OAuth / agy)',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     defaultModels: [
-      'gemini-2.5-pro-preview-05-06',
-      'gemini-2.0-flash',
-      'gemini-2.0-flash-lite',
-      'gemini-1.5-pro',
-      'gemini-1.5-flash',
-      'gemini-1.5-flash-8b',
+      'gemini-3.8-flash-high',
+      'gemini-3.8-flash-medium',
+      'gemini-3.8-flash-low',
+      'gemini-3.7-flash-high',
+      'gemini-3.7-flash-medium',
+      'gemini-3.7-flash-low',
+      'gemini-3.6-flash-high',
+      'gemini-3.6-flash-medium',
+      'gemini-3.6-flash-low',
+      'gemini-3.1-pro-high',
+      'gemini-3.1-pro-low',
+      'claude-sonnet-4-6',
+      'claude-opus-4-6-thinking',
+      'gpt-oss-120b-medium',
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
     ],
     supportsLocalModels: true,
+    requiresApiKey: false,
+  );
+
+  static const claudeSubscription = AiProviderConfig(
+    id: 'claude_subscription',
+    displayName: 'Claude subscription',
+    logoEmoji: '👑',
+    apiKeyHint: 'setup-token...',
+    baseUrl: '',
+    defaultModels: ['default'],
+    requiresApiKey: false,
   );
 
   static const openai = AiProviderConfig(
@@ -97,28 +133,30 @@ class AiProviders {
     defaultModels: [
       'gpt-4o',
       'gpt-4o-mini',
+      'o1-preview',
+      'o1-mini',
       'gpt-4-turbo',
       'gpt-4',
       'gpt-3.5-turbo',
-      'o1-preview',
-      'o1-mini',
     ],
     supportsLocalModels: true,
   );
 
   static const anthropic = AiProviderConfig(
     id: 'anthropic',
-    displayName: 'Anthropic Claude',
+    displayName: 'Anthropic API',
     logoEmoji: '🧠',
     apiKeyHint: 'sk-ant-...',
-    baseUrl: 'https://api.anthropic.com/v1',
+    baseUrl: 'https://api.anthropic.com',
     defaultModels: [
+      'claude-3-7-sonnet-20250219',
+      'claude-3-5-sonnet-20241022',
+      'claude-3-5-haiku-20241022',
+      'claude-sonnet-4-6',
+      'claude-opus-4-6',
       'claude-opus-4-5',
       'claude-sonnet-4-5',
       'claude-haiku-4-5',
-      'claude-3-5-sonnet-20241022',
-      'claude-3-5-haiku-20241022',
-      'claude-3-opus-20240229',
     ],
     supportsLocalModels: true,
   );
@@ -129,8 +167,73 @@ class AiProviders {
     logoEmoji: '🐳',
     apiKeyHint: 'sk-...',
     baseUrl: 'https://api.deepseek.com',
-    defaultModels: ['deepseek-chat', 'deepseek-coder'],
+    defaultModels: [
+      'deepseek-chat',
+      'deepseek-reasoner',
+      'deepseek-coder',
+    ],
     supportsLocalModels: true,
+  );
+
+  static const openrouter = AiProviderConfig(
+    id: 'openrouter',
+    displayName: 'OpenRouter',
+    logoEmoji: '🌐',
+    apiKeyHint: 'sk-or-...',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModels: [
+      'dots-studio/dots-3-note-preview:free',
+      'deepseek/deepseek-r1:free',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'qwen/qwen-2.5-coder-32b-instruct:free',
+      'google/gemini-2.0-flash-exp:free',
+      'deepseek/deepseek-r1',
+      'anthropic/claude-3.7-sonnet',
+      'anthropic/claude-3.5-sonnet',
+      'google/gemini-2.5-pro',
+      'openai/gpt-4o',
+      'meta-llama/llama-3.3-70b-instruct',
+      'qwen/qwen-2.5-coder-32b-instruct',
+    ],
+    supportsLocalModels: true,
+  );
+
+  static const opencodeZen = AiProviderConfig(
+    id: 'opencode_zen',
+    displayName: 'OpenCode Zen',
+    logoEmoji: '⚡',
+    apiKeyHint: 'sk-...',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    defaultModels: ['deepseek-v4-flash'],
+  );
+
+  static const kimi = AiProviderConfig(
+    id: 'kimi',
+    displayName: 'Kimi (Moonshot AI)',
+    logoEmoji: '🌙',
+    apiKeyHint: 'sk-...',
+    baseUrl: 'https://api.moonshot.ai/anthropic',
+    defaultModels: [
+      'kimi-k2.6',
+      'moonshot-v1-8k',
+      'moonshot-v1-32k',
+      'moonshot-v1-128k',
+    ],
+  );
+
+  static const nvidia = AiProviderConfig(
+    id: 'nvidia',
+    displayName: 'NVIDIA NIM',
+    logoEmoji: '💚',
+    apiKeyHint: 'nvapi-...',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    defaultModels: [
+      'qwen/qwen2.5-coder-32b-instruct',
+      'meta/llama-3.1-70b-instruct',
+      'meta/llama-3.1-8b-instruct',
+      'mistralai/mistral-7b-instruct-v0.3',
+      'google/gemma-2-9b-it',
+    ],
   );
 
   static const groq = AiProviderConfig(
@@ -144,21 +247,6 @@ class AiProviders {
       'llama-3.1-8b-instant',
       'mixtral-8x7b-32768',
       'gemma2-9b-it',
-    ],
-    supportsLocalModels: true,
-  );
-
-  static const openrouter = AiProviderConfig(
-    id: 'openrouter',
-    displayName: 'OpenRouter',
-    logoEmoji: '🌐',
-    apiKeyHint: 'sk-or-...',
-    baseUrl: 'https://openrouter.ai/api/v1',
-    defaultModels: [
-      'deepseek/deepseek-chat',
-      'google/gemini-2.5-pro',
-      'anthropic/claude-3.5-sonnet',
-      'meta-llama/llama-3.3-70b-instruct',
     ],
     supportsLocalModels: true,
   );
@@ -211,6 +299,22 @@ class AiProviders {
     ],
   );
 
+  static const mistral = AiProviderConfig(
+    id: 'mistral',
+    displayName: 'Mistral AI',
+    logoEmoji: '🌪️',
+    apiKeyHint: '...',
+    baseUrl: 'https://api.mistral.ai/v1',
+    defaultModels: [
+      'codestral-latest',
+      'mistral-large-latest',
+      'mistral-small-latest',
+      'codestral-mamba-latest',
+      'pixtral-large-latest',
+    ],
+    supportsLocalModels: true,
+  );
+
   static const custom = AiProviderConfig(
     id: 'custom',
     displayName: 'Custom API',
@@ -232,51 +336,46 @@ class AiProviders {
     requiresApiKey: false,
   );
 
-  static const kimi = AiProviderConfig(
-    id: 'kimi',
-    displayName: 'Kimi (Moonshot AI)',
-    logoEmoji: '🌙',
-    apiKeyHint: 'sk-...',
-    baseUrl: 'https://api.moonshot.cn/v1',
-    defaultModels: [
-      'moonshot-v1-8k',
-      'moonshot-v1-32k',
-      'moonshot-v1-128k',
-    ],
-  );
-
-  static const nvidia = AiProviderConfig(
-    id: 'nvidia',
-    displayName: 'NVIDIA NIM',
-    logoEmoji: '💚',
-    apiKeyHint: 'nvapi-...',
-    baseUrl: 'https://integrate.api.nvidia.com/v1',
-    defaultModels: [
-      'meta/llama-3.1-8b-instruct',
-      'meta/llama-3.1-70b-instruct',
-      'mistralai/mistral-7b-instruct-v0.3',
-      'google/gemma-2-9b-it',
-    ],
-  );
-
   static const all = [
-    google,
-    openai,
-    anthropic,
-    deepseek,
-    groq,
     openrouter,
+    deepseek,
+    anthropic,
+    google,
+    mistral,
+    opencodeZen,
+    kimi,
+    nvidia,
+    openai,
+    groq,
     grok,
     together,
     perplexity,
     fireworks,
-    kimi,
-    nvidia,
     custom,
+    claudeSubscription,
     localEdge,
   ];
 
   static AiProviderConfig byId(String id) {
-    return all.firstWhere((p) => p.id == id, orElse: () => google);
+    return all.firstWhere((p) => p.id == id, orElse: () => openrouter);
+  }
+
+  /// Возвращает рекомендуемые модели с описанием и флагом бесплатности
+  static List<DiscoveredModel> getRecommendedDiscoveredModels(String providerId) {
+    final provider = byId(providerId);
+    return provider.defaultModels.map((m) {
+      final isFree = m.endsWith(':free');
+      String display = m;
+      if (m.contains('/')) {
+        final parts = m.split('/');
+        display = parts.length > 1 ? '${parts[1]} (${parts[0]})' : m;
+      }
+      return DiscoveredModel(
+        id: m,
+        displayName: display,
+        isFree: isFree,
+        providerId: providerId,
+      );
+    }).toList();
   }
 }

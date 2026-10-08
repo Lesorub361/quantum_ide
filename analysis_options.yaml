@@ -1,6 +1,13 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  exclude:
+    - test_app/**
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - linux/**
   errors:
     # Treat deprecated_member_use as warning, not info
     deprecated_member_use: warning

@@ -1,0 +1,12 @@
+{
+  "versionCode": 25,
+  "versionName": "1.2.3",
+  "notes": "Обновление QuantumIDE: интеграция Antigravity CLI OAuth с автоматическим TUI-рукопожатием, поддержка официальных релизов DeepSeek и Claude Code, устранение бага блокировки чата при открытом файле, встроенный установщик и менеджер обновлений CLI и приложения.",
+  "artifacts": {
+    "online": {
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.3/quantum-ide-v1.2.3.apk",
+      "sha256": "",
+      "sizeBytes": 0
+    }
+  }
+}

@@ -56,20 +56,21 @@ class AiPermissionService {
   /// Evaluates the risk level of an AIAction and determines if it is safe to auto-approve.
   AiRiskLevel evaluateActionRisk(AIAction action, String workspaceRoot) {
     // 1. Check path scope for file actions
-    if (action.type == 'edit' || action.type == 'create' || action.type == 'delete') {
+    if (action.type == 'edit' || action.type == 'create' || action.type == 'delete' || action.type == 'rewrite_whole_file') {
       if (action.path.isEmpty) {
         return AiRiskLevel.high;
       }
       if (!isPathInScope(action.path, workspaceRoot)) {
-        // Any action outside the workspace is HIGH risk (and should be blocked)
+        // Any action outside the workspace is blocked/high risk
         return AiRiskLevel.high;
       }
       
       if (action.type == 'delete') {
-        return AiRiskLevel.high; // Deletion is always high risk
+        return AiRiskLevel.high; // Deletion requires caution
       }
       
-      return AiRiskLevel.medium; // Edits and creation are medium risk
+      // Inside workspace: creating and editing files is safe for autonomous agent
+      return AiRiskLevel.low;
     }
 
     // 2. Command action evaluation
@@ -77,31 +78,17 @@ class AiPermissionService {
       final cmd = action.content.trim();
       final cmdLower = cmd.toLowerCase();
 
-      // Check path candidates within the command
-      final paths = extractPathCandidates(cmd);
-      for (final path in paths) {
-        // If the path looks absolute or relative, but is outside the workspace, mark as HIGH risk
-        // Ignore simple non-existent paths unless they resolve outside workspace
-        final absPath = p.isAbsolute(path) ? path : p.join(workspaceRoot, path);
-        if (!isPathInScope(absPath, workspaceRoot)) {
-          // If it references something outside the workspace, block/high risk
-          return AiRiskLevel.high;
-        }
-      }
-
-      // Check against blocklist/high risk patterns
+      // Check against destructive system patterns
       final destructivePatterns = [
-        'rm ',
-        'rm -rf',
+        'rm -rf /',
+        'rm -rf ~',
+        'rm -rf ..',
         'mv /',
-        'chmod /',
-        'chown /',
-        'kill ',
+        'chmod -R 777 /',
         'shutdown',
         'reboot',
-        'dd ',
         'mkfs',
-        'sudo ',
+        ':(){ :|:& };:',
       ];
 
       for (final pattern in destructivePatterns) {
@@ -110,73 +97,26 @@ class AiPermissionService {
         }
       }
 
-      // Check for low-risk read-only and build commands
-      final lowRiskPrefixes = [
-        'flutter analyze',
-        'flutter test',
-        'flutter pub get',
-        'flutter pub add',
-        'flutter build',
-        'flutter run',
-        'dart test',
-        'dart analyze',
-        'dart pub get',
-        'dart run',
-        'python3 ',
-        'python ',
-        'pip install',
-        'pip3 install',
-        'npm run',
-        'npm install',
-        'npx ',
-        'git status',
-        'git diff',
-        'git log',
-        'git add',
-        'git commit',
-        'git push',
-        'git pull',
-        'ls',
-        'pwd',
-        'find',
-        'grep',
-        'cat',
-        'echo',
-        'mkdir',
-        'touch',
-      ];
-
-      for (final prefix in lowRiskPrefixes) {
-        if (cmdLower == prefix || cmdLower.startsWith('$prefix ')) {
-          return AiRiskLevel.low;
-        }
-      }
-
-      // Default for other commands (e.g. running a build, flutter pub get, git commit) is medium risk
-      return AiRiskLevel.medium;
-    }
-
-    // 3. Read-only operation types (Low risk)
-    if (action.type == 'read_file' ||
-        action.type == 'grep_search' ||
-        action.type == 'list_dir' ||
-        action.type == 'web_search' ||
-        action.type == 'web_fetch') {
-      // For read_file and list_dir, double-check scope for safety
-      if (action.type == 'read_file' || action.type == 'list_dir') {
-        final pathToCheck = action.path.isEmpty ? workspaceRoot : action.path;
-        if (!isPathInScope(pathToCheck, workspaceRoot)) {
-          return AiRiskLevel.high; // Reading outside workspace is high risk / blocked
-        }
-      }
+      // Standard development tools and commands run inside PRoot container safely
       return AiRiskLevel.low;
     }
 
-    // 4. MCP tool calls (Medium risk)
-    if (action.type == 'mcp') {
-      return AiRiskLevel.medium;
+    // 3. Read-only and exploration operation types (Low risk)
+    if (action.type == 'read_file' ||
+        action.type == 'grep_search' ||
+        action.type == 'list_dir' ||
+        action.type == 'find_symbols' ||
+        action.type == 'web_search' ||
+        action.type == 'web_fetch') {
+      return AiRiskLevel.low;
     }
 
-    return AiRiskLevel.high;
+    // 4. MCP tool calls (Low risk)
+    if (action.type == 'mcp') {
+      return AiRiskLevel.low;
+    }
+
+    return AiRiskLevel.medium;
   }
 }
+

@@ -12,6 +12,9 @@ import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifi
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
+import 'package:quantum_ide/core/models/agent_activity_item.dart';
+import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -33,6 +36,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       }
       ref.read(editorProvider.notifier).clearWorkspace();
       ref.read(terminalTabsProvider.notifier).closeAllSessions();
+      ref.read(runtimeServiceProvider).init();
     });
   }
 
@@ -518,7 +522,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             child: InkWell(
               onTap: () async {
                 await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
-                if (context.mounted) context.push('/editor');
+                if (context.mounted) context.go('/editor');
               },
               onLongPress: () => _showProjectActions(context, ref, project),
               child: Padding(
@@ -664,6 +668,11 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
       actions: [
         _buildAppActionButton(
+          icon: LucideIcons.git_branch,
+          tooltip: 'GitHub',
+          onTap: () => context.push('/github'),
+        ),
+        _buildAppActionButton(
           icon: LucideIcons.package,
           tooltip: AppLocalizations.of(context)!.packagesTooltip,
           onTap: () => context.push('/packages'),
@@ -733,7 +742,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           child: InkWell(
             onTap: () async {
               await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
-              if (context.mounted) context.push('/editor');
+              if (context.mounted) context.go('/editor');
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -981,6 +990,26 @@ class _HomePageState extends ConsumerState<HomePage> {
     return Row(
       children: [
         _buildActionItem(
+          icon: LucideIcons.sparkles,
+          label: 'Quick Chat',
+          color: const Color(0xFFa078ff),
+          onTap: () async {
+            final allProjects = ref.read(projectServiceProvider);
+            final usedSlugs = allProjects.map((p) => p.name.toLowerCase()).toSet();
+            final identity = generateQuickChatIdentity(usedSlugs);
+            final project = await ref.read(projectServiceProvider.notifier).createProject(
+              name: identity.slug,
+              path: '',
+              type: ProjectType.web,
+            );
+            await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
+            ref.read(rightChatPanelOpenProvider.notifier).state = true;
+            if (context.mounted) {
+              context.go('/editor');
+            }
+          },
+        ),
+        _buildActionItem(
           icon: LucideIcons.folder_open,
           label: AppLocalizations.of(context)!.open,
           color: theme.colorScheme.primary,
@@ -1098,7 +1127,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             child: InkWell(
               onTap: () async {
                 await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
-                if (context.mounted) context.push('/editor');
+                if (context.mounted) context.go('/editor');
               },
               onLongPress: () => _showProjectActions(context, ref, project),
               child: Padding(
@@ -1268,7 +1297,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               onTap: () async {
                 Navigator.pop(ctx);
                 await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
-                if (context.mounted) context.push('/editor');
+                if (context.mounted) context.go('/editor');
               },
             ),
 
@@ -1463,6 +1492,65 @@ class _HomePageState extends ConsumerState<HomePage> {
     ];
     final isDesktop = MediaQuery.of(context).size.width > 800;
 
+    final projectTemplates = [
+      (
+        type: ProjectType.flutter,
+        title: 'Flutter App',
+        subtitle: 'Cross-platform mobile, desktop & web with Dart',
+        icon: LucideIcons.smartphone,
+        color: const Color(0xFF02569B),
+        badge: 'Recommended',
+      ),
+      (
+        type: ProjectType.web,
+        title: 'React + Vite / Web',
+        subtitle: 'Modern Web app with HTML5, CSS3 & JavaScript',
+        icon: LucideIcons.globe,
+        color: const Color(0xFF00D8FF),
+        badge: 'Web',
+      ),
+      (
+        type: ProjectType.nodejs,
+        title: 'Node.js Backend',
+        subtitle: 'REST API, Express server & npm packages',
+        icon: LucideIcons.server,
+        color: const Color(0xFF68A063),
+        badge: 'Node',
+      ),
+      (
+        type: ProjectType.python,
+        title: 'Python Project',
+        subtitle: 'FastAPI, automation, scripts & AI tools',
+        icon: LucideIcons.terminal,
+        color: const Color(0xFFFFD43B),
+        badge: 'Python',
+      ),
+      (
+        type: ProjectType.rust,
+        title: 'Rust Binary',
+        subtitle: 'High-performance memory safe systems code',
+        icon: LucideIcons.cpu,
+        color: const Color(0xFFDEA584),
+        badge: 'Rust',
+      ),
+      (
+        type: ProjectType.androidKotlin,
+        title: 'Android Native (Kotlin)',
+        subtitle: 'Modern native Android project with Gradle',
+        icon: LucideIcons.layers,
+        color: const Color(0xFF3DDC84),
+        badge: 'Kotlin',
+      ),
+      (
+        type: ProjectType.androidJava,
+        title: 'Android Native (Java)',
+        subtitle: 'Classic native Android project with Gradle',
+        icon: LucideIcons.layers,
+        color: const Color(0xFFF89820),
+        badge: 'Java',
+      ),
+    ];
+
     bool isCreating = false;
     String? creationError;
 
@@ -1473,7 +1561,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           builder: (ctx, setState) => Dialog(
             backgroundColor: Colors.transparent,
             child: Container(
-              width: 760,
+              width: 820,
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(24),
@@ -1532,37 +1620,105 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 const SizedBox(height: 24),
                                 Text(AppLocalizations.of(context)!.projectType, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                                 const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: ProjectType.values.where((type) => type != ProjectType.dart && type != ProjectType.shell && type != ProjectType.other).map((type) {
-                                    final isSelected = selectedType == type;
-                                    return GestureDetector(
-                                      onTap: () => setState(() {
-                                        final oldType = selectedType;
-                                        selectedType = type;
-                                        if ((type == ProjectType.androidJava || type == ProjectType.androidKotlin) && 
-                                            (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
-                                          sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
-                                        } else if (type == ProjectType.flutter && 
-                                                   (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
-                                          sdkCtrl.text = '34';
-                                        }
-                                      }),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        decoration: BoxDecoration(
-                                          color: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.15) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                                          borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(color: isSelected ? theme.colorScheme.primary : Colors.transparent),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxHeight: 280),
+                                  child: ListView.separated(
+                                    shrinkWrap: true,
+                                    itemCount: projectTemplates.length,
+                                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                                    itemBuilder: (context, idx) {
+                                      final t = projectTemplates[idx];
+                                      final isSelected = selectedType == t.type;
+                                      return InkWell(
+                                        borderRadius: BorderRadius.circular(12),
+                                        onTap: () => setState(() {
+                                          final oldType = selectedType;
+                                          selectedType = t.type;
+                                          if ((t.type == ProjectType.androidJava || t.type == ProjectType.androidKotlin) && 
+                                              (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
+                                            sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
+                                          } else if (t.type == ProjectType.flutter && 
+                                                     (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
+                                            sdkCtrl.text = '34';
+                                          }
+                                        }),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 150),
+                                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: isSelected ? t.color.withValues(alpha: 0.12) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(
+                                              color: isSelected ? t.color : Colors.white.withValues(alpha: 0.06),
+                                              width: isSelected ? 1.5 : 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 36,
+                                                height: 36,
+                                                decoration: BoxDecoration(
+                                                  color: t.color.withValues(alpha: 0.18),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Icon(t.icon, color: t.color, size: 18),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          t.title,
+                                                          style: GoogleFonts.inter(
+                                                            color: isSelected ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withValues(alpha: 0.9),
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: t.color.withValues(alpha: 0.15),
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Text(
+                                                            t.badge,
+                                                            style: GoogleFonts.inter(
+                                                              color: t.color,
+                                                              fontSize: 9,
+                                                              fontWeight: FontWeight.w600,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      t.subtitle,
+                                                      style: GoogleFonts.inter(
+                                                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                                        fontSize: 11,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                              Icon(
+                                                isSelected ? LucideIcons.circle_check : LucideIcons.circle,
+                                                color: isSelected ? t.color : Colors.white24,
+                                                size: 18,
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                        child: Text(
-                                          type.name.toUpperCase(),
-                                          style: GoogleFonts.inter(color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold),
-                                        ),
-                                      ),
-                                    );
-                                  }).toList(),
+                                      );
+                                    },
+                                  ),
                                 ),
                                 if (selectedType == ProjectType.flutter) ...[
                                   const SizedBox(height: 24),
@@ -1835,7 +1991,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   sdkVersion: project.sdkVersion,
                                 ));
                               } else {
-                                await ref.read(projectServiceProvider.notifier).createProject(
+                                final newProj = await ref.read(projectServiceProvider.notifier).createProject(
                                   name: nameCtrl.text,
                                   path: '',
                                   type: selectedType,
@@ -1846,6 +2002,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
                                   sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
                                 );
+                                await ref.read(workspaceProvider.notifier).setWorkspace(newProj.path);
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                if (context.mounted) context.go('/editor');
+                                return;
                               }
                               if (ctx.mounted) Navigator.pop(ctx);
                             } catch (e) {
@@ -1922,37 +2082,105 @@ class _HomePageState extends ConsumerState<HomePage> {
                     const SizedBox(height: 24),
                     Text(AppLocalizations.of(context)!.projectType, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: ProjectType.values.where((type) => type != ProjectType.dart && type != ProjectType.shell && type != ProjectType.other).map((type) {
-                        final isSelected = selectedType == type;
-                        return GestureDetector(
-                          onTap: () => setState(() {
-                            final oldType = selectedType;
-                            selectedType = type;
-                            if ((type == ProjectType.androidJava || type == ProjectType.androidKotlin) && 
-                                (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
-                              sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
-                            } else if (type == ProjectType.flutter && 
-                                       (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
-                              sdkCtrl.text = '34';
-                            }
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isSelected ? theme.colorScheme.primary.withValues(alpha: 0.15) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: isSelected ? theme.colorScheme.primary : Colors.transparent),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 260),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: projectTemplates.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, idx) {
+                          final t = projectTemplates[idx];
+                          final isSelected = selectedType == t.type;
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => setState(() {
+                              final oldType = selectedType;
+                              selectedType = t.type;
+                              if ((t.type == ProjectType.androidJava || t.type == ProjectType.androidKotlin) && 
+                                  (oldType == ProjectType.flutter || sdkCtrl.text == '34')) {
+                                sdkCtrl.text = 'com.example.${nameCtrl.text.isEmpty ? 'app' : nameCtrl.text.toLowerCase().replaceAll('-', '_')}';
+                              } else if (t.type == ProjectType.flutter && 
+                                         (oldType == ProjectType.androidJava || oldType == ProjectType.androidKotlin || sdkCtrl.text.contains('.'))) {
+                                sdkCtrl.text = '34';
+                              }
+                            }),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isSelected ? t.color.withValues(alpha: 0.12) : theme.colorScheme.onSurface.withValues(alpha: 0.03),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected ? t.color : Colors.white.withValues(alpha: 0.06),
+                                  width: isSelected ? 1.5 : 1,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: t.color.withValues(alpha: 0.18),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(t.icon, color: t.color, size: 18),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              t.title,
+                                              style: GoogleFonts.inter(
+                                                color: isSelected ? theme.colorScheme.onSurface : theme.colorScheme.onSurface.withValues(alpha: 0.9),
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: t.color.withValues(alpha: 0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                t.badge,
+                                                style: GoogleFonts.inter(
+                                                  color: t.color,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          t.subtitle,
+                                          style: GoogleFonts.inter(
+                                            color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7),
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(
+                                    isSelected ? LucideIcons.circle_check : LucideIcons.circle,
+                                    color: isSelected ? t.color : Colors.white24,
+                                    size: 18,
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: Text(
-                              type.name.toUpperCase(),
-                              style: GoogleFonts.inter(color: isSelected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                          );
+                        },
+                      ),
                     ),
                     if (selectedType == ProjectType.flutter) ...[
                       const SizedBox(height: 24),
@@ -2226,7 +2454,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               sdkVersion: project.sdkVersion,
                             ));
                           } else {
-                            await ref.read(projectServiceProvider.notifier).createProject(
+                            final newProj = await ref.read(projectServiceProvider.notifier).createProject(
                               name: nameCtrl.text,
                               path: '',
                               type: selectedType,
@@ -2237,6 +2465,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                               platforms: selectedType == ProjectType.flutter ? selectedPlatforms : null,
                               sdkVersion: (selectedType == ProjectType.flutter || selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ? sdkCtrl.text.trim() : null,
                             );
+                            await ref.read(workspaceProvider.notifier).setWorkspace(newProj.path);
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (context.mounted) context.go('/editor');
+                            return;
                           }
                           if (ctx.mounted) Navigator.pop(ctx);
                         } catch (e) {

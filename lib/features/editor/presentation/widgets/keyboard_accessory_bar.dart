@@ -51,12 +51,12 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onPressed,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(5),
             child: Container(
-              width: 36,
-              height: 36,
+              width: 28,
+              height: 28,
               alignment: Alignment.center,
-              child: Icon(icon, size: 17, color: color ?? Colors.white70),
+              child: Icon(icon, size: 14, color: color ?? Colors.white70),
             ),
           ),
         ),
@@ -65,9 +65,9 @@ class KeyboardAccessoryBar extends ConsumerWidget {
 
     if (!isKeyboardOpen) {
       return Container(
-        height: 42,
+        height: 32,
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
           color: const Color(0xE610121D),
           border: Border(
@@ -103,9 +103,9 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               children: [
                 Text(
                   '${settings.fontSize.toInt()} px',
-                  style: const TextStyle(fontSize: 11, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 6),
                 buildBtn(
                   icon: LucideIcons.keyboard,
                   tooltip: l10n.edit,
@@ -123,9 +123,9 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     }
 
     return Container(
-      height: 42,
+      height: 32,
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
         color: const Color(0xFF161925),
         border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5)),
@@ -150,8 +150,8 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           ),
           Container(
             width: 1,
-            height: 18,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
+            height: 14,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
             color: Colors.white.withValues(alpha: 0.08),
           ),
           Expanded(
@@ -163,19 +163,19 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                 final symbol = symbols[index];
                 final isTab = symbol == 'TAB';
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 1.5, vertical: 2),
                   child: TextButton(
                     onPressed: () {
                       _triggerHaptic(ref);
                       _insertText(symbol);
                     },
                     style: TextButton.styleFrom(
-                      minimumSize: Size(isTab ? 46 : 32, 32),
+                      minimumSize: Size(isTab ? 38 : 26, 26),
                       padding: EdgeInsets.zero,
                       backgroundColor: isTab ? Colors.cyanAccent.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.03),
                       foregroundColor: isTab ? Colors.cyanAccent : Colors.white70,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(5),
                         side: isTab
                           ? BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.15))
                           : BorderSide(color: Colors.white.withValues(alpha: 0.04), width: 0.5),
@@ -184,7 +184,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                     child: Text(
                       symbol,
                       style: TextStyle(
-                        fontSize: isTab ? 11 : 15,
+                        fontSize: isTab ? 9.5 : 12.5,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
