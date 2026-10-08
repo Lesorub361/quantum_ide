@@ -442,20 +442,20 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
   Future<void> _installDeepSeekHarness() async {
     state = state.copyWith(
       installProgress: 0.3,
-      statusMessage: 'Установка DeepSeek Harness (dsh)...',
+      statusMessage: 'Установка/Обновление DeepSeek Harness (@deepseek-ai/dsh)...',
     );
 
     if (Platform.isAndroid) {
-      await _runtime.runCommand('npm install -g @deepseek-ai/dsh || pip install --break-system-packages deepseek-harness');
+      await _runtime.runCommand('npm install -g @deepseek-ai/dsh@latest');
     } else {
-      final res = await Process.run('npm', ['install', '-g', '@deepseek-ai/dsh']);
+      final res = await Process.run('npm', ['install', '-g', '@deepseek-ai/dsh@latest']);
       if (res.exitCode != 0) {
-        await Process.run('pip', ['install', 'deepseek-harness']);
+        await Process.run('npm', ['install', '-g', '--prefix', p.join(_homeDir, '.local'), '@deepseek-ai/dsh@latest']);
       }
     }
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('cli_dsh-version', '0.1.5');
+    await prefs.setString('cli_dsh-version', '0.2.0-rc.2');
   }
 }
 

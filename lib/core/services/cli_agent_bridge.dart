@@ -719,7 +719,7 @@ class CliAgentBridge {
       case AgentKind.antigravity:
         return 'npm install -g @google/antigravity-cli || npm install -g @google/gemini-cli';
       case AgentKind.deepseekHarness:
-        return 'pip install --break-system-packages deepseek-harness || pipx install deepseek-harness';
+        return 'npm install -g @deepseek-ai/dsh@latest';
     }
   }
 
