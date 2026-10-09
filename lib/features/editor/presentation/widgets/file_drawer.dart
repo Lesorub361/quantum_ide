@@ -313,6 +313,13 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                                 onPressed: () => showSortMenu(context, ref),
                               ),
                               DrawerActionIcon(
+                                icon: LucideIcons.git_branch,
+                                tooltip: 'Git',
+                                onPressed: () {
+                                  ref.read(drawerTabProvider.notifier).state = 5;
+                                },
+                              ),
+                              DrawerActionIcon(
                                 icon: LucideIcons.wrench,
                                 tooltip: AppLocalizations.of(context)!.environment,
                                 onPressed: () => showEnvironmentBottomSheet(context, ref),

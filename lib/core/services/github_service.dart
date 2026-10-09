@@ -92,7 +92,7 @@ class GitHubService {
     }
   }
 
-  Future<String?> cloneRepository(String url, String destinationPath) async {
+  Future<String?> cloneRepository(String url, String destinationPath, {Future<String> Function(String cmd)? runner}) async {
     try {
       String cloneUrl = url;
       if (_accessToken != null && _accessToken!.isNotEmpty && cloneUrl.startsWith('https://')) {
@@ -112,16 +112,34 @@ class GitHubService {
         await dir.create(recursive: true);
       }
 
-      final result = await Process.run('git', ['clone', cloneUrl, destinationPath]);
-      if (result.exitCode == 0) {
-        // Configure safe directory and author details if logged in
-        await Process.run('git', ['config', '--global', '--add', 'safe.directory', '*']);
-        if (_currentUser != null) {
-          final name = _currentUser!['name'] ?? _currentUser!['login'] ?? 'Quantum Developer';
-          final email = _currentUser!['email'] ?? '${_currentUser!['login']}@users.noreply.github.com';
-          await Process.run('git', ['config', 'user.name', name], workingDirectory: destinationPath);
-          await Process.run('git', ['config', 'user.email', email], workingDirectory: destinationPath);
+      bool success = false;
+      if (runner != null) {
+        try {
+          await runner('git clone "$cloneUrl" "$destinationPath"');
+          success = true;
+        } catch (e) {
+          // If runner failed, try Process.run as fallback
         }
+      }
+
+      if (!success) {
+        final result = await Process.run('git', ['clone', cloneUrl, destinationPath]);
+        if (result.exitCode == 0) {
+          success = true;
+        }
+      }
+
+      if (success) {
+        // Configure safe directory and author details if logged in
+        try {
+          await Process.run('git', ['config', '--global', '--add', 'safe.directory', '*']);
+          if (_currentUser != null) {
+            final name = _currentUser!['name'] ?? _currentUser!['login'] ?? 'Quantum Developer';
+            final email = _currentUser!['email'] ?? '${_currentUser!['login']}@users.noreply.github.com';
+            await Process.run('git', ['config', 'user.name', name], workingDirectory: destinationPath);
+            await Process.run('git', ['config', 'user.email', email], workingDirectory: destinationPath);
+          }
+        } catch (_) {}
         return destinationPath;
       }
       return null;
@@ -219,7 +237,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'

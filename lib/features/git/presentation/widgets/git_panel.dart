@@ -72,18 +72,35 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () => gitNotifier.init(),
-                  icon: const Icon(LucideIcons.git_fork, size: 13),
-                  label: Text(l10n.initGitAction),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amberAccent.withValues(alpha: 0.15),
-                    foregroundColor: Colors.amberAccent,
-                    elevation: 0,
-                    side: BorderSide(color: Colors.amberAccent.withValues(alpha: 0.3)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: () => gitNotifier.init(),
+                      icon: const Icon(LucideIcons.git_fork, size: 13),
+                      label: Text(l10n.initGitAction),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amberAccent.withValues(alpha: 0.15),
+                        foregroundColor: Colors.amberAccent,
+                        elevation: 0,
+                        side: BorderSide(color: Colors.amberAccent.withValues(alpha: 0.3)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => context.push('/github'),
+                      icon: const Icon(LucideIcons.folder_git_2, size: 13),
+                      label: const Text('GitHub'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -108,6 +125,14 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                 style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 12),
               ),
               const Spacer(),
+              IconButton(
+                icon: const Icon(LucideIcons.folder_git_2, size: 14, color: Colors.cyanAccent),
+                tooltip: 'GitHub',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => context.push('/github'),
+              ),
+              const SizedBox(width: 10),
               IconButton(
                 icon: const Icon(LucideIcons.refresh_cw, size: 14, color: Colors.white38),
                 padding: EdgeInsets.zero,

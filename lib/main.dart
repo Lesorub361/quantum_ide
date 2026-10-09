@@ -52,6 +52,11 @@ Future<void> _initializeAndroid() async {
         debugPrint('Storage permission denied by user');
       }
     }
+    // Request notification permission for Android 13+ (POST_NOTIFICATIONS)
+    // so background terminal and foreground session notifications are visible to the user
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
     // Примечание: разрешение камеры запрашивается только при реальном
     // использовании (вставка изображения в AI), не при старте.
     debugPrint('Android initialization complete');

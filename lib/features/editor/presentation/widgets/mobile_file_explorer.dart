@@ -126,6 +126,16 @@ class _MobileFileExplorerState extends ConsumerState<MobileFileExplorer> {
             ),
           ),
           IconButton(
+            icon: const Icon(LucideIcons.git_branch, color: Colors.cyanAccent, size: 20),
+            tooltip: 'Git',
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(drawerTabProvider.notifier).state = 5;
+            },
+            padding: const EdgeInsets.all(10),
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+          ),
+          IconButton(
             icon: const Icon(LucideIcons.x, color: Colors.white54, size: 24),
             onPressed: () => Navigator.pop(context),
             padding: const EdgeInsets.all(12),

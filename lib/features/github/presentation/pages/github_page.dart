@@ -8,6 +8,8 @@ import 'package:quantum_ide/core/services/github_service.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class GitHubPage extends ConsumerStatefulWidget {
@@ -28,7 +30,19 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
   @override
   void initState() {
     super.initState();
-    _loadRepos();
+    _initAndLoadRepos();
+  }
+
+  Future<void> _initAndLoadRepos() async {
+    setState(() => _isLoading = true);
+    await _githubService.init();
+    if (mounted) {
+      if (_githubService.isAuthenticated) {
+        await _loadRepos();
+      } else {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   @override
@@ -126,6 +140,21 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                       backgroundColor: const Color(0xFF238636),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse('https://github.com/settings/tokens/new?description=QuantumIDE&scopes=repo,workflow,write:packages');
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    },
+                    icon: const Icon(LucideIcons.external_link, size: 14),
+                    label: const Text('Создать токен в браузере (1 клик)'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.cyanAccent,
+                      side: const BorderSide(color: Colors.cyanAccent, width: 0.8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
@@ -267,6 +296,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                           final isThisCloning = _cloningRepoName == name;
 
                           return ListTile(
+                            onTap: _cloningRepoName != null ? null : () => _cloneAndOpenRepo(repo),
                             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                             leading: Container(
                               padding: const EdgeInsets.all(8),
@@ -410,6 +440,16 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                 fillColor: Colors.black.withValues(alpha: 0.4),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                suffixIcon: IconButton(
+                  icon: const Icon(LucideIcons.clipboard_paste, size: 16, color: Colors.cyanAccent),
+                  tooltip: 'Вставить из буфера обмена',
+                  onPressed: () async {
+                    final data = await Clipboard.getData('text/plain');
+                    if (data?.text != null && data!.text!.isNotEmpty) {
+                      tokenController.text = data.text!.trim();
+                    }
+                  },
+                ),
               ),
             ),
           ],
@@ -460,7 +500,11 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
       }
       final destinationPath = '${projectsDir.path}/$repoName';
 
-      final result = await _githubService.cloneRepository(url, destinationPath);
+      final result = await _githubService.cloneRepository(
+        url,
+        destinationPath,
+        runner: (cmd) => runtime.runCommand(cmd),
+      );
 
       if (result != null && mounted) {
         // Automatically setup Cloud APK workflow if not present

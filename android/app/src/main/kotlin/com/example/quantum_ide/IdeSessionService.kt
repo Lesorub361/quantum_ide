@@ -68,10 +68,10 @@ class IdeSessionService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "Фоновая сессия Quantum IDE",
-                NotificationManager.IMPORTANCE_LOW
+                NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
                 description = "Поддерживает работу терминала и фоновых процессов при сворачивании"
-                setShowBadge(false)
+                setShowBadge(true)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
@@ -106,7 +106,7 @@ class IdeSessionService : Service() {
             .setContentIntent(openAppPendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Остановить", stopPendingIntent)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
     }
 }
