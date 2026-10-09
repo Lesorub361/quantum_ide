@@ -9,6 +9,7 @@ import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifi
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 
 /// Mobile-optimized file explorer using bottom sheet
 /// Provides full-screen file browsing with large touch targets

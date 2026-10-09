@@ -8,6 +8,7 @@ import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dar
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:go_router/go_router.dart';
 
 class SidebarGitPanel extends ConsumerStatefulWidget {
   const SidebarGitPanel({super.key});
