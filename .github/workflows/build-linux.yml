@@ -1,0 +1,64 @@
+name: Build Linux Desktop
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'lib/**'
+      - 'linux/**'
+      - 'pubspec.yaml'
+      - '.github/workflows/build-linux.yml'
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.9'
+          cache: true
+
+      - name: Enable Linux Desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Linux release
+        run: flutter build linux --release --no-tree-shake-icons
+
+      - name: Package Linux Bundle
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czvf /tmp/quantum_ide-linux-x64.tar.gz .
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantum_ide-linux-x64
+          path: /tmp/quantum_ide-linux-x64.tar.gz
+          retention-days: 14
+
+      - name: Attach to GitHub Release
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: /tmp/quantum_ide-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
