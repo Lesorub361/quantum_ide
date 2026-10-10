@@ -64,8 +64,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     ];
 
     return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0F14).withValues(alpha: 0.95),
         border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5)),
@@ -74,7 +74,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: keys.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 3),
+        separatorBuilder: (context, index) => const SizedBox(width: 4),
         itemBuilder: (context, index) {
           final key = keys[index];
           final isActive = widget.activeKeys.contains(key.label);
@@ -122,33 +122,33 @@ class _VirtualKeyButton extends StatelessWidget {
 
     return Material(
       color: buttonColor,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
-          height: 24,
-          constraints: const BoxConstraints(minWidth: 26),
-          padding: const EdgeInsets.symmetric(horizontal: 5),
+          height: 32,
+          constraints: const BoxConstraints(minWidth: 34),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: borderColor, width: 0.5),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: borderColor, width: 0.8),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (keyData.icon != null) ...[
-                Icon(keyData.icon, size: 11, color: themeColor),
+                Icon(keyData.icon, size: 14, color: themeColor),
                 if (keyData.label.isNotEmpty && keyData.label != '↑' && keyData.label != '↓' && keyData.label != '←' && keyData.label != '→')
-                  const SizedBox(width: 3),
+                  const SizedBox(width: 4),
               ],
               if (keyData.icon == null || (keyData.label.isNotEmpty && keyData.label != '↑' && keyData.label != '↓' && keyData.label != '←' && keyData.label != '→'))
                 Text(
                   keyData.label,
                   style: GoogleFonts.jetBrainsMono(
                     color: themeColor,
-                    fontSize: 9.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
                 ),

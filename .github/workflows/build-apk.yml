@@ -37,9 +37,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## QuantumIDE v1.2.2
+        ## QuantumIDE v1.2.9
 
-        Performance optimizations and terminal fixes.
+        - Responsive UI redesign for Phone, Tablet, and Desktop.
+        - Split-View file explorer with interactive code/markdown/image preview.
+        - Enhanced terminal with bigger touch targets on virtual keys and improved auto-completion.
+        - Full audit and fixes for all optional packages (Llama server, Android SDK, Flutter, Python).
     steps:
       - name: Checkout
         uses: actions/checkout@v4

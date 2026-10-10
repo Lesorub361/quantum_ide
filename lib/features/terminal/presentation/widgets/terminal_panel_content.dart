@@ -120,6 +120,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final runtime = ref.read(runtimeServiceProvider);
     final appDir = runtime.appDirectory;
 
+    final home = Platform.environment['HOME'] ?? '';
     final pathDirs = [
       p.join(appDir, 'rootfs', 'ubuntu', 'bin'),
       p.join(appDir, 'rootfs', 'ubuntu', 'usr', 'bin'),
@@ -127,7 +128,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       p.join(appDir, 'rootfs', 'ubuntu', 'sbin'),
       p.join(appDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin'),
       p.join(appDir, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin'),
+      p.join(appDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'cmdline-tools', 'latest', 'bin'),
       p.join(appDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'platform-tools'),
+      '/usr/bin',
+      '/usr/local/bin',
+      if (home.isNotEmpty) p.join(home, '.local', 'bin'),
     ];
 
     final binaries = <String>{};
@@ -456,7 +461,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   : _buildBody(panelState, sessions, notifier, editorState),
             ),
             if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
-                !(Platform.isLinux || Platform.isWindows || Platform.isMacOS || MediaQuery.of(context).size.width > 800))
+                (Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650))
               _buildVirtualKeys(sessions, notifier),
           ],
         ),
@@ -1401,7 +1406,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                       onTap: () => notifier.closeSession(index),
                                       borderRadius: BorderRadius.circular(4),
                                       child: const Padding(
-                                        padding: const EdgeInsets.all(4),
+                                        padding: EdgeInsets.all(4),
                                         child: Icon(LucideIcons.trash_2, size: 11, color: Colors.redAccent),
                                       ),
                                     ),
@@ -1720,12 +1725,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     autofocus: true,
                     child: Shortcuts(
                       shortcuts: <LogicalKeySet, Intent>{
-                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): CopyTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): CopyTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyV): PasteTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV): PasteTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): SelectAllTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): SelectAllTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const CopyTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const CopyTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyV): const PasteTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV): const PasteTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const SelectAllTextIntent(),
+                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const SelectAllTextIntent(),
                       },
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
@@ -2296,11 +2301,11 @@ Also explain what exactly went wrong and how you fixed it.
         side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
       ),
       items: [
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'selection_mode',
           height: 38,
           child: Row(
-            children: const [
+            children: [
               Icon(LucideIcons.text_cursor_input, size: 15, color: Colors.cyanAccent),
               SizedBox(width: 10),
               Text('Режим выделения (курсоры)', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
@@ -2342,11 +2347,11 @@ Also explain what exactly went wrong and how you fixed it.
           ),
         ),
         const PopupMenuDivider(height: 1),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'ctrl_c',
           height: 38,
           child: Row(
-            children: const [
+            children: [
               Icon(LucideIcons.square, size: 15, color: Colors.redAccent),
               SizedBox(width: 10),
               Text('Прервать (Ctrl+C)', style: TextStyle(color: Colors.redAccent, fontSize: 13)),
@@ -2367,6 +2372,8 @@ Also explain what exactly went wrong and how you fixed it.
       ],
     );
 
+    if (!mounted || !context.mounted) return;
+
     if (result == 'selection_mode') {
       TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
     } else if (result == 'copy') {
@@ -2374,11 +2381,13 @@ Also explain what exactly went wrong and how you fixed it.
           ? session.xtermTerminal.buffer.getText(session.xtermViewController.selection!)
           : '';
       if (selectedText.isNotEmpty) {
+        final messenger = ScaffoldMessenger.of(context);
+        final copiedMsg = AppLocalizations.of(context)!.copiedToClipboard;
         await Clipboard.setData(ClipboardData(text: selectedText));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted && context.mounted) {
+          messenger.showSnackBar(
             SnackBar(
-              content: Text(AppLocalizations.of(context)!.copiedToClipboard),
+              content: Text(copiedMsg),
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 1),
             ),

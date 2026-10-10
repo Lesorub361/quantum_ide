@@ -43,7 +43,7 @@ const String _ensureCmdlineTools = '(if [ ! -f /root/android-sdk/cmdline-tools/l
     '[ -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ]';
 
 const String _sdkPrefix = '$_ensureCmdlineTools && '
-    'export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)} && '
+    'export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-*-openjdk-* 2>/dev/null | head -n 1)} && '
     'export PATH=\$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:\$PATH && '
     '(yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && '
     '/root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk';
@@ -53,7 +53,7 @@ final defaultPackages = [
     id: 'python',
     name: 'Python 3',
     description: 'General-purpose programming language',
-    command: '${_aptPrefix}apt install -y python3 python3-pip python-is-python3',
+    command: '${_aptPrefix}apt install -y python3 python3-pip python3-venv python-is-python3',
     icon: LucideIcons.terminal,
     category: 'Languages',
   ),
@@ -77,7 +77,7 @@ final defaultPackages = [
     id: 'flutter',
     name: 'Flutter & Dart SDK (Language Support)',
     description: 'Google\'s UI toolkit for building natively compiled Dart and Flutter applications with full IDE language server support.',
-    command: '${_aptPrefix}apt install -y git curl unzip xz-utils libglu1-mesa debianutils ca-certificates && git config --global --add safe.directory \'*\' 2>/dev/null || true && if [ -d /root/flutter/.git ]; then cd /root/flutter && git pull && /root/flutter/bin/flutter precache; else rm -rf /root/flutter && git clone --depth 1 https://github.com/flutter/flutter.git -b stable /root/flutter && /root/flutter/bin/flutter precache; fi && (grep -q "/root/flutter/bin" /root/.bashrc 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.bashrc)',
+    command: '${_aptPrefix}apt install -y git curl unzip xz-utils libglu1-mesa debianutils ca-certificates && git config --global --add safe.directory \'*\' 2>/dev/null || true && if [ -d /root/flutter/.git ]; then cd /root/flutter && git pull && /root/flutter/bin/flutter precache; else rm -rf /root/flutter && git clone --depth 1 https://github.com/flutter/flutter.git -b stable /root/flutter && /root/flutter/bin/flutter precache; fi && ln -sf /root/flutter/bin/flutter /usr/local/bin/flutter 2>/dev/null || true && ln -sf /root/flutter/bin/dart /usr/local/bin/dart 2>/dev/null || true && (grep -q "/root/flutter/bin" /root/.bashrc 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.bashrc) && (grep -q "/root/flutter/bin" /root/.profile 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.profile)',
     icon: LucideIcons.code,
     category: 'Languages',
   ),
@@ -133,7 +133,7 @@ final defaultPackages = [
     id: 'local-ai-qwen',
     name: 'Local Llama Server',
     description: 'Local engine to run offline AI models (llama-server and llama-cli).',
-    command: '${_aptPrefix}apt install -y curl wget tar ca-certificates && mkdir -p /tmp/llama_download && cd /tmp/llama_download && (wget --no-check-certificate -q https://github.com/ggml-org/llama.cpp/releases/download/b4200/llama-b4200-bin-ubuntu-arm64.tar.gz || curl -k -fL --retry 3 -o llama-b4200-bin-ubuntu-arm64.tar.gz https://github.com/ggml-org/llama.cpp/releases/download/b4200/llama-b4200-bin-ubuntu-arm64.tar.gz) && tar -xzf llama-b4200-bin-ubuntu-arm64.tar.gz && cp bin/llama-server /usr/bin/llama-server && cp bin/llama-cli /usr/bin/llama-cli && rm -rf /tmp/llama_download && echo "Llama Server installed successfully"',
+    command: '${_aptPrefix}apt install -y curl wget tar ca-certificates && ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then LLAMA_ARCH="arm64"; else LLAMA_ARCH="x64"; fi && mkdir -p /tmp/llama_dl && cd /tmp/llama_dl && (wget --no-check-certificate -qO llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz" || curl -k -fL --retry 3 -o llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz") && tar -xzf llama.tar.gz && (find . -type f -name "llama-server" -exec cp {} /usr/bin/llama-server \\; ; find . -type f -name "llama-cli" -exec cp {} /usr/bin/llama-cli \\; ; find . -type f -name "*.so*" -exec cp {} /usr/lib/ \\; 2>/dev/null || true) && chmod +x /usr/bin/llama-server /usr/bin/llama-cli 2>/dev/null || true && cd / && rm -rf /tmp/llama_dl && echo "Llama Server installed successfully"',
     icon: LucideIcons.brain,
     category: 'AI Tools',
   ),
@@ -149,7 +149,7 @@ final defaultPackages = [
     id: 'android-sdk',
     name: 'Android SDK & Java',
     description: 'Essential for Android builds (Java 17, cmdline-tools, platform-tools)',
-    command: '${_aptPrefix}apt install -y openjdk-17-jdk-headless wget curl unzip debianutils libstdc++6 zlib1g ca-certificates && mkdir -p /root/android-sdk/cmdline-tools /tmp/cmdline-extracted && (wget --no-check-certificate -qO /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || curl -k -fL --retry 3 -o /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip) && rm -rf /root/android-sdk/cmdline-tools/latest && unzip -qo /tmp/sdk.zip -d /tmp/cmdline-extracted && mkdir -p /root/android-sdk/cmdline-tools/latest && (if [ -d /tmp/cmdline-extracted/cmdline-tools ]; then cp -r /tmp/cmdline-extracted/cmdline-tools/* /root/android-sdk/cmdline-tools/latest/; else cp -r /tmp/cmdline-extracted/* /root/android-sdk/cmdline-tools/latest/; fi) && rm -rf /tmp/sdk.zip /tmp/cmdline-extracted && chmod +x /root/android-sdk/cmdline-tools/latest/bin/* 2>/dev/null || true && mkdir -p ~/.gradle && echo "systemProp.java.net.preferIPv4Stack=true" >> ~/.gradle/gradle.properties && export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)} && export PATH=\$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:\$PATH && (yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34" && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && echo "Android SDK and Java installed successfully"',
+    command: '${_aptPrefix}apt install -y openjdk-17-jdk-headless wget curl unzip debianutils libstdc++6 zlib1g ca-certificates && mkdir -p /root/android-sdk/cmdline-tools /tmp/cmdline-extracted && (wget --no-check-certificate -qO /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || curl -k -fL --retry 3 -o /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip) && rm -rf /root/android-sdk/cmdline-tools/latest && unzip -qo /tmp/sdk.zip -d /tmp/cmdline-extracted && mkdir -p /root/android-sdk/cmdline-tools/latest && (if [ -d /tmp/cmdline-extracted/cmdline-tools ]; then cp -r /tmp/cmdline-extracted/cmdline-tools/* /root/android-sdk/cmdline-tools/latest/; else cp -r /tmp/cmdline-extracted/* /root/android-sdk/cmdline-tools/latest/; fi) && rm -rf /tmp/sdk.zip /tmp/cmdline-extracted && chmod +x /root/android-sdk/cmdline-tools/latest/bin/* 2>/dev/null || true && mkdir -p ~/.gradle && echo "systemProp.java.net.preferIPv4Stack=true" >> ~/.gradle/gradle.properties && export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-*-openjdk-* 2>/dev/null | head -n 1)} && export PATH=\$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:\$PATH && (yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34" && ln -sf /root/android-sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/bin/sdkmanager 2>/dev/null || true && ln -sf /root/android-sdk/platform-tools/adb /usr/local/bin/adb 2>/dev/null || true && (grep -q "ANDROID_HOME" /root/.bashrc 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.bashrc) && (grep -q "ANDROID_HOME" /root/.profile 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.profile) && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && echo "Android SDK and Java installed successfully"',
     icon: LucideIcons.settings_2,
     category: 'System',
   ),

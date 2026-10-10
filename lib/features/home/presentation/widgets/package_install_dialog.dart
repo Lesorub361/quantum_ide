@@ -199,14 +199,38 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
               ? 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-arm/cli_linux_arm64.tar.gz'
               : 'https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-x64/cli_linux_x64.tar.gz';
           desktopCmd = 'mkdir -p ~/.local/bin /tmp/agy_dl && curl -fL --retry 3 "$url" | tar -xz -C /tmp/agy_dl && (mv /tmp/agy_dl/antigravity ~/.local/bin/agy 2>/dev/null || mv /tmp/agy_dl/antigravity /usr/local/bin/agy 2>/dev/null || true) && (chmod +x ~/.local/bin/agy 2>/dev/null || true) && (chmod +x /usr/local/bin/agy 2>/dev/null || true) && rm -rf /tmp/agy_dl && agy --version';
-        } else if (!isRoot && desktopCmd.contains('pgrep -x "apt|apt-get|dpkg|dpkg-deb"')) {
-          final idx = desktopCmd.indexOf(' ; ');
-          if (idx != -1 && idx + 3 < desktopCmd.length) {
-            desktopCmd = desktopCmd.substring(idx + 3);
+        } else if (!isRoot) {
+          const lockMarker = 'ca-certificates 2>/dev/null || true ; ';
+          if (desktopCmd.contains(lockMarker)) {
+            final idx = desktopCmd.indexOf(lockMarker);
+            desktopCmd = desktopCmd.substring(idx + lockMarker.length);
+          } else if (desktopCmd.contains('kill -9 \$(pgrep')) {
+            final parts = desktopCmd.split(' ; ');
+            desktopCmd = parts.where((p) => 
+              !p.contains('pgrep') && 
+              !p.contains('/var/lib/') && 
+              !p.contains('/var/cache/') && 
+              !p.contains('dpkg --configure') &&
+              !p.contains('export HOME=/root') &&
+              !p.contains('export USER=root')
+            ).join(' ; ');
           }
-          desktopCmd = desktopCmd.replaceAll('apt update', 'sudo apt update')
+          desktopCmd = desktopCmd.replaceAll('apt update', '(sudo apt-get update -o Acquire::Retries=1 2>/dev/null || sudo apt update 2>/dev/null || true)')
                                  .replaceAll('apt install', 'sudo apt install')
-                                 .replaceAll('/root/', '~/');
+                                 .replaceAll('/root/android-sdk', '~/Android/Sdk')
+                                 .replaceAll('/root/flutter', '~/flutter')
+                                 .replaceAll('/root/.bashrc', '~/.bashrc')
+                                 .replaceAll('/root/.profile', '~/.profile')
+                                 .replaceAll('/root/projects', '~/projects')
+                                 .replaceAll('/root/', '~/')
+                                 .replaceAll('npm install -g', 'sudo npm install -g')
+                                 .replaceAll('npm i -g', 'sudo npm i -g')
+                                 .replaceAll('| bash', '| sudo bash')
+                                 .replaceAll('cp {} /usr/bin/', 'sudo cp {} /usr/bin/')
+                                 .replaceAll('cp {} /usr/lib/', 'sudo cp {} /usr/lib/')
+                                 .replaceAll('chmod +x /usr/bin/', 'sudo chmod +x /usr/bin/')
+                                 .replaceAll('ln -sf ', 'sudo ln -sf ')
+                                 .replaceAll('chown -R root:root', 'chown -R \$(id -u):\$(id -g)');
         }
 
         final env = Map<String, String>.from(Platform.environment);
@@ -300,14 +324,22 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
-    final isDesktop = size.width > 700;
+    final isDesktop = size.width >= 720;
+    final maxHeight = (size.height * 0.88).clamp(320.0, 680.0);
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isDesktop ? 32 : 16,
+        vertical: isDesktop ? 32 : 16,
+      ),
       child: Container(
+        constraints: BoxConstraints(
+          maxWidth: 680,
+          maxHeight: maxHeight,
+        ),
         width: isDesktop ? 680 : double.infinity,
-        height: isDesktop ? 540 : size.height * 0.75,
+        height: isDesktop ? 540 : maxHeight,
         decoration: BoxDecoration(
           color: const Color(0xFF10141D),
           borderRadius: BorderRadius.circular(20),

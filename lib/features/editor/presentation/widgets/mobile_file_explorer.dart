@@ -21,11 +21,16 @@ class MobileFileExplorer extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.95,
-        minChildSize: 0.5,
-        maxChildSize: 0.98,
-        builder: (context, scrollController) => const MobileFileExplorer(),
+      builder: (context) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.95,
+            minChildSize: 0.5,
+            maxChildSize: 0.98,
+            builder: (context, scrollController) => const MobileFileExplorer(),
+          ),
+        ),
       ),
     );
   }

@@ -68,12 +68,21 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     }
 
     String translated = cmd;
-    // Strip Android-specific apt/dpkg lock clearing prefix
-    if (translated.contains('pgrep -x "apt|apt-get|dpkg|dpkg-deb"')) {
-      final index = translated.indexOf(' ; ');
-      if (index != -1 && index + 3 < translated.length) {
-        translated = translated.substring(index + 3);
-      }
+    // 1. Strip Android-specific apt/dpkg lock clearing and root export prefix
+    const lockMarker = 'ca-certificates 2>/dev/null || true ; ';
+    if (translated.contains(lockMarker)) {
+      final index = translated.indexOf(lockMarker);
+      translated = translated.substring(index + lockMarker.length);
+    } else if (translated.contains('kill -9 \$(pgrep')) {
+      final parts = translated.split(' ; ');
+      translated = parts.where((p) => 
+        !p.contains('pgrep') && 
+        !p.contains('/var/lib/') && 
+        !p.contains('/var/cache/') && 
+        !p.contains('dpkg --configure') &&
+        !p.contains('export HOME=/root') &&
+        !p.contains('export USER=root')
+      ).join(' ; ');
     }
     
     // 2. Prepend sudo to apt commands with resilient fallback
@@ -84,6 +93,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     translated = translated.replaceAll('/root/android-sdk', '~/Android/Sdk');
     translated = translated.replaceAll('/root/flutter', '~/flutter');
     translated = translated.replaceAll('/root/.bashrc', '~/.bashrc');
+    translated = translated.replaceAll('/root/.profile', '~/.profile');
     translated = translated.replaceAll('/root/projects', '~/projects');
     translated = translated.replaceAll('/root/', '~/');
     
@@ -101,9 +111,14 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     translated = translated.replaceAll('| bash', '| sudo bash');
     translated = translated.replaceAll('cp bin/llama-server /usr/bin', 'sudo cp bin/llama-server /usr/bin');
     translated = translated.replaceAll('cp bin/llama-cli /usr/bin', 'sudo cp bin/llama-cli /usr/bin');
+    translated = translated.replaceAll('cp {} /usr/bin/', 'sudo cp {} /usr/bin/');
+    translated = translated.replaceAll('cp {} /usr/lib/', 'sudo cp {} /usr/lib/');
     translated = translated.replaceAll('mv /usr/share/', 'sudo mv /usr/share/');
     translated = translated.replaceAll('mv /tmp/aapt2_download/aapt2 /usr/bin/', 'sudo mv /tmp/aapt2_download/aapt2 /usr/bin/');
     translated = translated.replaceAll('chmod +x /usr/bin/', 'sudo chmod +x /usr/bin/');
+    translated = translated.replaceAll('ln -sf /root/', 'sudo ln -sf ~/');
+    translated = translated.replaceAll('ln -sf ', 'sudo ln -sf ');
+    translated = translated.replaceAll('chown -R root:root', 'chown -R \$(id -u):\$(id -g)');
     
     return translated;
   }
@@ -197,7 +212,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               exists = _hasCommand('typescript-language-server');
               break;
             case 'html-css-lsp':
-              exists = _hasCommand('html-languageserver') || _hasCommand('vscode-html-language-server');
+              exists = _hasCommand('html-languageserver') || _hasCommand('vscode-html-language-server') || _hasCommand('vscode-html-languageserver');
               break;
             case 'yaml-json-lsp':
               exists = _hasCommand('yaml-language-server');
@@ -212,23 +227,32 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               exists = _hasCommand('intelephense');
               break;
             case 'python-lsp':
-              exists = _hasCommand('pyright');
+              exists = _hasCommand('pyright') || _hasCommand('pyright-langserver');
+              break;
+            case 'local-ai-qwen':
+              exists = _hasCommand('llama-server') || _hasCommand('llama-cli');
               break;
           }
         } else {
           // Check on Android inside rootfs
           switch (pkg.id) {
             case 'python':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'python3')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'python3')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'python')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'python3')).exists();
               break;
             case 'nodejs':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'node')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'node')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'node')).exists();
               break;
             case 'git':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'git')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'git')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'git')).exists();
               break;
             case 'flutter':
-              exists = await File(p.join(rootfsPath, 'root', 'flutter', 'bin', 'flutter')).exists();
+              exists = await File(p.join(rootfsPath, 'root', 'flutter', 'bin', 'flutter')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'flutter')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'flutter')).exists();
               break;
             case 'antigravity-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'agy')).exists() ||
@@ -251,13 +275,16 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                        await File(p.join(rootfsPath, 'usr', 'bin', 'ollama')).exists();
               break;
             case 'kilocode-cli':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kilocode')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kilocode')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'kilocode')).exists();
               break;
             case 'opencode-ai':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode-ai')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode-ai')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode-ai')).exists();
               break;
             case 'build-essential':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gcc')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gcc')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'g++')).exists();
               break;
             case 'android-sdk':
               final jvmDir = Directory(p.join(rootfsPath, 'usr', 'lib', 'jvm'));
@@ -266,19 +293,22 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                 hasJvm = jvmDir.listSync().any((entity) =>
                     entity is Directory &&
                     p.basename(entity.path).startsWith('java-') &&
-                    p.basename(entity.path).endsWith('-openjdk-arm64'));
+                    p.basename(entity.path).contains('-openjdk-'));
               }
               final hasJava = await File(p.join(rootfsPath, 'usr', 'bin', 'java')).exists() || hasJvm;
               final hasSdkManager = await File(p.join(sdkPath, 'cmdline-tools', 'latest', 'bin', 'sdkmanager')).exists() ||
                                    await File(p.join(sdkPath, 'cmdline-tools', 'bin', 'sdkmanager')).exists() ||
+                                   await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'sdkmanager')).exists() ||
                                    await File(p.join(rootfsPath, 'usr', 'bin', 'sdkmanager')).exists();
               exists = hasJava && hasSdkManager;
               break;
             case 'java-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'jdtls')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'jdtls')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'jdtls')).exists();
               break;
             case 'kotlin-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'kotlin-language-server')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'kotlin-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kotlin-language-server')).exists();
               break;
             case 'typescript-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'typescript-language-server')).exists() ||
@@ -286,14 +316,17 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'html-css-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vscode-html-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-language-server')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'vscode-html-languageserver')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-languageserver')).exists();
               break;
             case 'yaml-json-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'yaml-language-server')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'yaml-language-server')).exists();
               break;
             case 'markdown-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'marksman')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'marksman')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'marksman')).exists();
               break;
             case 'vue-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vue-language-server')).exists() ||
@@ -305,10 +338,15 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'python-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'pyright-langserver')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright-langserver')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright-langserver')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'pyright')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright')).exists();
               break;
             case 'local-ai-qwen':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'llama-server')).exists();
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'llama-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'llama-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'llama-cli')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'llama-cli')).exists();
               break;
           }
         }

@@ -32,7 +32,9 @@ class FileExplorerPage extends ConsumerStatefulWidget {
 
 class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _breadcrumbScrollController = ScrollController();
   String _searchQuery = '';
+  String? _selectedPreviewPath;
   
   bool _isSelectMode = false;
   final Set<String> _selectedPaths = {};
@@ -41,6 +43,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _breadcrumbScrollController.dispose();
     super.dispose();
   }
 
@@ -125,89 +128,28 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
             },
             child: Scaffold(
               backgroundColor: const Color(0xFF0D0F14),
-              body: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                transitionBuilder: (child, animation) {
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: const Offset(0.02, 0.0),
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
-                    ),
-                  );
-                },
-                child: CustomScrollView(
-                  key: ValueKey(explorerState.currentPath),
-                  slivers: [
-                    _isSelectMode
-                        ? explorerState.files.when(
-                            data: (nodes) => _buildSelectionAppBar(context, ref, nodes),
-                            loading: () => _buildSelectionAppBar(context, ref, []),
-                            error: (err, stack) => _buildSelectionAppBar(context, ref, []),
-                          )
-                        : _buildSliverAppBar(context, ref, explorerState, workspaceRoot),
-                    if (!_isSelectMode)
-                      SliverToBoxAdapter(
-                        child: _buildBreadcrumbs(context, explorerState.currentPath, workspaceRoot),
-                      ),
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                        child: _buildSearchBar(),
-                      ),
-                    ),
-                    explorerState.files.when(
-                      data: (nodes) => SliverToBoxAdapter(child: _buildStatsPanel(nodes)),
-                      loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
-                      error: (err, stack) => const SliverToBoxAdapter(child: SizedBox.shrink()),
-                    ),
-                    explorerState.files.when(
-                      data: (nodes) {
-                        final filteredNodes = nodes.where((n) => 
-                          n.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
-                        
-                        if (filteredNodes.isEmpty) {
-                          return SliverFillRemaining(
-                            child: Center(child: Text(AppLocalizations.of(context)!.noFilesFound, style: const TextStyle(color: Colors.white24))),
-                          );
-                        }
-
-                        return SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          sliver: SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) => _buildFileItem(context, ref, filteredNodes[index]),
-                              childCount: filteredNodes.length,
-                            ),
-                          ),
-                        );
-                      },
-                      loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)))),
-                      error: (err, stack) => SliverFillRemaining(
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(LucideIcons.circle_alert, size: 48, color: Colors.redAccent),
-                              const SizedBox(height: 16),
-                              Text(AppLocalizations.of(context)!.errorOccurred(err.toString()), style: const TextStyle(color: Colors.white38)),
-                              TextButton(
-                                onPressed: () => notifier.scanDirectory(explorerState.currentPath),
-                                child: Text(AppLocalizations.of(context)!.retry, style: const TextStyle(color: Color(0xFF00D4FF))),
-                              ),
-                            ],
-                          ),
+              body: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 768;
+                  final explorerBody = _buildExplorerBody(context, ref, explorerState, notifier, workspaceRoot);
+                  if (isWide) {
+                    return Row(
+                      children: [
+                        SizedBox(
+                          width: (constraints.maxWidth * 0.42).clamp(360.0, 520.0),
+                          child: explorerBody,
                         ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 100)),
-                  ],
-                ),
+                        const VerticalDivider(width: 1, color: Colors.white10),
+                        Expanded(
+                          child: _selectedPreviewPath != null
+                              ? _buildPreviewPane(context, ref, _selectedPreviewPath!)
+                              : _buildEmptyPreviewPane(context),
+                        ),
+                      ],
+                    );
+                  }
+                  return explorerBody;
+                },
               ),
               floatingActionButton: _buildFAB(context, ref),
             ),
@@ -237,6 +179,243 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExplorerBody(
+    BuildContext context,
+    WidgetRef ref,
+    FileExplorerState explorerState,
+    FileExplorerNotifier notifier,
+    String? workspaceRoot,
+  ) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 300),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      transitionBuilder: (child, animation) {
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0.02, 0.0),
+              end: Offset.zero,
+            ).animate(animation),
+            child: child,
+          ),
+        );
+      },
+      child: CustomScrollView(
+        key: ValueKey(explorerState.currentPath),
+        slivers: [
+          _isSelectMode
+              ? explorerState.files.when(
+                  data: (nodes) => _buildSelectionAppBar(context, ref, nodes),
+                  loading: () => _buildSelectionAppBar(context, ref, []),
+                  error: (err, stack) => _buildSelectionAppBar(context, ref, []),
+                )
+              : _buildSliverAppBar(context, ref, explorerState, workspaceRoot),
+          if (!_isSelectMode)
+            SliverToBoxAdapter(
+              child: _buildBreadcrumbs(context, explorerState.currentPath, workspaceRoot),
+            ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: _buildSearchBar(),
+            ),
+          ),
+          explorerState.files.when(
+            data: (nodes) => SliverToBoxAdapter(child: _buildStatsPanel(nodes)),
+            loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+            error: (err, stack) => const SliverToBoxAdapter(child: SizedBox.shrink()),
+          ),
+          explorerState.files.when(
+            data: (nodes) {
+              final filteredNodes = nodes.where((n) => 
+                n.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+              
+              if (filteredNodes.isEmpty) {
+                return SliverFillRemaining(
+                  child: Center(child: Text(AppLocalizations.of(context)!.noFilesFound, style: const TextStyle(color: Colors.white24))),
+                );
+              }
+
+              return SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildFileItem(context, ref, filteredNodes[index]),
+                    childCount: filteredNodes.length,
+                  ),
+                ),
+              );
+            },
+            loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)))),
+            error: (err, stack) => SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.circle_alert, size: 48, color: Colors.redAccent),
+                    const SizedBox(height: 16),
+                    Text(AppLocalizations.of(context)!.errorOccurred(err.toString()), style: const TextStyle(color: Colors.white38)),
+                    TextButton(
+                      onPressed: () => notifier.scanDirectory(explorerState.currentPath),
+                      child: Text(AppLocalizations.of(context)!.retry, style: const TextStyle(color: Color(0xFF00D4FF))),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyPreviewPane(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.02),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+            child: const Icon(LucideIcons.file_text, size: 48, color: Colors.white24),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Select a file to inspect',
+            style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.white38),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Preview images, code, and file details',
+            style: GoogleFonts.inter(fontSize: 12, color: Colors.white24),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPreviewPane(BuildContext context, WidgetRef ref, String filePath) {
+    final file = File(filePath);
+    final exists = file.existsSync();
+    final fileName = p.basename(filePath);
+    final ext = p.extension(filePath).toLowerCase();
+    final isImg = ext == '.png' || ext == '.jpg' || ext == '.jpeg' || ext == '.gif' || ext == '.webp' || ext == '.bmp';
+    final iconInfo = FileIconHelper.getIconInfo(fileName, false);
+
+    return Container(
+      color: const Color(0xFF090B0F),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF10131B),
+              border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+            ),
+            child: Row(
+              children: [
+                Icon(iconInfo.icon, size: 18, color: iconInfo.color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        fileName,
+                        style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13.5, color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        filePath,
+                        style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    await ref.read(editorProvider.notifier).openFile(filePath);
+                    if (context.mounted) context.push('/editor');
+                  },
+                  icon: const Icon(LucideIcons.pencil, size: 14),
+                  label: const Text('Open in Editor', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF00D4FF),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(LucideIcons.x, size: 16, color: Colors.white38),
+                  tooltip: 'Close Preview',
+                  onPressed: () => setState(() => _selectedPreviewPath = null),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: !exists
+                ? const Center(child: Text('File does not exist', style: TextStyle(color: Colors.white38)))
+                : isImg
+                    ? Center(
+                        child: SingleChildScrollView(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Image.file(
+                              file,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) => const Icon(LucideIcons.image_off, size: 48, color: Colors.white24),
+                            ),
+                          ),
+                        ),
+                      )
+                    : FutureBuilder<String>(
+                        future: () async {
+                          try {
+                            final length = await file.length();
+                            if (length > 100 * 1024) {
+                              final bytes = await file.openRead(0, 100 * 1024).first;
+                              return '${String.fromCharCodes(bytes)}\n\n--- [Preview truncated, file size > 100KB] ---';
+                            }
+                            return await file.readAsString();
+                          } catch (e) {
+                            return 'Binary file or unsupported encoding';
+                          }
+                        }(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator(color: Color(0xFF00D4FF)));
+                          }
+                          final content = snapshot.data ?? '';
+                          return Container(
+                            width: double.infinity,
+                            color: const Color(0xFF0B0D12),
+                            padding: const EdgeInsets.all(16),
+                            child: SingleChildScrollView(
+                              child: SelectableText(
+                                content,
+                                style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white70, height: 1.4),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
         ],
       ),
     );
@@ -803,22 +982,33 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
   Widget _buildFileItem(BuildContext context, WidgetRef ref, FileNode node) {
     final iconInfo = FileIconHelper.getIconInfo(node.name, node.isDirectory);
     final isSelected = _selectedPaths.contains(node.path);
+    final isPreviewActive = _selectedPreviewPath == node.path;
     final gitColor = _getGitStatusColor(ref, node.path, node.isDirectory);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: isSelected 
-            ? Colors.cyanAccent.withValues(alpha: 0.08) 
-            : Colors.white.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
+    return GestureDetector(
+      onSecondaryTap: () {
+        if (!_isSelectMode) {
+          _showItemContextMenu(context, ref, node);
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        decoration: BoxDecoration(
           color: isSelected 
-              ? Colors.cyanAccent.withValues(alpha: 0.3) 
-              : Colors.white.withValues(alpha: 0.05),
+              ? Colors.cyanAccent.withValues(alpha: 0.08) 
+              : (isPreviewActive
+                  ? const Color(0xFF00D4FF).withValues(alpha: 0.12)
+                  : Colors.white.withValues(alpha: 0.02)),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected 
+                ? Colors.cyanAccent.withValues(alpha: 0.3) 
+                : (isPreviewActive
+                    ? const Color(0xFF00D4FF).withValues(alpha: 0.4)
+                    : Colors.white.withValues(alpha: 0.05)),
+          ),
         ),
-      ),
-      child: ListTile(
+        child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
         leading: Container(
           padding: const EdgeInsets.all(5),
@@ -909,6 +1099,8 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
           } else {
             if (node.isDirectory) {
               ref.read(fileExplorerProvider.notifier).navigateTo(node.path);
+            } else if (MediaQuery.of(context).size.width >= 768) {
+              setState(() => _selectedPreviewPath = node.path);
             } else if (node.name.toLowerCase().endsWith('.apk')) {
                try {
                 await OpenFilex.open(node.path);
@@ -951,6 +1143,64 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
             });
           }
         },
+      ),
+    ));
+  }
+
+  void _showItemContextMenu(BuildContext context, WidgetRef ref, FileNode node) {
+    final l10n = AppLocalizations.of(context)!;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF161922),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              border: Border.all(color: Colors.white10),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(LucideIcons.file_text, color: Colors.cyanAccent),
+                  title: Text(node.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                  subtitle: Text(_formatSize(node.size), style: const TextStyle(color: Colors.white38, fontSize: 11)),
+                ),
+                const Divider(color: Colors.white10),
+                if (!node.isDirectory)
+                  ListTile(
+                    leading: const Icon(LucideIcons.code, color: Colors.cyanAccent, size: 18),
+                    title: const Text('Open in Editor', style: TextStyle(color: Colors.white, fontSize: 13)),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await ref.read(editorProvider.notifier).openFile(node.path);
+                      if (context.mounted) context.push('/editor');
+                    },
+                  ),
+                ListTile(
+                  leading: const Icon(LucideIcons.pencil, color: Colors.white70, size: 18),
+                  title: Text(l10n.rename, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showRenameDialog(context, ref, node);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(LucideIcons.trash_2, color: Colors.redAccent, size: 18),
+                  title: Text(l10n.deleteTooltip, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showDeleteConfirm(context, ref, node);
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1636,12 +1886,11 @@ Please perform this request. If you need to modify the file, create a new one, d
 
   Widget _buildBreadcrumbs(BuildContext context, String currentPath, String? rootPath) {
     final crumbs = _getBreadcrumbs(currentPath, rootPath);
-    final scrollController = ScrollController();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (scrollController.hasClients) {
-        scrollController.animateTo(
-          scrollController.position.maxScrollExtent,
+      if (_breadcrumbScrollController.hasClients) {
+        _breadcrumbScrollController.animateTo(
+          _breadcrumbScrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
@@ -1660,7 +1909,7 @@ Please perform this request. If you need to modify the file, create a new one, d
         ),
       ),
       child: ListView.builder(
-        controller: scrollController,
+        controller: _breadcrumbScrollController,
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         itemCount: crumbs.length,

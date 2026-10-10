@@ -59,17 +59,299 @@ class _HomePageState extends ConsumerState<HomePage> {
         ? projects.where((p) => p.id != lastProject.id).toList()
         : projects;
         
-    final isDesktop = MediaQuery.of(context).size.width > 800;
+    final width = MediaQuery.of(context).size.width;
 
-    if (isDesktop) {
+    if (width >= 1024) {
       return _buildDesktopHome(context, projects, lastProject, otherProjects);
+    } else if (width >= 600) {
+      return _buildTabletHome(context, projects, lastProject, otherProjects);
     } else {
       return _buildMobileHome(context, projects, lastProject, otherProjects);
     }
   }
 
+  Widget _buildEmptyStateSliver(BuildContext context, ThemeData theme) {
+    return SliverFillRemaining(
+      hasScrollBody: false,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.folder_search, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isEmpty ? AppLocalizations.of(context)!.noProjects : AppLocalizations.of(context)!.nothingFound,
+              style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5), fontSize: 16),
+            ),
+            if (_searchQuery.isEmpty) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: () => _showProjectDialog(context, ref),
+                icon: const Icon(LucideIcons.plus, size: 18),
+                label: Text(AppLocalizations.of(context)!.createFirstProject),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: theme.colorScheme.onPrimary,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRailItem({required IconData icon, required String tooltip, required Color color, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabletHome(BuildContext context, List<Project> projects, Project? lastProject, List<Project> otherProjects) {
+    final theme = Theme.of(context);
+    final stats = ref.watch(systemStatsProvider);
+
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: Row(
+        children: [
+          // Tablet Navigation Rail
+          Container(
+            width: 68,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.015),
+              border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [theme.colorScheme.primary, theme.colorScheme.secondary],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(LucideIcons.terminal, color: Colors.white, size: 20),
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1, color: Colors.white10),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      _buildRailItem(
+                        icon: LucideIcons.plus,
+                        tooltip: AppLocalizations.of(context)!.createProject,
+                        color: theme.colorScheme.primary,
+                        onTap: () => _showProjectDialog(context, ref),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.folder_open,
+                        tooltip: AppLocalizations.of(context)!.open,
+                        color: theme.colorScheme.secondary,
+                        onTap: () async {
+                          final dir = await FilePicker.getDirectoryPath();
+                          if (dir != null) {
+                            await ref.read(projectServiceProvider.notifier).importProject(dir);
+                          }
+                        },
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.terminal,
+                        tooltip: AppLocalizations.of(context)!.terminal,
+                        color: theme.colorScheme.tertiary,
+                        onTap: () => context.push('/terminal'),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.layout_dashboard,
+                        tooltip: AppLocalizations.of(context)!.market,
+                        color: Colors.pinkAccent,
+                        onTap: () => context.push('/packages'),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.server,
+                        tooltip: AppLocalizations.of(context)!.servers,
+                        color: theme.colorScheme.error,
+                        onTap: () => context.push('/servers'),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.git_branch,
+                        tooltip: 'GitHub',
+                        color: Colors.purpleAccent,
+                        onTap: () => context.push('/github'),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.settings,
+                        tooltip: AppLocalizations.of(context)!.settings,
+                        color: theme.colorScheme.onSurfaceVariant,
+                        onTap: () => context.push('/settings'),
+                      ),
+                    ],
+                  ),
+                ),
+                // Telemetry summary indicator
+                Tooltip(
+                  message: 'CPU: ${(stats.cpuUsage * 100).toStringAsFixed(0)}% • RAM: ${stats.ramUsedGB.toStringAsFixed(1)} GB',
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Container(
+                      width: 44,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.02),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981)),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
+                            style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Main content
+          Expanded(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.all(24),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  AppLocalizations.of(context)!.welcomeTitle,
+                                  style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  AppLocalizations.of(context)!.welcomeSubtitle,
+                                  style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          SizedBox(
+                            width: 260,
+                            child: _buildSearchField(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      if (lastProject != null && _searchQuery.isEmpty) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildResumeCard(context, lastProject),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 2,
+                              child: _buildSystemMonitor(context),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                      ] else ...[
+                        _buildSystemMonitor(context),
+                        const SizedBox(height: 20),
+                      ],
+                      if (projects.isNotEmpty) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              AppLocalizations.of(context)!.projectsHeader(projects.length),
+                              style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                    ]),
+                  ),
+                ),
+                if (projects.isEmpty)
+                  _buildEmptyStateSliver(context, theme)
+                else
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 320,
+                        mainAxisExtent: 175,
+                        mainAxisSpacing: 14,
+                        crossAxisSpacing: 14,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => _buildDesktopProjectCard(context, ref, projects[index]),
+                        childCount: projects.length,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showProjectDialog(context, ref),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        child: const Icon(LucideIcons.plus),
+      ),
+    );
+  }
+
   Widget _buildMobileHome(BuildContext context, List<Project> projects, Project? lastProject, List<Project> otherProjects) {
     final theme = Theme.of(context);
+    final isLandscapeMobile = MediaQuery.of(context).orientation == Orientation.landscape;
+
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: Stack(
@@ -130,7 +412,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       if (lastProject != null && _searchQuery.isEmpty) ...[
                         _buildResumeCard(context, lastProject),
                       ],
-                      _buildQuickActionsRow(context),
+                      _buildQuickActionsAdaptive(context),
                       const SizedBox(height: 14),
                       _buildSystemMonitor(context),
                       const SizedBox(height: 20),
@@ -142,45 +424,29 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                 ),
                 if (projects.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(LucideIcons.folder_search, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty ? AppLocalizations.of(context)!.noProjects : AppLocalizations.of(context)!.nothingFound,
-                            style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5), fontSize: 16),
-                          ),
-                          if (_searchQuery.isEmpty) ...[
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: () => _showProjectDialog(context, ref),
-                              icon: const Icon(LucideIcons.plus, size: 18),
-                              label: Text(AppLocalizations.of(context)!.createFirstProject),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: theme.colorScheme.primary,
-                                foregroundColor: theme.colorScheme.onPrimary,
-                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  )
+                  _buildEmptyStateSliver(context, theme)
                 else if (otherProjects.isNotEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                    sliver: SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) => _buildProjectCard(context, ref, otherProjects[index]),
-                        childCount: otherProjects.length,
-                      ),
-                    ),
+                    sliver: isLandscapeMobile
+                        ? SliverGrid(
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 360,
+                              mainAxisExtent: 96,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => _buildProjectCard(context, ref, otherProjects[index]),
+                              childCount: otherProjects.length,
+                            ),
+                          )
+                        : SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) => _buildProjectCard(context, ref, otherProjects[index]),
+                              childCount: otherProjects.length,
+                            ),
+                          ),
                   ),
               ],
             ),
@@ -408,45 +674,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
                 
                 if (projects.isEmpty)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(LucideIcons.folder_search, size: 64, color: theme.colorScheme.onSurface.withValues(alpha: 0.1)),
-                          const SizedBox(height: 16),
-                          Text(
-                            _searchQuery.isEmpty ? AppLocalizations.of(context)!.noProjects : AppLocalizations.of(context)!.nothingFound,
-                            style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5), fontSize: 16),
-                          ),
-                          if (_searchQuery.isEmpty) ...[
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: () => _showProjectDialog(context, ref),
-                              icon: const Icon(LucideIcons.plus, size: 18),
-                              label: Text(AppLocalizations.of(context)!.createFirstProject),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: theme.colorScheme.primary,
-                                foregroundColor: theme.colorScheme.onPrimary,
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  )
+                  _buildEmptyStateSliver(context, theme)
                 else
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(32, 0, 32, 32),
                     sliver: SliverGrid(
                       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 320,
+                        mainAxisExtent: 175,
                         mainAxisSpacing: 16,
                         crossAxisSpacing: 16,
-                        childAspectRatio: 1.4,
                       ),
                       delegate: SliverChildBuilderDelegate(
                         (context, index) => _buildDesktopProjectCard(context, ref, projects[index]),
@@ -525,6 +762,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 if (context.mounted) context.go('/editor');
               },
               onLongPress: () => _showProjectActions(context, ref, project),
+              onSecondaryTap: () => _showProjectActions(context, ref, project),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -985,98 +1223,124 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildQuickActionsRow(BuildContext context) {
+  Widget _buildQuickActionsAdaptive(BuildContext context) {
     final theme = Theme.of(context);
-    return Row(
-      children: [
-        _buildActionItem(
-          icon: LucideIcons.sparkles,
-          label: 'Quick Chat',
-          color: const Color(0xFFa078ff),
-          onTap: () async {
-            final allProjects = ref.read(projectServiceProvider);
-            final usedSlugs = allProjects.map((p) => p.name.toLowerCase()).toSet();
-            final identity = generateQuickChatIdentity(usedSlugs);
-            final project = await ref.read(projectServiceProvider.notifier).createProject(
-              name: identity.slug,
-              path: '',
-              type: ProjectType.web,
-            );
-            await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
-            ref.read(rightChatPanelOpenProvider.notifier).state = true;
-            if (context.mounted) {
-              context.go('/editor');
-            }
-          },
-        ),
-        _buildActionItem(
-          icon: LucideIcons.folder_open,
-          label: AppLocalizations.of(context)!.open,
-          color: theme.colorScheme.primary,
-          onTap: () async {
-            final dir = await FilePicker.getDirectoryPath();
-            if (dir != null) {
-              await ref.read(projectServiceProvider.notifier).importProject(dir);
-            }
-          },
-        ),
-        _buildActionItem(
-          icon: LucideIcons.terminal,
-          label: AppLocalizations.of(context)!.terminal,
-          color: theme.colorScheme.secondary,
-          onTap: () => context.push('/terminal'),
-        ),
-        _buildActionItem(
-          icon: LucideIcons.layout_dashboard,
-          label: AppLocalizations.of(context)!.market,
-          color: theme.colorScheme.tertiary,
-          onTap: () => context.push('/packages'),
-        ),
-        _buildActionItem(
-          icon: LucideIcons.server,
-          label: AppLocalizations.of(context)!.servers,
-          color: theme.colorScheme.error,
-          onTap: () => context.push('/servers'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionItem({required IconData icon, required String label, required Color color, required VoidCallback onTap}) {
-    final theme = Theme.of(context);
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.02),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.8),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: color.withValues(alpha: 0.25)),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: GoogleFonts.inter(color: theme.colorScheme.onSurface.withValues(alpha: 0.8), fontSize: 10, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
+    final actions = [
+      (
+        icon: LucideIcons.sparkles,
+        label: 'Quick Chat',
+        color: const Color(0xFFa078ff),
+        onTap: () async {
+          final allProjects = ref.read(projectServiceProvider);
+          final usedSlugs = allProjects.map((p) => p.name.toLowerCase()).toSet();
+          final identity = generateQuickChatIdentity(usedSlugs);
+          final project = await ref.read(projectServiceProvider.notifier).createProject(
+            name: identity.slug,
+            path: '',
+            type: ProjectType.web,
+          );
+          await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
+          ref.read(rightChatPanelOpenProvider.notifier).state = true;
+          if (context.mounted) {
+            context.go('/editor');
+          }
+        },
       ),
+      (
+        icon: LucideIcons.plus,
+        label: AppLocalizations.of(context)!.createProject,
+        color: theme.colorScheme.primary,
+        onTap: () => _showProjectDialog(context, ref),
+      ),
+      (
+        icon: LucideIcons.folder_open,
+        label: AppLocalizations.of(context)!.open,
+        color: theme.colorScheme.secondary,
+        onTap: () async {
+          final dir = await FilePicker.getDirectoryPath();
+          if (dir != null) {
+            await ref.read(projectServiceProvider.notifier).importProject(dir);
+          }
+        },
+      ),
+      (
+        icon: LucideIcons.terminal,
+        label: AppLocalizations.of(context)!.terminal,
+        color: theme.colorScheme.tertiary,
+        onTap: () => context.push('/terminal'),
+      ),
+      (
+        icon: LucideIcons.layout_dashboard,
+        label: AppLocalizations.of(context)!.market,
+        color: Colors.pinkAccent,
+        onTap: () => context.push('/packages'),
+      ),
+      (
+        icon: LucideIcons.server,
+        label: AppLocalizations.of(context)!.servers,
+        color: theme.colorScheme.error,
+        onTap: () => context.push('/servers'),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth < 360 ? 2 : 3;
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: actions.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            mainAxisExtent: 64,
+          ),
+          itemBuilder: (context, index) {
+            final item = actions[index];
+            return InkWell(
+              onTap: item.onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.02),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.8),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: item.color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: item.color.withValues(alpha: 0.25)),
+                      ),
+                      child: Icon(item.icon, color: item.color, size: 18),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item.label,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1218,12 +1482,16 @@ class _HomePageState extends ConsumerState<HomePage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHigh,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        ),
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+      isScrollControlled: true,
+      builder: (ctx) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Container(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHigh,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1367,7 +1635,9 @@ class _HomePageState extends ConsumerState<HomePage> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildActionTile({
@@ -1490,7 +1760,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       const Color(0xFFD4E157),
       const Color(0xFFFFD54F),
     ];
-    final isDesktop = MediaQuery.of(context).size.width > 800;
+    final isWide = MediaQuery.of(context).size.width >= 720;
 
     final projectTemplates = [
       (
@@ -1554,14 +1824,14 @@ class _HomePageState extends ConsumerState<HomePage> {
     bool isCreating = false;
     String? creationError;
 
-    if (isDesktop) {
+    if (isWide) {
       await showDialog(
         context: context,
         builder: (ctx) => StatefulBuilder(
           builder: (ctx, setState) => Dialog(
             backgroundColor: Colors.transparent,
             child: Container(
-              width: 820,
+              constraints: const BoxConstraints(maxWidth: 820),
               decoration: BoxDecoration(
                 color: theme.colorScheme.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(24),
@@ -1786,14 +2056,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                                 ],
                                 if (selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ...[
                                   const SizedBox(height: 24),
-                                  Text("PACKAGE NAME (APPLICATION ID)", style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                                  Text('PACKAGE NAME (APPLICATION ID)', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                                   const SizedBox(height: 12),
                                   TextField(
                                     controller: sdkCtrl,
                                     keyboardType: TextInputType.text,
                                     style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
                                     decoration: InputDecoration(
-                                      hintText: "e.g. com.example.myapp",
+                                      hintText: 'e.g. com.example.myapp',
                                       hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                                       filled: true,
                                       fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
@@ -1946,7 +2216,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                          ),
                            child: Row(
                              children: [
-                               Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+                               const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
                              const SizedBox(width: 8),
                              Expanded(
                                child: Text(
@@ -2040,7 +2310,10 @@ class _HomePageState extends ConsumerState<HomePage> {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (ctx) => StatefulBuilder(
-          builder: (ctx, setState) => Container(
+          builder: (ctx, setState) => Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: Container(
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHigh,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -2248,14 +2521,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ],
                     if (selectedType == ProjectType.androidJava || selectedType == ProjectType.androidKotlin) ...[
                       const SizedBox(height: 24),
-                      Text("PACKAGE NAME (APPLICATION ID)", style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                      Text('PACKAGE NAME (APPLICATION ID)', style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                       const SizedBox(height: 12),
                       TextField(
                         controller: sdkCtrl,
                         keyboardType: TextInputType.text,
                         style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 14),
                         decoration: InputDecoration(
-                          hintText: "e.g. com.example.myapp",
+                          hintText: 'e.g. com.example.myapp',
                           hintStyle: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
                           filled: true,
                           fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
@@ -2415,7 +2688,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
+                          const Icon(Icons.error_outline, size: 16, color: Colors.redAccent),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -2495,7 +2768,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
         ),
-      );
+      ),
+    ),
+  );
     }
   }
 
