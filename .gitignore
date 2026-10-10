@@ -47,3 +47,17 @@ app.*.map.json
 *.zip
 android/gradle-8.0-bin.zip
 android/gradle-wrapper.zip
+
+# Signing secrets — never commit
+android/key.properties
+android/keystore.properties
+
+# Accidental `flutter create` output inside the android/ folder
+/android/android/
+/android/lib/
+/android/pubspec.yaml
+/android/pubspec.lock
+/android/test/
+/android/analysis_options.yaml
+/android/.metadata
+/android/Task

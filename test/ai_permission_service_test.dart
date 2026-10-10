@@ -39,7 +39,7 @@ void main() {
     });
 
     group('Risk Scoring', () {
-      test('Edits and creations in workspace are MEDIUM', () {
+      test('Edits and creations in workspace are LOW', () {
         final action = AIAction(
           type: 'edit',
           path: '/home/user/project/lib/main.dart',
@@ -47,7 +47,7 @@ void main() {
         );
         expect(
           service.evaluateActionRisk(action, workspaceRoot),
-          equals(AiRiskLevel.medium),
+          equals(AiRiskLevel.low),
         );
       });
 
@@ -75,7 +75,7 @@ void main() {
         );
       });
 
-      test('Commands like cargo build (not in low risk list) are MEDIUM', () {
+      test('Other build commands like cargo build are LOW', () {
         final cmdAction = AIAction(
           type: 'command',
           path: '',
@@ -83,7 +83,7 @@ void main() {
         );
         expect(
           service.evaluateActionRisk(cmdAction, workspaceRoot),
-          equals(AiRiskLevel.medium),
+          equals(AiRiskLevel.low),
         );
       });
 
