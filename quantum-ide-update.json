@@ -1,10 +1,10 @@
 {
-  "versionCode": 25,
-  "versionName": "1.2.3",
-  "notes": "Обновление QuantumIDE: интеграция Antigravity CLI OAuth с автоматическим TUI-рукопожатием, поддержка официальных релизов DeepSeek и Claude Code, устранение бага блокировки чата при открытом файле, встроенный установщик и менеджер обновлений CLI и приложения.",
+  "versionCode": 26,
+  "versionName": "1.2.8",
+  "notes": "Обновление QuantumIDE: в терминале PRoot исправлена кодировка (C.UTF-8 вместо отсутствующей en_US.UTF-8) — вместо букв печатались знаки вопроса; установщик Node.js 20 теперь проверяет мажорную версию и действительно обновляет Node, а не рапортовал об успехе; починены зависимости сборки Linux (libsecret-1-dev); имя и код версии теперь меняются с каждой сборкой.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.3/quantum-ide-v1.2.3.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.8/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
