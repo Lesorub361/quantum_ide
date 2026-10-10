@@ -61,7 +61,7 @@ final defaultPackages = [
     id: 'nodejs',
     name: 'Node.js 20',
     description: 'JavaScript runtime (v20.x) for modern tools and CLI',
-    command: 'if which node >/dev/null 2>&1 && which npm >/dev/null 2>&1; then echo "Node.js already installed: \$(node -v)"; else ${_aptPrefix}apt install -y curl ca-certificates && curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs; fi',
+    command: 'if which node >/dev/null 2>&1 && which npm >/dev/null 2>&1 && [ "\$(node -v | sed \'s/^v//\' | cut -d. -f1)" = "20" ]; then echo "Node.js already installed: \$(node -v)"; else echo "Installing Node.js 20 (found: \$(node -v 2>/dev/null || echo none))"; ${_aptPrefix}apt install -y curl ca-certificates && curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs; hash -r; node -v; fi',
     icon: LucideIcons.zap,
     category: 'Web',
   ),

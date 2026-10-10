@@ -155,8 +155,8 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       if (!Platform.isAndroid && !Platform.isWindows) {
         env['TERM'] = 'xterm-256color';
         env['COLORTERM'] = 'truecolor';
-        env['LANG'] = env['LANG'] ?? 'en_US.UTF-8';
-        env['LC_ALL'] = 'en_US.UTF-8';
+        env['LANG'] = env['LANG'] ?? 'C.UTF-8';
+        env['LC_ALL'] = env['LC_ALL'] ?? 'C.UTF-8';
         env['HOME'] = env['HOME'] ?? Platform.environment['HOME'] ?? '/root';
         // Ensure PWD is actual host dir for Desktop
         env['PWD'] = dir;

@@ -12,14 +12,18 @@ This guide covers building QuantumIDE on both Linux desktop and Android devices.
   ```bash
   sudo apt-get update
   sudo apt-get install -y \
-    build-essential cmake git curl \
-    libgl1-mesa-dev libxrender-dev libxrandr-dev \
-    libglib2.0-dev pkg-config
+    clang cmake ninja-build pkg-config build-essential git curl \
+    libgtk-3-dev liblzma-dev libstdc++-12-dev \
+    libgl1-mesa-dev libxrender-dev libxrandr-dev libglib2.0-dev \
+    libsecret-1-dev
   ```
+  - `libgtk-3-dev` — обязателен, без него `flutter build linux` не запустится
+  - `libsecret-1-dev` — обязателен для `flutter_secure_storage_linux` (ищет `libsecret-1 >= 0.18.4` через pkg-config)
 
 ### Android
 - **JDK**: Java 11 or higher
   ```bash
+  sudo apt-get update
   sudo apt-get install -y openjdk-17-jdk
   ```
 - **Android SDK**: API level 26+ (minSdk requirement for flterm)
@@ -183,7 +187,22 @@ export PATH="$PATH:$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin"
 ```bash
 # The build system will auto-detect and use proper symlinks
 # Ensure you have flutter_pty build dependencies:
+sudo apt-get update
 sudo apt-get install -y libffi-dev libutil-linux-dev
+```
+
+### Issue: Terminal shows `?` instead of letters
+**Solution**: the PRoot rootfs ships without generated system locales, so any
+`LANG=en_US.UTF-8` makes bash fall back to ASCII. The terminal must use
+`C.UTF-8` instead (built into glibc, always present):
+```bash
+locale -a | grep -i utf   # should list C.utf8
+```
+The app sets `LANG=C.UTF-8` in `lib/core/services/runtime_service.dart` for the
+PRoot wrapper. If a locale other than `C.UTF-8` is needed, generate it once
+inside the container:
+```bash
+apt install -y locales && sed -i 's/# en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen && locale-gen
 ```
 
 ## Environment Variables

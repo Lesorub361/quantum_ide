@@ -869,7 +869,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     if (!Platform.isAndroid && !Platform.isWindows) {
       env['TERM'] = 'xterm-256color';
       env['COLORTERM'] = 'truecolor';
-      env['LANG'] = env['LANG'] ?? 'en_US.UTF-8';
+      env['LANG'] = env['LANG'] ?? 'C.UTF-8';
       env['HOME'] = env['HOME'] ?? Platform.environment['HOME'] ?? '/root';
       env['PWD'] = dir;
     }

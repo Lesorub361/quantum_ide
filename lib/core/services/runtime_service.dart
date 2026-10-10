@@ -784,7 +784,7 @@ if [ \$# -gt 2 ]; then
         --bind="\$ROOTFS/tmp:/dev/shm" \\
         \$BIND_OVERLAYS -0 /usr/bin/env HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
         JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
-        LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 DEBIAN_FRONTEND=noninteractive \\
+        LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive \\
         FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
         "\$@"
 else
@@ -821,7 +821,7 @@ else
         --bind="\$ROOTFS/tmp:/dev/shm" \\
         \$BIND_OVERLAYS -0 /usr/bin/env HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
         JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
-        LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 DEBIAN_FRONTEND=noninteractive \\
+        LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive \\
         FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
         /bin/bash --rcfile /root/.bashrc
 fi
@@ -939,8 +939,8 @@ fi
         ...Platform.environment,
         'TERM': 'xterm-256color',
         'COLORTERM': 'truecolor',
-        'LANG': 'en_US.UTF-8',
-        'LC_ALL': 'en_US.UTF-8',
+        'LANG': Platform.environment['LANG'] ?? 'C.UTF-8',
+        'LC_ALL': Platform.environment['LC_ALL'] ?? 'C.UTF-8',
       };
     }
     // Android/iOS: use PRoot-specific environment
@@ -955,8 +955,8 @@ fi
       'JAVA_HOME': _detectedJavaHome,
       'FLUTTER_ROOT': '/root/flutter',
       'USER': 'root',
-      'LANG': 'en_US.UTF-8',
-      'LC_ALL': 'en_US.UTF-8',
+      'LANG': 'C.UTF-8',
+      'LC_ALL': 'C.UTF-8',
       'FLUTTER_ALLOW_SU_ROOT': 'true',
       // Force IPv4 for Java/Gradle — Android PRoot routing of IPv6 sockets is broken
       '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true',
