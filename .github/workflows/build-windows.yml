@@ -31,6 +31,8 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows release
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --release --no-tree-shake-icons
 
       - name: Package Windows Bundle
