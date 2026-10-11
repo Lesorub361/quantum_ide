@@ -48,6 +48,21 @@ class SelectAllTextIntent extends Intent {
   const SelectAllTextIntent();
 }
 
+class TerminalFocusNode extends FocusNode {
+  bool allowAutoKeyboard;
+
+  TerminalFocusNode({this.allowAutoKeyboard = true});
+
+  @override
+  bool consumeKeyboardToken() {
+    if (!allowAutoKeyboard) {
+      super.consumeKeyboardToken();
+      return false;
+    }
+    return super.consumeKeyboardToken();
+  }
+}
+
 class TerminalPanelContent extends ConsumerStatefulWidget {
   final bool onlyTerminal;
   const TerminalPanelContent({super.key, this.onlyTerminal = false});
@@ -63,6 +78,57 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   bool _isMobileKeyboardActive = false;
   int _buildSubTab = 0;
   double _pinchBaseFontSize = 13.0;
+
+  final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
+  final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
+
+  GlobalKey<xt.TerminalViewState> _getTerminalKey(String id) {
+    return _terminalKeys.putIfAbsent(id, () => GlobalKey<xt.TerminalViewState>());
+  }
+
+  TerminalFocusNode _getFocusNode(String id) {
+    final isMobile = Platform.isAndroid || Platform.isIOS || (mounted && MediaQuery.of(context).size.width < 650);
+    return _terminalFocusNodes.putIfAbsent(
+      id,
+      () => TerminalFocusNode(allowAutoKeyboard: !isMobile),
+    );
+  }
+
+  void _openTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+    _isMobileKeyboardActive = true;
+    final keyId = isSecondary ? '${session.id}_sec' : session.id;
+    final focusNode = _getFocusNode(keyId);
+    focusNode.allowAutoKeyboard = true;
+    focusNode.requestFocus();
+    _getTerminalKey(keyId).currentState?.requestKeyboard();
+    SystemChannels.textInput.invokeMethod('TextInput.show');
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        focusNode.allowAutoKeyboard = false;
+      }
+    });
+    if (mounted) setState(() {});
+  }
+
+  void _closeTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+    _isMobileKeyboardActive = false;
+    final keyId = isSecondary ? '${session.id}_sec' : session.id;
+    _getTerminalKey(keyId).currentState?.closeKeyboard();
+    FocusManager.instance.primaryFocus?.unfocus();
+    SystemChannels.textInput.invokeMethod('TextInput.hide');
+    if (mounted) setState(() {});
+  }
+
+  void _toggleTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    if (bottomInset > 20) {
+      _closeTerminalKeyboard(session, isSecondary: isSecondary);
+    } else if (_isMobileKeyboardActive && bottomInset == 0 && !Platform.isAndroid && !Platform.isIOS) {
+      _closeTerminalKeyboard(session, isSecondary: isSecondary);
+    } else {
+      _openTerminalKeyboard(session, isSecondary: isSecondary);
+    }
+  }
 
   String _currentInput = '';
   final ValueNotifier<List<String>?> _suggestionsNotifier = ValueNotifier(null);
@@ -80,6 +146,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   @override
   void dispose() {
+    for (final node in _terminalFocusNodes.values) {
+      node.dispose();
+    }
+    _terminalFocusNodes.clear();
+    _terminalKeys.clear();
     _suggestionsNotifier.dispose();
     super.dispose();
   }
@@ -359,12 +430,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
     if (value == 'toggle_keyboard') {
-      setState(() {
-        _isMobileKeyboardActive = !_isMobileKeyboardActive;
-      });
-      if (!_isMobileKeyboardActive) {
-        FocusManager.instance.primaryFocus?.unfocus();
-      }
+      _toggleTerminalKeyboard(session);
       return;
     }
     if (value == 'selection_mode') {
@@ -1697,6 +1763,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
     final theme = _getTerminalTheme(terminalThemeName);
     final isMobile = Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650;
+    final keyId = isSecondary ? '${session.id}_sec' : session.id;
 
     if (!isSecondary) {
       if (_lastAttachedSession != session) {
@@ -1749,6 +1816,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       },
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
+                        onTap: () => _openTerminalKeyboard(session, isSecondary: isSecondary),
                         onScaleStart: (details) {
                           if (details.pointerCount >= 2) {
                             _pinchBaseFontSize = ref.read(settingsProvider).terminalFontSize;
@@ -1770,17 +1838,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         onSecondaryTapDown: (details) =>
                             _showTerminalContextMenu(context, details.globalPosition, session),
                         child: xt.TerminalView(
+                          key: _getTerminalKey(keyId),
                           session.xtermTerminal,
                           controller: session.xtermViewController,
+                          focusNode: _getFocusNode(keyId),
                           autofocus: !isMobile,
-                          hardwareKeyboardOnly: isMobile && !_isMobileKeyboardActive,
-                          onTapUp: (details, offset) {
-                            if (isMobile && !_isMobileKeyboardActive) {
-                              setState(() {
-                                _isMobileKeyboardActive = true;
-                              });
-                            }
-                          },
+                          hardwareKeyboardOnly: false,
+                          onTapUp: (details, offset) => _openTerminalKeyboard(session, isSecondary: isSecondary),
                           padding: const EdgeInsets.all(10),
                           theme: theme,
                           backgroundOpacity: 0,
@@ -2622,8 +2686,13 @@ Also explain what exactly went wrong and how you fixed it.
   Widget _buildVirtualKeys(List<TerminalSession> sessions, TerminalTabsNotifier notifier) {
     if (sessions.isEmpty) return const SizedBox();
     final currentSession = sessions[notifier.currentIndex];
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardOpen = (bottomInset > 20) || _isMobileKeyboardActive;
     return VirtualKeysView(
-      activeKeys: _activeModifiers,
+      activeKeys: {
+        ..._activeModifiers,
+        if (isKeyboardOpen) 'KEYB',
+      },
       onKeyTap: (value) => _onKeyTap(value, currentSession),
     );
   }
