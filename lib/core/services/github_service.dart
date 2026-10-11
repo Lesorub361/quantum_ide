@@ -92,7 +92,12 @@ class GitHubService {
     }
   }
 
-  Future<String?> cloneRepository(String url, String destinationPath, {Future<String> Function(String cmd)? runner}) async {
+  Future<String?> cloneRepository(
+    String url,
+    String destinationPath, {
+    String? guestDestinationPath,
+    Future<String> Function(String cmd)? runner,
+  }) async {
     try {
       String cloneUrl = url;
       if (_accessToken != null && _accessToken!.isNotEmpty && cloneUrl.startsWith('https://')) {
@@ -101,21 +106,36 @@ class GitHubService {
         cloneUrl = 'https://$_accessToken@$stripped';
       }
       
+      final targetGuestPath = guestDestinationPath ?? destinationPath;
+
       // Ensure destination directory parent exists
       final dir = Directory(destinationPath);
       if (await dir.exists()) {
         final contents = dir.listSync();
         if (contents.isNotEmpty) {
-          throw Exception('Destination directory is not empty');
+          final gitDir = Directory('${dir.path}/.git');
+          final isAlreadyCloned = await gitDir.exists() && contents.length > 2;
+          if (isAlreadyCloned) {
+            // Already cloned and non-empty: update repo
+            if (runner != null) {
+              try {
+                await runner('git -C "$targetGuestPath" pull');
+              } catch (_) {}
+            }
+            return destinationPath;
+          } else {
+            // Broken or incomplete directory (e.g. only .github or empty .git), clean up
+            try {
+              await dir.delete(recursive: true);
+            } catch (_) {}
+          }
         }
-      } else {
-        await dir.create(recursive: true);
       }
 
       bool success = false;
       if (runner != null) {
         try {
-          await runner('git clone "$cloneUrl" "$destinationPath"');
+          await runner('git clone "$cloneUrl" "$targetGuestPath"');
           success = true;
         } catch (e) {
           // If runner failed, try Process.run as fallback
@@ -130,16 +150,38 @@ class GitHubService {
       }
 
       if (success) {
-        // Configure safe directory and author details if logged in
-        try {
-          await Process.run('git', ['config', '--global', '--add', 'safe.directory', '*']);
-          if (_currentUser != null) {
-            final name = _currentUser!['name'] ?? _currentUser!['login'] ?? 'Quantum Developer';
-            final email = _currentUser!['email'] ?? '${_currentUser!['login']}@users.noreply.github.com';
-            await Process.run('git', ['config', 'user.name', name], workingDirectory: destinationPath);
-            await Process.run('git', ['config', 'user.email', email], workingDirectory: destinationPath);
-          }
-        } catch (_) {}
+        // 1. CRITICAL: Never keep the personal access token in git remote config!
+        if (runner != null) {
+          try {
+            await runner('git -C "$targetGuestPath" remote set-url origin "$url"');
+          } catch (_) {}
+        } else {
+          try {
+            await Process.run('git', ['remote', 'set-url', 'origin', url], workingDirectory: destinationPath);
+          } catch (_) {}
+        }
+
+        // 2. Configure safe directory and author details if logged in
+        if (runner != null) {
+          try {
+            await runner('git config --global --add safe.directory "*"');
+            if (_currentUser != null) {
+              final name = _currentUser!['name'] ?? _currentUser!['login'] ?? 'Quantum Developer';
+              final email = _currentUser!['email'] ?? '${_currentUser!['login']}@users.noreply.github.com';
+              await runner('git -C "$targetGuestPath" config user.name "$name" && git -C "$targetGuestPath" config user.email "$email"');
+            }
+          } catch (_) {}
+        } else {
+          try {
+            await Process.run('git', ['config', '--global', '--add', 'safe.directory', '*']);
+            if (_currentUser != null) {
+              final name = _currentUser!['name'] ?? _currentUser!['login'] ?? 'Quantum Developer';
+              final email = _currentUser!['email'] ?? '${_currentUser!['login']}@users.noreply.github.com';
+              await Process.run('git', ['config', 'user.name', name], workingDirectory: destinationPath);
+              await Process.run('git', ['config', 'user.email', email], workingDirectory: destinationPath);
+            }
+          } catch (_) {}
+        }
         return destinationPath;
       }
       return null;

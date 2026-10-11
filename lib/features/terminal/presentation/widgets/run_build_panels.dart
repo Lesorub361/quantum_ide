@@ -36,14 +36,31 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
       bool hasPackageJson = false;
       bool hasPyFile = false;
       bool hasHtmlFile = false;
+      bool hasGradle = false;
+      bool hasCargo = false;
       for (final file in files) {
         final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
         if (name == 'pubspec.yaml') hasPubspec = true;
         if (name == 'package.json') hasPackageJson = true;
         if (name.endsWith('.py')) hasPyFile = true;
         if (name == 'index.html' || name.endsWith('.html')) hasHtmlFile = true;
+        if (name == 'build.gradle' || name == 'build.gradle.kts' ||
+            name == 'settings.gradle' || name == 'settings.gradle.kts') {
+          hasGradle = true;
+        }
+        if (name == 'cargo.toml') hasCargo = true;
       }
-      if (hasPubspec) return ProjectType.flutter;
+      if (hasPubspec) {
+        try {
+          final pubspecContent = File('$path${Platform.pathSeparator}pubspec.yaml').readAsStringSync();
+          if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
+          return ProjectType.dart;
+        } catch (_) {
+          return ProjectType.flutter;
+        }
+      }
+      if (hasGradle) return ProjectType.androidKotlin;
+      if (hasCargo) return ProjectType.rust;
       if (hasPackageJson) return ProjectType.nodejs;
       if (hasPyFile) return ProjectType.python;
       if (hasHtmlFile) return ProjectType.web;
@@ -209,9 +226,20 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         title = l10n.androidProject;
         actions.addAll([
           _buildActionButton(l10n.buildAPK, LucideIcons.box, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 'bash ./gradlew assembleDebug')),
+              () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug')),
           _buildActionButton(l10n.install, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 'bash ./gradlew installDebug')),
+              () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew installDebug')),
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
+              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+        ]);
+        break;
+      case ProjectType.rust:
+        title = 'Rust Project';
+        actions.addAll([
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
+              () => _runDedicatedCommand(workspaceState.currentPath, 'cargo run')),
+          _buildActionButton('Test', LucideIcons.flask_conical, Colors.cyanAccent, 
+              () => _runDedicatedCommand(workspaceState.currentPath, 'cargo test')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
         ]);
@@ -515,6 +543,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
       bool hasPyFile = false;
       bool hasHtmlFile = false;
       bool hasGradle = false;
+      bool hasCargo = false;
       for (final file in files) {
         final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
         if (name == 'pubspec.yaml') hasPubspec = true;
@@ -525,9 +554,19 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
             name == 'settings.gradle' || name == 'settings.gradle.kts') {
           hasGradle = true;
         }
+        if (name == 'cargo.toml') hasCargo = true;
       }
-      if (hasPubspec) return ProjectType.flutter;
+      if (hasPubspec) {
+        try {
+          final pubspecContent = File('$path${Platform.pathSeparator}pubspec.yaml').readAsStringSync();
+          if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
+          return ProjectType.dart;
+        } catch (_) {
+          return ProjectType.flutter;
+        }
+      }
       if (hasGradle) return ProjectType.androidKotlin;
+      if (hasCargo) return ProjectType.rust;
       if (hasPackageJson) return ProjectType.nodejs;
       if (hasPyFile) return ProjectType.python;
       if (hasHtmlFile) return ProjectType.web;
@@ -595,16 +634,42 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'bash ./gradlew assembleDebug && echo "✓ Debug APK: app/build/outputs/apk/debug/app-debug.apk"')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug && echo "✓ Debug APK: app/build/outputs/apk/debug/app-debug.apk"')),
           _buildActionButton('Release APK', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'bash ./gradlew assembleRelease && echo "✓ Release APK: app/build/outputs/apk/release/"')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleRelease && echo "✓ Release APK: app/build/outputs/apk/release/"')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'bash ./gradlew clean')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew clean')),
           _buildActionButton('Sync', LucideIcons.refresh_cw, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'bash ./gradlew dependencies')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew dependencies')),
+        ];
+        break;
+
+      case ProjectType.rust:
+        buildActions = [
+          _buildActionButton('Cargo Build', LucideIcons.package, Colors.orange,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'cargo build')),
+          _buildActionButton('Release', LucideIcons.box, Colors.greenAccent,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'cargo build --release')),
+          _buildActionButton('Check', LucideIcons.circle_check, Colors.cyanAccent,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'cargo check')),
+          _buildActionButton('Test', LucideIcons.flask_conical, Colors.blue,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'cargo test')),
+          _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'cargo clean')),
+        ];
+        break;
+
+      case ProjectType.dart:
+        buildActions = [
+          _buildActionButton('Compile Exe', LucideIcons.package, Colors.orange,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'dart compile exe bin/main.dart')),
+          _buildActionButton('Analyze', LucideIcons.circle_check, Colors.cyanAccent,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'dart analyze')),
+          _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
+              () => _runDedicatedCommand(workspaceState.currentPath, 'dart pub get')),
         ];
         break;
 

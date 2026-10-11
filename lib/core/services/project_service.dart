@@ -657,7 +657,7 @@ class ProjectService extends StateNotifier<List<Project>> {
         break;
       case ProjectType.nodejs:
         await _createFile(p.join(path, 'package.json'), _nodePackage(name));
-        await _createFile(p.join(path, 'index.js'), "console.log('Hello from QuantumIDE Node.js!');\n");
+        await _createFile(p.join(path, 'index.js'), _nodeIndexJs(name));
         await _createFile(p.join(path, 'README.md'), '# $name\n\nA Node.js project created with QuantumIDE.\n');
         await _createFile(p.join(path, '.gitignore'), 'node_modules/\nbuild/\n*.iml\n.idea/\n');
         break;
@@ -1097,6 +1097,10 @@ include(":app")
 }
 ''');
 
+    // 2.1 local.properties
+    final sdkPath = _getAndroidSdkPath();
+    await _createFile(p.join(projectPath, 'local.properties'), 'sdk.dir=$sdkPath\n');
+
     // 3. app/build.gradle.kts
     final pluginsBlock = isKotlin ? '''plugins {
     id("com.android.application")
@@ -1246,17 +1250,24 @@ public class MainActivity extends AppCompatActivity {
 ''');
     }
 
-    // 8. Copy Gradle wrapper
+    // 8. Proguard rules
+    await _createFile(p.join(projectPath, 'app', 'proguard-rules.pro'), '# Add project specific ProGuard rules here.\n');
+
+    // 9. Copy Gradle wrapper
     await _copyGradleWrapper(projectPath);
   }
 
   Future<void> _copyGradleWrapper(String destPath) async {
     final runtime = _ref.read(runtimeServiceProvider);
-    // Search for gradle wrapper in proot Linux env and app data directory
+    // Search for gradle wrapper in various known locations
     final sourcePaths = [
+      '/root/projects/.gradle_template',
+      '/root/flutter/bin/cache/artifacts/gradle_wrapper',
       p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'projects', '.gradle_template'),
+      p.join(runtime.appDirectory, 'projects', '.gradle_template'),
       p.join(runtime.appDirectory, 'android'),
       p.join(Directory.current.path, 'android'),
+      p.join(Directory.current.path, 'quantum_ide-main', 'android'),
     ];
 
     final filesToCopy = [
@@ -1266,34 +1277,33 @@ public class MainActivity extends AppCompatActivity {
       'gradle/wrapper/gradle-wrapper.properties',
     ];
 
-    bool copied = false;
+    bool copiedWrapperJar = false;
     for (final srcRoot in sourcePaths) {
-      bool allExist = true;
+      if (!await Directory(srcRoot).exists()) continue;
       for (final relPath in filesToCopy) {
-        if (!await File(p.join(srcRoot, relPath)).exists()) {
-          allExist = false;
-          break;
-        }
-      }
-      if (allExist) {
-        for (final relPath in filesToCopy) {
-          final srcFile = File(p.join(srcRoot, relPath));
+        final srcFile = File(p.join(srcRoot, relPath));
+        if (await srcFile.exists()) {
           final destFile = File(p.join(destPath, relPath));
-          await destFile.parent.create(recursive: true);
-          await srcFile.copy(destFile.path);
-          if (relPath == 'gradlew') {
-            try {
-              await Process.run('chmod', ['+x', destFile.path]);
-            } catch (_) {}
+          if (!await destFile.exists()) {
+            await destFile.parent.create(recursive: true);
+            await srcFile.copy(destFile.path);
+            if (relPath == 'gradlew') {
+              try {
+                await Process.run('chmod', ['+x', destFile.path]);
+              } catch (_) {}
+            }
+            if (relPath.endsWith('gradle-wrapper.jar')) {
+              copiedWrapperJar = true;
+            }
           }
         }
-        copied = true;
-        break;
       }
+      if (copiedWrapperJar) break;
     }
 
-    if (!copied) {
-      await _createFile(p.join(destPath, 'gradle/wrapper/gradle-wrapper.properties'), '''distributionBase=GRADLE_USER_HOME
+    final propFile = File(p.join(destPath, 'gradle/wrapper/gradle-wrapper.properties'));
+    if (!await propFile.exists()) {
+      await _createFile(propFile.path, '''distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
 distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip
 zipStoreBase=GRADLE_USER_HOME
@@ -1326,6 +1336,28 @@ zipStorePath=wrapper/dists
     } catch (e) {
       debugPrint('Initial mirroring failed: $e');
     }
+  }
+
+  String _getAndroidSdkPath() {
+    if (Directory('/root/android-sdk').existsSync()) {
+      return '/root/android-sdk';
+    }
+    if (Directory('/usr/lib/android-sdk').existsSync()) {
+      return '/usr/lib/android-sdk';
+    }
+    final home = Platform.environment['HOME'] ?? '/root';
+    final userSdk = p.join(home, 'Android', 'Sdk');
+    if (Directory(userSdk).existsSync()) {
+      return userSdk;
+    }
+    final runtime = _ref.read(runtimeServiceProvider);
+    if (Platform.isAndroid && runtime.filesDir.isNotEmpty) {
+      final prootPath = p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk');
+      if (Directory(prootPath).existsSync()) return prootPath;
+    }
+    return Platform.environment['ANDROID_HOME'] ?? 
+           Platform.environment['ANDROID_SDK_ROOT'] ?? 
+           p.join(home, 'android-sdk');
   }
 
   Future<void> _createFile(String path, String content) async {
@@ -1429,8 +1461,43 @@ dev_dependencies:
   "name": "$name",
   "version": "1.0.0",
   "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {}
 }
+''';
+
+  String _nodeIndexJs(String name) => '''const http = require('http');
+const port = process.env.PORT || 3000;
+
+const server = http.createServer((req, res) => {
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.end(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>$name</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; padding: 2rem 3rem; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.3); text-align: center; }
+    h1 { color: #38bdf8; margin-top: 0; }
+    p { color: #94a3b8; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🚀 Hello from QuantumIDE!</h1>
+    <p>Node.js server for <strong>$name</strong> is running on port \${port}</p>
+  </div>
+</body>
+</html>`);
+});
+
+server.listen(port, () => {
+  console.log(`Server running at http://localhost:\${port}/`);
+});
 ''';
 
   String _webHtml(String name) => '''<!DOCTYPE html>

@@ -8,6 +8,7 @@ import 'package:quantum_ide/core/services/github_service.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
@@ -499,10 +500,12 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
         await projectsDir.create(recursive: true);
       }
       final destinationPath = '${projectsDir.path}/$repoName';
+      final guestPath = PathMapper.mapToGuest(destinationPath, runtime.appDirectory);
 
       final result = await _githubService.cloneRepository(
         url,
         destinationPath,
+        guestDestinationPath: guestPath,
         runner: (cmd) => runtime.runCommand(cmd),
       );
 

@@ -1,10 +1,10 @@
 {
-  "versionCode": 26,
-  "versionName": "1.2.8",
-  "notes": "Обновление QuantumIDE: в терминале PRoot исправлена кодировка (C.UTF-8 вместо отсутствующей en_US.UTF-8) — вместо букв печатались знаки вопроса; установщик Node.js 20 теперь проверяет мажорную версию и действительно обновляет Node, а не рапортовал об успехе; починены зависимости сборки Linux (libsecret-1-dev); имя и код версии теперь меняются с каждой сборкой.",
+  "versionCode": 28,
+  "versionName": "1.2.10",
+  "notes": "Обновление QuantumIDE 1.2.10: современный киберпанк fastfetch дашборд при открытии терминала с логотипом, системными метриками и прогресс-барами; исправлено клонирование репозиториев GitHub внутри приложения (поддержка путей гостевой системы PRoot и очистка битых директорий); защита токенов GitHub от утечки в .git/config; поддержка проектов Rust (Cargo) и запуск серверов Node.js.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.8/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.10/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

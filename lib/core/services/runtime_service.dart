@@ -445,7 +445,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '9';
+    const bashrcVersion = '11';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -463,8 +463,27 @@ class RuntimeService extends ChangeNotifier {
     }
 
     if (needsWrite) {
+      final termFetchScript = _generateTermFetchScript().replaceAll('\r', '');
+
+      // 1. Write standalone term-fetch executable
+      final termFetchTargets = [
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'term-fetch'),
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'term-fetch'),
+        '/usr/local/bin/term-fetch',
+        '/usr/bin/term-fetch',
+      ];
+      for (final targetPath in termFetchTargets) {
+        try {
+          final f = File(targetPath);
+          if (await f.parent.exists()) {
+            await f.writeAsString(termFetchScript);
+            await Process.run('chmod', ['755', targetPath]);
+          }
+        } catch (_) {}
+      }
+
       const bashrcContent = r'''
-# BASHRC_VERSION=9
+# BASHRC_VERSION=11
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest
@@ -481,6 +500,8 @@ fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
 export COLORTERM=truecolor
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 export HISTSIZE=5000
 export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
@@ -525,14 +546,133 @@ if ! command -v which > /dev/null 2>&1; then
     chmod 755 /usr/bin/which
 fi
 
+# Modern Responsive System Fetch
+term_fetch() {
+    local COLS=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
+    [ -z "$COLS" ] && COLS=80
+
+    local C_RESET="\033[0m"
+    local C_BOLD="\033[1m"
+    local C_DIM="\033[2m"
+    local C_CYAN="\033[38;5;51m"
+    local C_BLUE="\033[38;5;39m"
+    local C_PURPLE="\033[38;5;141m"
+    local C_MAGENTA="\033[38;5;201m"
+    local C_PINK="\033[38;5;213m"
+    local C_GREEN="\033[38;5;48m"
+    local C_YELLOW="\033[38;5;220m"
+    local C_ORANGE="\033[38;5;208m"
+    local C_RED="\033[38;5;196m"
+    local C_WHITE="\033[38;5;255m"
+    local C_GRAY="\033[38;5;245m"
+    local C_DARK="\033[38;5;238m"
+
+    local OS_NAME=$(grep -oP '(?<=PRETTY_NAME=")[^"]*' /etc/os-release 2>/dev/null)
+    [ -z "$OS_NAME" ] && OS_NAME="$(uname -s)"
+    local ARCH=$(uname -m)
+    local KERNEL=$(uname -r | cut -d'-' -f1-2)
+
+    local HOST_MODEL=""
+    if command -v getprop >/dev/null 2>&1; then
+        local BRAND=$(getprop ro.product.brand 2>/dev/null)
+        local MODEL=$(getprop ro.product.model 2>/dev/null)
+        [ -n "$MODEL" ] && HOST_MODEL="$BRAND $MODEL"
+    fi
+    if [ -z "$HOST_MODEL" ] && [ -f /sys/devices/virtual/dmi/id/product_name ]; then
+        HOST_MODEL=$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)
+    fi
+    [ -z "$HOST_MODEL" ] && HOST_MODEL="$(hostname 2>/dev/null || echo 'localhost')"
+
+    local UPTIME_STR="unknown"
+    if [ -f /proc/uptime ]; then
+        local UP_SECS=$(cut -d. -f1 /proc/uptime)
+        local DAYS=$((UP_SECS / 86400))
+        local HOURS=$(( (UP_SECS % 86400) / 3600 ))
+        local MINS=$(( (UP_SECS % 3600) / 60 ))
+        UPTIME_STR=""
+        [ $DAYS -gt 0 ] && UPTIME_STR="${DAYS}d "
+        [ $HOURS -gt 0 ] && UPTIME_STR="${UPTIME_STR}${HOURS}h "
+        UPTIME_STR="${UPTIME_STR}${MINS}m"
+    fi
+
+    local CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "1")
+    local CPU_NAME=$(grep -m1 -E 'Hardware|model name|Processor' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs)
+    [ -z "$CPU_NAME" ] && CPU_NAME="ARM64 Processor"
+
+    local MEM_USED_MB=0 MEM_TOTAL_MB=0 MEM_PERCENT=0
+    if [ -f /proc/meminfo ]; then
+        local MEM_TOTAL_KB=$(grep 'MemTotal:' /proc/meminfo | awk '{print $2}')
+        local MEM_AVAIL_KB=$(grep 'MemAvailable:' /proc/meminfo | awk '{print $2}')
+        [ -z "$MEM_AVAIL_KB" ] && MEM_AVAIL_KB=$(grep 'MemFree:' /proc/meminfo | awk '{print $2}')
+        local MEM_USED_KB=$((MEM_TOTAL_KB - MEM_AVAIL_KB))
+        MEM_USED_MB=$((MEM_USED_KB / 1024))
+        MEM_TOTAL_MB=$((MEM_TOTAL_KB / 1024))
+        [ $MEM_TOTAL_KB -gt 0 ] && MEM_PERCENT=$((MEM_USED_KB * 100 / MEM_TOTAL_KB)) || MEM_PERCENT=0
+    fi
+
+    local DISK_INFO=$(df -h / 2>/dev/null | tail -1)
+    local DISK_USED=$(echo "$DISK_INFO" | awk '{print $3}')
+    local DISK_TOTAL=$(echo "$DISK_INFO" | awk '{print $2}')
+    local DISK_PERCENT=$(echo "$DISK_INFO" | awk '{print $5}' | tr -d '%')
+    [ -z "$DISK_PERCENT" ] && DISK_PERCENT=0
+
+    _q_bar() {
+        local pct=$1 width=$2 bar=""
+        [ -z "$width" ] && width=10
+        local filled=$((pct * width / 100))
+        local empty=$((width - filled))
+        for ((i=0; i<filled; i++)); do bar="${bar}█"; done
+        for ((i=0; i<empty; i++)); do bar="${bar}░"; done
+        echo "$bar"
+    }
+
+    local RUNTIMES=""
+    command -v flutter >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Flutter "
+    command -v node >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Node.js "
+    command -v python3 >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Python "
+    command -v rustc >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Rust "
+    command -v clang >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Clang "
+    [ -z "$RUNTIMES" ] && RUNTIMES="Linux Core"
+
+    if [ "$COLS" -ge 65 ]; then
+        local RAM_BAR=$(_q_bar $MEM_PERCENT 10)
+        local DISK_BAR=$(_q_bar $DISK_PERCENT 10)
+        echo -e "${C_CYAN}  ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗   ██╗███╗   ███╗${C_RESET}"
+        echo -e "${C_BLUE} ██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██║   ██║████╗ ████║${C_RESET}"
+        echo -e "${C_PURPLE} ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ██║   ██║██╔████╔██║${C_RESET}"
+        echo -e "${C_MAGENTA} ╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ╚██████╔╝██║ ╚═╝ ██║${C_RESET}"
+        echo -e "${C_MAGENTA}  ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝${C_RESET}"
+        echo -e "         ${C_BOLD}${C_CYAN}Q U A N T U M   I D E${C_RESET} ${C_DARK}│${C_RESET} ${C_PURPLE}Next-Gen Mobile & Desktop Studio${C_RESET}"
+        echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "  ${C_CYAN}◆ OS      ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
+        echo -e "  ${C_BLUE}◆ Host    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${HOST_MODEL}${C_RESET} ${C_DIM}[Kernel: ${KERNEL}]${C_RESET}"
+        echo -e "  ${C_YELLOW}◆ CPU     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${CPU_NAME}${C_RESET} ${C_CYAN}(${CPU_CORES} cores)${C_RESET}"
+        echo -e "  ${C_GREEN}◆ RAM     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}MB / ${MEM_TOTAL_MB}MB${C_RESET} ${C_DIM}(${MEM_PERCENT}%)${C_RESET}"
+        echo -e "  ${C_PURPLE}◆ Disk    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED} / ${DISK_TOTAL}${C_RESET} ${C_DIM}(${DISK_PERCENT}%)${C_RESET}"
+        echo -e "  ${C_PINK}◆ Uptime  ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
+        echo -e "  ${C_MAGENTA}◆ Stack   ${C_RESET} ${C_GRAY}::${C_RESET} ${C_CYAN}${RUNTIMES}${C_RESET}"
+        echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
+        echo -e "  ${C_DIM}Colors  :${C_RESET} ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
+    else
+        local RAM_BAR=$(_q_bar $MEM_PERCENT 7)
+        local DISK_BAR=$(_q_bar $DISK_PERCENT 7)
+        echo -e "  ${C_CYAN}╭───────╮${C_RESET}  ${C_BOLD}${C_CYAN}QUANTUM IDE${C_RESET} ${C_DARK}::${C_RESET} ${C_PURPLE}Dev Studio${C_RESET}"
+        echo -e "  ${C_BLUE}│ ◈   ◈ │${C_RESET}  ${C_DARK}────────────────────────────────${C_RESET}"
+        echo -e "  ${C_PURPLE}│   ◆   │${C_RESET}  ${C_CYAN}OS  :${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
+        echo -e "  ${C_MAGENTA}│ ◈   ◈ │${C_RESET}  ${C_YELLOW}CPU :${C_RESET} ${C_WHITE}${CPU_CORES} cores${C_RESET} ${C_DIM}[${CPU_NAME:0:15}]${C_RESET}"
+        echo -e "  ${C_PINK}╰───────╯${C_RESET}  ${C_GREEN}RAM :${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}M/${MEM_TOTAL_MB}M${C_RESET}"
+        echo -e "             ${C_PURPLE}Disk:${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED}/${DISK_TOTAL}${C_RESET}"
+        echo -e "             ${C_PINK}Up  :${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
+        echo -e "  ${C_DARK}────────────────────────────────────────${C_RESET}"
+        echo -e "  ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
+    fi
+    echo
+}
+
 # Ubuntu Greeting & Cyberpunk Banner
 if [ -z "$VTE_VERSION" ]; then
     clear
-    if [ -x /usr/local/bin/term-fetch ]; then
-        /usr/local/bin/term-fetch
-    else
-        echo -e '\e[38;5;51m   QUANTUM IDE TERMINAL \e[0m'
-    fi
+    term_fetch
     echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
     echo -e '    \e[38;5;141mll\e[0m             → ls -la'
     echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
@@ -541,7 +681,7 @@ if [ -z "$VTE_VERSION" ]; then
     echo
 fi
 
-alias fetch="/usr/local/bin/term-fetch"
+alias fetch="term_fetch"
 alias fd="fdfind"
 alias mem="free -m"
 alias clean-apt="apt-get clean && apt-get autoremove -y"
@@ -554,11 +694,27 @@ if command -v starship >/dev/null 2>&1; then
 fi
 ''';
       try {
-        if (await bashrc.parent.exists()) {
-          await bashrc.writeAsString(bashrcContent.replaceAll('\r', ''));
+        final bashrcTargets = [
+          bashrc,
+          File('/root/.bashrc'),
+          if (Platform.isLinux && Platform.environment['HOME'] != null)
+            File(p.join(Platform.environment['HOME']!, '.bashrc')),
+        ];
+        for (final target in bashrcTargets) {
+          try {
+            if (await target.parent.exists()) {
+              await target.writeAsString(bashrcContent.replaceAll('\r', ''));
+            }
+          } catch (_) {}
+        }
 
-          final zshrc = File('$_filesDir/rootfs/ubuntu/root/.zshrc');
-          const zshrcContent = r'''
+        final zshrcTargets = [
+          File('$_filesDir/rootfs/ubuntu/root/.zshrc'),
+          File('/root/.zshrc'),
+          if (Platform.isLinux && Platform.environment['HOME'] != null)
+            File(p.join(Platform.environment['HOME']!, '.zshrc')),
+        ];
+        const zshrcContent = r'''
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 if [ -d "/root/jdk-17" ]; then
@@ -574,6 +730,8 @@ fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
 export COLORTERM=truecolor
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
 
 autoload -Uz vcs_info
 precmd() { vcs_info }
@@ -593,25 +751,33 @@ alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
 alias cls='clear'
+alias fetch="/usr/local/bin/term-fetch"
 
 if [ -z "$VTE_VERSION" ]; then
     clear
-    echo -e '\e[38;5;51m   ___                  __              \e[0m'
-    echo -e '\e[38;5;45m  / _ \__ _____ ____  / /___ ____ _     \e[0m'
-    echo -e '\e[38;5;39m / // / // / _ `/ _ \/ __/ // /  ` \    \e[0m'
-    echo -e '\e[38;5;33m/____/\_,_/\_,_/_//_/\__/\_,_/_/_/_/    \e[0m'
-    echo -e '\e[38;5;27m                                        \e[0m'
-    echo -e '\e[38;5;93m  ___   ___     ___                     \e[0m'
-    echo -e '\e[38;5;129m |_ _| |   \   | __|                    \e[0m'
-    echo -e '\e[38;5;165m  | |  | |) |  | _|                     \e[0m'
-    echo -e '\e[38;5;201m |___| |___/   |___|                    \e[0m'
-    echo
-    echo -e '\e[38;5;213m   Welcome to Ubuntu 24.04 LTS (Quantum Edition v8)   \e[0m'
-    echo -e '\e[38;5;248m   Powered by Quantum IDE — Your Mobile Dev Environment\e[0m'
-    echo
+    [ -x /usr/local/bin/term-fetch ] && /usr/local/bin/term-fetch
 fi
 ''';
-          await zshrc.writeAsString(zshrcContent.replaceAll('\r', ''));
+        for (final target in zshrcTargets) {
+          try {
+            if (await target.parent.exists()) {
+              await target.writeAsString(zshrcContent.replaceAll('\r', ''));
+            }
+          } catch (_) {}
+        }
+
+        final inputrcTargets = [
+          File('$_filesDir/rootfs/ubuntu/root/.inputrc'),
+          File('/root/.inputrc'),
+          if (Platform.isLinux && Platform.environment['HOME'] != null)
+            File(p.join(Platform.environment['HOME']!, '.inputrc')),
+        ];
+        for (final inputrc in inputrcTargets) {
+          try {
+            if (!await inputrc.exists() && await inputrc.parent.exists()) {
+              await inputrc.writeAsString('set input-meta on\nset output-meta on\nset convert-meta off\n');
+            }
+          } catch (_) {}
         }
       } catch (e) {
         debugPrint('Warning: Failed to write shell config files: $e');
@@ -621,6 +787,154 @@ fi
 
   Future<void> updateScripts() async {
     await _ensureBinaries();
+  }
+
+  String _generateTermFetchScript() {
+    return r'''#!/bin/bash
+# ==============================================================================
+# QuantumIDE Cyberpunk System Fetch (term-fetch)
+# ==============================================================================
+
+COLS=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
+[ -z "$COLS" ] && COLS=80
+
+# ANSI Escape Colors
+C_RESET="\033[0m"
+C_BOLD="\033[1m"
+C_DIM="\033[2m"
+
+# Cyberpunk Palette
+C_CYAN="\033[38;5;51m"
+C_BLUE="\033[38;5;39m"
+C_PURPLE="\033[38;5;141m"
+C_MAGENTA="\033[38;5;201m"
+C_PINK="\033[38;5;213m"
+C_GREEN="\033[38;5;48m"
+C_YELLOW="\033[38;5;220m"
+C_ORANGE="\033[38;5;208m"
+C_RED="\033[38;5;196m"
+C_WHITE="\033[38;5;255m"
+C_GRAY="\033[38;5;245m"
+C_DARK="\033[38;5;238m"
+
+# 1. OS & Kernel
+OS_NAME=$(grep -oP '(?<=PRETTY_NAME=")[^"]*' /etc/os-release 2>/dev/null)
+[ -z "$OS_NAME" ] && OS_NAME="$(uname -s)"
+ARCH=$(uname -m)
+KERNEL=$(uname -r | cut -d'-' -f1-2)
+
+# 2. Host / Device Model
+HOST_MODEL=""
+if command -v getprop >/dev/null 2>&1; then
+    BRAND=$(getprop ro.product.brand 2>/dev/null)
+    MODEL=$(getprop ro.product.model 2>/dev/null)
+    [ -n "$MODEL" ] && HOST_MODEL="$BRAND $MODEL"
+fi
+if [ -z "$HOST_MODEL" ] && [ -f /sys/devices/virtual/dmi/id/product_name ]; then
+    HOST_MODEL=$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)
+fi
+[ -z "$HOST_MODEL" ] && HOST_MODEL="$(hostname 2>/dev/null || echo 'localhost')"
+
+# 3. Uptime
+if [ -f /proc/uptime ]; then
+    UP_SECS=$(cut -d. -f1 /proc/uptime)
+    DAYS=$((UP_SECS / 86400))
+    HOURS=$(( (UP_SECS % 86400) / 3600 ))
+    MINS=$(( (UP_SECS % 3600) / 60 ))
+    UPTIME_STR=""
+    [ $DAYS -gt 0 ] && UPTIME_STR="${DAYS}d "
+    [ $HOURS -gt 0 ] && UPTIME_STR="${UPTIME_STR}${HOURS}h "
+    UPTIME_STR="${UPTIME_STR}${MINS}m"
+else
+    UPTIME_STR="unknown"
+fi
+
+# 4. CPU Info
+CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "1")
+CPU_NAME=$(grep -m1 -E 'Hardware|model name|Processor' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs)
+[ -z "$CPU_NAME" ] && CPU_NAME="ARM64 Processor"
+
+# 5. RAM Usage
+if [ -f /proc/meminfo ]; then
+    MEM_TOTAL_KB=$(grep 'MemTotal:' /proc/meminfo | awk '{print $2}')
+    MEM_AVAIL_KB=$(grep 'MemAvailable:' /proc/meminfo | awk '{print $2}')
+    [ -z "$MEM_AVAIL_KB" ] && MEM_AVAIL_KB=$(grep 'MemFree:' /proc/meminfo | awk '{print $2}')
+    MEM_USED_KB=$((MEM_TOTAL_KB - MEM_AVAIL_KB))
+    MEM_USED_MB=$((MEM_USED_KB / 1024))
+    MEM_TOTAL_MB=$((MEM_TOTAL_KB / 1024))
+    [ $MEM_TOTAL_KB -gt 0 ] && MEM_PERCENT=$((MEM_USED_KB * 100 / MEM_TOTAL_KB)) || MEM_PERCENT=0
+else
+    MEM_USED_MB=0
+    MEM_TOTAL_MB=0
+    MEM_PERCENT=0
+fi
+
+# 6. Disk Usage
+DISK_INFO=$(df -h / 2>/dev/null | tail -1)
+DISK_USED=$(echo "$DISK_INFO" | awk '{print $3}')
+DISK_TOTAL=$(echo "$DISK_INFO" | awk '{print $2}')
+DISK_PERCENT=$(echo "$DISK_INFO" | awk '{print $5}' | tr -d '%')
+[ -z "$DISK_PERCENT" ] && DISK_PERCENT=0
+
+# Progress bar generator
+make_bar() {
+    local pct=$1
+    local width=$2
+    [ -z "$width" ] && width=10
+    local filled=$((pct * width / 100))
+    local empty=$((width - filled))
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar="${bar}█"; done
+    for ((i=0; i<empty; i++)); do bar="${bar}░"; done
+    echo "$bar"
+}
+
+# 7. Detected Runtimes / Tools
+RUNTIMES=""
+command -v flutter >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Flutter "
+command -v node >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Node.js "
+command -v python3 >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Python "
+command -v rustc >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Rust "
+command -v clang >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Clang "
+[ -z "$RUNTIMES" ] && RUNTIMES="Linux Core"
+
+# RENDER
+if [ "$COLS" -ge 65 ]; then
+    RAM_BAR=$(make_bar $MEM_PERCENT 10)
+    DISK_BAR=$(make_bar $DISK_PERCENT 10)
+
+    echo -e "${C_CYAN}  ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗   ██╗███╗   ███╗${C_RESET}"
+    echo -e "${C_BLUE} ██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██║   ██║████╗ ████║${C_RESET}"
+    echo -e "${C_PURPLE} ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ██║   ██║██╔████╔██║${C_RESET}"
+    echo -e "${C_MAGENTA} ╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ╚██████╔╝██║ ╚═╝ ██║${C_RESET}"
+    echo -e "${C_MAGENTA}  ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝${C_RESET}"
+    echo -e "         ${C_BOLD}${C_CYAN}Q U A N T U M   I D E${C_RESET} ${C_DARK}│${C_RESET} ${C_PURPLE}Next-Gen Mobile & Desktop Studio${C_RESET}"
+    echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  ${C_CYAN}◆ OS      ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
+    echo -e "  ${C_BLUE}◆ Host    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${HOST_MODEL}${C_RESET} ${C_DIM}[Kernel: ${KERNEL}]${C_RESET}"
+    echo -e "  ${C_YELLOW}◆ CPU     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${CPU_NAME}${C_RESET} ${C_CYAN}(${CPU_CORES} cores)${C_RESET}"
+    echo -e "  ${C_GREEN}◆ RAM     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}MB / ${MEM_TOTAL_MB}MB${C_RESET} ${C_DIM}(${MEM_PERCENT}%)${C_RESET}"
+    echo -e "  ${C_PURPLE}◆ Disk    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED} / ${DISK_TOTAL}${C_RESET} ${C_DIM}(${DISK_PERCENT}%)${C_RESET}"
+    echo -e "  ${C_PINK}◆ Uptime  ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
+    echo -e "  ${C_MAGENTA}◆ Stack   ${C_RESET} ${C_GRAY}::${C_RESET} ${C_CYAN}${RUNTIMES}${C_RESET}"
+    echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
+    echo -e "  ${C_DIM}Colors  :${C_RESET} ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
+else
+    RAM_BAR=$(make_bar $MEM_PERCENT 7)
+    DISK_BAR=$(make_bar $DISK_PERCENT 7)
+
+    echo -e "  ${C_CYAN}╭───────╮${C_RESET}  ${C_BOLD}${C_CYAN}QUANTUM IDE${C_RESET} ${C_DARK}::${C_RESET} ${C_PURPLE}Dev Studio${C_RESET}"
+    echo -e "  ${C_BLUE}│ ◈   ◈ │${C_RESET}  ${C_DARK}────────────────────────────────${C_RESET}"
+    echo -e "  ${C_PURPLE}│   ◆   │${C_RESET}  ${C_CYAN}OS  :${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
+    echo -e "  ${C_MAGENTA}│ ◈   ◈ │${C_RESET}  ${C_YELLOW}CPU :${C_RESET} ${C_WHITE}${CPU_CORES} cores${C_RESET} ${C_DIM}[${CPU_NAME:0:15}]${C_RESET}"
+    echo -e "  ${C_PINK}╰───────╯${C_RESET}  ${C_GREEN}RAM :${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}M/${MEM_TOTAL_MB}M${C_RESET}"
+    echo -e "             ${C_PURPLE}Disk:${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED}/${DISK_TOTAL}${C_RESET}"
+    echo -e "             ${C_PINK}Up  :${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
+    echo -e "  ${C_DARK}────────────────────────────────────────${C_RESET}"
+    echo -e "  ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
+fi
+echo
+''';
   }
 
   String _generateInitHostScript() {
@@ -658,8 +972,8 @@ if [ ! -f "\$ROOTFS/etc/group" ]; then
     echo "aid_input:x:1004:" >> "\$ROOTFS/etc/group"
 fi
 
-# Map common Android GIDs to avoid warnings
-for gid in 1077 1078 1079 3003 9997 20487 50487; do
+# Map common and current Android GIDs to avoid warnings
+for gid in \$(id -G 2>/dev/null) 1077 1078 1079 3003 9997; do
     if ! grep -q ":\$gid:" "\$ROOTFS/etc/group" 2>/dev/null; then
         echo "android_\$gid:x:\$gid:" >> "\$ROOTFS/etc/group"
     fi

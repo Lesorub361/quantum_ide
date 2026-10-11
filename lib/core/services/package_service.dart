@@ -50,6 +50,14 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     if (Directory('/root/android-sdk').existsSync()) {
       return '/root/android-sdk';
     }
+    if (Directory('/usr/lib/android-sdk').existsSync()) {
+      return '/usr/lib/android-sdk';
+    }
+    final home = Platform.environment['HOME'] ?? '/root';
+    final userSdk = p.join(home, 'Android', 'Sdk');
+    if (Directory(userSdk).existsSync()) {
+      return userSdk;
+    }
     final runtime = _ref.read(runtimeServiceProvider);
     if (Platform.isAndroid && runtime.filesDir.isNotEmpty) {
       final prootPath = p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk');
@@ -57,7 +65,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     }
     return Platform.environment['ANDROID_HOME'] ?? 
            Platform.environment['ANDROID_SDK_ROOT'] ?? 
-           p.join(Platform.environment['HOME'] ?? '/root', 'android-sdk');
+           p.join(home, 'android-sdk');
   }
 
   String _translateCommandForPC(String cmd) {
@@ -123,15 +131,28 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     return translated;
   }
 
+  Future<void> markPackageInstalled(String id) async {
+    final prefs = await SharedPreferences.getInstance();
+    final current = (prefs.getStringList(_key) ?? []).toSet();
+    current.add(id);
+    await prefs.setStringList(_key, current.toList());
+    state = [for (final p in state) if (p.id == id) p..isInstalled = true else p];
+    await _checkActualInstallation();
+  }
+
   Future<void> _checkActualInstallation() async {
     final runtime = _ref.read(runtimeServiceProvider);
     final isAndroid = Platform.isAndroid;
     final filesDir = runtime.filesDir;
     if (isAndroid && filesDir.isEmpty) return;
 
+    final prefs = await SharedPreferences.getInstance();
+    final installedIds = prefs.getStringList(_key) ?? [];
+
     final updatedPackages = <OptionalPackage>[];
     final rootfsPath = isAndroid ? p.join(filesDir, 'rootfs', 'ubuntu') : '';
     final sdkPath = _getAndroidSdkPath();
+    final newlyInstalledIds = <String>{};
     
     for (final pkg in state) {
       bool exists = false;
@@ -149,7 +170,8 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             : (version == '3.18' ? '3.18.1'
             : (version == '3.22' ? '3.22.1'
             : (version == '3.31' ? '3.31.0' : version))));
-        exists = await Directory(p.join(sdkPath, 'cmake', dirName)).exists();
+        exists = await Directory(p.join(sdkPath, 'cmake', dirName)).exists() ||
+                 _hasCommand('cmake');
       } else if (pkg.id.startsWith('ndk-')) {
         final version = pkg.id.replaceFirst('ndk-', '');
         final dirName = version == 'r21e' ? '21.4.7075529'
@@ -164,7 +186,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
         exists = await Directory(p.join(sdkPath, 'ndk', dirName)).exists();
       } else {
         if (!isAndroid) {
-          // Check on PC using PATH
+          // Check on PC / Container using PATH and host filesystem
           switch (pkg.id) {
             case 'python':
               exists = _hasCommand('python3') || _hasCommand('python');
@@ -176,25 +198,40 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               exists = _hasCommand('git');
               break;
             case 'flutter':
-              exists = _hasCommand('flutter');
+              exists = _hasCommand('flutter') ||
+                       File(p.join(Platform.environment['HOME'] ?? '', 'flutter', 'bin', 'flutter')).existsSync() ||
+                       File('/root/flutter/bin/flutter').existsSync();
               break;
             case 'antigravity-cli':
-              exists = _hasCommand('agy') || _hasCommand('antigravity');
+              exists = _hasCommand('agy') || _hasCommand('antigravity') ||
+                       File('/usr/local/bin/agy').existsSync() ||
+                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'agy')).existsSync();
               break;
             case 'claude-code':
-              exists = _hasCommand('claude');
+              exists = _hasCommand('claude') ||
+                       File('/usr/local/bin/claude').existsSync() ||
+                       File('/usr/bin/claude').existsSync() ||
+                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'claude')).existsSync();
               break;
             case 'deepseek-harness':
-              exists = _hasCommand('dsh') || _hasCommand('deepseek-harness');
+              exists = _hasCommand('dsh') || _hasCommand('deepseek-harness') ||
+                       File('/usr/local/bin/dsh').existsSync() ||
+                       File('/usr/bin/dsh').existsSync();
               break;
             case 'ollama-cli':
-              exists = _hasCommand('ollama');
+              exists = _hasCommand('ollama') ||
+                       File('/usr/local/bin/ollama').existsSync() ||
+                       File('/usr/bin/ollama').existsSync();
               break;
             case 'kilocode-cli':
-              exists = _hasCommand('kilocode');
+              exists = _hasCommand('kilocode') ||
+                       File('/usr/local/bin/kilocode').existsSync() ||
+                       File('/usr/bin/kilocode').existsSync();
               break;
             case 'opencode-ai':
-              exists = _hasCommand('opencode-ai');
+              exists = _hasCommand('opencode-ai') || _hasCommand('opencode') ||
+                       File('/usr/local/bin/opencode-ai').existsSync() ||
+                       File('/usr/local/bin/opencode').existsSync();
               break;
             case 'build-essential':
               exists = _hasCommand('gcc') || _hasCommand('g++');
@@ -202,11 +239,44 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'android-sdk':
               exists = await Directory(sdkPath).exists() || _hasCommand('sdkmanager');
               break;
+            case 'build-fix':
+              final homeDir = Platform.environment['HOME'] ?? '/root';
+              final marker = File(p.join(homeDir, '.quantum_build_fix_installed'));
+              final rootMarker = File('/root/.quantum_build_fix_installed');
+              final gradleProp = File(p.join(homeDir, '.gradle', 'gradle.properties'));
+              bool hasGradleFix = false;
+              if (gradleProp.existsSync()) {
+                try {
+                  final text = gradleProp.readAsStringSync();
+                  hasGradleFix = text.contains('aapt2.daemon=false') || text.contains('aapt2FromMavenOverride');
+                } catch (_) {}
+              }
+              final hasAapt2 = _hasCommand('aapt2') || File('/usr/bin/aapt2').existsSync();
+              exists = marker.existsSync() || rootMarker.existsSync() || (hasAapt2 && hasGradleFix);
+              break;
+            case 'build-clean':
+              exists = installedIds.contains('build-clean');
+              break;
+            case 'clangd-lsp':
+              exists = _hasCommand('clangd') || File('/usr/bin/clangd').existsSync();
+              break;
+            case 'rust-lsp':
+              exists = _hasCommand('rust-analyzer') || _hasCommand('rustc') || File('/usr/bin/rust-analyzer').existsSync();
+              break;
+            case 'go-lsp':
+              exists = _hasCommand('gopls') || _hasCommand('go') || File('/usr/bin/gopls').existsSync();
+              break;
+            case 'ripgrep':
+              exists = _hasCommand('rg') || File('/usr/bin/rg').existsSync();
+              break;
+            case 'gh-cli':
+              exists = _hasCommand('gh') || File('/usr/bin/gh').existsSync();
+              break;
             case 'java-lsp':
-              exists = _hasCommand('jdtls');
+              exists = _hasCommand('jdtls') || File('/usr/bin/jdtls').existsSync() || Directory('/usr/share/jdtls').existsSync();
               break;
             case 'kotlin-lsp':
-              exists = _hasCommand('kotlin-language-server');
+              exists = _hasCommand('kotlin-language-server') || File('/usr/bin/kotlin-language-server').existsSync() || Directory('/usr/share/kotlin-language-server').existsSync();
               break;
             case 'typescript-lsp':
               exists = _hasCommand('typescript-language-server');
@@ -218,7 +288,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               exists = _hasCommand('yaml-language-server');
               break;
             case 'markdown-lsp':
-              exists = _hasCommand('marksman');
+              exists = _hasCommand('marksman') || File('/usr/bin/marksman').existsSync() || File('/usr/local/bin/marksman').existsSync();
               break;
             case 'vue-lsp':
               exists = _hasCommand('vue-language-server');
@@ -257,18 +327,22 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'antigravity-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'agy')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'agy')).exists() ||
+                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'agy')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'antigravity')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'antigravity')).exists();
               break;
             case 'claude-code':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'claude')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'claude')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'claude')).exists() ||
+                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'claude')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code')).exists();
               break;
             case 'deepseek-harness':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'dsh')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'dsh')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'deepseek-harness')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'deepseek-harness')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'deepseek-harness')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh')).exists();
               break;
             case 'ollama-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'ollama')).exists() ||
@@ -276,11 +350,14 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'kilocode-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kilocode')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'kilocode')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'kilocode')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@kilocode', 'cli')).exists();
               break;
             case 'opencode-ai':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode-ai')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode-ai')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode-ai')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode')).exists();
               break;
             case 'build-essential':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gcc')).exists() ||
@@ -302,13 +379,53 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                                    await File(p.join(rootfsPath, 'usr', 'bin', 'sdkmanager')).exists();
               exists = hasJava && hasSdkManager;
               break;
+            case 'build-fix':
+              final marker = File(p.join(rootfsPath, 'root', '.quantum_build_fix_installed'));
+              final gradleProp = File(p.join(rootfsPath, 'root', '.gradle', 'gradle.properties'));
+              bool hasGradleFix = false;
+              if (await gradleProp.exists()) {
+                try {
+                  final text = await gradleProp.readAsString();
+                  hasGradleFix = text.contains('aapt2.daemon=false') || text.contains('aapt2FromMavenOverride');
+                } catch (_) {}
+              }
+              final hasAapt2 = await File(p.join(rootfsPath, 'usr', 'bin', 'aapt2')).exists();
+              exists = (await marker.exists()) || (hasAapt2 && hasGradleFix);
+              break;
+            case 'build-clean':
+              exists = installedIds.contains('build-clean');
+              break;
+            case 'clangd-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'clangd')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'clangd')).exists();
+              break;
+            case 'rust-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'rust-analyzer')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'rust-analyzer')).exists() ||
+                       await File(p.join(rootfsPath, 'root', '.cargo', 'bin', 'rust-analyzer')).exists();
+              break;
+            case 'go-lsp':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gopls')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'gopls')).exists() ||
+                       await File(p.join(rootfsPath, 'root', 'go', 'bin', 'gopls')).exists();
+              break;
+            case 'ripgrep':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'rg')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'rg')).exists();
+              break;
+            case 'gh-cli':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gh')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'gh')).exists();
+              break;
             case 'java-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'jdtls')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'jdtls')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'jdtls')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'share', 'jdtls')).exists();
               break;
             case 'kotlin-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'kotlin-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kotlin-language-server')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kotlin-language-server')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'share', 'kotlin-language-server')).exists();
               break;
             case 'typescript-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'typescript-language-server')).exists() ||
@@ -353,13 +470,21 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
       }
 
       if (exists) {
-        updatedPackages.add(pkg..isInstalled = true);
+        pkg.isInstalled = true;
+        newlyInstalledIds.add(pkg.id);
       } else {
-        updatedPackages.add(pkg);
+        if (installedIds.contains(pkg.id) && (pkg.id == 'build-clean' || pkg.id == 'build-fix')) {
+          pkg.isInstalled = true;
+          newlyInstalledIds.add(pkg.id);
+        } else {
+          pkg.isInstalled = false;
+        }
       }
+      updatedPackages.add(pkg);
     }
     
     state = updatedPackages;
+    await prefs.setStringList(_key, newlyInstalledIds.toList());
   }
 
   Future<void> _loadState() async {

@@ -73,6 +73,7 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
     if (lower.contains('debconf: delaying package configuration')) return true;
     if (lower.contains('/proc/self/fd/')) return true;
     if (lower.contains('scanning processes')) return true;
+    if (lower.contains('unable to resolve host')) return true;
     return false;
   }
 
@@ -83,7 +84,13 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
         lower.contains('unpacking') ||
         lower.contains('setting up') ||
         lower.contains('selecting previously') ||
-        lower.contains('progress:');
+        lower.contains('progress:') ||
+        lower.contains('picked up _java_options') ||
+        lower.contains('update-alternatives') ||
+        lower.contains('processing triggers') ||
+        lower.contains('updating certificates') ||
+        lower.contains('running hooks') ||
+        lower.contains('done.');
   }
 
   static final _ansiRegex = RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07|[()][A-Za-z0-9])');
@@ -129,8 +136,6 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
         // Run full package command for SDK components, LSPs, etc.
         command = widget.package.command;
       }
-    } else if (widget.package.id == 'antigravity-cli' && !Platform.isAndroid && !Platform.isIOS) {
-      command = 'mkdir -p ~/.local/bin && curl -fL --retry 3 "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-x64/cli_linux_x64.tar.gz" | tar -xz -C /tmp antigravity && mv /tmp/antigravity ~/.local/bin/agy && chmod +x ~/.local/bin/agy && agy --version';
     }
 
     try {
@@ -176,7 +181,7 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
           _scrollToBottom();
 
           if (_isSuccess) {
-            await ref.read(packageServiceProvider.notifier).checkActualInstallation();
+            await ref.read(packageServiceProvider.notifier).markPackageInstalled(widget.package.id);
           }
         }
       } else {
@@ -264,10 +269,14 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
             .transform(const LineSplitter())
             .listen((line) {
           if (mounted) {
-            setState(() {
-              _logs.add('⚠️ ${_cleanAnsi(line)}');
-            });
-            _scrollToBottom();
+            final cleaned = _cleanAnsi(line);
+            if (cleaned.trim().isNotEmpty && !_isNoisyLog(cleaned)) {
+              final markAsError = !_isHarmlessInfo(cleaned);
+              setState(() {
+                _logs.add(markAsError ? '⚠️ $cleaned' : cleaned);
+              });
+              _scrollToBottom();
+            }
           }
         });
 
@@ -289,7 +298,7 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
           _scrollToBottom();
 
           if (_isSuccess) {
-            await ref.read(packageServiceProvider.notifier).checkActualInstallation();
+            await ref.read(packageServiceProvider.notifier).markPackageInstalled(widget.package.id);
           }
         }
       }

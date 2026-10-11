@@ -24,7 +24,7 @@ class TerminalSession {
   final xt.Terminal xtermTerminal;
   final xt.TerminalController xtermViewController;
 
-  StreamSubscription<Uint8List>? ptyOutSubscription;
+  StreamSubscription<dynamic>? ptyOutSubscription;
   final Utf8Decoder utf8decoder = const Utf8Decoder(allowMalformed: true);
 
   TerminalSession({
@@ -196,9 +196,12 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       );
 
       Timer? gitRefreshDebounceTimer;
-      final sub = pty.output.listen(
-        (data) {
-          xtermTerm.write(session.utf8decoder.convert(data));
+      final sub = pty.output
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen(
+        (text) {
+          xtermTerm.write(text);
 
           gitRefreshDebounceTimer?.cancel();
           gitRefreshDebounceTimer = Timer(

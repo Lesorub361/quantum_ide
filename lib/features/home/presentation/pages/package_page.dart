@@ -85,6 +85,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
         allPackages.any((p) => p.id == 'android-sdk' && !p.isInstalled) &&
         _searchQuery.isEmpty;
     final showFixHero = (tabType == 'all' || tabType == 'build_system') &&
+        allPackages.any((p) => p.id == 'build-fix' && !p.isInstalled) &&
         _searchQuery.isEmpty;
 
     final List<Widget> headers = [];
@@ -1101,6 +1102,31 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
             onPressed: () => PackageInstallDialog.show(context, pkg, isUpdate: true),
           ),
         ],
+      );
+    }
+
+    if (pkg.id == 'build-clean') {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+        ),
+        child: ElevatedButton.icon(
+          icon: const Icon(LucideIcons.refresh_ccw, size: 13),
+          onPressed: () => PackageInstallDialog.show(context, pkg),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            foregroundColor: theme.colorScheme.onSurface,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          label: Text(
+            'Очистить',
+            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ),
       );
     }
 

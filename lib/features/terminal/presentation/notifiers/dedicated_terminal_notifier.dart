@@ -170,9 +170,12 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       // ptyOutSub is stored in TerminalSession
       // and cancelled in dispose() via session.ptyOutSubscription?.cancel()
       // ignore: cancel_subscriptions
-      final ptyOutSub = pty.output.listen(
-        (data) {
-          xtermTerm.write(utf8.decode(data, allowMalformed: true));
+      final ptyOutSub = pty.output
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen(
+        (text) {
+          xtermTerm.write(text);
         },
         onDone: () {
           _markAsExited(type);

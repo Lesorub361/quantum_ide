@@ -37,12 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## QuantumIDE v1.2.9
+        ## QuantumIDE v1.2.10
 
-        - Responsive UI redesign for Phone, Tablet, and Desktop.
-        - Split-View file explorer with interactive code/markdown/image preview.
-        - Enhanced terminal with bigger touch targets on virtual keys and improved auto-completion.
-        - Full audit and fixes for all optional packages (Llama server, Android SDK, Flutter, Python).
+        - Terminal: Modern cyberpunk fastfetch system banner on launch with live CPU, RAM, disk usage, and host details.
+        - Terminal: Responsive terminal layout (wide desktop ASCII banner & compact mobile card).
+        - GitHub: Fixed repository cloning into internal/external PRoot storage and automatic path mapping.
+        - GitHub: Protected GitHub personal access tokens from being saved in .git/config origin URLs.
+        - Projects: Pre-configured Gradle 8.13 wrappers and Cargo (Rust) run/build support.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
