@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'dart:io';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -53,11 +55,21 @@ class _PreviewPageState extends ConsumerState<PreviewPage> {
               onWebViewCreated: (controller) {
                 webViewController = controller;
               },
+              gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                Factory<VerticalDragGestureRecognizer>(() => VerticalDragGestureRecognizer()),
+                Factory<HorizontalDragGestureRecognizer>(() => HorizontalDragGestureRecognizer()),
+                Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
+                Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
+              },
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 useWideViewPort: true,
                 loadWithOverviewMode: true,
                 supportZoom: true,
+                verticalScrollBarEnabled: true,
+                horizontalScrollBarEnabled: true,
+                disableVerticalScroll: false,
+                disableHorizontalScroll: false,
               ),
             )
           : Center(

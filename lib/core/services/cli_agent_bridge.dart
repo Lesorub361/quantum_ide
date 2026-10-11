@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 
 final cliAgentBridgeProvider = Provider<CliAgentBridge>((ref) {
   final runtime = ref.watch(runtimeServiceProvider);
@@ -25,7 +26,7 @@ class CliAgentBridge {
 
   /// Candidate binary paths depending on agent and system
   List<String> _candidateBinaries(AgentKind kind) {
-    final home = Platform.environment['HOME'] ?? '';
+    final home = PlatformUtils.userHomeDir;
     final nvmBase = p.join(home, '.config', 'nvm', 'versions', 'node');
     final List<String> nvmBins = [];
     if (Directory(nvmBase).existsSync()) {
@@ -78,14 +79,18 @@ class CliAgentBridge {
   /// Resolve absolute or usable path to the binary
   String? resolveBinary(AgentKind kind) {
     for (final candidate in _candidateBinaries(kind)) {
-      if (candidate.contains('/')) {
+      if (candidate.contains('/') || candidate.contains(r'\')) {
         final f = File(candidate);
         if (f.existsSync()) return candidate;
       } else {
         try {
-          final res = Process.runSync('which', [candidate]);
+          final res = Process.runSync(
+            PlatformUtils.whichCommand,
+            [candidate],
+            runInShell: Platform.isWindows,
+          );
           if (res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty) {
-            return res.stdout.toString().trim();
+            return res.stdout.toString().trim().split('\n').first.trim();
           }
         } catch (_) {}
       }
@@ -113,16 +118,32 @@ class CliAgentBridge {
     if (direct != null) return true;
 
     try {
+      final names = kind == AgentKind.antigravity
+          ? ['agy', 'gemini']
+          : (kind == AgentKind.claudeCode ? ['claude'] : ['dsh', 'deepseek-harness']);
+
       if (Platform.isAndroid || Platform.isIOS) {
-        final names = kind == AgentKind.antigravity
-            ? ['agy', 'gemini']
-            : (kind == AgentKind.claudeCode ? ['claude'] : ['dsh', 'deepseek-harness']);
         for (final n in names) {
           final res = await _runtime.runCommand('which $n || test -f /root/.local/bin/$n || test -f /usr/local/bin/$n');
           if (res.trim().isNotEmpty) return true;
         }
         return false;
       } else {
+        // Desktop platform check via which/where and common binary directories
+        final whichCmd = PlatformUtils.whichCommand;
+        for (final n in names) {
+          final res = await Process.run(whichCmd, [n], runInShell: Platform.isWindows);
+          if (res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty) return true;
+        }
+        for (final dir in PlatformUtils.commonBinaryDirs) {
+          for (final n in names) {
+            if (await File(p.join(dir, n)).exists() ||
+                (Platform.isWindows && await File(p.join(dir, '$n.cmd')).exists()) ||
+                (Platform.isWindows && await File(p.join(dir, '$n.exe')).exists())) {
+              return true;
+            }
+          }
+        }
         return false;
       }
     } catch (_) {

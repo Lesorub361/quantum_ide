@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 
 class LocalModelInfo {
   final String id;
@@ -257,7 +258,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
   RuntimeService get _runtime => _ref.read(runtimeServiceProvider);
 
-  String get _binaryPath => p.join(
+  String get _binaryPath {
+    if (Platform.isAndroid || Platform.isIOS) {
+      return p.join(
         _runtime.filesDir,
         'rootfs',
         'ubuntu',
@@ -265,6 +268,13 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         'bin',
         'llama-server',
       );
+    }
+    return p.join(
+      _runtime.filesDir,
+      'bin',
+      Platform.isWindows ? 'llama-server.exe' : 'llama-server',
+    );
+  }
 
   String _getOllamaBaseUrl() {
     final aiSvc = _ref.read(aiServiceProvider);
@@ -277,7 +287,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     final engine = _ref.read(aiServiceProvider).settings.selectedLocalEngine;
 
     if (engine == LocalAiEngine.llamaServer) {
-      final modelsDir = p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models');
+      final modelsDir = (Platform.isAndroid || Platform.isIOS)
+          ? p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models')
+          : p.join(_runtime.filesDir, 'models');
       
       final downloadedMap = <String, bool>{};
       bool anyModelDownloaded = false;
@@ -291,7 +303,15 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         }
       }
 
-      final binaryExists = await File(_binaryPath).exists();
+      bool binaryExists = await File(_binaryPath).exists();
+      if (!binaryExists && !Platform.isAndroid && !Platform.isIOS) {
+        try {
+          final res = await Process.run(PlatformUtils.whichCommand, ['llama-server'], runInShell: Platform.isWindows);
+          if (res.exitCode == 0) {
+            binaryExists = true;
+          }
+        } catch (_) {}
+      }
 
       final prefs = await SharedPreferences.getInstance();
       String activeFilename = prefs.getString('ai_selected_local_model_filename') ?? 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf';
@@ -764,10 +784,17 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final useFlashAttn = state.useFlashAttn;
       final contextSize = state.contextSize;
 
+      final modelsDir = (Platform.isAndroid || Platform.isIOS)
+          ? p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models')
+          : p.join(_runtime.filesDir, 'models');
+      final modelFilePath = (Platform.isAndroid || Platform.isIOS)
+          ? '/root/models/$activeModelFile'
+          : p.join(modelsDir, activeModelFile);
+
       final serverArgs = [
         'llama-server',
         '-m',
-        '/root/models/$activeModelFile',
+        modelFilePath,
         '-c',
         '$contextSize',
         '--port',
@@ -787,15 +814,25 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final logArgs = serverArgs.join(' ');
       _appendLogs('[Local AI] Command: $logArgs\n');
 
-      final process = await Process.start(
-        'sh',
-        [
-          proot,
-          filesDir,
-          '/root',
-          ...serverArgs,
-        ],
-      );
+      final Process process;
+      if (Platform.isAndroid || Platform.isIOS) {
+        process = await Process.start(
+          'sh',
+          [
+            proot,
+            filesDir,
+            '/root',
+            ...serverArgs,
+          ],
+        );
+      } else {
+        final binToRun = (await File(_binaryPath).exists()) ? _binaryPath : 'llama-server';
+        process = await Process.start(
+          binToRun,
+          serverArgs.sublist(1),
+          runInShell: Platform.isWindows,
+        );
+      }
 
       _process = process;
 
@@ -852,7 +889,13 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     _process = null;
 
     try {
-      await _runtime.runCommand('pkill -f llama-server');
+      if (Platform.isWindows) {
+        await Process.run('taskkill', ['/F', '/IM', 'llama-server.exe', '/T']);
+      } else if (Platform.isAndroid || Platform.isIOS) {
+        await _runtime.runCommand('pkill -f llama-server');
+      } else {
+        await Process.run('pkill', ['-f', 'llama-server']);
+      }
     } catch (_) {}
 
     state = state.copyWith(isRunning: false, isStarting: false);

@@ -8,6 +8,8 @@ analyzer:
     - ios/**
     - web/**
     - linux/**
+    - windows/**
+    - macos/**
   errors:
     # Treat deprecated_member_use as warning, not info
     deprecated_member_use: warning

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -37,6 +38,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
   @override
   Widget build(BuildContext context) {
     final keys = [
+      VirtualKey(label: 'KEYB', value: 'toggle_keyboard', icon: LucideIcons.keyboard),
+      VirtualKey(label: 'DROP', value: 'selection_mode', icon: LucideIcons.text_cursor_input),
       VirtualKey(label: 'ESC', value: '\x1b'),
       VirtualKey(label: 'TAB', value: '\t'),
       VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true),
@@ -124,7 +127,10 @@ class _VirtualKeyButton extends StatelessWidget {
       color: buttonColor,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(6),
         child: Container(
           height: 32,

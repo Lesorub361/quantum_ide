@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -29,23 +30,31 @@ class MobileBottomNav extends ConsumerWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF0D0F14),
+        color: const Color(0xFF090B10),
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 12,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 52,
+          height: 54,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _NavButton(
-                icon: LucideIcons.folder,
+                icon: LucideIcons.folder_tree,
                 label: 'Files',
                 isActive: false,
                 onTap: () {
+                  HapticFeedback.lightImpact();
                   Scaffold.of(context).openDrawer();
                 },
               ),
@@ -55,6 +64,7 @@ class MobileBottomNav extends ConsumerWidget {
                 isActive: hasOpenFiles,
                 badge: openFilesCount > 0 ? openFilesCount : 0,
                 onTap: () {
+                  HapticFeedback.lightImpact();
                   if (!hasOpenFiles) {
                     Scaffold.of(context).openDrawer();
                   }
@@ -64,7 +74,9 @@ class MobileBottomNav extends ConsumerWidget {
                 icon: LucideIcons.terminal,
                 label: 'Terminal',
                 isActive: isTerminalOpen,
+                activeColor: const Color(0xFF00E5FF),
                 onTap: () {
+                  HapticFeedback.lightImpact();
                   final panelNotifier = ref.read(panelProvider.notifier);
                   if (isTerminalOpen) {
                     panelNotifier.closePanel();
@@ -75,10 +87,12 @@ class MobileBottomNav extends ConsumerWidget {
                 },
               ),
               _NavButton(
-                icon: LucideIcons.message_square,
-                label: 'AI',
+                icon: LucideIcons.sparkles,
+                label: 'AI Chat',
                 isActive: isAiOpen,
+                activeColor: const Color(0xFFB388FF),
                 onTap: () {
+                  HapticFeedback.lightImpact();
                   ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                 },
               ),
@@ -96,6 +110,7 @@ class _NavButton extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
   final int badge;
+  final Color activeColor;
 
   const _NavButton({
     required this.icon,
@@ -103,16 +118,30 @@ class _NavButton extends StatelessWidget {
     required this.isActive,
     required this.onTap,
     this.badge = 0,
+    this.activeColor = const Color(0xFF6C63FF),
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 64,
+      borderRadius: BorderRadius.circular(10),
+      splashColor: activeColor.withValues(alpha: 0.12),
+      highlightColor: activeColor.withValues(alpha: 0.06),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive ? activeColor.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: isActive
+              ? Border.all(
+                  color: activeColor.withValues(alpha: 0.3),
+                  width: 0.8,
+                )
+              : null,
+        ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Stack(
@@ -120,23 +149,34 @@ class _NavButton extends StatelessWidget {
               children: [
                 Icon(
                   icon,
-                  size: 20,
-                  color: isActive ? const Color(0xFF6C63FF) : Colors.white38,
+                  size: 19,
+                  color: isActive ? activeColor : Colors.white54,
                 ),
                 if (badge > 0)
                   Positioned(
-                    right: -6,
+                    right: -9,
                     top: -4,
                     child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6C63FF),
-                        shape: BoxShape.circle,
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: activeColor,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: 0.5),
+                            blurRadius: 4,
+                          ),
+                        ],
                       ),
                       constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                       child: Text(
                         badge > 9 ? '9+' : '$badge',
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                          height: 1.0,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -147,9 +187,10 @@ class _NavButton extends StatelessWidget {
             Text(
               label,
               style: GoogleFonts.inter(
-                fontSize: 9,
-                color: isActive ? const Color(0xFF6C63FF) : Colors.white38,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                fontSize: 9.5,
+                color: isActive ? activeColor : Colors.white54,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                letterSpacing: 0.2,
               ),
             ),
           ],

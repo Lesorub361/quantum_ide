@@ -6,6 +6,7 @@ import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_ta
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 
 class WorkspaceState {
   final String? currentPath;
@@ -27,6 +28,7 @@ class WorkspaceState {
 
 class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
   final Ref ref;
+
   WorkspaceNotifier(this.ref) : super(WorkspaceState()) {
     _loadFromPrefs();
   }
@@ -40,8 +42,7 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
 
     // Migrate old /tmp/quantum_ide and mobile paths to ~/.quantum_ide (Desktop)
     if (!Platform.isAndroid && !Platform.isIOS) {
-      final homeDir = Platform.environment['HOME'] ?? '';
-      final newBase = p.join(homeDir, '.quantum_ide');
+      final newBase = PlatformUtils.desktopDataDir;
       final pcProjectsDir = p.join(newBase, 'projects');
       const oldBase = '/tmp/quantum_ide';
       bool migrated = false;

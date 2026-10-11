@@ -24,11 +24,6 @@ on:
         default: ''
   push:
     branches: [main]
-    paths:
-      - 'lib/**'
-      - 'android/**'
-      - 'pubspec.yaml'
-      - '.github/workflows/build-apk.yml'
     tags:
       - 'v*.*.*'
 
@@ -37,13 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## QuantumIDE v1.2.10
+        ## QuantumIDE v1.2.11
 
-        - Terminal: Modern cyberpunk fastfetch system banner on launch with live CPU, RAM, disk usage, and host details.
-        - Terminal: Responsive terminal layout (wide desktop ASCII banner & compact mobile card).
-        - GitHub: Fixed repository cloning into internal/external PRoot storage and automatic path mapping.
-        - GitHub: Protected GitHub personal access tokens from being saved in .git/config origin URLs.
-        - Projects: Pre-configured Gradle 8.13 wrappers and Cargo (Rust) run/build support.
+        - Мультиплатформенная поддержка и сборки для всех платформ: Android, Linux, Windows, macOS, Web.
+        - Терминал: улучшенное сенсорное выделение текста без ложного вызова экранной клавиатуры.
+        - Предпросмотр: встроенный просмотр с перехватом ошибок консоли и передачей ссылки на смартфон через Wi-Fi QR-код.
+        - Статус-бар: минималистичные информативные иконки, динамическое отображение языков открытых файлов и мониторинг ресурсов.
+        - Файловый менеджер: расширенная поддержка типов файлов и кроссплатформенная совместимость.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -88,14 +83,20 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build release APK
-        run: flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons
+      - name: Build release APK (Universal & Split ABIs)
+        run: |
+          flutter build apk --release --no-tree-shake-icons
+          cp build/app/outputs/flutter-apk/app-release.apk /tmp/app-universal-release.apk
+          flutter build apk --release --split-per-abi --no-tree-shake-icons
+          cp /tmp/app-universal-release.apk build/app/outputs/flutter-apk/app-universal-release.apk
+          cp /tmp/app-universal-release.apk build/app/outputs/flutter-apk/app-release.apk
+          flutter build appbundle --release --no-tree-shake-icons || true
 
-      - name: Upload APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: app-android-release
+          path: build/app/outputs/flutter-apk/*.apk
           retention-days: 14
 
       - name: Create GitHub Release
@@ -105,6 +106,12 @@ jobs:
           tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
           name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
           body: ${{ github.event.inputs.release_notes != '' && github.event.inputs.release_notes || env.DEFAULT_NOTES }}
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-universal-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
+            build/app/outputs/bundle/release/app-release.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

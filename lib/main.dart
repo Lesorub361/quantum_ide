@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'app.dart';
 
 void main() async {
@@ -25,8 +27,8 @@ void main() async {
     try {
       if (Platform.isAndroid) {
         await _initializeAndroid();
-      } else if (Platform.isLinux) {
-        await _initializeLinux();
+      } else if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+        await _initializeDesktop();
       }
     } catch (e) {
       debugPrint('Platform initialization failed: $e');
@@ -65,12 +67,13 @@ Future<void> _initializeAndroid() async {
   }
 }
 
-/// Initialize Linux-specific settings
-Future<void> _initializeLinux() async {
+/// Initialize Desktop-specific settings (Linux, Windows, macOS)
+Future<void> _initializeDesktop() async {
   try {
-    // Set up Linux-specific environment if needed
-    debugPrint('Linux initialization complete');
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    debugPrint('Desktop initialization complete (SQLite FFI enabled)');
   } catch (e) {
-    debugPrint('Linux initialization error: $e');
+    debugPrint('Desktop initialization error: $e');
   }
 }

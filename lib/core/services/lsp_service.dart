@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import '../models/code_diagnostic.dart';
 import 'package:re_editor/re_editor.dart';
@@ -64,28 +65,26 @@ class LspService {
 
     if (!Platform.isAndroid && !Platform.isIOS) {
       try {
-        final checkCmd = Platform.isWindows ? 'where' : 'which';
-        final result = await Process.run(checkCmd, [command]);
+        final checkCmd = PlatformUtils.whichCommand;
+        final result = await Process.run(checkCmd, [command], runInShell: Platform.isWindows);
         final available = result.exitCode == 0;
-        _binaryAvailabilityCache[command] = available;
-        return available;
-      } catch (_) {
-        final hostSearchDirs = [
-          '/usr/bin',
-          '/usr/local/bin',
-          '/bin',
-          '/sbin',
-          p.join(Platform.environment['HOME'] ?? '', 'flutter', 'bin'),
-        ];
-        for (final dir in hostSearchDirs) {
-          if (await File(p.join(dir, command)).exists()) {
-            _binaryAvailabilityCache[command] = true;
-            return true;
-          }
+        if (available) {
+          _binaryAvailabilityCache[command] = true;
+          return true;
         }
-        _binaryAvailabilityCache[command] = false;
-        return false;
+      } catch (_) {}
+
+      final hostSearchDirs = PlatformUtils.commonBinaryDirs;
+      for (final dir in hostSearchDirs) {
+        if (await File(p.join(dir, command)).exists() ||
+            (Platform.isWindows && await File(p.join(dir, '$command.cmd')).exists()) ||
+            (Platform.isWindows && await File(p.join(dir, '$command.exe')).exists())) {
+          _binaryAvailabilityCache[command] = true;
+          return true;
+        }
       }
+      _binaryAvailabilityCache[command] = false;
+      return false;
     }
 
     final searchDirs = [
@@ -206,8 +205,13 @@ class LspService {
         debugPrint('LSP: Starting $key server via init-host at $initHostPath for $guestActivePath');
         process = await Process.start('sh', [initHostPath, filesDirPath, guestActivePath, ...commandArgs]);
       } else {
-        debugPrint('LSP: Starting direct $key server: ${commandArgs.join(' ')}');
-        process = await Process.start(commandArgs[0], commandArgs.sublist(1));
+        debugPrint('LSP: Starting direct $key server: ${commandArgs.join(' ')} (cwd: $currentActivePath)');
+        process = await Process.start(
+          commandArgs[0],
+          commandArgs.sublist(1),
+          workingDirectory: currentActivePath,
+          runInShell: Platform.isWindows,
+        );
       }
 
       _processes[key] = process;

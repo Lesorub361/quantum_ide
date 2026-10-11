@@ -7,11 +7,6 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths:
-      - 'lib/**'
-      - 'linux/**'
-      - 'pubspec.yaml'
-      - '.github/workflows/build-linux.yml'
     tags:
       - 'v*.*.*'
 

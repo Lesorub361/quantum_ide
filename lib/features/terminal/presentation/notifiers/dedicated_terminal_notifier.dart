@@ -159,7 +159,13 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         maxLines: 10000,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
-            : xt.TerminalTargetPlatform.linux,
+            : (Platform.isIOS
+                ? xt.TerminalTargetPlatform.ios
+                : (Platform.isMacOS
+                    ? xt.TerminalTargetPlatform.macos
+                    : (Platform.isWindows
+                        ? xt.TerminalTargetPlatform.windows
+                        : xt.TerminalTargetPlatform.linux))),
         onOutput: (data) {
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },

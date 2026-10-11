@@ -15,6 +15,7 @@ import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_noti
 import 'package:quantum_ide/models/chat_message.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
+import 'package:quantum_ide/core/utils/share_utils.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
@@ -1176,6 +1177,49 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                         });
                       },
                     ),
+                  if (!hasSelection && widget.name.toLowerCase().endsWith('.apk')) ...[
+                    _buildBottomSheetItem(
+                      icon: LucideIcons.smartphone,
+                      title: 'Установить APK',
+                      subtitle: 'Запустить установку приложения на Android',
+                      color: const Color(0xFF3DDC84),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        try {
+                          await OpenFilex.open(widget.path);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Ошибка установки: $e')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    _buildBottomSheetItem(
+                      icon: LucideIcons.share_2,
+                      title: 'Поделиться APK',
+                      subtitle: 'Отправить APK файл через Telegram или соцсети',
+                      color: Colors.cyanAccent,
+                      onTap: () {
+                        Navigator.pop(context);
+                        ShareUtils.shareFile(widget.path);
+                      },
+                    ),
+                    const Divider(color: Colors.white10),
+                  ] else if (!widget.isDirectory && !hasSelection) ...[
+                    _buildBottomSheetItem(
+                      icon: LucideIcons.share_2,
+                      title: 'Поделиться файлом',
+                      subtitle: 'Отправить файл через другие приложения',
+                      color: Colors.cyanAccent,
+                      onTap: () {
+                        Navigator.pop(context);
+                        ShareUtils.shareFile(widget.path);
+                      },
+                    ),
+                    const Divider(color: Colors.white10),
+                  ],
                   if (!hasSelection) ...[
                     if (widget.name.toLowerCase().endsWith('.zip'))
                       _buildBottomSheetItem(

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 
 class RuntimeService extends ChangeNotifier {
   static const _channel = MethodChannel('com.example.quantum_ide/native');
@@ -21,12 +22,11 @@ class RuntimeService extends ChangeNotifier {
   double get progress => _progress;
 
   String _filesDir = () {
-    final homeDir = Platform.environment['HOME'] ?? Directory.current.path;
-    final dir = Directory(p.join(homeDir, '.quantum_ide'));
-    if (!dir.existsSync()) {
-      try { dir.createSync(recursive: true); } catch (_) {}
+    final desktopDir = Directory(PlatformUtils.desktopDataDir);
+    if (!desktopDir.existsSync()) {
+      try { desktopDir.createSync(recursive: true); } catch (_) {}
     }
-    return dir.path;
+    return desktopDir.path;
   }();
   String get filesDir => _filesDir;
   String _nativeLibDir = '';
@@ -80,9 +80,8 @@ class RuntimeService extends ChangeNotifier {
 
         await _bootstrapRootfs();
       } else {
-        // Desktop platform — use a persistent directory in HOME
-        final homeDir = Platform.environment['HOME'] ?? Directory.current.path;
-        final desktopDataDir = Directory(p.join(homeDir, '.quantum_ide'));
+        // Desktop platform — use a persistent directory in user home
+        final desktopDataDir = Directory(PlatformUtils.desktopDataDir);
         if (!desktopDataDir.existsSync()) {
           desktopDataDir.createSync(recursive: true);
         }
@@ -151,10 +150,17 @@ class RuntimeService extends ChangeNotifier {
         return await _channel.invokeMethod('runCommand', {'command': command});
       } else {
         // Desktop platforms direct execution
-        debugPrint('RuntimeService: Running command natively: $command in ${workingDirectory ?? 'current'}');
+        String execCommand = command;
+        if (Platform.isWindows) {
+          execCommand = execCommand
+              .replaceAll('2>/dev/null', '2>nul')
+              .replaceAll('>/dev/null', '>nul')
+              .replaceAll('cd "', 'cd /d "');
+        }
+        debugPrint('RuntimeService: Running command natively: $execCommand in ${workingDirectory ?? 'current'}');
         final result = await Process.run(
           Platform.isWindows ? 'cmd' : 'bash',
-          Platform.isWindows ? ['/c', command] : ['-c', command],
+          Platform.isWindows ? ['/c', execCommand] : ['-c', execCommand],
           workingDirectory: workingDirectory,
         );
         final output = result.stdout.toString() + result.stderr.toString();
@@ -1188,7 +1194,7 @@ fi
   /// On Desktop: returns the actual system HOME directory.
   String get workingDirectory {
     if (Platform.isAndroid || Platform.isIOS) return '/root';
-    return Platform.environment['HOME'] ?? Directory.current.path;
+    return PlatformUtils.userHomeDir;
   }
 
   String? _cachedJavaHome;

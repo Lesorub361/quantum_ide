@@ -1,0 +1,61 @@
+name: Build Windows Desktop
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.9'
+          cache: true
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release --no-tree-shake-icons
+
+      - name: Package Windows Bundle
+        shell: pwsh
+        run: |
+          if (Test-Path "build\windows\x64\runner\Release") {
+            Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath quantum_ide-windows-x64.zip
+          } elseif (Test-Path "build\windows\runner\Release") {
+            Compress-Archive -Path build\windows\runner\Release\* -DestinationPath quantum_ide-windows-x64.zip
+          } else {
+            Write-Error "Release build directory not found"
+            exit 1
+          }
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantum_ide-windows-x64
+          path: quantum_ide-windows-x64.zip
+          retention-days: 14
+
+      - name: Attach to GitHub Release
+        if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: quantum_ide-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

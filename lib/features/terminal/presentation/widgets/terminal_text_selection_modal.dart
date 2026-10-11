@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:xterm/xterm.dart' as xt;
+import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 
-class TerminalTextSelectionModal extends StatefulWidget {
+class TerminalTextSelectionModal extends ConsumerStatefulWidget {
   final xt.Terminal terminal;
   final String title;
 
@@ -27,16 +30,17 @@ class TerminalTextSelectionModal extends StatefulWidget {
   }
 
   @override
-  State<TerminalTextSelectionModal> createState() => _TerminalTextSelectionModalState();
+  ConsumerState<TerminalTextSelectionModal> createState() => _TerminalTextSelectionModalState();
 }
 
-class _TerminalTextSelectionModalState extends State<TerminalTextSelectionModal> {
+class _TerminalTextSelectionModalState extends ConsumerState<TerminalTextSelectionModal> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   String _extractedText = '';
   List<String> _lines = [];
   String _searchQuery = '';
   int _matchCount = 0;
+  bool _wrapLines = true;
 
   @override
   void initState() {
@@ -178,7 +182,7 @@ class _TerminalTextSelectionModalState extends State<TerminalTextSelectionModal>
                           ),
                         ),
                         Text(
-                          '${widget.title} • ${_lines.length} строк • Удерживайте для курсора выделения',
+                          '${widget.title} • ${_lines.length} строк • Удерживайте текст для капелек выделения',
                           style: GoogleFonts.inter(
                             fontSize: 10.5,
                             color: Colors.white54,
@@ -186,6 +190,15 @@ class _TerminalTextSelectionModalState extends State<TerminalTextSelectionModal>
                         ),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _wrapLines ? LucideIcons.text_wrap : LucideIcons.fold_horizontal,
+                      size: 16,
+                      color: _wrapLines ? Colors.cyanAccent : Colors.white60,
+                    ),
+                    tooltip: _wrapLines ? 'Перенос строк: Вкл' : 'Перенос строк: Выкл',
+                    onPressed: () => setState(() => _wrapLines = !_wrapLines),
                   ),
                   IconButton(
                     icon: const Icon(LucideIcons.copy, size: 16, color: Colors.cyanAccent),
@@ -283,20 +296,41 @@ class _TerminalTextSelectionModalState extends State<TerminalTextSelectionModal>
                           controller: _scrollController,
                           physics: const BouncingScrollPhysics(),
                           scrollDirection: Axis.vertical,
-                          child: SelectionArea(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              physics: const BouncingScrollPhysics(),
-                              child: SelectableText(
-                                _extractedText,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11.5,
-                                  color: const Color(0xFFE2E8F0),
-                                  height: 1.45,
+                          child: _wrapLines
+                              ? SelectableText(
+                                  _extractedText,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 12,
+                                    color: const Color(0xFFE2E8F0),
+                                    height: 1.45,
+                                  ),
+                                  showCursor: true,
+                                  cursorColor: Colors.cyanAccent,
+                                  contextMenuBuilder: (context, editableTextState) {
+                                    return AdaptiveTextSelectionToolbar.editableText(
+                                      editableTextState: editableTextState,
+                                    );
+                                  },
+                                )
+                              : SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  physics: const BouncingScrollPhysics(),
+                                  child: SelectableText(
+                                    _extractedText,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 12,
+                                      color: const Color(0xFFE2E8F0),
+                                      height: 1.45,
+                                    ),
+                                    showCursor: true,
+                                    cursorColor: Colors.cyanAccent,
+                                    contextMenuBuilder: (context, editableTextState) {
+                                      return AdaptiveTextSelectionToolbar.editableText(
+                                        editableTextState: editableTextState,
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
-                            ),
-                          ),
                         ),
                       ),
               ),
@@ -314,7 +348,7 @@ class _TerminalTextSelectionModalState extends State<TerminalTextSelectionModal>
                     child: OutlinedButton.icon(
                       icon: const Icon(LucideIcons.copy, size: 14, color: Colors.cyanAccent),
                       label: Text(
-                        'Скопировать весь вывод',
+                        'Копировать всё',
                         style: GoogleFonts.inter(fontSize: 12, color: Colors.cyanAccent, fontWeight: FontWeight.w600),
                       ),
                       style: OutlinedButton.styleFrom(
@@ -325,17 +359,37 @@ class _TerminalTextSelectionModalState extends State<TerminalTextSelectionModal>
                       onPressed: _copyAll,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    icon: const Icon(LucideIcons.sparkles, size: 14, color: Colors.purpleAccent),
+                    label: Text(
+                      'Исправить с ИИ',
+                      style: GoogleFonts.inter(fontSize: 12, color: Colors.purpleAccent, fontWeight: FontWeight.w600),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.purpleAccent.withValues(alpha: 0.35)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      ref.read(rightChatPanelOpenProvider.notifier).state = true;
+                      ref.read(aiProvider.notifier).askAI(
+                        'Проанализируй вывод терминала и помоги исправить найденные ошибки:\n\n```\n$_extractedText\n```',
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white.withValues(alpha: 0.08),
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                     onPressed: () => Navigator.of(context).pop(),
-                    child: Text('Готово', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                    child: Text('Закрыть', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),

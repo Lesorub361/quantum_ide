@@ -76,6 +76,7 @@ class Project {
 
   IconData get icon {
     if (iconCodePoint != null) {
+      // ignore: non_const_argument_for_const_parameter
       return IconData(
         iconCodePoint!, 
         fontFamily: iconFontFamily ?? 'LucideIcons', 

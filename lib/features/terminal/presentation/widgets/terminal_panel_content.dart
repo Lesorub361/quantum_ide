@@ -60,6 +60,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   final Set<String> _activeModifiers = {};
   bool _isSidebarOpen = false;
   bool _isTerminalSplit = false;
+  bool _isMobileKeyboardActive = false;
   int _buildSubTab = 0;
   double _pinchBaseFontSize = 13.0;
 
@@ -355,6 +356,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           _activeModifiers.add('SHIFT');
         }
       });
+      return;
+    }
+    if (value == 'toggle_keyboard') {
+      setState(() {
+        _isMobileKeyboardActive = !_isMobileKeyboardActive;
+      });
+      if (!_isMobileKeyboardActive) {
+        FocusManager.instance.primaryFocus?.unfocus();
+      }
+      return;
+    }
+    if (value == 'selection_mode') {
+      TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
       return;
     }
     if (value == 'paste') {
@@ -1682,6 +1696,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
     final theme = _getTerminalTheme(terminalThemeName);
+    final isMobile = Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650;
 
     if (!isSecondary) {
       if (_lastAttachedSession != session) {
@@ -1722,7 +1737,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     ),
                   },
                   child: Focus(
-                    autofocus: true,
+                    autofocus: !isMobile,
                     child: Shortcuts(
                       shortcuts: <LogicalKeySet, Intent>{
                         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const CopyTextIntent(),
@@ -1757,7 +1772,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         child: xt.TerminalView(
                           session.xtermTerminal,
                           controller: session.xtermViewController,
-                          autofocus: true,
+                          autofocus: !isMobile,
+                          hardwareKeyboardOnly: isMobile && !_isMobileKeyboardActive,
+                          onTapUp: (details, offset) {
+                            if (isMobile && !_isMobileKeyboardActive) {
+                              setState(() {
+                                _isMobileKeyboardActive = true;
+                              });
+                            }
+                          },
                           padding: const EdgeInsets.all(10),
                           theme: theme,
                           backgroundOpacity: 0,
@@ -2308,7 +2331,7 @@ Also explain what exactly went wrong and how you fixed it.
             children: [
               Icon(LucideIcons.text_cursor_input, size: 15, color: Colors.cyanAccent),
               SizedBox(width: 10),
-              Text('Режим выделения (курсоры)', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
+              Text('Режим выделения (капельки)', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
             ],
           ),
         ),

@@ -119,6 +119,61 @@ class FileIconHelper {
         );
       }
 
+      if (segment == '.dart_tool') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_cog,
+          const Color(0xFF00B4AB), // Dart tool teal
+        );
+      }
+      if (segment == 'linux') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_code,
+          const Color(0xFFFCC624), // Linux yellow
+        );
+      }
+      if (segment == 'macos' || segment == 'darwin') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_code,
+          const Color(0xFFA2AAAD), // Apple silver
+        );
+      }
+      if (segment == 'windows') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_code,
+          const Color(0xFF0078D7), // Windows blue
+        );
+      }
+      if (segment == 'fonts' || segment == 'font') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder,
+          const Color(0xFFE91E63), // Pink
+        );
+      }
+      if (segment == 'images' || segment == 'img' || segment == 'icons' || segment == 'pics') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_heart,
+          const Color(0xFFAB47BC), // Purple
+        );
+      }
+      if (segment == 'scripts' || segment == 'bin') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_code,
+          const Color(0xFF4CAF50), // Green
+        );
+      }
+      if (segment == 'docs' || segment == 'doc') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_input,
+          const Color(0xFF26A69A), // Teal
+        );
+      }
+      if (segment == 'config' || segment == 'configs' || segment == 'settings') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_cog,
+          const Color(0xFF78909C), // Blue grey
+        );
+      }
+
       // Default folder
       return FileIconInfo(
         isExpanded ? LucideIcons.folder_open : LucideIcons.folder,
@@ -131,6 +186,103 @@ class FileIconHelper {
       return const FileIconInfo(
         LucideIcons.smartphone,
         Color(0xFF3DDC84), // Android Green
+      );
+    }
+    if (lowerName.endsWith('.aab')) {
+      return const FileIconInfo(
+        LucideIcons.package,
+        Color(0xFF3DDC84), // Android Green
+      );
+    }
+    if (lowerName == '.env' || lowerName.startsWith('.env.')) {
+      return const FileIconInfo(
+        LucideIcons.key_round,
+        Color(0xFFFFB300), // Amber
+      );
+    }
+    if (lowerName == 'dockerfile' || lowerName.startsWith('dockerfile.')) {
+      return const FileIconInfo(
+        LucideIcons.container,
+        Color(0xFF2496ED), // Docker Blue
+      );
+    }
+    if (lowerName == '.gitignore' || lowerName == '.gitattributes' || lowerName == '.gitmodules') {
+      return const FileIconInfo(
+        LucideIcons.git_branch,
+        Color(0xFFF05032), // Git Orange
+      );
+    }
+    if (lowerName.endsWith('.gradle') || lowerName.endsWith('.gradle.kts')) {
+      return const FileIconInfo(
+        LucideIcons.settings_2,
+        Color(0xFF02303A), // Gradle Dark Slate
+      );
+    }
+    if (lowerName.endsWith('.toml')) {
+      return const FileIconInfo(
+        LucideIcons.file_cog,
+        Color(0xFF9C27B0), // Purple
+      );
+    }
+    if (lowerName.endsWith('.sqlite') || lowerName.endsWith('.sqlite3') || lowerName.endsWith('.db')) {
+      return const FileIconInfo(
+        LucideIcons.database,
+        Color(0xFF4DB6AC), // Teal
+      );
+    }
+    if (lowerName.endsWith('.lock')) {
+      return const FileIconInfo(
+        LucideIcons.lock,
+        Color(0xFF90A4AE), // Grey
+      );
+    }
+    if (lowerName.endsWith('.svg')) {
+      return const FileIconInfo(
+        LucideIcons.file_code,
+        Color(0xFFFFB300), // Amber
+      );
+    }
+    if (lowerName.endsWith('.png') || lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') ||
+        lowerName.endsWith('.gif') || lowerName.endsWith('.webp') || lowerName.endsWith('.ico')) {
+      return const FileIconInfo(
+        LucideIcons.image,
+        Color(0xFFAB47BC), // Purple
+      );
+    }
+    if (lowerName.endsWith('.mp3') || lowerName.endsWith('.wav') || lowerName.endsWith('.ogg') || lowerName.endsWith('.m4a')) {
+      return const FileIconInfo(
+        LucideIcons.music,
+        Color(0xFFE91E63), // Pink
+      );
+    }
+    if (lowerName.endsWith('.mp4') || lowerName.endsWith('.mkv') || lowerName.endsWith('.mov') || lowerName.endsWith('.webm')) {
+      return const FileIconInfo(
+        LucideIcons.video,
+        Color(0xFFFF5722), // Deep Orange
+      );
+    }
+    if (lowerName.endsWith('.zip') || lowerName.endsWith('.tar') || lowerName.endsWith('.gz') || lowerName.endsWith('.7z') || lowerName.endsWith('.rar')) {
+      return const FileIconInfo(
+        LucideIcons.archive,
+        Color(0xFFFFB74D), // Light Orange
+      );
+    }
+    if (lowerName.endsWith('.pdf')) {
+      return const FileIconInfo(
+        LucideIcons.file_text,
+        Color(0xFFE53935), // Red
+      );
+    }
+    if (lowerName.endsWith('.log')) {
+      return const FileIconInfo(
+        LucideIcons.file_text,
+        Color(0xFF78909C), // Blue grey
+      );
+    }
+    if (lowerName.endsWith('.sh') || lowerName.endsWith('.bash') || lowerName.endsWith('.zsh')) {
+      return const FileIconInfo(
+        LucideIcons.terminal,
+        Color(0xFF4CAF50), // Green
       );
     }
 

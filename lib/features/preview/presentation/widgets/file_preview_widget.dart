@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path/path.dart' as p;
@@ -116,6 +117,9 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   }
 
   Widget _buildSvgPreview(BuildContext context) {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS && !Platform.isMacOS)) {
+      return _buildGenericPreview(context);
+    }
     final content = _svgContent;
     if (content == null) return const Center(child: CircularProgressIndicator());
     final encoded = Uri.dataFromString(
@@ -134,6 +138,9 @@ class _FilePreviewWidgetState extends State<FilePreviewWidget> {
   }
 
   Widget _buildPdfPreview(BuildContext context) {
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS && !Platform.isMacOS)) {
+      return _buildGenericPreview(context);
+    }
     final file = File(widget.filePath);
     return InAppWebView(
       initialUrlRequest: URLRequest(url: WebUri('file://${file.absolute.path}')),

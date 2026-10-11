@@ -664,16 +664,31 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       },
                       child: CallbackShortcuts(
                         bindings: {
+                          // Save file (Ctrl+S / Cmd+S)
                           const SingleActivator(LogicalKeyboardKey.keyS, control: true):
                               () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                          const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
+                              () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                          // Quick open files (Ctrl+P / Cmd+P)
                           const SingleActivator(LogicalKeyboardKey.keyP, control: true):
                               () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
+                          const SingleActivator(LogicalKeyboardKey.keyP, meta: true):
+                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
+                          // Command palette (Ctrl+Shift+P / Cmd+Shift+P)
                           const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true):
                               () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.commands),
+                          const SingleActivator(LogicalKeyboardKey.keyP, meta: true, shift: true):
+                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.commands),
+                          // Search files (Ctrl+Shift+F / Cmd+Shift+F)
                           const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true):
                               () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
+                          const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
+                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
+                          // Toggle Sidebar (Ctrl+B / Cmd+B)
                           const SingleActivator(LogicalKeyboardKey.keyB, control: true): () {
-                            if (!isDesktop) {
+                            if (isDesktop) {
+                              ref.read(leftPanelOpenProvider.notifier).update((v) => !v);
+                            } else {
                               if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
                                 _scaffoldKey.currentState?.closeDrawer();
                               } else {
@@ -681,24 +696,63 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               }
                             }
                           },
+                          const SingleActivator(LogicalKeyboardKey.keyB, meta: true): () {
+                            if (isDesktop) {
+                              ref.read(leftPanelOpenProvider.notifier).update((v) => !v);
+                            } else {
+                              if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
+                                _scaffoldKey.currentState?.closeDrawer();
+                              } else {
+                                _scaffoldKey.currentState?.openDrawer();
+                              }
+                            }
+                          },
+                          // Toggle Terminal Panel (Ctrl+` / Cmd+`)
                           const SingleActivator(LogicalKeyboardKey.backquote, control: true):
                               () => panelNotifier.toggle(),
+                          const SingleActivator(LogicalKeyboardKey.backquote, meta: true):
+                              () => panelNotifier.toggle(),
+                          // Quick symbols (Ctrl+T / Cmd+T)
                           const SingleActivator(LogicalKeyboardKey.keyT, control: true):
                               () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.symbols),
+                          const SingleActivator(LogicalKeyboardKey.keyT, meta: true):
+                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.symbols),
+                          // Close active tab (Ctrl+W / Cmd+W)
                           const SingleActivator(LogicalKeyboardKey.keyW, control: true):
                               () => ref.read(editorProvider.notifier).closeTab(safeActiveIndex),
+                          const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
+                              () => ref.read(editorProvider.notifier).closeTab(safeActiveIndex),
+                          // Find in file (Ctrl+F / Cmd+F)
                           const SingleActivator(LogicalKeyboardKey.keyF, control: true):
                               () => _showFindPanel(context, ref),
+                          const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
+                              () => _showFindPanel(context, ref),
+                          // Replace in file (Ctrl+H / Cmd+H)
                           const SingleActivator(LogicalKeyboardKey.keyH, control: true):
                               () => _showFindPanel(context, ref, replace: true),
+                          const SingleActivator(LogicalKeyboardKey.keyH, meta: true):
+                              () => _showFindPanel(context, ref, replace: true),
+                          // Duplicate line (Ctrl+D / Cmd+D)
                           const SingleActivator(LogicalKeyboardKey.keyD, control: true):
                               () => _duplicateLine(ref),
+                          const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
+                              () => _duplicateLine(ref),
+                          // Zen mode (Ctrl+K / Cmd+K)
                           const SingleActivator(LogicalKeyboardKey.keyK, control: true):
                               () => _toggleZenMode(ref),
+                          const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+                              () => _toggleZenMode(ref),
+                          // Split editor (Ctrl+\ / Cmd+\)
                           const SingleActivator(LogicalKeyboardKey.backslash, control: true):
                               () => _toggleSplitMode(ref),
+                          const SingleActivator(LogicalKeyboardKey.backslash, meta: true):
+                              () => _toggleSplitMode(ref),
+                          // Problems tab
                           const SingleActivator(LogicalKeyboardKey.bracketLeft, control: true, shift: true):
                               () => panelNotifier.selectTab(PanelTab.problems),
+                          const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true, shift: true):
+                              () => panelNotifier.selectTab(PanelTab.problems),
+                          // Run project (F5)
                           const SingleActivator(LogicalKeyboardKey.f5): () {
                             if (currentProject != null) {
                               ref.read(projectServiceProvider.notifier).runProject(currentProject);

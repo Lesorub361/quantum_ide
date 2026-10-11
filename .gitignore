@@ -51,6 +51,8 @@ android/gradle-wrapper.zip
 # Signing secrets — never commit
 android/key.properties
 android/keystore.properties
+*.jks
+*.keystore
 
 # Accidental `flutter create` output inside the android/ folder
 /android/android/

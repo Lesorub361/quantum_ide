@@ -11,6 +11,8 @@ import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/core/models/code_diagnostic.dart';
+import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 
 class StatusBar extends ConsumerStatefulWidget {
   const StatusBar({super.key});
@@ -67,7 +69,7 @@ class _StatusBarState extends ConsumerState<StatusBar> {
 
     final workspacePath = ref.watch(workspaceProvider).currentPath ?? '';
     final pos = _cursorValue?.selection.extent;
-    final totalErrors = _getTotalErrors(editorState.allDiagnostics, workspacePath);
+    final (errorsCount, warningsCount, hintsCount) = _getDiagnosticsCounts(editorState.allDiagnostics, workspacePath);
 
     return RepaintBoundary(
       child: Container(
@@ -84,7 +86,7 @@ class _StatusBarState extends ConsumerState<StatusBar> {
         ),
         child: Row(
           children: [
-            // Left Side: Git & Diagnostics
+            // Left Side: Git & Diagnostics & CPU/RAM
             Expanded(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -101,15 +103,76 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                       ),
                       const SizedBox(width: 8),
                     ],
-                    _StatusBarPill(
-                      icon: LucideIcons.circle_alert,
-                      label: '$totalErrors Проблем',
-                      color: totalErrors > 0 ? Colors.redAccent : Colors.white38,
+                    // Problems: Icons and numbers only (❌ errors, ⚠️ warnings)
+                    InkWell(
+                      borderRadius: BorderRadius.circular(4),
                       onTap: () {
                         ref.read(panelProvider.notifier).selectTab(PanelTab.problems);
                       },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: (errorsCount > 0
+                                  ? const Color(0xFFFF6B6B)
+                                  : (warningsCount > 0 ? Colors.amberAccent : Colors.white54))
+                              .withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(3.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              LucideIcons.circle_x,
+                              size: 10,
+                              color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white38,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '$errorsCount',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white60,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              LucideIcons.triangle_alert,
+                              size: 10,
+                              color: warningsCount > 0 ? Colors.amberAccent : Colors.white38,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '$warningsCount',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: warningsCount > 0 ? Colors.amberAccent : Colors.white60,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (hintsCount > 0) ...[
+                              const SizedBox(width: 6),
+                              const Icon(
+                                LucideIcons.info,
+                                size: 10,
+                                color: Colors.cyanAccent,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '$hintsCount',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: Colors.cyanAccent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
+                    // CPU & RAM: Icons and numbers only (🔲 cpu%  💾 ram)
                     Consumer(
                       builder: (context, ref, _) {
                         final stats = ref.watch(systemStatsProvider);
@@ -118,13 +181,44 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                         final isHigh = stats.cpuUsage > 0.85 || stats.ramUsage > 0.85;
                         final isMed = stats.cpuUsage > 0.6 || stats.ramUsage > 0.6;
                         final color = isHigh ? const Color(0xFFFF6B6B) : (isMed ? Colors.amberAccent : Colors.cyanAccent);
-                        return _StatusBarPill(
-                          icon: LucideIcons.cpu,
-                          label: 'CPU $cpuPercent%  RAM ${ramGB}G',
-                          color: color,
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(4),
                           onTap: () {
                             ref.read(panelProvider.notifier).selectTab(PanelTab.run);
                           },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(3.5),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(LucideIcons.cpu, size: 10, color: color),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '$cpuPercent%',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: color,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Icon(LucideIcons.server, size: 10, color: color),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '${ramGB}G',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: color,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         );
                       },
                     ),
@@ -173,10 +267,16 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                       ),
                       const SizedBox(width: 10),
 
-                      _StatusBarPill(
-                        icon: LucideIcons.code,
-                        label: _getLanguageName(activeFile.path),
-                        color: Colors.cyanAccent,
+                      // Language pill with genuine file/language icon from FileIconHelper
+                      Builder(
+                        builder: (context) {
+                          final fileInfo = FileIconHelper.getIconInfo(p.basename(activeFile.path), false);
+                          return _StatusBarPill(
+                            icon: fileInfo.icon,
+                            label: _getLanguageName(activeFile.path),
+                            color: fileInfo.color,
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -189,14 +289,28 @@ class _StatusBarState extends ConsumerState<StatusBar> {
     );
   }
 
-  int _getTotalErrors(Map<String, List<dynamic>> allDiagnostics, String workspacePath) {
-    int total = 0;
+  (int, int, int) _getDiagnosticsCounts(Map<String, List<CodeDiagnostic>> allDiagnostics, String workspacePath) {
+    int errors = 0;
+    int warnings = 0;
+    int hints = 0;
     allDiagnostics.forEach((filePath, list) {
-      if (workspacePath.isNotEmpty && filePath.startsWith(workspacePath)) {
-        total += list.length;
+      if (workspacePath.isEmpty || filePath.startsWith(workspacePath)) {
+        for (final diag in list) {
+          switch (diag.severity) {
+            case CodeDiagnosticSeverity.error:
+              errors++;
+              break;
+            case CodeDiagnosticSeverity.warning:
+              warnings++;
+              break;
+            case CodeDiagnosticSeverity.hint:
+              hints++;
+              break;
+          }
+        }
       }
     });
-    return total;
+    return (errors, warnings, hints);
   }
 
   String _getLanguageName(String path) {
