@@ -8,6 +8,8 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'core/providers/locale_provider.dart';
 import 'core/services/settings_service.dart';
 
+import 'core/services/ghost_qa_service.dart';
+
 class QuantumApp extends ConsumerWidget {
   const QuantumApp({super.key});
 
@@ -28,6 +30,12 @@ class QuantumApp extends ConsumerWidget {
       darkTheme: AppTheme.dark(scheme, customColor: customColor),
       themeMode: settings.themeMode,
       routerConfig: appRouter,
+      builder: (context, child) {
+        return RepaintBoundary(
+          key: GhostQAService.repaintKey,
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       locale: locale,
       localizationsDelegates: [
         AppLocalizations.delegate,

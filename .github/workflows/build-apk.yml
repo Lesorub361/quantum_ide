@@ -32,13 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## QuantumIDE v1.2.14
+        ## QuantumIDE v1.2.15
 
-        - Интеграция AI CLI-агентов: Claude Code, Antigravity CLI, DeepSeek Harness прямо в чате с фоновым выполнением, стримингом и карточками активности.
-        - Исправление сборки APK на ARM64/телефоне: автоматическое применение флага `--target-platform android-arm64`, исключающее падение gen_snapshot.
-        - Диагностика сборки Android: расширенный парсинг Gradle/Kotlinc/AAPT2/Manifest и детектор устаревших APK.
-        - Local Format Gateway: мульти-ключевые пулы API с мгновенной авто-ротацией при HTTP 429/401/403.
-        - Безопасность PRoot: сохранение домашнего каталога /root при восстановлении и сбросе rootfs.
+        - **Ghost QA Engine (Autonomous UI Testing)**: автономный движок для разработчика с программной инспекцией дерева виджетов, симуляцией жестов и кликов без ADB, перехватом ошибок Flutter и RenderFlex overflow.
+        - **Local HTTP QA Bridge (127.0.0.1:9988)**: локальный API мост для автоматического тестирования и аудита вкладок внешними агентами (Antigravity/curl/скрипты).
+        - **In-App AI Agent QA Integration**: инструменты `qa_inspect_ui`, `qa_tap`, `qa_get_errors`, `qa_clear_errors`, `qa_take_screenshot`, `qa_audit` для проверки интерфейса прямо из чата ассистента с циклом самоисправления кода.
+        - **Строгая безопасность и изоляция**: движок полностью заблокирован и отключен для обычных пользователей (активируется исключительно при наличии секретного ключа разработчика на устройстве).
+        - **Фикс сборки APK на ARM64**: сохранена поддержка `--target-platform android-arm64` для успешной сборки на смартфонах.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -55,6 +55,7 @@ class AIPrompts {
     String rulesContent = '',
     AiInteractionMode interactionMode = AiInteractionMode.chat,
     bool isLocalModel = false,
+    bool isGhostQaEnabled = false,
   }) {
     // Detect project type from workspace overview
     final isPythonProject = workspaceOverview.contains('Python Project');
@@ -426,7 +427,7 @@ To edit the project, run commands, use internet tools, or call MCP servers, you 
 
 ### JSON Schema
 Each object in the array must have:
-- `type`: String matching `"create"` | `"edit"` | `"rewrite_whole_file"` | `"delete"` | `"command"` | `"read_file"` | `"grep_search"` | `"find_symbols"` | `"list_dir"` | `"web_search"` | `"web_fetch"` | `"mcp"`
+- `type`: String matching `"create"` | `"edit"` | `"rewrite_whole_file"` | `"delete"` | `"command"` | `"read_file"` | `"grep_search"` | `"find_symbols"` | `"list_dir"` | `"web_search"` | `"web_fetch"` | `"mcp"` | `"qa_inspect_ui"` | `"qa_tap"` | `"qa_get_errors"` | `"qa_clear_errors"` | `"qa_take_screenshot"` | `"qa_audit"`
 - `path`: String. Required for `create`, `edit`, `rewrite_whole_file`, `delete`, `read_file`, `list_dir` (holds directory path), and `web_fetch` (holds the URL).
 - `content`: String. Required for `create`, `edit`, and `rewrite_whole_file` (holds complete file content), `web_search` (holds search query), `grep_search` (holds the text pattern to search), and `find_symbols` (holds the symbol name to search).
 - `search_block`: String. Required for `replace_code_block` (the exact code to find in the file).
@@ -553,6 +554,55 @@ $workspaceOverview
       buffer.writeln(rulesContent);
     }
 
+    if (isGhostQaEnabled) {
+      buffer.writeln('''
+
+---
+
+## 12. AUTONOMOUS UI TESTING & GHOST QA ENGINE (PROJECT OWNER EXCLUSIVE)
+You have direct programmatic access to inspect and interact with the live running UI of Quantum IDE on the screen!
+Use this capability when the user asks you to:
+- "Покликай по кнопкам / проверь интерфейс / протестируй вкладки"
+- "Посмотри что работает, а что нет в нашей IDE"
+- "Исправь ошибки и переполнения в интерфейсе"
+
+### Available QA Actions:
+1. `qa_inspect_ui`:
+   - Inspects the live screen UI tree.
+   - Returns interactive buttons, tabs, input fields, labels, bounding coordinates, and IDs.
+   - Example: `<actions>[{"type":"qa_inspect_ui","description":"Осмотр элементов текущего экрана"}]</actions>`
+
+2. `qa_tap`:
+   - Simulates a real tap on any button, tab, or coordinate.
+   - Pass the label text in `content` (e.g. "Terminal", "Settings", "Git", "Debug") OR screen coordinates `x,y`.
+   - Example: `<actions>[{"type":"qa_tap","content":"Terminal","description":"Кликаю по вкладке Терминал"}]</actions>`
+
+3. `qa_get_errors`:
+   - Retrieves captured Flutter runtime exceptions, assertion errors, and RenderFlex layout overflows!
+   - Example: `<actions>[{"type":"qa_get_errors","description":"Проверяю ошибки рендеринга"}]</actions>`
+
+4. `qa_clear_errors`:
+   - Clears the error log after fixing the code.
+   - Example: `<actions>[{"type":"qa_clear_errors","description":"Очищаю журнал ошибок"}]</actions>`
+
+5. `qa_take_screenshot`:
+   - Takes a PNG screenshot of the current screen and saves to project storage.
+   - Example: `<actions>[{"type":"qa_take_screenshot","description":"Сохраняю снимок экрана"}]</actions>`
+
+6. `qa_audit`:
+   - Runs an autonomous walkthrough clicking across key screen elements and reports a bug summary.
+   - Example: `<actions>[{"type":"qa_audit","description":"Автономный аудит интерфейса"}]</actions>`
+
+### Autonomous QA & Repair Cycle:
+1. Use `qa_inspect_ui` to explore what elements/tabs exist on the screen.
+2. Click through tabs with `qa_tap`.
+3. Check `qa_get_errors` to catch any RenderFlex overflow or widget crash.
+4. If an error is spotted: use `find_symbols` or `grep_search` to find the offending widget file.
+5. Fix the code using `replace_code_block`.
+6. Run `flutter analyze` or re-test with `qa_tap` and verify with `qa_get_errors`!
+''');
+    }
+
     return buffer.toString();
   }
 
@@ -560,6 +610,7 @@ $workspaceOverview
     String workspaceOverview = '',
     bool internetAccess = false,
     String rulesContent = '',
+    bool isGhostQaEnabled = false,
   }) {
     final buffer = StringBuffer();
 
@@ -664,6 +715,55 @@ INCORRECT EXAMPLE (DO NOT DO THIS):
 [ ... ]
 </actions>
 ''');
+
+    if (isGhostQaEnabled) {
+      buffer.writeln('''
+
+---
+
+## 8. AUTONOMOUS UI TESTING & GHOST QA ENGINE (PROJECT OWNER EXCLUSIVE)
+You have direct programmatic access to inspect and interact with the live running UI of Quantum IDE on the screen!
+Use this capability when the user asks you to:
+- "Покликай по кнопкам / проверь интерфейс / протестируй вкладки"
+- "Посмотри что работает, а что нет в нашей IDE"
+- "Исправь ошибки и переполнения в интерфейсе"
+
+### Available QA Actions:
+1. `qa_inspect_ui`:
+   - Inspects the live screen UI tree.
+   - Returns interactive buttons, tabs, input fields, labels, bounding coordinates, and IDs.
+   - Example: `<actions>[{"type":"qa_inspect_ui","description":"Осмотр элементов текущего экрана"}]</actions>`
+
+2. `qa_tap`:
+   - Simulates a real tap on any button, tab, or coordinate.
+   - Pass the label text in `content` (e.g. "Terminal", "Settings", "Git", "Debug") OR screen coordinates `x,y`.
+   - Example: `<actions>[{"type":"qa_tap","content":"Terminal","description":"Кликаю по вкладке Терминал"}]</actions>`
+
+3. `qa_get_errors`:
+   - Retrieves captured Flutter runtime exceptions, assertion errors, and RenderFlex layout overflows!
+   - Example: `<actions>[{"type":"qa_get_errors","description":"Проверяю ошибки рендеринга"}]</actions>`
+
+4. `qa_clear_errors`:
+   - Clears the error log after fixing the code.
+   - Example: `<actions>[{"type":"qa_clear_errors","description":"Очищаю журнал ошибок"}]</actions>`
+
+5. `qa_take_screenshot`:
+   - Takes a PNG screenshot of the current screen and saves to project storage.
+   - Example: `<actions>[{"type":"qa_take_screenshot","description":"Сохраняю снимок экрана"}]</actions>`
+
+6. `qa_audit`:
+   - Runs an autonomous walkthrough clicking across key screen elements and reports a bug summary.
+   - Example: `<actions>[{"type":"qa_audit","description":"Автономный аудит интерфейса"}]</actions>`
+
+### Autonomous QA & Repair Cycle:
+1. Use `qa_inspect_ui` to explore what elements/tabs exist on the screen.
+2. Click through tabs with `qa_tap`.
+3. Check `qa_get_errors` to catch any RenderFlex overflow or widget crash.
+4. If an error is spotted: use `find_symbols` or `grep_search` to find the offending widget file.
+5. Fix the code using `replace_code_block`.
+6. Run `flutter analyze` or re-test with `qa_tap` and verify with `qa_get_errors`!
+''');
+    }
 
     return buffer.toString();
   }

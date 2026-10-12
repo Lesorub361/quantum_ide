@@ -1,10 +1,10 @@
 {
-  "versionCode": 32,
-  "versionName": "1.2.14",
-  "notes": "Обновление QuantumIDE 1.2.14: интеграция AI CLI-агентов (Claude Code, Antigravity, DeepSeek) прямо в чат с фоновым стримингом; исправление сборки APK на телефонах ARM64 (--target-platform android-arm64); диагностика ошибок Gradle/AAPT2/Manifest; мульти-ключевые пулы API с авто-ротацией; сохранение /root при сбросе системы.",
+  "versionCode": 33,
+  "versionName": "1.2.15",
+  "notes": "Обновление QuantumIDE 1.2.15: Ghost QA Engine — автономный движок тестирования UI для разработчика (инспекция виджетов, симуляция кликов и свайпов, перехват RenderFlex overflow и ошибок Flutter, снимки экрана, локальный HTTP-мост 127.0.0.1:9988; полная изоляция и защита для обычных пользователей).",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.14/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.15/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

@@ -8,6 +8,7 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/agent_markers.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
+import 'package:quantum_ide/core/services/ghost_qa_service.dart';
 import 'package:dio/dio.dart';
 
 class PendingEdit {
@@ -372,6 +373,72 @@ class EnhancedAIToolExecutor {
         },
         risk: AIToolRisk.medium,
       ),
+      if (GhostQAService.instance.isAuthorized) ...[
+        const AIToolDefinition(
+          name: 'qa_inspect_ui',
+          description: 'Inspect current screen UI tree. Returns visible and interactive elements (buttons, tabs, inputs, text, labels, coordinates) for automated testing.',
+          inputSchema: {'type': 'object', 'properties': {}},
+          risk: AIToolRisk.low,
+        ),
+        const AIToolDefinition(
+          name: 'qa_tap_element',
+          description: 'Simulate a tap on a UI button, tab, or screen coordinate. Pass label (e.g. "Terminal", "Settings"), id, or x/y coordinates.',
+          inputSchema: {
+            'type': 'object',
+            'properties': {
+              'label': {'type': 'string', 'description': 'Text label or tooltip of the element to tap'},
+              'id': {'type': 'string', 'description': 'Element ID returned by qa_inspect_ui'},
+              'x': {'type': 'number', 'description': 'X coordinate on screen'},
+              'y': {'type': 'number', 'description': 'Y coordinate on screen'},
+            },
+          },
+          risk: AIToolRisk.low,
+        ),
+        const AIToolDefinition(
+          name: 'qa_scroll',
+          description: 'Simulate a scroll or swipe on screen.',
+          inputSchema: {
+            'type': 'object',
+            'properties': {
+              'start_x': {'type': 'number', 'description': 'Start X coordinate'},
+              'start_y': {'type': 'number', 'description': 'Start Y coordinate'},
+              'dx': {'type': 'number', 'description': 'Delta X distance'},
+              'dy': {'type': 'number', 'description': 'Delta Y distance'},
+            },
+          },
+          risk: AIToolRisk.low,
+        ),
+        const AIToolDefinition(
+          name: 'qa_enter_text',
+          description: 'Type text into the currently active or focused input field.',
+          inputSchema: {
+            'type': 'object',
+            'properties': {
+              'text': {'type': 'string', 'description': 'Text to enter'},
+            },
+            'required': ['text'],
+          },
+          risk: AIToolRisk.low,
+        ),
+        const AIToolDefinition(
+          name: 'qa_get_runtime_errors',
+          description: 'Retrieve runtime Flutter exceptions and RenderFlex overflow errors caught during testing.',
+          inputSchema: {'type': 'object', 'properties': {}},
+          risk: AIToolRisk.low,
+        ),
+        const AIToolDefinition(
+          name: 'qa_clear_errors',
+          description: 'Clear the intercepted error log after fixing bugs.',
+          inputSchema: {'type': 'object', 'properties': {}},
+          risk: AIToolRisk.low,
+        ),
+        const AIToolDefinition(
+          name: 'qa_take_screenshot',
+          description: 'Capture a full screenshot of the app and save it to project storage. Returns the saved path.',
+          inputSchema: {'type': 'object', 'properties': {}},
+          risk: AIToolRisk.low,
+        ),
+      ],
     ];
   }
 
@@ -401,6 +468,13 @@ class EnhancedAIToolExecutor {
         case 'git_diff': return await _gitDiff(toolCall);
         case 'git_log': return await _gitLog(toolCall);
         case 'git_commit': return await _gitCommit(toolCall);
+        case 'qa_inspect_ui': return await _qaInspectUi(toolCall);
+        case 'qa_tap_element': return await _qaTapElement(toolCall);
+        case 'qa_scroll': return await _qaScroll(toolCall);
+        case 'qa_enter_text': return await _qaEnterText(toolCall);
+        case 'qa_get_runtime_errors': return await _qaGetRuntimeErrors(toolCall);
+        case 'qa_clear_errors': return await _qaClearErrors(toolCall);
+        case 'qa_take_screenshot': return await _qaTakeScreenshot(toolCall);
         default:
           return AIToolResult(toolCallId: toolCall.id, content: 'Unknown tool: ${toolCall.name}', isError: true);
       }
@@ -887,6 +961,160 @@ class EnhancedAIToolExecutor {
     } catch (e) {
       return AIToolResult(toolCallId: toolCall.id, content: 'Git commit error: $e', isError: true);
     }
+  }
+
+  Future<AIToolResult> _qaInspectUi(AIToolCall toolCall) async {
+    if (!GhostQAService.instance.isAuthorized) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Ghost QA Engine is inactive: requires owner authorization.',
+        isError: true,
+      );
+    }
+    final uiData = await GhostQAService.instance.inspectUiElements();
+    return AIToolResult(toolCallId: toolCall.id, content: jsonEncode(uiData));
+  }
+
+  Future<AIToolResult> _qaTapElement(AIToolCall toolCall) async {
+    if (!GhostQAService.instance.isAuthorized) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Ghost QA Engine is inactive: requires owner authorization.',
+        isError: true,
+      );
+    }
+    final args = toolCall.arguments;
+    bool ok = false;
+    String info = '';
+    if (args.containsKey('x') && args.containsKey('y')) {
+      final x = (args['x'] as num).toDouble();
+      final y = (args['y'] as num).toDouble();
+      ok = await GhostQAService.instance.tapAt(x, y);
+      info = 'coordinates ($x, $y)';
+    } else if (args.containsKey('label') && args['label'] != null) {
+      final label = args['label'].toString();
+      ok = await GhostQAService.instance.tapByLabel(label);
+      info = 'label "$label"';
+    } else if (args.containsKey('id') && args['id'] != null) {
+      final id = args['id'].toString();
+      ok = await GhostQAService.instance.tapById(id);
+      info = 'element id "$id"';
+    } else {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Missing target: specify "label", "id", or "x" and "y".',
+        isError: true,
+      );
+    }
+
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    return AIToolResult(
+      toolCallId: toolCall.id,
+      content: ok ? 'Successfully tapped $info' : 'Failed to tap $info: element not found or not rendered',
+      isError: !ok,
+    );
+  }
+
+  Future<AIToolResult> _qaScroll(AIToolCall toolCall) async {
+    if (!GhostQAService.instance.isAuthorized) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Ghost QA Engine is inactive: requires owner authorization.',
+        isError: true,
+      );
+    }
+    final args = toolCall.arguments;
+    final startX = (args['start_x'] as num? ?? 300).toDouble();
+    final startY = (args['start_y'] as num? ?? 600).toDouble();
+    final dx = (args['dx'] as num? ?? 0).toDouble();
+    final dy = (args['dy'] as num? ?? -300).toDouble();
+
+    final ok = await GhostQAService.instance.scroll(
+      startX: startX,
+      startY: startY,
+      dx: dx,
+      dy: dy,
+    );
+
+    return AIToolResult(
+      toolCallId: toolCall.id,
+      content: ok ? 'Scrolled by dx: $dx, dy: $dy' : 'Failed to scroll',
+      isError: !ok,
+    );
+  }
+
+  Future<AIToolResult> _qaEnterText(AIToolCall toolCall) async {
+    if (!GhostQAService.instance.isAuthorized) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Ghost QA Engine is inactive: requires owner authorization.',
+        isError: true,
+      );
+    }
+    final text = toolCall.arguments['text'] as String? ?? '';
+    final ok = await GhostQAService.instance.enterText(text);
+
+    return AIToolResult(
+      toolCallId: toolCall.id,
+      content: ok ? 'Entered text "$text" into focused input' : 'Failed to enter text: no focused text field found',
+      isError: !ok,
+    );
+  }
+
+  Future<AIToolResult> _qaGetRuntimeErrors(AIToolCall toolCall) async {
+    if (!GhostQAService.instance.isAuthorized) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Ghost QA Engine is inactive: requires owner authorization.',
+        isError: true,
+      );
+    }
+    final errors = GhostQAService.instance.getErrors();
+    return AIToolResult(
+      toolCallId: toolCall.id,
+      content: jsonEncode({
+        'error_count': errors.length,
+        'errors': errors,
+      }),
+    );
+  }
+
+  Future<AIToolResult> _qaClearErrors(AIToolCall toolCall) async {
+    if (!GhostQAService.instance.isAuthorized) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Ghost QA Engine is inactive: requires owner authorization.',
+        isError: true,
+      );
+    }
+    GhostQAService.instance.clearErrors();
+    return AIToolResult(
+      toolCallId: toolCall.id,
+      content: 'Error log cleared',
+    );
+  }
+
+  Future<AIToolResult> _qaTakeScreenshot(AIToolCall toolCall) async {
+    if (!GhostQAService.instance.isAuthorized) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Ghost QA Engine is inactive: requires owner authorization.',
+        isError: true,
+      );
+    }
+    final path = await GhostQAService.instance.saveScreenshot();
+    if (path == null) {
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Failed to capture screenshot: screen boundary not ready',
+        isError: true,
+      );
+    }
+    return AIToolResult(
+      toolCallId: toolCall.id,
+      content: 'Screenshot saved to: $path',
+    );
   }
 
   RegExp _globToRegex(String glob) {

@@ -121,6 +121,37 @@ class LocalActionTranslator {
       }
     }
 
+    // ── QA Testing & Screen Audit intent ─────────────────────────────────────
+    if (_containsAny(lower, [
+      'проверь интерфейс', 'проверить интерфейс', 'протестируй интерфейс',
+      'протестируй приложение', 'проверь приложение', 'покликай', 'покликаю',
+      'пощелкай', 'пощелкаю', 'проверь вкладки', 'протестируй вкладки',
+      'аудит интерфейса', 'проверь экран', 'осмотри экран', 'что на экране',
+      'inspect ui', 'test ui', 'audit ui', 'check buttons', 'click buttons',
+    ])) {
+      actions.add(AIAction(
+        type: 'qa_inspect_ui',
+        path: '',
+        content: '',
+        description: 'Инспекция экрана приложения (Ghost QA)',
+      ));
+      return actions;
+    }
+
+    // ── QA Screenshot intent ─────────────────────────────────────────────────
+    if (_containsAny(lower, [
+      'сделай скриншот', 'сделать скриншот', 'снимок экрана', 'скриншот экрана',
+      'take screenshot', 'capture screen', 'screenshot',
+    ])) {
+      actions.add(AIAction(
+        type: 'qa_take_screenshot',
+        path: '',
+        content: '',
+        description: 'Снимок экрана приложения',
+      ));
+      return actions;
+    }
+
     // ── Fallback: model wrote code without explicit intent keyword ────────────
     // If the model output a code block with a detectable filename, suggest creating it.
     final filename = _extractFilename(response);

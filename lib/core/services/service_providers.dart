@@ -12,6 +12,7 @@ import 'marketplace_service.dart';
 import 'ai_scenario_executor.dart';
 import 'runtime_service.dart';
 import 'collaboration_service.dart';
+import 'ghost_qa_service.dart';
 
 /// Provider for BuildDiagnosticsService
 final buildDiagnosticsServiceProvider = Provider((ref) {
@@ -93,3 +94,9 @@ final aiScenarioExecutorProvider = StateNotifierProvider<AiScenarioExecutor, AiS
   ref.onDispose(() => service.dispose());
   return service;
 });
+
+/// Provider for GhostQAService (Autonomous AI Screen & QA Testing Engine)
+final ghostQAServiceProvider = Provider<GhostQAService>((ref) {
+  return GhostQAService.instance;
+});
+

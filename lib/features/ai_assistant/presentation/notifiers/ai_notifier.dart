@@ -32,6 +32,7 @@ import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
 import 'package:quantum_ide/core/services/cli_auth_service.dart';
 import 'package:quantum_ide/core/services/local_action_translator.dart';
+import 'package:quantum_ide/core/services/ghost_qa_service.dart';
 
 // ─── Top-level функция для Isolate — не должна быть методом класса ───
 /// Запускается через compute() — не блокирует UI поток.
@@ -1096,6 +1097,7 @@ class AINotifier extends StateNotifier<AIState> {
           rulesContent: rulesContent,
           interactionMode: state.interactionMode,
           isLocalModel: isLocalAi,
+          isGhostQaEnabled: GhostQAService.instance.isAuthorized,
         );
         
         // Append session memory to local model instruction
@@ -1989,6 +1991,14 @@ class AINotifier extends StateNotifier<AIState> {
       case 'web_search':
       case 'web_fetch':
         return 'Search';
+      case 'qa_inspect_ui':
+      case 'qa_get_errors':
+      case 'qa_take_screenshot':
+        return 'QA Inspect';
+      case 'qa_tap':
+      case 'qa_audit':
+      case 'qa_clear_errors':
+        return 'QA Test';
       default:
         return 'Action';
     }
@@ -2269,6 +2279,67 @@ class AINotifier extends StateNotifier<AIState> {
           final mcpResult = await mcpService.executeMcpTool(action.server!, action.tool!, action.arguments ?? {});
           removeAction(action);
           return jsonEncode(mcpResult);
+        case 'qa_inspect_ui':
+          if (!GhostQAService.instance.isAuthorized) {
+            removeAction(action);
+            return 'Ghost QA Engine не активирован (требуется ключ владельца).';
+          }
+          final uiData = await GhostQAService.instance.inspectUiElements();
+          removeAction(action);
+          final elements = (uiData['elements'] as List<dynamic>?) ?? [];
+          final clickables = elements.where((e) => e['isClickable'] == true).map((e) => '• [${e['type']}] "${e['label']}" (id: ${e['id']})').join('\n');
+          return '🔍 **Инспекция интерфейса экрана:**\nВсего элементов: ${elements.length}\nИнтерактивные:\n$clickables';
+        case 'qa_tap':
+          if (!GhostQAService.instance.isAuthorized) {
+            removeAction(action);
+            return 'Ghost QA Engine не активирован (требуется ключ владельца).';
+          }
+          final query = action.content.isNotEmpty ? action.content : action.path;
+          bool ok = false;
+          if (query.contains(',')) {
+            final parts = query.split(',');
+            final x = double.tryParse(parts[0].trim());
+            final y = double.tryParse(parts[1].trim());
+            if (x != null && y != null) {
+              ok = await GhostQAService.instance.tapAt(x, y);
+            }
+          } else {
+            ok = await GhostQAService.instance.tapByLabel(query);
+          }
+          removeAction(action);
+          return ok ? '👆 Успешный клик по элементу "$query"' : '⚠️ Элемент "$query" не найден на экране для клика';
+        case 'qa_get_errors':
+          if (!GhostQAService.instance.isAuthorized) {
+            removeAction(action);
+            return 'Ghost QA Engine не активирован.';
+          }
+          final errors = GhostQAService.instance.getErrors();
+          removeAction(action);
+          if (errors.isEmpty) {
+            return '✅ Ошибок интерфейса / RenderFlex переполнений не зафиксировано.';
+          }
+          final errorList = errors.map((e) => '⚠️ [${e['timestamp']}] ${e['message']}').join('\n\n');
+          return '🚨 **Обнаружено ошибок Flutter (${errors.length}):**\n$errorList';
+        case 'qa_clear_errors':
+          GhostQAService.instance.clearErrors();
+          removeAction(action);
+          return '🧹 Журнал ошибок UI очищен.';
+        case 'qa_take_screenshot':
+          if (!GhostQAService.instance.isAuthorized) {
+            removeAction(action);
+            return 'Ghost QA Engine не активирован.';
+          }
+          final path = await GhostQAService.instance.saveScreenshot();
+          removeAction(action);
+          return path != null ? '📸 Скриншот экрана сохранен: $path' : '⚠️ Не удалось сделать скриншот';
+        case 'qa_audit':
+          if (!GhostQAService.instance.isAuthorized) {
+            removeAction(action);
+            return 'Ghost QA Engine не активирован.';
+          }
+          final report = await GhostQAService.instance.runAutonomousAudit();
+          removeAction(action);
+          return '🤖 **Отчет автономного аудита UI:**\nПроверено интерактивных элементов: ${report['audited_count']}\nНовых ошибок: ${report['total_new_errors']}';
         default:
           return l10n.unknownAction(action.type);
       }
@@ -2879,6 +2950,18 @@ $history
         return '🌐 **Поиск в интернете:** *"${action.content}"*';
       case 'web_fetch':
         return '📥 **Загрузка веб-страницы:** *"${action.path}"*';
+      case 'qa_inspect_ui':
+        return '🔍 **Инспекция интерфейса экрана (Ghost QA)**';
+      case 'qa_tap':
+        return '👆 **Клик по элементу интерфейса:** *"${action.content.isNotEmpty ? action.content : action.path}"*';
+      case 'qa_get_errors':
+        return '🚨 **Проверка ошибок UI и RenderFlex переполнений**';
+      case 'qa_clear_errors':
+        return '🧹 **Очистка журнала ошибок UI**';
+      case 'qa_take_screenshot':
+        return '📸 **Снимок экрана приложения**';
+      case 'qa_audit':
+        return '🤖 **Автономный аудит интерактивных элементов UI**';
       default:
         return '⚙️ **Выполнение действия (${action.type}):** `$relPath`';
     }
@@ -2890,7 +2973,10 @@ $history
         action.type == 'grep_search' ||
         action.type == 'find_symbols' ||
         action.type == 'web_search' ||
-        action.type == 'web_fetch';
+        action.type == 'web_fetch' ||
+        action.type == 'qa_inspect_ui' ||
+        action.type == 'qa_get_errors' ||
+        action.type == 'qa_take_screenshot';
   }
 
   Future<String> _performWebFetch(String url) async {

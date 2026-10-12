@@ -308,4 +308,80 @@ final List<AIToolDefinition> defaultAITools = [
     risk: AIToolRisk.high,
     requiresConfirmation: true,
   ),
+  const AIToolDefinition(
+    name: 'qa_inspect_ui',
+    description: 'Inspect current screen UI tree. Returns visible and interactive elements (buttons, tabs, inputs, text, labels, coordinates) for automated testing.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {},
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'qa_tap_element',
+    description: 'Simulate a tap on a UI button, tab, or screen coordinate. Pass label (e.g. "Terminal", "Settings"), id, or x/y coordinates.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'label': {'type': 'string', 'description': 'Text label or tooltip of the element to tap'},
+        'id': {'type': 'string', 'description': 'Element ID returned by qa_inspect_ui'},
+        'x': {'type': 'number', 'description': 'X coordinate on screen'},
+        'y': {'type': 'number', 'description': 'Y coordinate on screen'},
+      },
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'qa_scroll',
+    description: 'Simulate a scroll or swipe on screen.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'start_x': {'type': 'number', 'description': 'Start X coordinate (default 300)'},
+        'start_y': {'type': 'number', 'description': 'Start Y coordinate (default 600)'},
+        'dx': {'type': 'number', 'description': 'Delta X distance (positive moves right)'},
+        'dy': {'type': 'number', 'description': 'Delta Y distance (negative scrolls down)'},
+      },
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'qa_enter_text',
+    description: 'Type text into the currently active or focused input field.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'text': {'type': 'string', 'description': 'Text string to enter'},
+      },
+      'required': ['text'],
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'qa_get_runtime_errors',
+    description: 'Retrieve runtime Flutter exceptions and RenderFlex overflow errors caught during testing.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {},
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'qa_clear_errors',
+    description: 'Clear the intercepted error log after fixing bugs.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {},
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'qa_take_screenshot',
+    description: 'Capture a full screenshot of the app and save it to project storage. Returns the saved path.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {},
+    },
+    risk: AIToolRisk.low,
+  ),
 ];
