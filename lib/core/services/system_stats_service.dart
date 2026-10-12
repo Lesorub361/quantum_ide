@@ -80,8 +80,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       _lastCpuTotal = total;
       _lastCpuIdle = idleTime;
     } else {
-      // Mock fallback CPU usage (10% to 45%)
-      cpu = 0.1 + _random.nextDouble() * 0.35;
+      final sysfsCpu = await _parseCpuUsageFromSysfs();
+      if (sysfsCpu != null) {
+        cpu = sysfsCpu;
+      } else {
+        // Mock fallback CPU usage (10% to 45%)
+        cpu = 0.1 + _random.nextDouble() * 0.35;
+      }
     }
 
     final ramStats = await _parseRamStats();
@@ -119,6 +124,31 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<double?> _parseCpuUsageFromSysfs() async {
+    try {
+      double totalRatio = 0.0;
+      int count = 0;
+      for (int i = 0; i < 8; i++) {
+        final curFile = File('/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq');
+        final maxFile = File('/sys/devices/system/cpu/cpu$i/cpufreq/scaling_max_freq');
+        if (await curFile.exists() && await maxFile.exists()) {
+          final curStr = (await curFile.readAsString()).trim();
+          final maxStr = (await maxFile.readAsString()).trim();
+          final cur = int.tryParse(curStr);
+          final max = int.tryParse(maxStr);
+          if (cur != null && max != null && max > 0) {
+            totalRatio += (cur / max).clamp(0.0, 1.0);
+            count++;
+          }
+        }
+      }
+      if (count > 0) {
+        return totalRatio / count;
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<_RamStats?> _parseRamStats() async {

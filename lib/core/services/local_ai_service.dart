@@ -201,8 +201,8 @@ class LocalAiState {
     this.downloadedModels = const {},
     this.selectedModelFilename = 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
     this.isBinaryInstalling = false,
-    this.threads = 4,
-    this.gpuLayers = 0,
+    this.threads = 6,
+    this.gpuLayers = 20,
     this.useFlashAttn = false,
     this.contextSize = 4096,
   });
@@ -327,8 +327,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         running = await _pingServer();
       }
 
-      final threads = prefs.getInt('ai_local_threads') ?? 4;
-      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? 0;
+      final defaultThreads = Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2);
+      final defaultGpuLayers = Platform.isAndroid ? 20 : 0;
+      final threads = prefs.getInt('ai_local_threads') ?? defaultThreads;
+      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
       final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
       final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
 
@@ -387,8 +389,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         await prefs.setString('ai_selected_local_model_filename', activeFilename);
       }
 
-      final threads = prefs.getInt('ai_local_threads') ?? 4;
-      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? 0;
+      final defaultThreads = Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2);
+      final defaultGpuLayers = Platform.isAndroid ? 20 : 0;
+      final threads = prefs.getInt('ai_local_threads') ?? defaultThreads;
+      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
       final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
       final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
 
@@ -405,8 +409,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       );
     } else {
       final prefs = await SharedPreferences.getInstance();
-      final threads = prefs.getInt('ai_local_threads') ?? 4;
-      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? 0;
+      final defaultThreads = Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2);
+      final defaultGpuLayers = Platform.isAndroid ? 20 : 0;
+      final threads = prefs.getInt('ai_local_threads') ?? defaultThreads;
+      final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
       final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
       final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
 

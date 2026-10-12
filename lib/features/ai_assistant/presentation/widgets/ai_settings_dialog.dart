@@ -29,8 +29,8 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
   bool _checkingOllama = false;
 
   // Local AI parameters
-  int _localThreads = 4;
-  int _localGpuLayers = 0;
+  int _localThreads = 6;
+  int _localGpuLayers = 20;
   bool _localUseFlashAttn = false;
 
   @override

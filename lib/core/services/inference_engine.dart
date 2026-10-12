@@ -97,18 +97,18 @@ class InferenceEngine {
         debugPrint('[Inference]   Free RAM: ${gpu.freeRamBytes ~/ 1024 ~/ 1024}MB');
         debugPrint('[Inference]   Recommended layers: ${gpu.recommendedGpuLayers}');
 
-        if (gpu.vulkanSupported && gpu.recommendedGpuLayers > 0) {
+        if (gpu.vulkanSupported) {
           final gpuNum = _extractGpuModel(gpu.gpuName);
+          final rec = gpu.recommendedGpuLayers;
           if (gpuNum >= 700) {
             gpuLayers = 99;
             debugPrint('[Inference] ✓ High-end GPU ($gpuNum) → full offload');
-          } else if (gpuNum >= 650) {
-            gpuLayers = gpu.recommendedGpuLayers;
-            debugPrint('[Inference] ✓ Upper-mid GPU ($gpuNum) → $gpuLayers layers');
+          } else if (rec > 0) {
+            gpuLayers = rec;
+            debugPrint('[Inference] ✓ GPU offload supported ($gpuNameStr) → $gpuLayers layers');
           } else {
-            gpuLayers = 0;
-            debugPrint(
-                '[Inference] Mid-range GPU ($gpuNum) — CPU is faster, skipping GPU');
+            gpuLayers = 16;
+            debugPrint('[Inference] ✓ Vulkan GPU active ($gpuNameStr) → hybrid $gpuLayers layers offload');
           }
         }
       } catch (e) {
@@ -118,22 +118,15 @@ class InferenceEngine {
       debugPrint('[Inference] CPU Safe Mode selected — bypassing Vulkan/GPU detection entirely');
     }
 
-    // ── Thread Tuning ──
+    // ── Thread Tuning (Dynamic multi-core CPU allocation) ──
+    final totalCores = Platform.numberOfProcessors;
     int threads;
     if (gpuLayers > 0) {
-      threads = deviceTier == 'ultra'
-          ? 4
-          : deviceTier == 'high'
-              ? 4
-              : 4;
+      // Hybrid mode: GPU processes layers while CPU computes prompt evaluation & residual layers
+      threads = totalCores >= 8 ? 6 : (totalCores >= 6 ? 4 : (totalCores > 2 ? totalCores - 1 : 2));
     } else {
-      threads = deviceTier == 'ultra'
-          ? 6
-          : deviceTier == 'high'
-              ? 5
-              : deviceTier == 'mid'
-                  ? 4
-                  : 3;
+      // CPU-dominant mode: utilize available performance cores
+      threads = totalCores >= 8 ? 6 : (totalCores >= 6 ? 5 : (totalCores > 2 ? totalCores - 1 : 2));
     }
 
     // Google Tensor SoC (Pixel 6/7/8) has known Q4_K_M dequant bugs
