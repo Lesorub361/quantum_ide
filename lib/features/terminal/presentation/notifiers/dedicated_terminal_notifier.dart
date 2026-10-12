@@ -135,6 +135,10 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
 
       env['PROOT_TMP_DIR'] = sessionTmpDir;
       env['PWD'] = dir;
+      env['TERM'] = 'xterm-256color';
+      env['COLORTERM'] = 'truecolor';
+      env['LANG'] = env['LANG'] ?? 'C.UTF-8';
+      env['LC_ALL'] = env['LC_ALL'] ?? 'C.UTF-8';
 
       final shell = Platform.isAndroid
           ? '/system/bin/sh'

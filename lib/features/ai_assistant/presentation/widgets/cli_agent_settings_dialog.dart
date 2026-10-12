@@ -11,6 +11,7 @@ import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_noti
 import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
 import 'package:quantum_ide/core/services/cli_auth_service.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
 import 'package:quantum_ide/core/services/app_update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -144,38 +145,76 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
         throw Exception('${kind.title} CLI не установлен в системе.');
       }
 
-      if (kind == AgentKind.antigravity) {
-        final res = await Process.run(binary, ['--print-timeout', '10s', '-p', 'ping']);
-        stopwatch.stop();
-        if (res.exitCode == 0) {
-          setState(() {
-            _testSuccess = true;
-            _testResult = 'Связь с Antigravity CLI успешна (${stopwatch.elapsedMilliseconds} ms)';
-          });
+      if (Platform.isAndroid || Platform.isIOS) {
+        final runtime = ref.read(runtimeServiceProvider);
+        if (kind == AgentKind.antigravity) {
+          final res = await runtime.runCommand('$binary --version');
+          stopwatch.stop();
+          if (res.trim().isNotEmpty && !res.toLowerCase().contains('not found')) {
+            setState(() {
+              _testSuccess = true;
+              _testResult = 'Связь с Antigravity CLI успешна (${res.trim()}) (${stopwatch.elapsedMilliseconds} ms)';
+            });
+          } else {
+            throw Exception(res.trim().isNotEmpty ? res.trim() : 'Команда $binary не найдена');
+          }
+        } else if (kind == AgentKind.claudeCode) {
+          final res = await runtime.runCommand('$binary --version');
+          stopwatch.stop();
+          if (res.trim().isNotEmpty && !res.toLowerCase().contains('not found')) {
+            setState(() {
+              _testSuccess = true;
+              _testResult = 'Claude Code обнаружен: ${res.trim()} (${stopwatch.elapsedMilliseconds} ms)';
+            });
+          } else {
+            throw Exception(res.trim().isNotEmpty ? res.trim() : 'Команда $binary не найдена');
+          }
         } else {
-          throw Exception(res.stderr.toString().isNotEmpty ? res.stderr.toString() : 'Ошибка запуска (код ${res.exitCode})');
-        }
-      } else if (kind == AgentKind.claudeCode) {
-        final res = await Process.run(binary, ['--version']);
-        stopwatch.stop();
-        if (res.exitCode == 0) {
-          setState(() {
-            _testSuccess = true;
-            _testResult = 'Claude Code обнаружен: ${res.stdout.toString().trim()} (${stopwatch.elapsedMilliseconds} ms)';
-          });
-        } else {
-          throw Exception(res.stderr.toString().isNotEmpty ? res.stderr.toString() : 'Код ${res.exitCode}');
+          final res = await runtime.runCommand('$binary --help');
+          stopwatch.stop();
+          if (res.trim().isNotEmpty && !res.toLowerCase().contains('not found')) {
+            setState(() {
+              _testSuccess = true;
+              _testResult = 'DeepSeek Harness готов (${stopwatch.elapsedMilliseconds} ms)';
+            });
+          } else {
+            throw Exception(res.trim().isNotEmpty ? res.trim() : 'Команда $binary не найдена');
+          }
         }
       } else {
-        final res = await Process.run(binary, ['--help']);
-        stopwatch.stop();
-        if (res.exitCode == 0) {
-          setState(() {
-            _testSuccess = true;
-            _testResult = 'DeepSeek Harness готов (${stopwatch.elapsedMilliseconds} ms)';
-          });
+        if (kind == AgentKind.antigravity) {
+          final res = await Process.run(binary, ['--version']);
+          stopwatch.stop();
+          if (res.exitCode == 0) {
+            setState(() {
+              _testSuccess = true;
+              _testResult = 'Связь с Antigravity CLI успешна (${res.stdout.toString().trim()}) (${stopwatch.elapsedMilliseconds} ms)';
+            });
+          } else {
+            throw Exception(res.stderr.toString().isNotEmpty ? res.stderr.toString() : 'Ошибка запуска (код ${res.exitCode})');
+          }
+        } else if (kind == AgentKind.claudeCode) {
+          final res = await Process.run(binary, ['--version']);
+          stopwatch.stop();
+          if (res.exitCode == 0) {
+            setState(() {
+              _testSuccess = true;
+              _testResult = 'Claude Code обнаружен: ${res.stdout.toString().trim()} (${stopwatch.elapsedMilliseconds} ms)';
+            });
+          } else {
+            throw Exception(res.stderr.toString().isNotEmpty ? res.stderr.toString() : 'Код ${res.exitCode}');
+          }
         } else {
-          throw Exception(res.stderr.toString().isNotEmpty ? res.stderr.toString() : 'Код ${res.exitCode}');
+          final res = await Process.run(binary, ['--help']);
+          stopwatch.stop();
+          if (res.exitCode == 0) {
+            setState(() {
+              _testSuccess = true;
+              _testResult = 'DeepSeek Harness готов (${stopwatch.elapsedMilliseconds} ms)';
+            });
+          } else {
+            throw Exception(res.stderr.toString().isNotEmpty ? res.stderr.toString() : 'Код ${res.exitCode}');
+          }
         }
       }
     } catch (e) {
@@ -888,7 +927,7 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
                 child: ListView.separated(
                   shrinkWrap: true,
                   itemCount: models.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                  separatorBuilder: (_, _) => const Divider(height: 1, color: Colors.white10),
                   itemBuilder: (c, idx) {
                     final m = models[idx];
                     final isSel = m == currentModel;

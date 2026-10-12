@@ -242,7 +242,7 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
         final home = Platform.environment['HOME'] ?? '';
         final nvmBin = '$home/.config/nvm/versions/node/v22.18.0/bin';
         final localBin = '$home/.local/bin';
-        env['PATH'] = '$localBin:$nvmBin:${env['PATH'] ?? ''}';
+        env['PATH'] = '/usr/local/lib/nodejs/bin:/usr/local/bin:/root/.local/bin:$localBin:$nvmBin:${env['PATH'] ?? ''}';
 
         _logs.add('\$ $desktopCmd\n');
 

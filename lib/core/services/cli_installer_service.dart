@@ -132,13 +132,87 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
     final prefs = await SharedPreferences.getInstance();
     final savedMarker = prefs.getString('cli_$markerName');
 
-    // Check executable binary
+    // 1. On Android proot (filesystem and runtime commands)
+    if (Platform.isAndroid || Platform.isIOS) {
+      final filesDirs = <String>{
+        if (_runtime.filesDir.isNotEmpty) _runtime.filesDir,
+        if (Platform.environment['FILES_DIR'] != null && Platform.environment['FILES_DIR']!.isNotEmpty)
+          Platform.environment['FILES_DIR']!,
+        '/data/user/0/com.example.quantum_ide/files',
+        '/data/data/com.example.quantum_ide/files',
+        '/data/user/0/com.quantum.ide/files',
+        '/data/data/com.quantum.ide/files',
+      };
+
+      for (final filesDir in filesDirs) {
+        final rootfs = p.join(filesDir, 'rootfs', 'ubuntu');
+        for (final cmd in commandNames) {
+          final candidateFiles = [
+            File(p.join(rootfs, 'usr', 'local', 'bin', cmd)),
+            File(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'bin', cmd)),
+            File(p.join(rootfs, 'root', '.local', 'bin', cmd)),
+            File(p.join(rootfs, 'usr', 'bin', cmd)),
+          ];
+          for (final f in candidateFiles) {
+            if (f.existsSync()) {
+              try {
+                final versionCheck = await _runtime.runCommand('$cmd --version');
+                final v = RegExp(r'\d+\.\d+\.\d+').firstMatch(versionCheck)?.group(0);
+                if (v != null && v.isNotEmpty) {
+                  await prefs.setString('cli_$markerName', v);
+                  return v;
+                }
+              } catch (_) {}
+              return savedMarker ?? 'installed';
+            }
+          }
+        }
+
+        if (kind == AgentKind.claudeCode) {
+          final claudeDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
+          final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
+          if (claudeDir.existsSync() || altDir.existsSync()) {
+            return savedMarker ?? 'installed';
+          }
+        } else if (kind == AgentKind.deepseekHarness) {
+          final dshDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
+          final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
+          if (dshDir.existsSync() || altDir.existsSync()) {
+            return savedMarker ?? 'installed';
+          }
+        }
+      }
+
+      for (final cmd in commandNames) {
+        try {
+          final checkCmd = 'which $cmd || command -v $cmd || '
+              '(test -f /usr/local/bin/$cmd && echo /usr/local/bin/$cmd) || '
+              '(test -f /usr/local/lib/nodejs/bin/$cmd && echo /usr/local/lib/nodejs/bin/$cmd) || '
+              '(test -f /root/.local/bin/$cmd && echo /root/.local/bin/$cmd) || '
+              '(test -f /usr/bin/$cmd && echo /usr/bin/$cmd)';
+          final guestCheck = await _runtime.runCommand(checkCmd);
+          if (guestCheck.trim().isNotEmpty && !guestCheck.toLowerCase().contains('not found')) {
+            final versionCheck = await _runtime.runCommand('$cmd --version');
+            final v = RegExp(r'\d+\.\d+\.\d+').firstMatch(versionCheck)?.group(0);
+            if (v != null && v.isNotEmpty) {
+              await prefs.setString('cli_$markerName', v);
+              return v;
+            }
+            return savedMarker ?? 'installed';
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 2. Desktop / Linux host checks
     for (final cmd in commandNames) {
       final localCandidate = p.join(_localBinDir, cmd);
       final paths = [
         localCandidate,
         '/usr/local/bin/$cmd',
+        '/usr/local/lib/nodejs/bin/$cmd',
         '/usr/bin/$cmd',
+        '/root/.local/bin/$cmd',
         if (cmd == 'dsh') '/usr/local/lib/dsh/node_modules/.bin/dsh',
       ];
 
@@ -159,7 +233,6 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
         }
       }
 
-      // Check via which in shell
       try {
         final whichRes = await Process.run('which', [cmd]);
         if (whichRes.exitCode == 0 && whichRes.stdout.toString().trim().isNotEmpty) {
@@ -176,16 +249,14 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
         }
       } catch (_) {}
 
-      // On Android proot
-      if (Platform.isAndroid) {
-        try {
-          final guestCheck = await _runtime.runCommand('which $cmd || test -f /root/.local/bin/$cmd');
-          if (guestCheck.trim().isNotEmpty) {
-            final versionCheck = await _runtime.runCommand('$cmd --version');
-            final v = RegExp(r'\d+\.\d+\.\d+').firstMatch(versionCheck)?.group(0);
-            return v ?? savedMarker ?? 'installed';
-          }
-        } catch (_) {}
+      if (kind == AgentKind.claudeCode) {
+        final d1 = Directory('/usr/local/lib/nodejs/lib/node_modules/@anthropic-ai/claude-code');
+        final d2 = Directory('/usr/local/lib/node_modules/@anthropic-ai/claude-code');
+        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'installed';
+      } else if (kind == AgentKind.deepseekHarness) {
+        final d1 = Directory('/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh');
+        final d2 = Directory('/usr/local/lib/node_modules/@deepseek-ai/dsh');
+        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'installed';
       }
     }
 
@@ -427,12 +498,16 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
 
     if (Platform.isAndroid) {
       await _runtime.runCommand('npm install -g @anthropic-ai/claude-code');
+      await _runtime.runCommand('ln -sf /usr/local/lib/nodejs/bin/claude /usr/local/bin/claude 2>/dev/null || true');
     } else {
       final res = await Process.run('npm', ['install', '-g', '@anthropic-ai/claude-code']);
       if (res.exitCode != 0) {
         // Fallback with prefix
         await Process.run('npm', ['install', '-g', '--prefix', p.join(_homeDir, '.local'), '@anthropic-ai/claude-code']);
       }
+      try {
+        await Process.run('ln', ['-sf', '/usr/local/lib/nodejs/bin/claude', '/usr/local/bin/claude']);
+      } catch (_) {}
     }
 
     final prefs = await SharedPreferences.getInstance();
@@ -447,11 +522,17 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
 
     if (Platform.isAndroid) {
       await _runtime.runCommand('npm install -g @deepseek-ai/dsh@latest');
+      await _runtime.runCommand('ln -sf /usr/local/lib/nodejs/bin/dsh /usr/local/bin/dsh 2>/dev/null || true');
+      await _runtime.runCommand('ln -sf /usr/local/lib/nodejs/bin/deepseek-harness /usr/local/bin/deepseek-harness 2>/dev/null || true');
     } else {
       final res = await Process.run('npm', ['install', '-g', '@deepseek-ai/dsh@latest']);
       if (res.exitCode != 0) {
         await Process.run('npm', ['install', '-g', '--prefix', p.join(_homeDir, '.local'), '@deepseek-ai/dsh@latest']);
       }
+      try {
+        await Process.run('ln', ['-sf', '/usr/local/lib/nodejs/bin/dsh', '/usr/local/bin/dsh']);
+        await Process.run('ln', ['-sf', '/usr/local/lib/nodejs/bin/deepseek-harness', '/usr/local/bin/deepseek-harness']);
+      } catch (_) {}
     }
 
     final prefs = await SharedPreferences.getInstance();

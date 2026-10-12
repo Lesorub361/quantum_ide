@@ -6,6 +6,7 @@ import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_ta
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
+import 'package:quantum_ide/core/services/ghost_qa_service.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
 
 class WorkspaceState {
@@ -96,6 +97,7 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     
     await _ensureGitIgnore(path);
     await LogService.setWorkspace(path);
+    GhostQAService.instance.onWorkspaceChanged(path);
     state = state.copyWith(currentPath: path, recentProjects: recent);
   }
 
@@ -128,6 +130,7 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyCurrentPath);
     await LogService.setWorkspace(null);
+    GhostQAService.instance.onWorkspaceChanged(null);
     state = state.copyWith(clearCurrentPath: true);
     
     // Perform centralized cleanup of other modules

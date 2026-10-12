@@ -36,7 +36,10 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
       if (home.isNotEmpty && File(p.join(home, '.local', 'bin', cmd)).existsSync()) {
         return true;
       }
-      if (File('/usr/local/bin/$cmd').existsSync() || File('/usr/bin/$cmd').existsSync()) {
+      if (File('/usr/local/bin/$cmd').existsSync() ||
+          File('/usr/bin/$cmd').existsSync() ||
+          File('/usr/local/lib/nodejs/bin/$cmd').existsSync() ||
+          File('/root/.local/bin/$cmd').existsSync()) {
         return true;
       }
       final res = Process.runSync('which', [cmd]);
@@ -59,9 +62,15 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
       return userSdk;
     }
     final runtime = _ref.read(runtimeServiceProvider);
-    if (Platform.isAndroid && runtime.filesDir.isNotEmpty) {
-      final prootPath = p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk');
-      if (Directory(prootPath).existsSync()) return prootPath;
+    if (Platform.isAndroid) {
+      final prootCandidates = [
+        if (runtime.filesDir.isNotEmpty) p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk'),
+        '/data/user/0/com.example.quantum_ide/files/rootfs/ubuntu/root/android-sdk',
+        '/data/data/com.example.quantum_ide/files/rootfs/ubuntu/root/android-sdk',
+      ];
+      for (final candidate in prootCandidates) {
+        if (Directory(candidate).existsSync()) return candidate;
+      }
     }
     return Platform.environment['ANDROID_HOME'] ?? 
            Platform.environment['ANDROID_SDK_ROOT'] ?? 
@@ -143,14 +152,32 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
   Future<void> _checkActualInstallation() async {
     final runtime = _ref.read(runtimeServiceProvider);
     final isAndroid = Platform.isAndroid;
-    final filesDir = runtime.filesDir;
-    if (isAndroid && filesDir.isEmpty) return;
+    String rootfsPath = '';
+    if (isAndroid) {
+      final candidatePaths = [
+        if (runtime.filesDir.isNotEmpty) p.join(runtime.filesDir, 'rootfs', 'ubuntu'),
+        if (runtime.filesDir.isNotEmpty) runtime.filesDir,
+        '/data/user/0/com.example.quantum_ide/files/rootfs/ubuntu',
+        '/data/data/com.example.quantum_ide/files/rootfs/ubuntu',
+        '/data/user/0/com.quantum.ide/files/rootfs/ubuntu',
+        '/data/data/com.quantum.ide/files/rootfs/ubuntu',
+      ];
+      for (final cp in candidatePaths) {
+        if (Directory(cp).existsSync()) {
+          rootfsPath = cp;
+          break;
+        }
+      }
+      if (rootfsPath.isEmpty && runtime.filesDir.isNotEmpty) {
+        rootfsPath = p.join(runtime.filesDir, 'rootfs', 'ubuntu');
+      }
+      if (rootfsPath.isEmpty) return;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     final installedIds = prefs.getStringList(_key) ?? [];
 
     final updatedPackages = <OptionalPackage>[];
-    final rootfsPath = isAndroid ? p.join(filesDir, 'rootfs', 'ubuntu') : '';
     final sdkPath = _getAndroidSdkPath();
     final newlyInstalledIds = <String>{};
     
@@ -192,7 +219,10 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               exists = _hasCommand('python3') || _hasCommand('python');
               break;
             case 'nodejs':
-              exists = _hasCommand('node');
+              exists = _hasCommand('node') ||
+                       File('/usr/local/lib/nodejs/bin/node').existsSync() ||
+                       File('/usr/local/bin/node').existsSync() ||
+                       File('/usr/bin/node').existsSync();
               break;
             case 'git':
               exists = _hasCommand('git');
@@ -205,18 +235,32 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'antigravity-cli':
               exists = _hasCommand('agy') || _hasCommand('antigravity') ||
                        File('/usr/local/bin/agy').existsSync() ||
-                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'agy')).existsSync();
+                       File('/usr/local/bin/antigravity').existsSync() ||
+                       File('/usr/bin/agy').existsSync() ||
+                       File('/usr/bin/antigravity').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/agy').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/antigravity').existsSync() ||
+                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'agy')).existsSync() ||
+                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'antigravity')).existsSync();
               break;
             case 'claude-code':
               exists = _hasCommand('claude') ||
                        File('/usr/local/bin/claude').existsSync() ||
                        File('/usr/bin/claude').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/claude').existsSync() ||
+                       Directory('/usr/local/lib/nodejs/lib/node_modules/@anthropic-ai/claude-code').existsSync() ||
+                       Directory('/usr/local/lib/node_modules/@anthropic-ai/claude-code').existsSync() ||
                        File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'claude')).existsSync();
               break;
             case 'deepseek-harness':
               exists = _hasCommand('dsh') || _hasCommand('deepseek-harness') ||
                        File('/usr/local/bin/dsh').existsSync() ||
-                       File('/usr/bin/dsh').existsSync();
+                       File('/usr/bin/dsh').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/dsh').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/deepseek-harness').existsSync() ||
+                       Directory('/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh').existsSync() ||
+                       Directory('/usr/local/lib/node_modules/@deepseek-ai/dsh').existsSync() ||
+                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'dsh')).existsSync();
               break;
             case 'ollama-cli':
               exists = _hasCommand('ollama') ||
@@ -226,12 +270,19 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'kilocode-cli':
               exists = _hasCommand('kilocode') ||
                        File('/usr/local/bin/kilocode').existsSync() ||
-                       File('/usr/bin/kilocode').existsSync();
+                       File('/usr/bin/kilocode').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/kilocode').existsSync() ||
+                       Directory('/usr/local/lib/nodejs/lib/node_modules/@kilocode/cli').existsSync() ||
+                       Directory('/usr/local/lib/node_modules/@kilocode/cli').existsSync();
               break;
             case 'opencode-ai':
               exists = _hasCommand('opencode-ai') || _hasCommand('opencode') ||
                        File('/usr/local/bin/opencode-ai').existsSync() ||
-                       File('/usr/local/bin/opencode').existsSync();
+                       File('/usr/local/bin/opencode').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/opencode-ai').existsSync() ||
+                       File('/usr/local/lib/nodejs/bin/opencode').existsSync() ||
+                       Directory('/usr/local/lib/nodejs/lib/node_modules/opencode-ai').existsSync() ||
+                       Directory('/usr/local/lib/node_modules/opencode-ai').existsSync();
               break;
             case 'build-essential':
               exists = _hasCommand('gcc') || _hasCommand('g++');
@@ -313,7 +364,8 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'nodejs':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'node')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'node')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'node')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'node')).exists();
               break;
             case 'git':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'git')).exists() ||
@@ -327,21 +379,29 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'antigravity-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'agy')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'agy')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'agy')).exists() ||
                        await File(p.join(rootfsPath, 'root', '.local', 'bin', 'agy')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'antigravity')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'antigravity')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'antigravity')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'antigravity')).exists() ||
+                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'antigravity')).exists();
               break;
             case 'claude-code':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'claude')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'claude')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'claude')).exists() ||
                        await File(p.join(rootfsPath, 'root', '.local', 'bin', 'claude')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@anthropic-ai', 'claude-code')).exists() ||
                        await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code')).exists();
               break;
             case 'deepseek-harness':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'dsh')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'dsh')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'dsh')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'deepseek-harness')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'deepseek-harness')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'deepseek-harness')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@deepseek-ai', 'dsh')).exists() ||
                        await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh')).exists();
               break;
             case 'ollama-cli':
@@ -351,13 +411,19 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'kilocode-cli':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kilocode')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'kilocode')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'kilocode')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@kilocode', 'cli')).exists() ||
                        await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@kilocode', 'cli')).exists();
               break;
             case 'opencode-ai':
               exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode-ai')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'opencode-ai')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'opencode-ai')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'opencode')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', 'opencode-ai')).exists() ||
+                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', 'opencode-ai')).exists();
               break;
             case 'build-essential':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gcc')).exists() ||
@@ -429,17 +495,21 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'typescript-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'typescript-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'typescript-language-server')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'typescript-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'typescript-language-server')).exists();
               break;
             case 'html-css-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vscode-html-language-server')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'vscode-html-language-server')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'vscode-html-languageserver')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-languageserver')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-languageserver')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'vscode-html-languageserver')).exists();
               break;
             case 'yaml-json-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'yaml-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'yaml-language-server')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'yaml-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'yaml-language-server')).exists();
               break;
             case 'markdown-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'marksman')).exists() ||
@@ -447,7 +517,8 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'vue-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vue-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vue-language-server')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vue-language-server')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'vue-language-server')).exists();
               break;
             case 'php-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'intelephense')).exists() ||
@@ -456,8 +527,10 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'python-lsp':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'pyright-langserver')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright-langserver')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'pyright-langserver')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'pyright')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright')).exists();
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'pyright')).exists();
               break;
             case 'local-ai-qwen':
               exists = await File(p.join(rootfsPath, 'usr', 'bin', 'llama-server')).exists() ||

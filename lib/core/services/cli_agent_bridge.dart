@@ -18,13 +18,14 @@ final cliAgentBridgeProvider = Provider<CliAgentBridge>((ref) {
 class CliAgentBridge {
   final RuntimeService _runtime;
   Process? _activeProcess;
+  StreamingCommand? _activeStreamingHandle;
   StreamSubscription? _stdoutSub;
   StreamSubscription? _stderrSub;
   bool _isStopping = false;
 
   CliAgentBridge(this._runtime);
 
-  bool get isRunning => _activeProcess != null;
+  bool get isRunning => _activeProcess != null || _activeStreamingHandle != null;
 
   /// Candidate binary paths depending on agent and system
   List<String> _candidateBinaries(AgentKind kind) {
@@ -51,7 +52,11 @@ class CliAgentBridge {
           for (final b in nvmBins) p.join(b, 'gemini'),
           p.join(home, '.local', 'bin', 'gemini'),
           '/usr/local/bin/agy',
+          '/usr/local/bin/antigravity',
+          '/usr/local/lib/nodejs/bin/agy',
+          '/usr/local/lib/nodejs/bin/gemini',
           '/usr/bin/agy',
+          '/root/.local/bin/agy',
           'agy',
           'gemini',
           'antigravity',
@@ -62,15 +67,21 @@ class CliAgentBridge {
           p.join(home, '.local', 'bin', 'claude'),
           for (final b in nvmBins) p.join(b, 'claude'),
           p.join(home, '.config', 'nvm', 'versions', 'node', 'v22.18.0', 'bin', 'claude'),
+          '/usr/local/lib/nodejs/bin/claude',
           '/usr/local/bin/claude',
           '/usr/bin/claude',
+          '/root/.local/bin/claude',
         ];
       case AgentKind.deepseekHarness:
         return [
           p.join(home, '.local', 'bin', 'dsh'),
+          '/usr/local/lib/nodejs/bin/dsh',
+          '/usr/local/lib/nodejs/bin/deepseek-harness',
           '/usr/local/lib/dsh/node_modules/.bin/dsh',
           '/usr/local/bin/dsh',
+          '/usr/local/bin/deepseek-harness',
           '/usr/bin/dsh',
+          '/root/.local/bin/dsh',
           p.join(home, '.local', 'bin', 'deepseek-harness'),
           'dsh',
           'deepseek-harness',
@@ -100,13 +111,24 @@ class CliAgentBridge {
 
     if (Platform.isAndroid || Platform.isIOS) {
       // In Android, check if file exists inside rootfs
+      final filesDirs = <String>{
+        if (_runtime.filesDir.isNotEmpty) _runtime.filesDir,
+        if (Platform.environment['FILES_DIR'] != null && Platform.environment['FILES_DIR']!.isNotEmpty)
+          Platform.environment['FILES_DIR']!,
+        '/data/user/0/com.example.quantum_ide/files',
+        '/data/data/com.example.quantum_ide/files',
+        '/data/user/0/com.quantum.ide/files',
+        '/data/data/com.quantum.ide/files',
+      };
+
       for (final candidate in _candidateBinaries(kind)) {
         if (!candidate.contains('/')) continue;
         final guestPath = candidate.startsWith('/') ? candidate.substring(1) : candidate;
-        final filesDir = Platform.environment['FILES_DIR'] ?? '/data/data/com.quantum.ide/files';
-        final rootfsCandidate = File(p.join(filesDir, 'rootfs', 'ubuntu', guestPath));
-        if (rootfsCandidate.existsSync()) {
-          return candidate;
+        for (final filesDir in filesDirs) {
+          final rootfsCandidate = File(p.join(filesDir, 'rootfs', 'ubuntu', guestPath));
+          if (rootfsCandidate.existsSync()) {
+            return candidate;
+          }
         }
       }
     }
@@ -126,8 +148,16 @@ class CliAgentBridge {
 
       if (Platform.isAndroid || Platform.isIOS) {
         for (final n in names) {
-          final res = await _runtime.runCommand('which $n || test -f /root/.local/bin/$n || test -f /usr/local/bin/$n');
-          if (res.trim().isNotEmpty) return true;
+          final res = await _runtime.runCommand(
+            'which $n || command -v $n || '
+            '(test -f /usr/local/bin/$n && echo /usr/local/bin/$n) || '
+            '(test -f /usr/local/lib/nodejs/bin/$n && echo /usr/local/lib/nodejs/bin/$n) || '
+            '(test -f /root/.local/bin/$n && echo /root/.local/bin/$n) || '
+            '(test -f /usr/bin/$n && echo /usr/bin/$n) || '
+            '(test -d /usr/local/lib/nodejs/lib/node_modules/@anthropic-ai/claude-code && echo claude) || '
+            '(test -d /usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh && echo dsh)',
+          );
+          if (res.trim().isNotEmpty && !res.toLowerCase().contains('not found')) return true;
         }
         return false;
       } else {
@@ -404,7 +434,7 @@ class CliAgentBridge {
       }
 
       // Mobile-Harness Guards: Ensure child compilers/tools do not spawn unbounded daemons or cause OOM
-      env['GRADLE_OPTS'] = '--max-workers=2 -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=256m"';
+      env['GRADLE_OPTS'] = '-Dorg.gradle.workers.max=2 -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=256m"';
       env['ANDROID_AAPT2_NO_DAEMON'] = '1';
       env['CI'] = '1';
 
@@ -414,58 +444,110 @@ class CliAgentBridge {
         isComplete: false,
       ));
 
-      _activeProcess = await Process.start(
-        binaryPath,
-        commandArgs,
-        workingDirectory: projectPath.isNotEmpty ? projectPath : null,
-        environment: env,
-      );
-
-      final stdoutLines = _activeProcess!.stdout
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
-
-      final stderrLines = _activeProcess!.stderr
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
-
+      int exitCode;
       bool hasStreamedText = false;
       String lastErrorMessage = '';
 
-      _stdoutSub = stdoutLines.listen((line) {
-        _handleOutputLine(
-          line,
-          agentKind,
-          onActivity,
-          (delta) {
-            hasStreamedText = true;
-            onDeltaText(delta);
-          },
-          onThinking,
-          onUsage,
-          hasStreamedText: hasStreamedText,
-          onErrorDetected: (err) => lastErrorMessage = err,
-        );
-      });
-
-      _stderrSub = stderrLines.listen((line) {
-        final trimmed = line.trim();
-        if (trimmed.isEmpty || trimmed.startsWith('bash: warning:')) return;
-
-        if (trimmed.toLowerCase().contains('reasoning') || trimmed.toLowerCase().contains('thinking')) {
-          onThinking(trimmed);
-        } else {
-          debugPrint('CliAgentBridge STDERR: $trimmed');
-          if (trimmed.startsWith('dsh:')) {
-            lastErrorMessage = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '');
-          } else if (trimmed.toLowerCase().contains('error') || trimmed.toLowerCase().contains('failed')) {
-            lastErrorMessage = trimmed;
+      if (Platform.isAndroid || Platform.isIOS) {
+        final envPairs = <String>[];
+        for (final entry in env.entries) {
+          if (entry.key.isNotEmpty && entry.value.isNotEmpty) {
+            envPairs.add('export ${entry.key}=${_shellQuote(entry.value)}');
           }
         }
-      });
+        final envExports = envPairs.isEmpty ? '' : '${envPairs.join('; ')}; ';
+        final escapedArgs = commandArgs.map(_shellQuote).join(' ');
+        final runCmd = '$envExports exec ${_shellQuote(binaryPath)} $escapedArgs';
 
-      final exitCode = await _activeProcess!.exitCode;
-      _activeProcess = null;
+        final handle = _runtime.runCommandStream(
+          runCmd,
+          workingDirectory: projectPath.isNotEmpty ? projectPath : null,
+          onLine: (line, {bool isError = false, bool replace = false}) {
+            if (!isError) {
+              _handleOutputLine(
+                line,
+                agentKind,
+                onActivity,
+                (delta) {
+                  hasStreamedText = true;
+                  onDeltaText(delta);
+                },
+                onThinking,
+                onUsage,
+                hasStreamedText: hasStreamedText,
+                onErrorDetected: (err) => lastErrorMessage = err,
+              );
+            } else {
+              final trimmed = line.trim();
+              if (trimmed.isEmpty || trimmed.startsWith('bash: warning:')) return;
+              if (trimmed.toLowerCase().contains('reasoning') || trimmed.toLowerCase().contains('thinking')) {
+                onThinking(trimmed);
+              } else {
+                debugPrint('CliAgentBridge PRoot STDERR: $trimmed');
+                if (trimmed.startsWith('dsh:')) {
+                  lastErrorMessage = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '');
+                } else if (trimmed.toLowerCase().contains('error') || trimmed.toLowerCase().contains('failed')) {
+                  lastErrorMessage = trimmed;
+                }
+              }
+            }
+          },
+        );
+
+        _activeStreamingHandle = handle;
+        exitCode = await handle.exitCode;
+        _activeStreamingHandle = null;
+      } else {
+        _activeProcess = await Process.start(
+          binaryPath,
+          commandArgs,
+          workingDirectory: projectPath.isNotEmpty ? projectPath : null,
+          environment: env,
+        );
+
+        final stdoutLines = _activeProcess!.stdout
+            .transform(utf8.decoder)
+            .transform(const LineSplitter());
+
+        final stderrLines = _activeProcess!.stderr
+            .transform(utf8.decoder)
+            .transform(const LineSplitter());
+
+        _stdoutSub = stdoutLines.listen((line) {
+          _handleOutputLine(
+            line,
+            agentKind,
+            onActivity,
+            (delta) {
+              hasStreamedText = true;
+              onDeltaText(delta);
+            },
+            onThinking,
+            onUsage,
+            hasStreamedText: hasStreamedText,
+            onErrorDetected: (err) => lastErrorMessage = err,
+          );
+        });
+
+        _stderrSub = stderrLines.listen((line) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty || trimmed.startsWith('bash: warning:')) return;
+
+          if (trimmed.toLowerCase().contains('reasoning') || trimmed.toLowerCase().contains('thinking')) {
+            onThinking(trimmed);
+          } else {
+            debugPrint('CliAgentBridge STDERR: $trimmed');
+            if (trimmed.startsWith('dsh:')) {
+              lastErrorMessage = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '');
+            } else if (trimmed.toLowerCase().contains('error') || trimmed.toLowerCase().contains('failed')) {
+              lastErrorMessage = trimmed;
+            }
+          }
+        });
+
+        exitCode = await _activeProcess!.exitCode;
+        _activeProcess = null;
+      }
 
       if (_isStopping) {
         onActivity(const ActivityItem(
@@ -508,6 +590,7 @@ class CliAgentBridge {
       }
     } finally {
       _activeProcess = null;
+      _activeStreamingHandle = null;
       _stdoutSub?.cancel();
       _stderrSub?.cancel();
       try {
@@ -818,8 +901,15 @@ class CliAgentBridge {
       _stderrSub?.cancel();
       _activeProcess?.kill(ProcessSignal.sigterm);
       _activeProcess?.kill(ProcessSignal.sigkill);
+      _activeStreamingHandle?.cancel();
     } catch (_) {}
     _activeProcess = null;
+    _activeStreamingHandle = null;
+  }
+
+  static String _shellQuote(String arg) {
+    if (arg.isEmpty) return "''";
+    return "'${arg.replaceAll("'", "'\\''")}'";
   }
 }
 

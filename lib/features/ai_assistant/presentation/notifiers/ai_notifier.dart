@@ -305,6 +305,22 @@ class AINotifier extends StateNotifier<AIState> {
     final bridge = _ref.read(cliAgentBridgeProvider);
     final auth = _ref.read(cliAuthProvider);
 
+    final binaryPath = bridge.resolveBinary(agentKind);
+    if (binaryPath == null || agentKind == AgentKind.native) {
+      if (agentKind != AgentKind.native) {
+        addLiveActivity(ActivityItem(
+          title: '${agentKind.title} не найден в системе',
+          detail: 'Используется встроенный автономный движок Quantum IDE. Нажмите на иконку агента в заголовке, чтобы открыть настройки и установить ${agentKind.title}.',
+          isComplete: true,
+        ));
+      }
+      // Direct call to internal autonomous agent engine (EnhancedAiToolExecutor)
+      // which has full project reading/writing/bash capabilities via API
+      setInteractionMode(AiInteractionMode.autopilot);
+      await askAI(prompt, imageBase64: imageBase64, contextFiles: contextFiles);
+      return;
+    }
+
     // 1. Add User message
     final userMsg = ChatMessage(
       role: MessageRole.user,
@@ -357,22 +373,6 @@ class AINotifier extends StateNotifier<AIState> {
                 : (auth.deepseekProviderType == 'openrouter'
                     ? 'google/gemma-4-31b-it:free'
                     : 'deepseek-chat')));
-
-    final binaryPath = bridge.resolveBinary(agentKind);
-    if (binaryPath == null || agentKind == AgentKind.native) {
-      if (agentKind != AgentKind.native) {
-        addLiveActivity(ActivityItem(
-          title: '${agentKind.title} не найден в системе',
-          detail: 'Используется встроенный автономный движок Quantum IDE. Нажмите на иконку агента в заголовке, чтобы открыть настройки и установить ${agentKind.title}.',
-          isComplete: true,
-        ));
-      }
-      // Direct call to internal autonomous agent engine (EnhancedAiToolExecutor)
-      // which has full project reading/writing/bash capabilities via API
-      setInteractionMode(AiInteractionMode.autopilot);
-      await askAI(prompt, imageBase64: imageBase64, contextFiles: contextFiles);
-      return;
-    }
 
     await bridge.startSession(
       projectId: p.basename(workspacePath),

@@ -181,17 +181,73 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
     loadAuthInfo();
   }
 
-  String get _homeDir => Platform.environment['HOME'] ?? '';
+  List<String> get _candidateHomeDirs {
+    final dirs = <String>{};
+    if (Platform.environment['HOME'] != null && Platform.environment['HOME']!.isNotEmpty) {
+      dirs.add(Platform.environment['HOME']!);
+    }
+    dirs.add('/root');
+    dirs.add('/data/user/0/com.example.quantum_ide/files/rootfs/ubuntu/root');
+    dirs.add('/data/data/com.example.quantum_ide/files/rootfs/ubuntu/root');
+    dirs.add('/data/user/0/com.example.quantum_ide');
+    dirs.add('/data/data/com.example.quantum_ide');
+    dirs.add('/sdcard');
+    dirs.add('/storage/emulated/0');
 
-  File get _officialCredentialFile =>
-      File(p.join(_homeDir, '.gemini', 'antigravity-cli', 'antigravity-oauth-token'));
+    final filesDir = Platform.environment['FILES_DIR'];
+    if (filesDir != null && filesDir.isNotEmpty) {
+      dirs.add(p.join(filesDir, 'rootfs', 'ubuntu', 'root'));
+      dirs.add(filesDir);
+    }
+    return dirs.toList();
+  }
+
+  String get _homeDir {
+    final envHome = Platform.environment['HOME'];
+    if (envHome != null && envHome.isNotEmpty) return envHome;
+    return _candidateHomeDirs.first;
+  }
+
+  File? _findCredentialFile(String relativePath) {
+    for (final dir in _candidateHomeDirs) {
+      final f = File(p.join(dir, relativePath));
+      if (f.existsSync()) return f;
+    }
+    return null;
+  }
+
+  String? _extractEmailFromTokenFile(File file) {
+    try {
+      if (!file.existsSync()) return null;
+      final content = file.readAsStringSync();
+      final json = jsonDecode(content) as Map<String, dynamic>;
+      if (json['email'] is String && (json['email'] as String).isNotEmpty) {
+        return json['email'] as String;
+      }
+      final idToken = json['id_token'];
+      if (idToken is String && idToken.contains('.')) {
+        final parts = idToken.split('.');
+        if (parts.length >= 2) {
+          var payload = parts[1];
+          payload += '=' * ((4 - payload.length % 4) % 4);
+          final decoded = utf8.decode(base64Url.decode(payload));
+          final payloadJson = jsonDecode(decoded) as Map<String, dynamic>;
+          final email = payloadJson['email'] as String?;
+          if (email != null && email.isNotEmpty) return email;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  File? get _officialCredentialFile =>
+      _findCredentialFile('.gemini/antigravity-cli/antigravity-oauth-token');
 
   bool hasOfficialCredential() {
-    if (_officialCredentialFile.existsSync()) return true;
-    final oauthCredsFile = File(p.join(_homeDir, '.gemini', 'oauth_creds.json'));
-    if (oauthCredsFile.existsSync()) return true;
-    final googleAccountsFile = File(p.join(_homeDir, '.gemini', 'google_accounts.json'));
-    if (googleAccountsFile.existsSync()) {
+    if (_officialCredentialFile != null && _officialCredentialFile!.existsSync()) return true;
+    if (_findCredentialFile('.gemini/oauth_creds.json') != null) return true;
+    final googleAccountsFile = _findCredentialFile('.gemini/google_accounts.json');
+    if (googleAccountsFile != null && googleAccountsFile.existsSync()) {
       try {
         final content = googleAccountsFile.readAsStringSync();
         final json = jsonDecode(content) as Map<String, dynamic>;
@@ -208,12 +264,23 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
     final savedEmail = prefs.getString('cli_google_email');
     bool isGoogleAuth = prefs.getBool('cli_google_auth') ?? false;
 
-    // Detect existing system Antigravity authentication (Desktop & PRoot)
+    // Detect existing system Antigravity authentication (Desktop & Android rootfs)
     String? detectedEmail = savedEmail;
-    final googleAccountsFile = File(p.join(_homeDir, '.gemini', 'google_accounts.json'));
-    final oauthCredsFile = File(p.join(_homeDir, '.gemini', 'oauth_creds.json'));
+    final googleAccountsFile = _findCredentialFile('.gemini/google_accounts.json');
+    final oauthCredsFile = _findCredentialFile('.gemini/oauth_creds.json');
+    final tokenFile = _officialCredentialFile;
 
-    if (googleAccountsFile.existsSync()) {
+    if (tokenFile != null && tokenFile.existsSync()) {
+      final emailFromToken = _extractEmailFromTokenFile(tokenFile);
+      if (emailFromToken != null) {
+        detectedEmail = emailFromToken;
+        isGoogleAuth = true;
+        await prefs.setBool('cli_google_auth', true);
+        await prefs.setString('cli_google_email', detectedEmail);
+      }
+    }
+
+    if (googleAccountsFile != null && googleAccountsFile.existsSync()) {
       try {
         final content = googleAccountsFile.readAsStringSync();
         final json = jsonDecode(content) as Map<String, dynamic>;
@@ -227,7 +294,7 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
       } catch (_) {}
     }
 
-    if (!isGoogleAuth && (hasOfficialCredential() || oauthCredsFile.existsSync())) {
+    if (!isGoogleAuth && (hasOfficialCredential() || (oauthCredsFile != null && oauthCredsFile.existsSync()))) {
       isGoogleAuth = true;
       detectedEmail ??= 'Google Account';
       await prefs.setString('cli_google_email', detectedEmail);
@@ -279,8 +346,17 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
     _workspaceTrustCompleted = false;
 
     // First check if already authorized in system
-    final googleAccountsFile = File(p.join(_homeDir, '.gemini', 'google_accounts.json'));
-    if (googleAccountsFile.existsSync()) {
+    final tokenFile = _officialCredentialFile;
+    if (tokenFile != null && tokenFile.existsSync()) {
+      final emailFromToken = _extractEmailFromTokenFile(tokenFile);
+      if (emailFromToken != null && emailFromToken.isNotEmpty) {
+        await _completeSuccessfulAuth(emailFromToken);
+        return;
+      }
+    }
+
+    final googleAccountsFile = _findCredentialFile('.gemini/google_accounts.json');
+    if (googleAccountsFile != null && googleAccountsFile.existsSync()) {
       try {
         final content = googleAccountsFile.readAsStringSync();
         final json = jsonDecode(content) as Map<String, dynamic>;
@@ -290,6 +366,11 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
           return;
         }
       } catch (_) {}
+    }
+
+    if (hasOfficialCredential()) {
+      await _completeSuccessfulAuth(state.googleAccountEmail ?? 'Google Account');
+      return;
     }
 
     state = state.copyWith(
@@ -472,8 +553,18 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
   void _startGoogleAccountsPolling() {
     _authPollTimer?.cancel();
     _authPollTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      final googleAccountsFile = File(p.join(_homeDir, '.gemini', 'google_accounts.json'));
-      if (googleAccountsFile.existsSync()) {
+      final tokenFile = _officialCredentialFile;
+      if (tokenFile != null && tokenFile.existsSync()) {
+        final email = _extractEmailFromTokenFile(tokenFile);
+        if (email != null && email.isNotEmpty) {
+          timer.cancel();
+          await _completeSuccessfulAuth(email);
+          return;
+        }
+      }
+
+      final googleAccountsFile = _findCredentialFile('.gemini/google_accounts.json');
+      if (googleAccountsFile != null && googleAccountsFile.existsSync()) {
         try {
           final content = await googleAccountsFile.readAsString();
           final json = jsonDecode(content) as Map<String, dynamic>;
@@ -481,6 +572,7 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
           if (active != null && active.trim().isNotEmpty) {
             timer.cancel();
             await _completeSuccessfulAuth(active.trim());
+            return;
           }
         } catch (_) {}
       }
@@ -558,10 +650,11 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
 
       await Future.delayed(const Duration(milliseconds: 1500));
       if (hasOfficialCredential()) {
-        await _completeSuccessfulAuth(email);
+        final tokenEmail = _officialCredentialFile != null ? _extractEmailFromTokenFile(_officialCredentialFile!) : null;
+        await _completeSuccessfulAuth(tokenEmail ?? email);
       } else {
-        final googleAccountsFile = File(p.join(_homeDir, '.gemini', 'google_accounts.json'));
-        if (googleAccountsFile.existsSync()) {
+        final googleAccountsFile = _findCredentialFile('.gemini/google_accounts.json');
+        if (googleAccountsFile != null && googleAccountsFile.existsSync()) {
           try {
             final content = googleAccountsFile.readAsStringSync();
             final json = jsonDecode(content) as Map<String, dynamic>;
@@ -604,11 +697,12 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
 
     // Delete official credential token file if any
     try {
-      if (_officialCredentialFile.existsSync()) {
-        await _officialCredentialFile.delete();
+      final tokenFile = _officialCredentialFile;
+      if (tokenFile != null && tokenFile.existsSync()) {
+        await tokenFile.delete();
       }
-      final altFile = File(p.join(_homeDir, '.gemini', 'oauth_creds.json'));
-      if (altFile.existsSync()) {
+      final altFile = _findCredentialFile('.gemini/oauth_creds.json');
+      if (altFile != null && altFile.existsSync()) {
         await altFile.delete();
       }
     } catch (_) {}

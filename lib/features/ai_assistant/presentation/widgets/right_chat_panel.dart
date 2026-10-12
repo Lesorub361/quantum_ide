@@ -56,6 +56,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   final TextEditingController _aiChatController = TextEditingController();
   bool _attachActiveFile = false;
   bool _showSlashCommands = false;
+  bool _isSendingMessage = false;
   String? _selectedImagePath;
   String? _selectedImageBase64;
 
@@ -1807,10 +1808,15 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   }
 
   Future<void> _sendMessage(BuildContext context, WidgetRef ref) async {
+    if (_isSendingMessage) return;
     final value = _aiChatController.text.trim();
     if (value.isEmpty && _selectedImageBase64 == null) return;
-    
-    final editor = ref.read(editorProvider);
+
+    _isSendingMessage = true;
+    _aiChatController.clear();
+
+    try {
+      final editor = ref.read(editorProvider);
     final hasActiveFile = editor.activeFilePath != null;
     final currentFileName = editor.activeFilePath?.split('/').last ?? '';
     final activeFile = editor.openFiles.isNotEmpty && editor.activeTabIndex < editor.openFiles.length ? editor.openFiles[editor.activeTabIndex] : null;
@@ -1966,12 +1972,14 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
       );
     }
-    _aiChatController.clear();
     setState(() {
       _attachActiveFile = false;
       _selectedImagePath = null;
       _selectedImageBase64 = null;
     });
+    } finally {
+      _isSendingMessage = false;
+    }
   }
 
   String _getModeLabel(AiInteractionMode mode) {

@@ -381,7 +381,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
       if (sequence.isNotEmpty) {
         session.pty.write(Uint8List.fromList(utf8.encode(sequence)));
-        _handleInputForAutocomplete(session, sequence);
+        if (sequence.length == 1 && data.length == 1) {
+          _handleInputForAutocomplete(session, sequence);
+        }
       }
 
       if (hadCtrl || hadAlt || hadShift) {
@@ -438,10 +440,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
     if (value == 'paste') {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      if (data != null && data.text != null && data.text!.isNotEmpty) {
-        session.pty.write(Uint8List.fromList(utf8.encode(data.text!)));
-      }
+      await _pasteToTerminal(session);
       return;
     }
     if (value == 'copy') {
@@ -2752,8 +2751,14 @@ Also explain what exactly went wrong and how you fixed it.
 
   Future<void> _pasteToTerminal(TerminalSession session) async {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
-    if (data?.text != null && data!.text!.isNotEmpty) {
-      session.pty.write(Uint8List.fromList(utf8.encode(data.text!)));
+    final text = data?.text;
+    if (text != null && text.isNotEmpty) {
+      if (session.xtermTerminal.bracketedPasteMode) {
+        session.xtermTerminal.paste(text);
+      } else {
+        final wrapped = '\x1b[200~$text\x1b[201~';
+        session.pty.write(Uint8List.fromList(utf8.encode(wrapped)));
+      }
     }
   }
 

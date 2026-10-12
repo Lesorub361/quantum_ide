@@ -586,9 +586,21 @@ class ProjectService extends StateNotifier<List<Project>> {
     bool usedCli = false;
     try {
       if (type == ProjectType.flutter) {
-        // Check if flutter executable exists inside guest rootfs
-        final flutterFile = File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin', 'flutter'));
-        if (await flutterFile.exists()) {
+        bool flutterExists = false;
+        try {
+          final flutterFile = File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin', 'flutter'));
+          flutterExists = await flutterFile.exists();
+        } catch (_) {
+          flutterExists = false;
+        }
+        if (!flutterExists) {
+          try {
+            final usrLocalFlutter = File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'flutter'));
+            flutterExists = await usrLocalFlutter.exists();
+          } catch (_) {}
+        }
+
+        if (flutterExists || Platform.isAndroid) {
           // Run flutter create inside the guest container using native runCommand
           String cmd = 'flutter create --project-name ${name.replaceAll("-", "_")}';
           if (platforms != null && platforms.isNotEmpty) {
@@ -596,10 +608,12 @@ class ProjectService extends StateNotifier<List<Project>> {
           }
           cmd += ' ${PathMapper.mapToGuest(path, runtime.appDirectory)}';
           
-          await runtime.runCommand(cmd);
-          // Patch Android build files to fix AGP + compileSdk compatibility
-          await _patchAndroidBuildFiles(path, sdkVersion: sdkVersion);
-          usedCli = true;
+          final res = await runtime.runCommand(cmd);
+          if (!res.contains('command not found') && !res.contains('flutter: not found')) {
+            // Patch Android build files to fix AGP + compileSdk compatibility
+            await _patchAndroidBuildFiles(path, sdkVersion: sdkVersion);
+            usedCli = true;
+          }
         } else if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
           // Desktop: run flutter create natively (no guest rootfs needed)
           List<String> effectivePlatforms = platforms ?? [];
@@ -620,12 +634,19 @@ class ProjectService extends StateNotifier<List<Project>> {
           usedCli = true;
         }
       } else if (type == ProjectType.dart) {
-        final dartFile = File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin', 'dart'));
-        if (await dartFile.exists()) {
+        bool dartExists = false;
+        try {
+          final dartFile = File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin', 'dart'));
+          dartExists = await dartFile.exists();
+        } catch (_) {}
+
+        if (dartExists || Platform.isAndroid) {
           // Run dart create inside the guest container using native runCommand
           final cmd = 'dart create --force ${PathMapper.mapToGuest(path, runtime.appDirectory)}';
-          await runtime.runCommand(cmd);
-          usedCli = true;
+          final res = await runtime.runCommand(cmd);
+          if (!res.contains('command not found') && !res.contains('dart: not found')) {
+            usedCli = true;
+          }
         }
       }
     } catch (e) {
@@ -1270,10 +1291,10 @@ public class MainActivity extends AppCompatActivity {
     final runtime = _ref.read(runtimeServiceProvider);
     // Search for gradle wrapper in various known locations
     final sourcePaths = [
+      p.join(runtime.appDirectory, 'projects', '.gradle_template'),
+      p.join(runtime.filesDir, 'projects', '.gradle_template'),
       '/root/projects/.gradle_template',
       '/root/flutter/bin/cache/artifacts/gradle_wrapper',
-      p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root', 'projects', '.gradle_template'),
-      p.join(runtime.appDirectory, 'projects', '.gradle_template'),
       p.join(runtime.appDirectory, 'android'),
       p.join(Directory.current.path, 'android'),
       p.join(Directory.current.path, 'quantum_ide-main', 'android'),
@@ -1288,37 +1309,58 @@ public class MainActivity extends AppCompatActivity {
 
     bool copiedWrapperJar = false;
     for (final srcRoot in sourcePaths) {
-      if (!await Directory(srcRoot).exists()) continue;
+      bool exists = false;
+      try {
+        exists = await Directory(srcRoot).exists();
+      } catch (_) {
+        exists = false;
+      }
+      if (!exists) continue;
+
       for (final relPath in filesToCopy) {
-        final srcFile = File(p.join(srcRoot, relPath));
-        if (await srcFile.exists()) {
-          final destFile = File(p.join(destPath, relPath));
-          if (!await destFile.exists()) {
-            await destFile.parent.create(recursive: true);
-            await srcFile.copy(destFile.path);
-            if (relPath == 'gradlew') {
-              try {
-                await Process.run('chmod', ['+x', destFile.path]);
-              } catch (_) {}
-            }
-            if (relPath.endsWith('gradle-wrapper.jar')) {
-              copiedWrapperJar = true;
+        try {
+          final srcFile = File(p.join(srcRoot, relPath));
+          if (await srcFile.exists()) {
+            final destFile = File(p.join(destPath, relPath));
+            if (!await destFile.exists()) {
+              await destFile.parent.create(recursive: true);
+              await srcFile.copy(destFile.path);
+              if (relPath == 'gradlew') {
+                try {
+                  await Process.run('chmod', ['+x', destFile.path]);
+                } catch (_) {}
+              }
+              if (relPath.endsWith('gradle-wrapper.jar')) {
+                copiedWrapperJar = true;
+              }
             }
           }
-        }
+        } catch (_) {}
       }
       if (copiedWrapperJar) break;
     }
 
-    final propFile = File(p.join(destPath, 'gradle/wrapper/gradle-wrapper.properties'));
-    if (!await propFile.exists()) {
-      await _createFile(propFile.path, '''distributionBase=GRADLE_USER_HOME
+    try {
+      final propFile = File(p.join(destPath, 'gradle', 'wrapper', 'gradle-wrapper.properties'));
+      if (!await propFile.exists()) {
+        await _createFile(propFile.path, '''distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
 distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
 ''');
-    }
+      }
+
+      final gradlewFile = File(p.join(destPath, 'gradlew'));
+      if (!await gradlewFile.exists()) {
+        await _createFile(gradlewFile.path, '''#!/bin/sh
+exec gradle "\$@"
+''');
+        try {
+          await Process.run('chmod', ['+x', gradlewFile.path]);
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
 

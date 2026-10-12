@@ -503,7 +503,7 @@ else
         export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
     fi
 fi
-export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/root/.local/bin:$PATH
+export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
 export COLORTERM=truecolor
 export LANG=C.UTF-8
@@ -733,7 +733,7 @@ else
         export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
     fi
 fi
-export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/root/.local/bin:$PATH
+export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
 export COLORTERM=truecolor
 export LANG=C.UTF-8
@@ -1031,7 +1031,7 @@ export PROOT_TMP_DIR="\$TMPDIR"
 export PROOT_LOADER="\$PROOT_LIB_DIR/libprootloader.so"
 export PROOT_LOADER_32="\$PROOT_LIB_DIR/libprootloader32.so"
 export LD_LIBRARY_PATH="\$FILES_DIR/lib:\$PROOT_LIB_DIR"
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin:\$PATH"
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin:\$PATH"
 
 # Prefer /root/jdk-17 if available
 if [ -d "\$ROOTFS/root/jdk-17" ]; then
@@ -1054,13 +1054,13 @@ export FLUTTER_ALLOW_SU_ROOT=true
 # (IPv6 socket routing is broken inside PRoot on Android)
 export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 if [ -f /usr/bin/aapt2 ]; then
-    export GRADLE_OPTS="-Dorg.gradle.daemon=false --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
 else
     BUILD_TOOLS_AAPT2=\$(find /root/android-sdk/build-tools -name "aapt2" 2>/dev/null | sort -V | tail -n 1)
     if [ -n "\$BUILD_TOOLS_AAPT2" ]; then
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
     else
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false"
     fi
 fi
 

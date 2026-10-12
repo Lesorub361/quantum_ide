@@ -98,11 +98,31 @@ class GhostQAService {
   final List<QARuntimeError> _errorLog = [];
   static const int _maxErrorLogSize = 50;
 
+  String? _activeWorkspacePath;
+
+  /// Update active workspace path to look for project-level owner key.
+  void onWorkspaceChanged(String? workspacePath) {
+    _activeWorkspacePath = workspacePath;
+    if (_authorizedCache != true) {
+      if (_computeAuthorization()) {
+        _authorizedCache = true;
+        _startHttpServerIfAuthorized();
+      }
+    }
+  }
+
   /// Check whether the current user is verified as the project owner/developer.
   bool get isAuthorized {
-    if (_authorizedCache != null) return _authorizedCache!;
-    _authorizedCache = _computeAuthorization();
-    return _authorizedCache!;
+    if (_authorizedCache == true) return true;
+    final auth = _computeAuthorization();
+    if (auth) {
+      _authorizedCache = true;
+      if (_server == null) {
+        _startHttpServerIfAuthorized();
+      }
+      return true;
+    }
+    return false;
   }
 
   /// Manually authorize (e.g. from developer settings or secret passkey).
@@ -123,11 +143,25 @@ class GhostQAService {
       return true;
     }
 
-    // 3. Local owner verification key file
-    final keyPaths = [
+    // 3. Local owner verification key paths
+    final keyPaths = <String>[
+      if (_activeWorkspacePath != null) ...[
+        '$_activeWorkspacePath/.quantum/owner_qa.key',
+        '$_activeWorkspacePath/owner_qa.key',
+      ],
       '/root/.quantum/owner_qa.key',
       '/root/projects/quantum_ide-main/.quantum/owner_qa.key',
+      '/data/user/0/com.example.quantum_ide/files/projects/quantum_ide-main/.quantum/owner_qa.key',
+      '/data/user/0/com.example.quantum_ide/files/tmp/quantum_owner_qa.key',
+      '/sdcard/quantum_owner_qa.key',
+      '/sdcard/QuantumIDE/owner_qa.key',
+      '/sdcard/QuantumIDE/quantum_ide-main/.quantum/owner_qa.key',
+      '/storage/emulated/0/quantum_owner_qa.key',
+      '/storage/emulated/0/QuantumIDE/owner_qa.key',
+      '/storage/emulated/0/QuantumIDE/quantum_ide-main/.quantum/owner_qa.key',
       '${Directory.systemTemp.path}/quantum_owner_qa.key',
+      '/tmp/quantum_owner_qa.key',
+      '${Directory.current.path}/.quantum/owner_qa.key',
     ];
 
     for (final path in keyPaths) {
@@ -141,6 +175,21 @@ class GhostQAService {
         }
       } catch (_) {}
     }
+
+    // 4. Check any project directory under Android files/projects
+    try {
+      final projectsDir = Directory('/data/user/0/com.example.quantum_ide/files/projects');
+      if (projectsDir.existsSync()) {
+        for (final entity in projectsDir.listSync()) {
+          if (entity is Directory) {
+            final keyFile = File('${entity.path}/.quantum/owner_qa.key');
+            if (keyFile.existsSync() && keyFile.readAsStringSync().trim().isNotEmpty) {
+              return true;
+            }
+          }
+        }
+      }
+    } catch (_) {}
 
     return false;
   }
