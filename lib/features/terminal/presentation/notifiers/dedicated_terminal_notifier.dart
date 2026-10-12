@@ -170,7 +170,9 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
-          pty.resize(rows, cols);
+          final safeRows = rows < 10 ? 10 : rows;
+          final safeCols = cols < 20 ? 20 : cols;
+          pty.resize(safeRows, safeCols);
         },
       );
       // ptyOutSub is stored in TerminalSession

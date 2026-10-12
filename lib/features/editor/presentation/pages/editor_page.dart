@@ -605,11 +605,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final mainBody = LayoutBuilder(
       builder: (context, constraints) {
         final double availableHeight = constraints.maxHeight;
+        final isMobileTerminalWithKeyboard = !isDesktop && isKeyboardOpen && panelState.selectedTab == PanelTab.terminal;
 
         // Panel height: drag range 90..availableHeight (full screen overlay)
         double activePanelHeight = 0.0;
         if (panelState.isOpened) {
-          if (panelState.isMaximized) {
+          if (panelState.isMaximized || isMobileTerminalWithKeyboard) {
             activePanelHeight = availableHeight;
           } else {
             activePanelHeight = panelState.panelHeight.clamp(90.0, availableHeight);
@@ -1196,7 +1197,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     bool isServerRunning,
     double maxAllowedPanelHeight,
   ) {
-    final double targetHeight = panelState.isMaximized
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final isMobileTerminalWithKeyboard = !isDesktop && isKeyboardOpen && panelState.selectedTab == PanelTab.terminal;
+
+    final double targetHeight = (panelState.isMaximized || isMobileTerminalWithKeyboard)
         ? maxAllowedPanelHeight
         : panelState.panelHeight.clamp(80.0, maxAllowedPanelHeight);
 

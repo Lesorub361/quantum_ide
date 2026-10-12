@@ -1582,12 +1582,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    currentSession.title,
-                    style: GoogleFonts.inter(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                  Flexible(
+                    child: Text(
+                      currentSession.title,
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   const SizedBox(width: 6),

@@ -1,10 +1,10 @@
 {
-  "versionCode": 30,
-  "versionName": "1.2.12",
-  "notes": "Обновление QuantumIDE 1.2.12: исправлено открытие клавиатуры при нажатии на терминал и по кнопке KEYB; оптимизирована плавная прокрутка без ложного всплытия клавиатуры; динамическая подсветка кнопки KEYB при открытой клавиатуре.",
+  "versionCode": 31,
+  "versionName": "1.2.13",
+  "notes": "Обновление QuantumIDE 1.2.13: устранена лесенка и дублирование строк терминала при анимациях/потоковом выводе; авто-расширение панели терминала над клавиатурой на мобильных экранах; безопасный расчет строк PTY (min 10); предотвращение переполнений RenderFlex overflow.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.12/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.13/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
