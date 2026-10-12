@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/agent_activity_item.dart';
+import 'package:quantum_ide/core/services/local_format_gateway.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/workspace_checkpoints_service.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
 
 final cliAgentBridgeProvider = Provider<CliAgentBridge>((ref) {
@@ -278,7 +280,19 @@ class CliAgentBridge {
 
     debugPrint('CliAgentBridge: Launching $binaryPath in $projectPath with args: $commandArgs');
 
+    LocalFormatGateway? localGateway;
+    WorkspaceCheckpointsService? checkpoints;
+
     try {
+      if (projectPath.isNotEmpty && Directory(projectPath).existsSync()) {
+        try {
+          checkpoints = WorkspaceCheckpointsService();
+          await checkpoints.createCheckpoint(projectId, projectPath);
+        } catch (e) {
+          debugPrint('CliAgentBridge: Checkpoint warning: $e');
+        }
+      }
+
       final env = Map<String, String>.from(Platform.environment);
       final home = Platform.environment['HOME'] ?? '';
       final localBin = p.join(home, '.local', 'bin');
@@ -294,23 +308,54 @@ class CliAgentBridge {
 
       if (agentKind == AgentKind.claudeCode) {
         if (apiKey != null && apiKey.isNotEmpty) {
-          if (apiKey.startsWith('sk-or-') || (model != null && model.contains('/'))) {
-            env['ANTHROPIC_BASE_URL'] = 'https://openrouter.ai/api';
-            env['ANTHROPIC_AUTH_TOKEN'] = apiKey;
-            env['OPENROUTER_API_KEY'] = apiKey;
-            env['ANTHROPIC_API_KEY'] = '';
-            final m = (model != null && model.isNotEmpty) ? model : 'anthropic/claude-3.7-sonnet';
-            env['ANTHROPIC_MODEL'] = m;
-            env['ANTHROPIC_DEFAULT_OPUS_MODEL'] = m;
-            env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = m;
-            env['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = m;
-            env['ANTHROPIC_SMALL_MODEL'] = m;
-            env['ANTHROPIC_FAST_MODEL'] = m;
-            env['CLAUDE_CODE_SUBAGENT_MODEL'] = m;
-            env['CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY'] = '1';
-            env['CLAUDE_CODE_DISABLE_TOKEN_COUNTING'] = '1';
-            env['DISABLE_TELEMETRY'] = '1';
-            env['DISABLE_AUTOUPDATER'] = '1';
+          final isNonAnthropic = apiKey.startsWith('sk-or-') ||
+              !apiKey.startsWith('sk-ant-') ||
+              (model != null && model.contains('/'));
+
+          if (isNonAnthropic) {
+            final targetModel = (model != null && model.isNotEmpty)
+                ? model
+                : (apiKey.startsWith('sk-or-') ? 'anthropic/claude-3.7-sonnet' : 'deepseek-chat');
+            final upstreamUrl = apiKey.startsWith('sk-or-')
+                ? 'https://openrouter.ai/api/v1'
+                : (env['OPENAI_BASE_URL'] ?? 'https://api.deepseek.com/v1');
+
+            try {
+              localGateway = LocalFormatGateway(
+                upstreamBaseUrl: upstreamUrl,
+                upstreamApiKey: apiKey,
+                targetModel: targetModel,
+                extraHeaders: apiKey.startsWith('sk-or-')
+                    ? {
+                        'HTTP-Referer': 'https://github.com/techjarves/Mobile-Harness',
+                        'X-Title': 'QuantumIDE Mobile',
+                      }
+                    : {},
+              );
+              await localGateway.start();
+
+              env['ANTHROPIC_BASE_URL'] = localGateway.url;
+              env['ANTHROPIC_AUTH_TOKEN'] = apiKey;
+              env['ANTHROPIC_API_KEY'] = 'token-placeholder';
+              env['OPENROUTER_API_KEY'] = apiKey;
+              env['ANTHROPIC_MODEL'] = targetModel;
+              env['ANTHROPIC_DEFAULT_OPUS_MODEL'] = targetModel;
+              env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = targetModel;
+              env['ANTHROPIC_DEFAULT_HAIKU_MODEL'] = targetModel;
+              env['ANTHROPIC_SMALL_MODEL'] = targetModel;
+              env['ANTHROPIC_FAST_MODEL'] = targetModel;
+              env['CLAUDE_CODE_SUBAGENT_MODEL'] = targetModel;
+              env['CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY'] = '1';
+              env['CLAUDE_CODE_DISABLE_TOKEN_COUNTING'] = '1';
+              env['DISABLE_TELEMETRY'] = '1';
+              env['DISABLE_AUTOUPDATER'] = '1';
+            } catch (e) {
+              debugPrint('CliAgentBridge: Failed to start LocalFormatGateway: $e');
+              // Fallback to direct URL if gateway bind failed
+              env['ANTHROPIC_BASE_URL'] = 'https://openrouter.ai/api';
+              env['ANTHROPIC_AUTH_TOKEN'] = apiKey;
+              env['OPENROUTER_API_KEY'] = apiKey;
+            }
           } else {
             env['ANTHROPIC_API_KEY'] = apiKey;
             if (model != null && model.isNotEmpty) {
@@ -357,6 +402,11 @@ class CliAgentBridge {
           env['GEMINI_API_KEY'] = apiKey;
         }
       }
+
+      // Mobile-Harness Guards: Ensure child compilers/tools do not spawn unbounded daemons or cause OOM
+      env['GRADLE_OPTS'] = '--max-workers=2 -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=256m"';
+      env['ANDROID_AAPT2_NO_DAEMON'] = '1';
+      env['CI'] = '1';
 
       onActivity(const ActivityItem(
         title: 'Think',
@@ -429,6 +479,20 @@ class CliAgentBridge {
 
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       if (exitCode == 0) {
+        if (checkpoints != null && projectPath.isNotEmpty) {
+          try {
+            final changes = await checkpoints.calculateChanges(projectId, projectPath);
+            if (changes.isNotEmpty) {
+              onActivity(ActivityItem(
+                title: 'Контрольная точка',
+                detail: 'Изменено файлов: ${changes.length}. Доступен просмотр Diff и пофайловый откат (Undo/Keep).',
+                isComplete: true,
+              ));
+            }
+          } catch (e) {
+            debugPrint('CliAgentBridge: Calculate changes error: $e');
+          }
+        }
         onComplete(duration);
       } else {
         final errorDetail = lastErrorMessage.isNotEmpty
@@ -446,6 +510,9 @@ class CliAgentBridge {
       _activeProcess = null;
       _stdoutSub?.cancel();
       _stderrSub?.cancel();
+      try {
+        await localGateway?.stop();
+      } catch (_) {}
     }
   }
 

@@ -530,7 +530,7 @@ alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
 alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="flutter build apk --release --split-per-abi --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -752,7 +752,7 @@ alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
 alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="flutter build apk --release --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -1054,13 +1054,13 @@ export FLUTTER_ALLOW_SU_ROOT=true
 # (IPv6 socket routing is broken inside PRoot on Android)
 export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 if [ -f /usr/bin/aapt2 ]; then
-    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+    export GRADLE_OPTS="-Dorg.gradle.daemon=false --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
 else
     BUILD_TOOLS_AAPT2=\$(find /root/android-sdk/build-tools -name "aapt2" 2>/dev/null | sort -V | tail -n 1)
     if [ -n "\$BUILD_TOOLS_AAPT2" ]; then
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
     else
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false"
     fi
 fi
 
@@ -1070,6 +1070,15 @@ if [ -L "\$TMPDIR/resolv.conf" ] || [ ! -f "\$TMPDIR/resolv.conf" ]; then
     rm -f "\$TMPDIR/resolv.conf"
     printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "\$TMPDIR/resolv.conf"
 fi
+
+# Android system & APEX mounts (required for Bionic linker64, aapt2, NDK, and devices running Android 10+)
+SYS_BINDS=""
+for sys_dir in /system /apex /vendor /product; do
+    if [ -d "\$sys_dir" ]; then
+        mkdir -p "\$ROOTFS\$sys_dir"
+        SYS_BINDS="\$SYS_BINDS --bind=\$sys_dir"
+    fi
+done
 
 # Proot handles stdio pipes automatically; avoid binding individual /proc/self/fd/0,1,2
 # as Android PRoot cannot canonicalize them and outputs warnings
@@ -1086,7 +1095,7 @@ if [ \$# -gt 2 ]; then
         --rootfs="\$ROOTFS" --cwd="\$GUEST_CWD" \\
         --bind=/dev --bind=/proc --bind=/sys \\
         --bind=/dev/urandom:/dev/random \\
-        \$FD_BINDS \\
+        \$FD_BINDS \$SYS_BINDS \\
         --bind="\$TMPDIR/resolv.conf:/etc/resolv.conf" \\
         --bind="\$CONFIG/proc_fakes/loadavg:/proc/loadavg" \\
         --bind="\$CONFIG/proc_fakes/stat:/proc/stat" \\
@@ -1123,7 +1132,7 @@ else
         --rootfs="\$ROOTFS" --cwd="\$GUEST_CWD" \\
         --bind=/dev --bind=/proc --bind=/sys \\
         --bind=/dev/urandom:/dev/random \\
-        \$FD_BINDS \\
+        \$FD_BINDS \$SYS_BINDS \\
         --bind="\$TMPDIR/resolv.conf:/etc/resolv.conf" \\
         --bind="\$CONFIG/proc_fakes/loadavg:/proc/loadavg" \\
         --bind="\$CONFIG/proc_fakes/stat:/proc/stat" \\
@@ -1182,6 +1191,29 @@ fi
     notifyListeners();
 
     await _channel.invokeMethod('extractRootfs', {'tarPath': archivePath});
+
+    // RootfsRepair: Restore preserved user files into rebuilt /root
+    final backupHomeDir = Directory(p.join(_filesDir, 'tmp', 'preserved_home'));
+    if (await backupHomeDir.exists()) {
+      try {
+        final restoredHome = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root'));
+        if (await restoredHome.exists()) {
+          final entries = backupHomeDir.listSync(recursive: true);
+          for (final entry in entries) {
+            if (entry is File) {
+              final rel = p.relative(entry.path, from: backupHomeDir.path);
+              final targetFile = File(p.join(restoredHome.path, rel));
+              await targetFile.parent.create(recursive: true);
+              await entry.copy(targetFile.path);
+            }
+          }
+          debugPrint('RuntimeService: Successfully restored preserved user files to /root');
+          await backupHomeDir.delete(recursive: true);
+        }
+      } catch (e) {
+        debugPrint('RuntimeService: Error restoring preserved home: $e');
+      }
+    }
 
     _status = 'Finalizing...';
     _progress = 1.0;
@@ -1285,18 +1317,42 @@ fi
     };
   }
 
-  Future<void> reset() async {
+  Future<void> reset({bool preserveHome = true}) async {
     _isInitialized = false;
     _status = 'Resetting...';
     _progress = 0;
     notifyListeners();
 
     try {
+      final homeDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root'));
+      final backupHomeDir = Directory(p.join(_filesDir, 'tmp', 'preserved_home'));
+
+      // RootfsRepair (Mobile-Harness): Preserve user's home files (.bashrc, .ssh, .gitconfig, tools)
+      if (preserveHome && await homeDir.exists()) {
+        try {
+          if (await backupHomeDir.exists()) await backupHomeDir.delete(recursive: true);
+          await backupHomeDir.create(recursive: true);
+          final entries = homeDir.listSync(recursive: true);
+          for (final entry in entries) {
+            if (entry is File) {
+              final rel = p.relative(entry.path, from: homeDir.path);
+              // Avoid preserving huge cache directories
+              if (rel.startsWith('.cache/') || rel.startsWith('.npm/_cacache/') || rel.startsWith('.gradle/caches/')) {
+                continue;
+              }
+              final targetFile = File(p.join(backupHomeDir.path, rel));
+              await targetFile.parent.create(recursive: true);
+              await entry.copy(targetFile.path);
+            }
+          }
+          debugPrint('RuntimeService: Preserved user /root files before reset');
+        } catch (e) {
+          debugPrint('RuntimeService: Failed to backup /root: $e');
+        }
+      }
+
       final rootfs = Directory(p.join(_filesDir, 'rootfs'));
       if (await rootfs.exists()) await rootfs.delete(recursive: true);
-
-      final tmp = Directory(p.join(_filesDir, 'tmp'));
-      if (await tmp.exists()) await tmp.delete(recursive: true);
 
       _status = 'Cleaned. Ready for init.';
       notifyListeners();

@@ -359,6 +359,13 @@ class AINotifier extends StateNotifier<AIState> {
 
     final binaryPath = bridge.resolveBinary(agentKind);
     if (binaryPath == null || agentKind == AgentKind.native) {
+      if (agentKind != AgentKind.native) {
+        addLiveActivity(ActivityItem(
+          title: '${agentKind.title} не найден в системе',
+          detail: 'Используется встроенный автономный движок Quantum IDE. Нажмите на иконку агента в заголовке, чтобы открыть настройки и установить ${agentKind.title}.',
+          isComplete: true,
+        ));
+      }
       // Direct call to internal autonomous agent engine (EnhancedAiToolExecutor)
       // which has full project reading/writing/bash capabilities via API
       setInteractionMode(AiInteractionMode.autopilot);

@@ -1,10 +1,10 @@
 {
-  "versionCode": 31,
-  "versionName": "1.2.13",
-  "notes": "Обновление QuantumIDE 1.2.13: устранена лесенка и дублирование строк терминала; авто-расширение панели над клавиатурой; аппаратное ускорение и largeHeap; оптимизация потоков CPU и Vulkan GPU для ИИ.",
+  "versionCode": 32,
+  "versionName": "1.2.14",
+  "notes": "Обновление QuantumIDE 1.2.14: интеграция AI CLI-агентов (Claude Code, Antigravity, DeepSeek) прямо в чат с фоновым стримингом; исправление сборки APK на телефонах ARM64 (--target-platform android-arm64); диагностика ошибок Gradle/AAPT2/Manifest; мульти-ключевые пулы API с авто-ротацией; сохранение /root при сбросе системы.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.13/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.14/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

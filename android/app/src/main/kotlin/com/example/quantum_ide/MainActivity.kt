@@ -1,14 +1,22 @@
 package com.example.quantum_ide
 
 import android.app.DownloadManager
+import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -113,6 +121,35 @@ class MainActivity : FlutterActivity() {
                         result.error("SERVICE_ERROR", e.message, null)
                     }
                 }
+                "installApk" -> {
+                    val apkPath = call.argument<String>("apkPath")
+                    val launchAfter = call.argument<Boolean>("launchAfterInstall") ?: true
+                    if (apkPath != null) {
+                        Thread {
+                            installApk(apkPath, launchAfter, result)
+                        }.start()
+                    } else {
+                        result.error("INVALID_ARGS", "apkPath is required", null)
+                    }
+                }
+                "launchApp" -> {
+                    val packageName = call.argument<String>("packageName")
+                    if (packageName != null) {
+                        try {
+                            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+                            if (launchIntent != null) {
+                                startActivity(launchIntent)
+                                result.success(true)
+                            } else {
+                                result.success(false)
+                            }
+                        } catch (e: Exception) {
+                            result.error("LAUNCH_ERROR", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "packageName is required", null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -197,5 +234,98 @@ class MainActivity : FlutterActivity() {
 
         val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         return manager.enqueue(request)
+    }
+
+    private fun installApk(apkPath: String, launchAfterInstall: Boolean, result: MethodChannel.Result) {
+        val apk = File(apkPath)
+        if (!apk.exists() || !apk.name.endsWith(".apk", ignoreCase = true) || apk.length() == 0L) {
+            runOnUiThread { result.error("INVALID_APK", "APK file does not exist or is empty: $apkPath", null) }
+            return
+        }
+
+        try {
+            // Check MIUI or older Android: use FileProvider
+            if (isMiui() || Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                val uri = FileProvider.getUriForFile(this, "${packageName}.fileprovider", apk)
+                val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                startActivity(intent)
+                runOnUiThread {
+                    result.success(mapOf("status" to "intent_launched", "method" to "file_provider"))
+                }
+                return
+            }
+
+            // Modern PackageInstaller API: Direct stream, no ADB needed, silent updates on Android 12+
+            val packageInstaller = packageManager.packageInstaller
+            val archiveInfo = packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
+            val apkPackageName = archiveInfo?.packageName
+            val isUpdate = apkPackageName?.let { isPackageInstalled(it) } == true
+
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                setSize(apk.length())
+                setInstallLocation(PackageInfo.INSTALL_LOCATION_AUTO)
+                setInstallReason(PackageManager.INSTALL_REASON_USER)
+                setOriginatingUid(Process.myUid())
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setRequireUserAction(
+                        if (isUpdate) PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED
+                        else PackageInstaller.SessionParams.USER_ACTION_REQUIRED
+                    )
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    setPackageSource(PackageInstaller.PACKAGE_SOURCE_LOCAL_FILE)
+                }
+            }
+
+            val sessionId = packageInstaller.createSession(params)
+            packageInstaller.openSession(sessionId).use { session ->
+                apk.inputStream().use { input ->
+                    session.openWrite(apk.name, 0, apk.length()).use { output ->
+                        input.copyTo(output)
+                        session.fsync(output)
+                    }
+                }
+
+                val intent = Intent(this, MainActivity::class.java).apply {
+                    action = "com.example.quantum_ide.INSTALL_COMPLETE"
+                    putExtra("package_name", apkPackageName)
+                    putExtra("launch_after", launchAfterInstall)
+                }
+                val mutability = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+                val pendingIntent = PendingIntent.getActivity(this, sessionId, intent, PendingIntent.FLAG_UPDATE_CURRENT or mutability)
+                session.commit(pendingIntent.intentSender)
+            }
+
+            runOnUiThread {
+                result.success(mapOf(
+                    "status" to "session_committed",
+                    "sessionId" to sessionId,
+                    "packageName" to apkPackageName,
+                    "isUpdate" to isUpdate,
+                    "method" to "package_installer"
+                ))
+            }
+        } catch (e: Exception) {
+            runOnUiThread {
+                result.error("INSTALL_ERROR", e.message ?: e.toString(), null)
+            }
+        }
+    }
+
+    private fun isMiui(): Boolean {
+        return !Build.MANUFACTURER.isNullOrEmpty() &&
+            Build.MANUFACTURER.contains("Xiaomi", ignoreCase = true)
+    }
+
+    private fun isPackageInstalled(pkg: String): Boolean {
+        return try {
+            packageManager.getPackageInfo(pkg, 0)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 }

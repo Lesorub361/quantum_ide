@@ -1101,6 +1101,15 @@ include(":app")
     final sdkPath = _getAndroidSdkPath();
     await _createFile(p.join(projectPath, 'local.properties'), 'sdk.dir=$sdkPath\n');
 
+    // 2.2 gradle.properties (Mobile-Harness compatibility: AndroidX, no-daemon, bounded JVM memory)
+    await _createFile(p.join(projectPath, 'gradle.properties'), '''android.useAndroidX=true
+kotlin.code.style=official
+android.nonTransitiveRClass=true
+org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
+org.gradle.daemon=false
+org.gradle.parallel=false
+''');
+
     // 3. app/build.gradle.kts
     final pluginsBlock = isKotlin ? '''plugins {
     id("com.android.application")
@@ -1618,7 +1627,7 @@ server.listen(port, () => {
           // Обновить Gradle Wrapper URL до 8.13 во избежание несовместимостей с AGP 8.11.1
           r"sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true",
           // Запустить сборку
-          'flutter build apk --release --no-tree-shake-icons 2>&1',
+          'flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons 2>&1',
         ].join(' && ');
         terminal.sendCommand(patchCmd);
       } else {

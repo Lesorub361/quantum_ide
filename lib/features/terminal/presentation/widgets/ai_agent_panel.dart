@@ -14,6 +14,8 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
 
 import 'package:quantum_ide/models/chat_message.dart';
+import 'package:quantum_ide/core/models/agent_activity_item.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/cli_agent_settings_dialog.dart';
 
 class AIAgentPanel extends ConsumerStatefulWidget {
   const AIAgentPanel({super.key});
@@ -209,6 +211,75 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
+                ),
+                const SizedBox(width: 8),
+                PopupMenuButton<String>(
+                  tooltip: 'Выбрать AI-агента',
+                  color: const Color(0xFF1E2230),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  onSelected: (value) {
+                    if (value == 'settings') {
+                      CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
+                    } else {
+                      final kind = AgentKind.values.firstWhere(
+                        (k) => k.name == value,
+                        orElse: () => AgentKind.native,
+                      );
+                      ref.read(aiProvider.notifier).setAgentKind(kind);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: aiState.activeAgentKind.brandColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: aiState.activeAgentKind.brandColor.withValues(alpha: 0.4), width: 0.8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(aiState.activeAgentKind.icon, size: 10, color: aiState.activeAgentKind.brandColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          aiState.activeAgentKind == AgentKind.native ? 'Native AI' : aiState.activeAgentKind.title,
+                          style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: aiState.activeAgentKind.brandColor),
+                        ),
+                        const SizedBox(width: 2),
+                        Icon(LucideIcons.chevron_down, size: 9, color: aiState.activeAgentKind.brandColor.withValues(alpha: 0.7)),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (ctx) => [
+                    for (final kind in AgentKind.values)
+                      PopupMenuItem(
+                        value: kind.name,
+                        child: Row(
+                          children: [
+                            Icon(kind.icon, size: 13, color: kind.brandColor),
+                            const SizedBox(width: 8),
+                            Text(kind == AgentKind.native ? 'Quantum Native' : kind.title, style: TextStyle(fontSize: 11, color: kind == aiState.activeAgentKind ? kind.brandColor : Colors.white)),
+                            if (kind == aiState.activeAgentKind) ...[
+                              const Spacer(),
+                              Icon(LucideIcons.check, size: 12, color: kind.brandColor),
+                            ],
+                          ],
+                        ),
+                      ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'settings',
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.sliders_horizontal, size: 13, color: Colors.cyanAccent),
+                          SizedBox(width: 8),
+                          Text('Настройки CLI-агентов...', style: TextStyle(fontSize: 11, color: Colors.cyanAccent)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const Spacer(),
                 // Start New Session Button
@@ -754,7 +825,11 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
                           finalPrompt = 'In file: $currentFileName\nCode:\n```\n$currentCode\n```\n\n$value';
                         }
                         
-                        ref.read(aiProvider.notifier).askAI(finalPrompt);
+                        if (aiState.activeAgentKind != AgentKind.native) {
+                          ref.read(aiProvider.notifier).executeCliTask(finalPrompt);
+                        } else {
+                          ref.read(aiProvider.notifier).askAI(finalPrompt);
+                        }
                         _aiChatController.clear();
                         setState(() {
                           _attachActiveFile = false;

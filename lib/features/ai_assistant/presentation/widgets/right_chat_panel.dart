@@ -8,16 +8,15 @@ import 'package:path/path.dart' as p;
 import 'package:image_picker/image_picker.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/ai_settings_dialog.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/cli_agent_settings_dialog.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/mcp_servers_dialog.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/ai_chat_messages.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
-import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
-import 'package:quantum_ide/core/services/local_inference_service.dart';
 
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/models/chat_message.dart';
@@ -213,12 +212,14 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
           // 3. Live Agent Process Banner (if running)
           if (aiState.isLoading)
-            _buildLiveAgentStatusBanner(context, ref, aiState),
+            _buildLiveAgentStatusBanner(context, ref, aiState)
+          else
+            _buildStatusRow(context, ref, aiState),
 
           // 4. Main Chat Messages or Welcome Hero
           Expanded(
             child: aiState.messages.isEmpty
-                ? _buildEmptyAgentHero(context, ref)
+                ? _buildEmptyAgentHero(context, ref, aiState)
                 : AIChatMessages(aiState: aiState),
           ),
 
@@ -274,25 +275,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4), width: 0.8),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(LucideIcons.bot, size: 10, color: Color(0xFF8B5CF6)),
-                const SizedBox(width: 4),
-                Text(
-                  'Ассистент',
-                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: const Color(0xFFD8B4FE)),
-                ),
-              ],
-            ),
-          ),
+          _buildAgentSelector(context, ref, aiState.activeAgentKind),
           const Spacer(),
           // New Chat Button
           IconButton(
@@ -310,16 +293,20 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             padding: const EdgeInsets.all(6),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
-          // Settings Button (AISettingsDialog)
+          // Settings Button (AISettingsDialog / CliAgentSettingsDialog)
           IconButton(
             icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.white70),
             onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => const AISettingsDialog(),
-              );
+              if (aiState.activeAgentKind != AgentKind.native) {
+                CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
+              } else {
+                showDialog(
+                  context: context,
+                  builder: (context) => const AISettingsDialog(),
+                );
+              }
             },
-            tooltip: l10n.settings,
+            tooltip: aiState.activeAgentKind != AgentKind.native ? 'Настройки CLI-агентов' : l10n.settings,
             padding: const EdgeInsets.all(6),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
@@ -339,15 +326,289 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
+  Widget _buildAgentSelector(BuildContext context, WidgetRef ref, AgentKind currentKind) {
+    return PopupMenuButton<String>(
+      tooltip: 'Выбрать AI-агента',
+      offset: const Offset(0, 28),
+      color: const Color(0xFF1E2230),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      onSelected: (value) {
+        if (value == 'settings') {
+          CliAgentSettingsDialog.show(context, initialKind: currentKind);
+        } else {
+          final kind = AgentKind.values.firstWhere(
+            (k) => k.name == value,
+            orElse: () => AgentKind.native,
+          );
+          ref.read(aiProvider.notifier).setAgentKind(kind);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: currentKind.brandColor.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: currentKind.brandColor.withValues(alpha: 0.4),
+            width: 0.9,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(currentKind.icon, size: 11, color: currentKind.brandColor),
+            const SizedBox(width: 4),
+            Text(
+              currentKind == AgentKind.native ? 'Native AI' : currentKind.title,
+              style: GoogleFonts.inter(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: currentKind.brandColor.withValues(alpha: 0.95),
+              ),
+            ),
+            const SizedBox(width: 3),
+            Icon(
+              LucideIcons.chevron_down,
+              size: 10,
+              color: currentKind.brandColor.withValues(alpha: 0.7),
+            ),
+          ],
+        ),
+      ),
+      itemBuilder: (context) => [
+        ...AgentKind.values.map((kind) {
+          final isSelected = kind == currentKind;
+          return PopupMenuItem<String>(
+            value: kind.name,
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: kind.brandColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(kind.icon, size: 13, color: kind.brandColor),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        kind == AgentKind.native ? 'Quantum Native AI' : kind.title,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          color: isSelected ? kind.brandColor : Colors.white,
+                        ),
+                      ),
+                      Text(
+                        kind.subtitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          color: Colors.white54,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  Icon(LucideIcons.check, size: 14, color: kind.brandColor),
+              ],
+            ),
+          );
+        }),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'settings',
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(LucideIcons.sliders_horizontal, size: 13, color: Colors.cyanAccent),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Настройки CLI-агентов...',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.cyanAccent,
+                      ),
+                    ),
+                    Text(
+                      'API-ключи, модели, установка',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getDefaultModelForAgent(AgentKind kind) {
+    switch (kind) {
+      case AgentKind.antigravity:
+        return 'gemini-3.8-flash-high';
+      case AgentKind.claudeCode:
+        return 'claude-3-7-sonnet-20250219';
+      case AgentKind.deepseekHarness:
+        return 'deepseek-chat';
+      case AgentKind.native:
+        return '';
+    }
+  }
+
+  void _showCliAgentModelPicker(BuildContext context, WidgetRef ref, AgentKind kind) {
+    List<String> models;
+    switch (kind) {
+      case AgentKind.antigravity:
+        models = [
+          'gemini-3.8-flash-high',
+          'gemini-3.8-flash-medium',
+          'gemini-3.8-flash-low',
+          'gemini-3.7-flash-high',
+          'gemini-3.1-pro-high',
+          'claude-sonnet-4-6',
+          'claude-opus-4-6-thinking',
+          'gpt-oss-120b-medium',
+        ];
+        break;
+      case AgentKind.claudeCode:
+        models = [
+          'claude-3-7-sonnet-20250219',
+          'claude-3-5-sonnet-20241022',
+          'claude-3-5-haiku-20241022',
+          'anthropic/claude-3.7-sonnet',
+          'deepseek/deepseek-chat',
+        ];
+        break;
+      case AgentKind.deepseekHarness:
+        models = [
+          'deepseek-chat',
+          'deepseek-reasoner',
+          'google/gemma-4-31b-it:free',
+          'meta-llama/llama-3.3-70b-instruct',
+        ];
+        break;
+      case AgentKind.native:
+        return;
+    }
+
+    final currentModel = ref.read(activeAiModelProvider);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF131824),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(kind.icon, size: 16, color: kind.brandColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Модели ${kind.title}',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                      onPressed: () => Navigator.pop(ctx),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white12, height: 16),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: models.length,
+                    separatorBuilder: (_, _) => const Divider(color: Colors.white10, height: 1),
+                    itemBuilder: (_, index) {
+                      final m = models[index];
+                      final isSelected = m == currentModel;
+                      return ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                        title: Text(
+                          m,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 12,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            color: isSelected ? kind.brandColor : Colors.white,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? Icon(LucideIcons.check, size: 14, color: kind.brandColor)
+                            : null,
+                        onTap: () {
+                          ref.read(activeAiModelProvider.notifier).state = m;
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildProviderAndModelBar(BuildContext context, WidgetRef ref, AIState aiState) {
     final activeProviderId = ref.watch(activeAiProviderIdProvider);
     final activeModel = ref.watch(activeAiModelProvider);
     final currentProvider = AiProviders.byId(activeProviderId);
     final aiSvc = ref.watch(aiServiceProvider);
+    final isCliAgent = aiState.activeAgentKind != AgentKind.native;
+    final agentKind = aiState.activeAgentKind;
 
     final String effectiveModel = activeModel.isNotEmpty 
         ? activeModel 
-        : aiSvc.selectedModel;
+        : (isCliAgent ? _getDefaultModelForAgent(agentKind) : aiSvc.selectedModel);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -359,77 +620,113 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       ),
       child: Row(
         children: [
-          // 1. Universal Provider Selector Dropdown Chip with all providers
-          PopupMenuButton<String>(
-            tooltip: 'Сменить AI-провайдера',
-            color: const Color(0xFF1E2230),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: Colors.white12),
-            ),
-            onSelected: (pId) async {
-              await ref.read(aiServiceProvider).setProvider(pId);
-              ref.read(activeAiProviderIdProvider.notifier).state = pId;
-              final newModel = ref.read(aiServiceProvider).selectedModel;
-              ref.read(activeAiModelProvider.notifier).state = newModel;
-            },
-            itemBuilder: (ctx) => [
-              for (final p in AiProviders.all)
-                PopupMenuItem<String>(
-                  value: p.id,
-                  child: Row(
-                    children: [
-                      Text(p.logoEmoji, style: const TextStyle(fontSize: 13)),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          p.displayName,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white,
-                            fontWeight: p.id == activeProviderId ? FontWeight.bold : FontWeight.normal,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (p.id == activeProviderId) ...[
-                        const SizedBox(width: 4),
-                        const Icon(LucideIcons.check, size: 12, color: Colors.cyanAccent),
-                      ],
-                    ],
-                  ),
+          if (isCliAgent) ...[
+            InkWell(
+              onTap: () => CliAgentSettingsDialog.show(context, initialKind: agentKind),
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: agentKind.brandColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: agentKind.brandColor.withValues(alpha: 0.4)),
                 ),
-            ],
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(currentProvider.logoEmoji, style: const TextStyle(fontSize: 11)),
-                  const SizedBox(width: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 100),
-                    child: Text(
-                      currentProvider.displayName,
-                      style: GoogleFonts.inter(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFD8B4FE),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(agentKind.icon, size: 11, color: agentKind.brandColor),
+                    const SizedBox(width: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 110),
+                      child: Text(
+                        agentKind.title,
+                        style: GoogleFonts.inter(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: agentKind.brandColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(LucideIcons.sliders_horizontal, size: 9, color: agentKind.brandColor.withValues(alpha: 0.8)),
+                  ],
+                ),
+              ),
+            ),
+          ] else ...[
+            // 1. Universal Provider Selector Dropdown Chip with all providers
+            PopupMenuButton<String>(
+              tooltip: 'Сменить AI-провайдера',
+              color: const Color(0xFF1E2230),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: Colors.white12),
+              ),
+              onSelected: (pId) async {
+                await ref.read(aiServiceProvider).setProvider(pId);
+                ref.read(activeAiProviderIdProvider.notifier).state = pId;
+                final newModel = ref.read(aiServiceProvider).selectedModel;
+                ref.read(activeAiModelProvider.notifier).state = newModel;
+              },
+              itemBuilder: (ctx) => [
+                for (final p in AiProviders.all)
+                  PopupMenuItem<String>(
+                    value: p.id,
+                    child: Row(
+                      children: [
+                        Text(p.logoEmoji, style: const TextStyle(fontSize: 13)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            p.displayName,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.white,
+                              fontWeight: p.id == activeProviderId ? FontWeight.bold : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (p.id == activeProviderId) ...[
+                          const SizedBox(width: 4),
+                          const Icon(LucideIcons.check, size: 12, color: Colors.cyanAccent),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 3),
-                  const Icon(LucideIcons.chevron_down, size: 10, color: Color(0xFF8B5CF6)),
-                ],
+              ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(currentProvider.logoEmoji, style: const TextStyle(fontSize: 11)),
+                    const SizedBox(width: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 100),
+                      child: Text(
+                        currentProvider.displayName,
+                        style: GoogleFonts.inter(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFD8B4FE),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    const Icon(LucideIcons.chevron_down, size: 10, color: Color(0xFF8B5CF6)),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
 
           const SizedBox(width: 8),
           Container(width: 1, height: 12, color: Colors.white12),
@@ -444,16 +741,20 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           Expanded(
             child: InkWell(
               onTap: () async {
-                final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
-                final selected = await showModelPickerModal(
-                  context,
-                  providerId: activeProviderId,
-                  currentModel: effectiveModel,
-                  apiKey: apiKey,
-                );
-                if (selected != null && selected.isNotEmpty) {
-                  ref.read(activeAiModelProvider.notifier).state = selected;
-                  await ref.read(aiServiceProvider).setModel(selected);
+                if (isCliAgent) {
+                  _showCliAgentModelPicker(context, ref, agentKind);
+                } else {
+                  final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
+                  final selected = await showModelPickerModal(
+                    context,
+                    providerId: activeProviderId,
+                    currentModel: effectiveModel,
+                    apiKey: apiKey,
+                  );
+                  if (selected != null && selected.isNotEmpty) {
+                    ref.read(activeAiModelProvider.notifier).state = selected;
+                    await ref.read(aiServiceProvider).setModel(selected);
+                  }
                 }
               },
               borderRadius: BorderRadius.circular(6),
@@ -570,7 +871,53 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Widget _buildEmptyAgentHero(BuildContext context, WidgetRef ref) {
+  Widget _buildEmptyAgentHero(BuildContext context, WidgetRef ref, AIState aiState) {
+    final kind = aiState.activeAgentKind;
+    final isCli = kind != AgentKind.native;
+
+    final heroTitle = isCli ? kind.title : 'Quantum AI Ассистент';
+    final heroSubtitle = isCli 
+        ? kind.subtitle
+        : 'Интеллектуальный помощник для кодовой базы. Анализирует файлы, пишет код, исправляет ошибки и отвечает на вопросы.';
+    final heroIcon = kind.icon;
+    final heroColor = kind.brandColor;
+
+    List<String> promptChips;
+    switch (kind) {
+      case AgentKind.antigravity:
+        promptChips = [
+          '🛠️ Проанализируй проект и найди ошибки',
+          '📝 Напиши модульные тесты для логики',
+          '⚡ Реализуй недостающий функционал',
+          '🐛 Исправь проблемы сборки и линтера',
+        ];
+        break;
+      case AgentKind.claudeCode:
+        promptChips = [
+          '🔍 Проведи архитектурный аудит проекта',
+          '⚡ Отрефактори код и очисти дубликаты',
+          '🧪 Напиши тесты для моделей и сервисов',
+          '🛠️ Исправь баги и улучши производительность',
+        ];
+        break;
+      case AgentKind.deepseekHarness:
+        promptChips = [
+          '🧠 Составь план реализации новой фичи',
+          '🐛 Найди утечки памяти и логические ошибки',
+          '⚡ Оптимизируй алгоритмы и зависимости',
+          '📝 Прокомментируй и документируй код',
+        ];
+        break;
+      case AgentKind.native:
+        promptChips = [
+          '🧪 Запусти тесты и исправь ошибки',
+          '🔍 Проанализируй проект и напиши план',
+          '⚡ Оптимизируй код и удали неиспользуемое',
+          '🐛 Найди возможные утечки памяти и баги',
+        ];
+        break;
+    }
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -581,25 +928,25 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF8B5CF6), Color(0xFF06B6D4)],
+                gradient: LinearGradient(
+                  colors: [heroColor, Colors.cyanAccent],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
+                    color: heroColor.withValues(alpha: 0.35),
                     blurRadius: 16,
                     spreadRadius: 2,
                   ),
                 ],
               ),
-              child: const Icon(LucideIcons.sparkles, color: Colors.white, size: 28),
+              child: Icon(heroIcon, color: Colors.white, size: 28),
             ),
             const SizedBox(height: 12),
             Text(
-              'Quantum AI Ассистент',
+              heroTitle,
               style: GoogleFonts.inter(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -608,7 +955,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Интеллектуальный помощник для кодовой базы. Анализирует файлы, пишет код, исправляет ошибки и отвечает на вопросы.',
+              heroSubtitle,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 fontSize: 11,
@@ -616,17 +963,38 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 height: 1.4,
               ),
             ),
+            if (isCli) ...[
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () => CliAgentSettingsDialog.show(context, initialKind: kind),
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: heroColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: heroColor.withValues(alpha: 0.4), width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(LucideIcons.sliders_horizontal, size: 11, color: heroColor),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Настроить ${kind.title}',
+                        style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: heroColor),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 6,
               runSpacing: 6,
               alignment: WrapAlignment.center,
-              children: [
-                _buildPromptChip('🧪 Запусти тесты и исправь ошибки', ref),
-                _buildPromptChip('🔍 Проанализируй проект и напиши план', ref),
-                _buildPromptChip('⚡ Оптимизируй код и удали неиспользуемое', ref),
-                _buildPromptChip('🐛 Найди возможные утечки памяти и баги', ref),
-              ],
+              children: promptChips.map((c) => _buildPromptChip(c, ref)).toList(),
             ),
           ],
         ),
@@ -680,9 +1048,24 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ref.read(aiProvider.notifier).rollbackAgentChanges();
         } else if (value == 'init') {
           ref.read(aiProvider.notifier).askAI('/init');
+        } else if (value == 'cli_settings') {
+          CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
         }
       },
       itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'cli_settings',
+          child: Row(
+            children: [
+              Icon(LucideIcons.sliders_horizontal, size: 12, color: Colors.cyanAccent),
+              SizedBox(width: 8),
+              Text(
+                'Настройки CLI-агентов',
+                style: TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
         PopupMenuItem(
           value: 'internet',
           child: Row(
@@ -714,28 +1097,28 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ),
         ),
         if (aiState.isAutopilot || aiState.isLoading)
-          PopupMenuItem(
+          const PopupMenuItem(
             value: 'rollback',
             child: Row(
               children: [
-                const Icon(LucideIcons.rotate_ccw, size: 12, color: Colors.amberAccent),
-                const SizedBox(width: 8),
+                Icon(LucideIcons.rotate_ccw, size: 12, color: Colors.amberAccent),
+                SizedBox(width: 8),
                 Text(
                   'Откатить изменения агента',
-                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                  style: TextStyle(color: Colors.white, fontSize: 11),
                 ),
               ],
             ),
           ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'init',
           child: Row(
             children: [
-              const Icon(LucideIcons.file_text, size: 12, color: Colors.tealAccent),
-              const SizedBox(width: 8),
+              Icon(LucideIcons.file_text, size: 12, color: Colors.tealAccent),
+              SizedBox(width: 8),
               Text(
                 'Создать .quantum/AGENTS.md',
-                style: const TextStyle(color: Colors.white, fontSize: 11),
+                style: TextStyle(color: Colors.white, fontSize: 11),
               ),
             ],
           ),
@@ -757,9 +1140,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             child: aiState.isLoading
                 ? Row(
                     children: [
-                      if (aiState.isAutopilot) ...[
+                      if (aiState.isAutopilot || (aiState.isLoading && aiState.activeAgentKind != AgentKind.native)) ...[
                         InkWell(
-                          onTap: () => ref.read(aiProvider.notifier).stopAutopilot(),
+                          onTap: () => ref.read(aiProvider.notifier).stopActiveAgent(),
                           borderRadius: BorderRadius.circular(12),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -975,27 +1358,35 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E6FE6).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFF1E6FE6).withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(LucideIcons.file_diff, size: 12, color: Color(0xFF58A6FF)),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    color: const Color(0xFF58A6FF),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+          InkWell(
+            onTap: () {
+              if (aiState.proposedActions.isNotEmpty) {
+                _showDiffDialog(aiState.proposedActions.first);
+              }
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E6FE6).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF1E6FE6).withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.file_diff, size: 12, color: Color(0xFF58A6FF)),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF58A6FF),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const Spacer(),
@@ -1561,11 +1952,20 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       }
     }
 
-    ref.read(aiProvider.notifier).askAI(
-      fullPrompt,
-      imageBase64: _selectedImageBase64,
-      contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
-    );
+    final activeKind = ref.read(aiProvider).activeAgentKind;
+    if (activeKind != AgentKind.native) {
+      ref.read(aiProvider.notifier).executeCliTask(
+        fullPrompt,
+        imageBase64: _selectedImageBase64,
+        contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
+      );
+    } else {
+      ref.read(aiProvider.notifier).askAI(
+        fullPrompt,
+        imageBase64: _selectedImageBase64,
+        contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
+      );
+    }
     _aiChatController.clear();
     setState(() {
       _attachActiveFile = false;

@@ -12,6 +12,8 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
+import 'package:quantum_ide/core/services/android_app_installer_service.dart';
+import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 // Standalone Sidebar Run Panel
@@ -78,6 +80,81 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
 
   void _sendRawKeyToDedicatedTerminal(String key) {
     ref.read(dedicatedTerminalProvider.notifier).sendRawChar(DedicatedTerminalType.run, key);
+  }
+
+  Future<void> _installBuiltApk(String? workspacePath) async {
+    if (workspacePath == null) return;
+
+    final diagnostics = ref.read(androidBuildDiagnosticsServiceProvider);
+    final apkInfo = diagnostics.findDebugApk(workspacePath);
+
+    if (apkInfo == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('APK еще не собран. Сначала нажмите Build APK.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (apkInfo.isStale && mounted) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E222D),
+          title: const Row(
+            children: [
+              Icon(LucideIcons.triangle_alert, color: Colors.amberAccent, size: 20),
+              SizedBox(width: 8),
+              Text('APK устарел', style: TextStyle(color: Colors.white, fontSize: 16)),
+            ],
+          ),
+          content: Text(
+            'Исходные файлы проекта были изменены после последней сборки APK (${apkInfo.fileName}).\n\n'
+            'Рекомендуется пересобрать проект. Установить имеющийся файл прямо сейчас?',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена', style: TextStyle(color: Colors.white60)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Все равно установить', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Установка ${apkInfo.fileName} (${apkInfo.formattedSize}) без ADB...'),
+          backgroundColor: Colors.blueAccent,
+        ),
+      );
+    }
+
+    final installer = ref.read(androidAppInstallerServiceProvider);
+    final res = await installer.installApk(apkInfo.path, launchAfterInstall: true);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res.success
+              ? 'Установка запущена нативно (${res.method ?? "PackageInstaller"})'
+              : 'Ошибка установки: ${res.message}'),
+          backgroundColor: res.success ? Colors.green : Colors.red,
+        ),
+      );
+    }
   }
 
   xt.TerminalTheme _getTerminalTheme(String themeName) {
@@ -160,6 +237,8 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
           actions.addAll([
             _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
                 () => _runDedicatedCommand(workspaceState.currentPath, 'flutter run -d web-server --web-port 8080')),
+            _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.cyanAccent, 
+                () => _installBuiltApk(workspaceState.currentPath)),
             _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
                 () => _sendRawKeyToDedicatedTerminal('r')),
             _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
@@ -226,9 +305,11 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         title = l10n.androidProject;
         actions.addAll([
           _buildActionButton(l10n.buildAPK, LucideIcons.box, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug')),
-          _buildActionButton(l10n.install, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew installDebug')),
+              () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=2 assembleDebug')),
+          _buildActionButton(Platform.isAndroid ? 'Установить APK' : l10n.install, LucideIcons.smartphone, Colors.cyanAccent, 
+              () => Platform.isAndroid 
+                  ? _installBuiltApk(workspaceState.currentPath) 
+                  : _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=2 installDebug')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
         ]);
@@ -610,7 +691,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                     'flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
             _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
                 () => _runDedicatedCommand(workspaceState.currentPath,
-                    'flutter pub get && flutter build apk --release --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk')),
+                    'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
           ] else ...[
             _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent,
                 () => _runDedicatedCommand(workspaceState.currentPath,
@@ -620,7 +701,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                     'flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
             _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
                 () => _runDedicatedCommand(workspaceState.currentPath,
-                    'flutter pub get && flutter build apk --release --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk')),
+                    'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
           ],
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter pub get')),
@@ -706,7 +787,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                     'flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
             _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
                 () => _runDedicatedCommand(workspaceState.currentPath,
-                    'flutter pub get && flutter build apk --release --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk')),
+                    'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
           ] else ...[
             _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent,
                 () => _runDedicatedCommand(workspaceState.currentPath,
@@ -716,7 +797,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                     'flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
             _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
                 () => _runDedicatedCommand(workspaceState.currentPath,
-                    'flutter pub get && flutter build apk --release --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk')),
+                    'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
           ],
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter pub get')),
@@ -1116,6 +1197,56 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
             ],
           ),
         ),
+        if (errorCount > 0)
+          Builder(builder: (context) {
+            final issues = AndroidBuildDiagnosticsService().parseBuildIssues(lines.join('\n'), '');
+            if (issues.isEmpty) return const SizedBox.shrink();
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(LucideIcons.circle_alert, size: 14, color: Colors.redAccent),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Диагностика ошибок (${issues.length})',
+                        style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  for (final issue in issues.take(2)) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2.0),
+                      child: Text(
+                        '• ${issue.filePath != null ? "${issue.filePath}${issue.line != null ? ":${issue.line}" : ""} — " : ""}${issue.detail}',
+                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (issue.suggestion != null)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 10.0, top: 1.0),
+                        child: Text(
+                          '💡 Совет: ${issue.suggestion}',
+                          style: GoogleFonts.inter(color: Colors.amberAccent, fontSize: 9.5),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+            );
+          }),
         Expanded(
           child: parsedLines.isEmpty
               ? Center(

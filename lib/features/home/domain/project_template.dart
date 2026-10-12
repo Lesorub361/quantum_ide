@@ -9,6 +9,8 @@ enum ProjectTemplateType {
   php('PHP', 'Traditional PHP web project', LucideIcons.file_code),
   python('Python', 'Simple Python script or app', LucideIcons.code),
   flutter('Flutter', 'Cross-platform mobile & web app', LucideIcons.layout_template),
+  androidCompose('Android (Compose)', 'Native Android app with Jetpack Compose & Material 3', LucideIcons.smartphone),
+  androidKotlin('Android (Kotlin/Views)', 'Native Android app with Kotlin & XML layouts', LucideIcons.layers),
   rust('Rust', 'High-performance systems programming', LucideIcons.cpu);
 
   final String title;
@@ -353,6 +355,266 @@ edition = "2021"
 }
 ''',
           'README.md': '# $projectName\n\nA Rust project created with QuantumIDE.',
+        };
+
+      case ProjectTemplateType.androidCompose:
+        final pkgSlug = projectName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+        final pkgName = 'com.example.$pkgSlug';
+        return {
+          'settings.gradle.kts': '''pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "$projectName"
+include(":app")
+''',
+          'build.gradle.kts': '''plugins {
+    id("com.android.application") version "8.11.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+}
+''',
+          'gradle.properties': '''android.useAndroidX=true
+kotlin.code.style=official
+android.nonTransitiveRClass=true
+org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
+org.gradle.daemon=false
+org.gradle.parallel=false
+''',
+          'app/build.gradle.kts': '''plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "$pkgName"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "$pkgName"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+    buildFeatures {
+        compose = true
+    }
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.15"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+}
+''',
+          'app/src/main/AndroidManifest.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="true"
+        android:label="$projectName"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+''',
+          'app/src/main/java/com/example/$pkgSlug/MainActivity.kt': '''package $pkgName
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    Greeting("$projectName")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun Greeting(name: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.fillMaxSize().padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = "Hello from \$name on Quantum IDE!")
+    }
+}
+''',
+          'README.md': '# $projectName\n\nNative Android Jetpack Compose project created with Quantum IDE.',
+          '.gitignore': '.gradle/\nlocal.properties\n**/build/\n*.iml\n.idea/\n',
+        };
+
+      case ProjectTemplateType.androidKotlin:
+        final pkgSlug = projectName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+        final pkgName = 'com.example.$pkgSlug';
+        return {
+          'settings.gradle.kts': '''pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "$projectName"
+include(":app")
+''',
+          'build.gradle.kts': '''plugins {
+    id("com.android.application") version "8.11.1" apply false
+    id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+}
+''',
+          'gradle.properties': '''android.useAndroidX=true
+kotlin.code.style=official
+android.nonTransitiveRClass=true
+org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
+org.gradle.daemon=false
+org.gradle.parallel=false
+''',
+          'app/build.gradle.kts': '''plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
+
+android {
+    namespace = "$pkgName"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "$pkgName"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.11.0")
+}
+''',
+          'app/src/main/AndroidManifest.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="true"
+        android:label="$projectName"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+''',
+          'app/src/main/res/layout/activity_main.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="Hello from $projectName on Quantum IDE!"
+        android:textSize="20sp" />
+
+</FrameLayout>
+''',
+          'app/src/main/res/values/strings.xml': '''<resources>
+    <string name="app_name">$projectName</string>
+</resources>
+''',
+          'app/src/main/java/com/example/$pkgSlug/MainActivity.kt': '''package $pkgName
+
+import android.os.Bundle
+import androidx.appcompat.app.AppCompatActivity
+
+class MainActivity : AppCompatActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+    }
+}
+''',
+          'README.md': '# $projectName\n\nNative Android Kotlin project created with Quantum IDE.',
+          '.gitignore': '.gradle/\nlocal.properties\n**/build/\n*.iml\n.idea/\n',
         };
     }
   }
