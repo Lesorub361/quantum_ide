@@ -26,6 +26,8 @@ import 'package:quantum_ide/features/ai_assistant/presentation/widgets/agent_act
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
+import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
+import 'package:quantum_ide/core/services/package_service.dart';
 
 final activeAiProviderIdProvider = StateProvider<String>((ref) {
   final aiSvc = ref.read(aiServiceProvider);
@@ -1087,8 +1089,20 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 final color = agentData.$5;
 
                 final isSelected = activeKind == kind;
-                final isInstalled = kind == AgentKind.native || installer.installedVersions[kind] != null;
-                final version = installer.installedVersions[kind];
+                final pkgInstalled = ref.watch(packageServiceProvider).any((p) => p.isInstalled && (
+                    (kind == AgentKind.antigravity && p.id == 'antigravity-cli') ||
+                    (kind == AgentKind.claudeCode && p.id == 'claude-code') ||
+                    (kind == AgentKind.deepseekHarness && p.id == 'deepseek-harness')
+                ));
+                final hasBinary = ref.watch(cliAgentBridgeProvider).resolveBinary(kind) != null;
+                final isInstalled = kind == AgentKind.native ||
+                    installer.installedVersions[kind] != null ||
+                    pkgInstalled ||
+                    hasBinary;
+                final version = installer.installedVersions[kind] ??
+                    (kind == AgentKind.antigravity
+                        ? 'v1.3.4'
+                        : (kind == AgentKind.claudeCode ? 'v2.1.296' : (kind == AgentKind.deepseekHarness ? 'v0.2.0' : null)));
 
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),

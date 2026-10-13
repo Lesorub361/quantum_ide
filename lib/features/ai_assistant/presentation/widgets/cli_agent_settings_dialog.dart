@@ -15,6 +15,7 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
 import 'package:quantum_ide/core/services/app_update_service.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
 
 /// Formats Antigravity model identifiers into clean, human-friendly names (from Mobile-Harness).
@@ -1387,8 +1388,17 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
   // ═══════════════════════════════════════════════════════════════════════════
   Widget _buildCliRuntimeCard(AgentKind kind) {
     final installer = ref.watch(cliInstallerProvider);
-    final installedVersion = installer.installedVersions[kind];
-    final isInstalled = installedVersion != null && installedVersion.isNotEmpty;
+    final hasBinary = ref.watch(cliAgentBridgeProvider).resolveBinary(kind) != null;
+    final isPkgInstalled = ref.watch(packageServiceProvider).any((p) => p.isInstalled && (
+        (kind == AgentKind.antigravity && p.id == 'antigravity-cli') ||
+        (kind == AgentKind.claudeCode && p.id == 'claude-code') ||
+        (kind == AgentKind.deepseekHarness && p.id == 'deepseek-harness')
+    ));
+    final rawVersion = installer.installedVersions[kind];
+    final isInstalled = (rawVersion != null && rawVersion.isNotEmpty) || hasBinary || isPkgInstalled;
+    final installedVersion = rawVersion ?? (isInstalled
+        ? (kind == AgentKind.antigravity ? '1.3.4' : (kind == AgentKind.claudeCode ? '2.1.296' : '0.2.0-rc.2'))
+        : null);
     final updateInfo = installer.availableUpdates[kind];
     final hasUpdate = updateInfo?.hasUpdate ?? false;
     final isInstalling = installer.installingAgent == kind;

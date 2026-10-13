@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/optional_package.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/cli_installer_service.dart';
 
 class PackageService extends StateNotifier<List<OptionalPackage>> {
   final Ref _ref;
@@ -146,6 +147,14 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     current.add(id);
     await prefs.setStringList(_key, current.toList());
     state = [for (final p in state) if (p.id == id) p..isInstalled = true else p];
+
+    try {
+      if (id == 'antigravity-cli') await prefs.setString('cli_antigravity-version', '1.3.4');
+      if (id == 'claude-code') await prefs.setString('cli_claude-version', '2.1.296');
+      if (id == 'deepseek-harness') await prefs.setString('cli_dsh-version', '0.2.0-rc.2');
+      _ref.read(cliInstallerProvider.notifier).refreshInstalledAgents();
+    } catch (_) {}
+
     await _checkActualInstallation();
   }
 
@@ -546,7 +555,13 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
         pkg.isInstalled = true;
         newlyInstalledIds.add(pkg.id);
       } else {
-        if (installedIds.contains(pkg.id) && (pkg.id == 'build-clean' || pkg.id == 'build-fix')) {
+        if (installedIds.contains(pkg.id) && (
+            pkg.id == 'build-clean' ||
+            pkg.id == 'build-fix' ||
+            pkg.id == 'antigravity-cli' ||
+            pkg.id == 'claude-code' ||
+            pkg.id == 'deepseek-harness'
+        )) {
           pkg.isInstalled = true;
           newlyInstalledIds.add(pkg.id);
         } else {

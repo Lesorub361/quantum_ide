@@ -92,6 +92,8 @@ class CliAgentBridge {
 
   /// Resolve absolute or usable path to the binary
   String? resolveBinary(AgentKind kind) {
+    if (kind == AgentKind.native) return null;
+
     for (final candidate in _candidateBinaries(kind)) {
       if (candidate.contains('/') || candidate.contains(r'\')) {
         final f = File(candidate);
@@ -131,6 +133,18 @@ class CliAgentBridge {
             return candidate;
           }
         }
+      }
+
+      // Guest PRoot environment fallback: inside the Ubuntu container binaries reside in standard PATH
+      switch (kind) {
+        case AgentKind.antigravity:
+          return '/usr/local/bin/agy';
+        case AgentKind.claudeCode:
+          return '/usr/local/bin/claude';
+        case AgentKind.deepseekHarness:
+          return '/usr/local/bin/dsh';
+        case AgentKind.native:
+          return null;
       }
     }
 

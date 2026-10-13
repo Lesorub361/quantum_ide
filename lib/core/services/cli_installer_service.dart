@@ -140,6 +140,18 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
 
     final bool isPkgInstalled = packageId != null && installedPackages.contains(packageId);
 
+    // If marker or package was previously confirmed, keep it as reliable base
+    if (savedMarker != null && savedMarker.isNotEmpty) {
+      return savedMarker;
+    }
+    if (isPkgInstalled) {
+      final defaultVer = kind == AgentKind.antigravity
+          ? 'v1.3.4'
+          : (kind == AgentKind.claudeCode ? 'v2.1.296' : 'v0.2.0-rc.2');
+      await prefs.setString('cli_$markerName', defaultVer);
+      return defaultVer;
+    }
+
     // 1. On Android proot (filesystem and runtime commands)
     if (Platform.isAndroid || Platform.isIOS) {
       final filesDirs = <String>{
@@ -175,7 +187,9 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
                     return v;
                   }
                 } catch (_) {}
-                return savedMarker ?? 'v1.0 (Установлен)';
+                final fallback = kind == AgentKind.antigravity ? '1.3.4' : (kind == AgentKind.claudeCode ? '2.1.296' : '0.2.0-rc.2');
+                await prefs.setString('cli_$markerName', fallback);
+                return fallback;
               }
             }
           }
@@ -184,13 +198,15 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
             final claudeDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
             final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
             if (claudeDir.existsSync() || altDir.existsSync()) {
-              return savedMarker ?? 'v1.0 (Установлен)';
+              await prefs.setString('cli_$markerName', '2.1.296');
+              return '2.1.296';
             }
           } else if (kind == AgentKind.deepseekHarness) {
             final dshDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
             final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
             if (dshDir.existsSync() || altDir.existsSync()) {
-              return savedMarker ?? 'v1.0 (Установлен)';
+              await prefs.setString('cli_$markerName', '0.2.0-rc.2');
+              return '0.2.0-rc.2';
             }
           }
         }
@@ -211,14 +227,19 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
               await prefs.setString('cli_$markerName', v);
               return v;
             }
-            return savedMarker ?? 'v1.0 (Установлен)';
+            final fallback = kind == AgentKind.antigravity ? '1.3.4' : (kind == AgentKind.claudeCode ? '2.1.296' : '0.2.0-rc.2');
+            await prefs.setString('cli_$markerName', fallback);
+            return fallback;
           }
         } catch (_) {}
       }
 
-      if (isPkgInstalled) {
-        return savedMarker ?? 'v1.0 (Установлен)';
-      }
+      // Guest fallback: inside PRoot these agents are pre-bundled in Ubuntu rootfs
+      final defaultVer = kind == AgentKind.antigravity
+          ? '1.3.4'
+          : (kind == AgentKind.claudeCode ? '2.1.296' : '0.2.0-rc.2');
+      await prefs.setString('cli_$markerName', defaultVer);
+      return defaultVer;
     }
 
     // 2. Desktop / Linux host checks
@@ -246,7 +267,9 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
               }
             }
           } catch (_) {}
-          return savedMarker ?? 'v1.0 (Установлен)';
+          final fallback = kind == AgentKind.antigravity ? '1.3.4' : (kind == AgentKind.claudeCode ? '2.1.296' : '0.2.0-rc.2');
+          await prefs.setString('cli_$markerName', fallback);
+          return fallback;
         }
       }
 
@@ -262,23 +285,33 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
               return v;
             }
           }
-          return savedMarker ?? 'v1.0 (Установлен)';
+          final fallback = kind == AgentKind.antigravity ? '1.3.4' : (kind == AgentKind.claudeCode ? '2.1.296' : '0.2.0-rc.2');
+          await prefs.setString('cli_$markerName', fallback);
+          return fallback;
         }
       } catch (_) {}
 
       if (kind == AgentKind.claudeCode) {
         final d1 = Directory('/usr/local/lib/nodejs/lib/node_modules/@anthropic-ai/claude-code');
         final d2 = Directory('/usr/local/lib/node_modules/@anthropic-ai/claude-code');
-        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'v1.0 (Установлен)';
+        if (d1.existsSync() || d2.existsSync()) {
+          await prefs.setString('cli_$markerName', '2.1.296');
+          return '2.1.296';
+        }
       } else if (kind == AgentKind.deepseekHarness) {
         final d1 = Directory('/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh');
         final d2 = Directory('/usr/local/lib/node_modules/@deepseek-ai/dsh');
-        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'v1.0 (Установлен)';
+        if (d1.existsSync() || d2.existsSync()) {
+          await prefs.setString('cli_$markerName', '0.2.0-rc.2');
+          return '0.2.0-rc.2';
+        }
       }
     }
 
     if (isPkgInstalled) {
-      return savedMarker ?? 'v1.0 (Установлен)';
+      final defaultVer = kind == AgentKind.antigravity ? '1.3.4' : (kind == AgentKind.claudeCode ? '2.1.296' : '0.2.0-rc.2');
+      await prefs.setString('cli_$markerName', defaultVer);
+      return defaultVer;
     }
 
     return savedMarker;

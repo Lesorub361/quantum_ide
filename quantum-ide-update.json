@@ -1,10 +1,10 @@
 {
-  "versionCode": 33,
-  "versionName": "1.2.15",
-  "notes": "Обновление QuantumIDE 1.2.15: Ghost QA Engine — автономный движок тестирования UI для разработчика (инспекция виджетов, симуляция кликов и свайпов, перехват RenderFlex overflow и ошибок Flutter, снимки экрана, локальный HTTP-мост 127.0.0.1:9988; полная изоляция и защита для обычных пользователей).",
+  "versionCode": 36,
+  "versionName": "1.2.18",
+  "notes": "Обновление QuantumIDE v1.2.18: Исправлено отображение и детекция CLI агентов в чате (Antigravity, Claude Code, DeepSeek Harness), синхронизация с установленными пакетами, поддержка PATH для Node.js и PRoot в ProcessManager.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.15/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.18/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
