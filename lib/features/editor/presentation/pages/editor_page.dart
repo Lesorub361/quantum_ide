@@ -546,18 +546,22 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               isScrollControlled: true,
               backgroundColor: Colors.transparent,
               builder: (context) {
-                return Container(
-                  height: MediaQuery.of(context).size.height * 0.85,
-                  margin: const EdgeInsets.only(top: 24),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0F111A),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
+                final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+                return Padding(
+                  padding: EdgeInsets.only(bottom: bottomInset),
+                  child: Container(
+                    height: MediaQuery.of(context).size.height * 0.88,
+                    margin: const EdgeInsets.only(top: 24),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F111A),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
                     ),
+                    clipBehavior: Clip.antiAlias,
+                    child: const RightChatPanel(isInline: false),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: const RightChatPanel(isInline: false),
                 );
               },
             ).whenComplete(() {
@@ -973,6 +977,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   panelNotifier.selectTab(PanelTab.terminal);
                                   panelNotifier.openPanel();
                                 }
+                              },
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.sparkles,
+                              color: Colors.purpleAccent,
+                              tooltip: AppLocalizations.of(context)!.aiChat,
+                              onTap: () {
+                                ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                               },
                             ),
                             PopupMenuButton<String>(

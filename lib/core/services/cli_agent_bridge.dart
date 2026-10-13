@@ -9,6 +9,7 @@ import 'package:quantum_ide/core/services/local_format_gateway.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_checkpoints_service.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 final cliAgentBridgeProvider = Provider<CliAgentBridge>((ref) {
   final runtime = ref.watch(runtimeServiceProvider);
@@ -142,8 +143,23 @@ class CliAgentBridge {
     if (direct != null) return true;
 
     try {
+      final prefs = await SharedPreferences.getInstance();
+      final installedPackages = prefs.getStringList('installed_packages') ?? [];
+      if (kind == AgentKind.antigravity &&
+          (installedPackages.contains('antigravity-cli') || prefs.getString('cli_antigravity-version') != null)) {
+        return true;
+      }
+      if (kind == AgentKind.claudeCode &&
+          (installedPackages.contains('claude-code') || prefs.getString('cli_claude-version') != null)) {
+        return true;
+      }
+      if (kind == AgentKind.deepseekHarness &&
+          (installedPackages.contains('deepseek-harness') || prefs.getString('cli_dsh-version') != null)) {
+        return true;
+      }
+
       final names = kind == AgentKind.antigravity
-          ? ['agy', 'gemini']
+          ? ['agy', 'antigravity', 'gemini']
           : (kind == AgentKind.claudeCode ? ['claude'] : ['dsh', 'deepseek-harness']);
 
       if (Platform.isAndroid || Platform.isIOS) {

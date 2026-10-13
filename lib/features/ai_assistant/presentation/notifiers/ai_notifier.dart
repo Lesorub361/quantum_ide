@@ -239,18 +239,27 @@ class AINotifier extends StateNotifier<AIState> {
       isLoading: false,
     );
 
+    final curModel = _ref.read(activeAiModelProvider);
     switch (kind) {
       case AgentKind.native:
-        _ref.read(activeAiModelProvider.notifier).state = 'google/gemma-4-31b-it:free';
+        if (!curModel.contains('gemma') && !curModel.contains('free')) {
+          _ref.read(activeAiModelProvider.notifier).state = 'google/gemma-4-31b-it:free';
+        }
         break;
       case AgentKind.antigravity:
-        _ref.read(activeAiModelProvider.notifier).state = 'gemini-3.8-flash-high';
+        if (!curModel.contains('gemini') && !curModel.contains('antigravity')) {
+          _ref.read(activeAiModelProvider.notifier).state = 'gemini-3.8-flash-high';
+        }
         break;
       case AgentKind.claudeCode:
-        _ref.read(activeAiModelProvider.notifier).state = 'claude-3-7-sonnet-20250219';
+        if (!curModel.contains('claude')) {
+          _ref.read(activeAiModelProvider.notifier).state = 'claude-3-7-sonnet-20250219';
+        }
         break;
       case AgentKind.deepseekHarness:
-        _ref.read(activeAiModelProvider.notifier).state = 'deepseek-chat';
+        if (curModel.contains('gemini') || curModel.contains('claude') || curModel.isEmpty) {
+          _ref.read(activeAiModelProvider.notifier).state = 'deepseek-chat';
+        }
         break;
     }
   }

@@ -131,6 +131,14 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final savedMarker = prefs.getString('cli_$markerName');
+    final installedPackages = prefs.getStringList('installed_packages') ?? [];
+
+    String? packageId;
+    if (kind == AgentKind.antigravity) packageId = 'antigravity-cli';
+    if (kind == AgentKind.claudeCode) packageId = 'claude-code';
+    if (kind == AgentKind.deepseekHarness) packageId = 'deepseek-harness';
+
+    final bool isPkgInstalled = packageId != null && installedPackages.contains(packageId);
 
     // 1. On Android proot (filesystem and runtime commands)
     if (Platform.isAndroid || Platform.isIOS) {
@@ -145,40 +153,45 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
       };
 
       for (final filesDir in filesDirs) {
-        final rootfs = p.join(filesDir, 'rootfs', 'ubuntu');
-        for (final cmd in commandNames) {
-          final candidateFiles = [
-            File(p.join(rootfs, 'usr', 'local', 'bin', cmd)),
-            File(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'bin', cmd)),
-            File(p.join(rootfs, 'root', '.local', 'bin', cmd)),
-            File(p.join(rootfs, 'usr', 'bin', cmd)),
-          ];
-          for (final f in candidateFiles) {
-            if (f.existsSync()) {
-              try {
-                final versionCheck = await _runtime.runCommand('$cmd --version');
-                final v = RegExp(r'\d+\.\d+\.\d+').firstMatch(versionCheck)?.group(0);
-                if (v != null && v.isNotEmpty) {
-                  await prefs.setString('cli_$markerName', v);
-                  return v;
-                }
-              } catch (_) {}
-              return savedMarker ?? 'installed';
+        final rootfsCandidates = [
+          p.join(filesDir, 'rootfs', 'ubuntu'),
+          filesDir,
+        ];
+        for (final rootfs in rootfsCandidates) {
+          for (final cmd in commandNames) {
+            final candidateFiles = [
+              File(p.join(rootfs, 'usr', 'local', 'bin', cmd)),
+              File(p.join(rootfs, 'usr', 'bin', cmd)),
+              File(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'bin', cmd)),
+              File(p.join(rootfs, 'root', '.local', 'bin', cmd)),
+            ];
+            for (final f in candidateFiles) {
+              if (f.existsSync()) {
+                try {
+                  final versionCheck = await _runtime.runCommand('$cmd --version');
+                  final v = RegExp(r'\d+\.\d+\.\d+').firstMatch(versionCheck)?.group(0);
+                  if (v != null && v.isNotEmpty) {
+                    await prefs.setString('cli_$markerName', v);
+                    return v;
+                  }
+                } catch (_) {}
+                return savedMarker ?? 'v1.0 (Установлен)';
+              }
             }
           }
-        }
 
-        if (kind == AgentKind.claudeCode) {
-          final claudeDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
-          final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
-          if (claudeDir.existsSync() || altDir.existsSync()) {
-            return savedMarker ?? 'installed';
-          }
-        } else if (kind == AgentKind.deepseekHarness) {
-          final dshDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
-          final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
-          if (dshDir.existsSync() || altDir.existsSync()) {
-            return savedMarker ?? 'installed';
+          if (kind == AgentKind.claudeCode) {
+            final claudeDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
+            final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code'));
+            if (claudeDir.existsSync() || altDir.existsSync()) {
+              return savedMarker ?? 'v1.0 (Установлен)';
+            }
+          } else if (kind == AgentKind.deepseekHarness) {
+            final dshDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
+            final altDir = Directory(p.join(rootfs, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh'));
+            if (dshDir.existsSync() || altDir.existsSync()) {
+              return savedMarker ?? 'v1.0 (Установлен)';
+            }
           }
         }
       }
@@ -198,9 +211,13 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
               await prefs.setString('cli_$markerName', v);
               return v;
             }
-            return savedMarker ?? 'installed';
+            return savedMarker ?? 'v1.0 (Установлен)';
           }
         } catch (_) {}
+      }
+
+      if (isPkgInstalled) {
+        return savedMarker ?? 'v1.0 (Установлен)';
       }
     }
 
@@ -229,7 +246,7 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
               }
             }
           } catch (_) {}
-          return savedMarker ?? 'installed';
+          return savedMarker ?? 'v1.0 (Установлен)';
         }
       }
 
@@ -245,19 +262,23 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
               return v;
             }
           }
-          return savedMarker ?? 'installed';
+          return savedMarker ?? 'v1.0 (Установлен)';
         }
       } catch (_) {}
 
       if (kind == AgentKind.claudeCode) {
         final d1 = Directory('/usr/local/lib/nodejs/lib/node_modules/@anthropic-ai/claude-code');
         final d2 = Directory('/usr/local/lib/node_modules/@anthropic-ai/claude-code');
-        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'installed';
+        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'v1.0 (Установлен)';
       } else if (kind == AgentKind.deepseekHarness) {
         final d1 = Directory('/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh');
         final d2 = Directory('/usr/local/lib/node_modules/@deepseek-ai/dsh');
-        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'installed';
+        if (d1.existsSync() || d2.existsSync()) return savedMarker ?? 'v1.0 (Установлен)';
       }
+    }
+
+    if (isPkgInstalled) {
+      return savedMarker ?? 'v1.0 (Установлен)';
     }
 
     return savedMarker;

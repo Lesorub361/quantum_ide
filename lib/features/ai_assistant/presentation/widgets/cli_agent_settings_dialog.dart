@@ -107,6 +107,10 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
     _geminiKeyCtrl.text = auth.geminiApiKey ?? '';
 
     _loadAppVersion();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(cliInstallerProvider.notifier).refreshInstalledAgents();
+    });
   }
 
   Future<void> _loadAppVersion() async {
@@ -442,6 +446,22 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
             _selectedAgent = kind;
             _testResult = null;
           });
+          final curModel = ref.read(activeAiModelProvider);
+          final auth = ref.read(cliAuthProvider);
+          if (kind == AgentKind.antigravity) {
+            if (!curModel.contains('gemini') && !auth.antigravityModels.contains(curModel)) {
+              ref.read(activeAiModelProvider.notifier).state = 'gemini-3.8-flash-high';
+            }
+          } else if (kind == AgentKind.claudeCode) {
+            if (!curModel.contains('claude')) {
+              final defaultM = auth.claudeProviderType == 'openrouter' ? 'anthropic/claude-3.7-sonnet' : 'claude-3-7-sonnet-20250219';
+              ref.read(activeAiModelProvider.notifier).state = defaultM;
+            }
+          } else if (kind == AgentKind.deepseekHarness) {
+            if (curModel.contains('gemini') || curModel.contains('claude') || curModel.isEmpty) {
+              ref.read(activeAiModelProvider.notifier).state = 'deepseek-chat';
+            }
+          }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -479,7 +499,9 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
   Widget _buildAntigravityInterface(BuildContext context, CliAuthState auth, String activeModel) {
     final isConnected = auth.isGoogleAuthenticated;
     final email = auth.googleAccountEmail;
-    final effectiveModel = activeModel.isNotEmpty ? activeModel : 'gemini-3.8-flash-high';
+    final effectiveModel = (activeModel.contains('gemini') || auth.antigravityModels.contains(activeModel) || activeModel.contains('antigravity'))
+        ? activeModel
+        : 'gemini-3.8-flash-high';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1014,6 +1036,9 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
     final mode = auth.claudeProviderType;
     final isSubscription = mode == 'claude_subscription';
     final isOpenRouter = mode == 'openrouter';
+    final effectiveModel = (activeModel.contains('claude') || (isOpenRouter && activeModel.isNotEmpty && !activeModel.contains('gemini') && !activeModel.contains('deepseek')))
+        ? activeModel
+        : (isOpenRouter ? 'anthropic/claude-3.7-sonnet' : 'claude-3-7-sonnet-20250219');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1123,7 +1148,7 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
                   final selected = await showModelPickerModal(
                     context,
                     providerId: providerId,
-                    currentModel: activeModel,
+                    currentModel: effectiveModel,
                     apiKey: isOpenRouter ? auth.openRouterApiKey : auth.anthropicApiKey,
                   );
                   if (selected != null) {
@@ -1145,7 +1170,7 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          activeModel.isNotEmpty ? activeModel : 'claude-3-7-sonnet-20250219',
+                          effectiveModel,
                           style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ),
@@ -1201,6 +1226,9 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
   Widget _buildDeepSeekInterface(BuildContext context, CliAuthState auth, String activeModel) {
     final provider = auth.deepseekProviderType;
     final isOpenRouter = provider == 'openrouter';
+    final effectiveModel = (!activeModel.contains('gemini') && !activeModel.contains('claude') && activeModel.isNotEmpty)
+        ? activeModel
+        : 'deepseek-chat';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1290,7 +1318,7 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
                   final selected = await showModelPickerModal(
                     context,
                     providerId: provider,
-                    currentModel: activeModel,
+                    currentModel: effectiveModel,
                     apiKey: isOpenRouter ? auth.openRouterApiKey : auth.deepseekApiKey,
                   );
                   if (selected != null) {
@@ -1312,7 +1340,7 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          activeModel.isNotEmpty ? activeModel : 'deepseek-chat',
+                          effectiveModel,
                           style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ),

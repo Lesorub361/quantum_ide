@@ -25,6 +25,7 @@ import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/agent_activity_widgets.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
+import 'package:quantum_ide/core/services/cli_installer_service.dart';
 
 final activeAiProviderIdProvider = StateProvider<String>((ref) {
   final aiSvc = ref.read(aiServiceProvider);
@@ -64,6 +65,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   void initState() {
     super.initState();
     _aiChatController.addListener(_onTextChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(cliInstallerProvider.notifier).refreshInstalledAgents();
+    });
   }
 
   void _onTextChanged() {
@@ -259,68 +263,84 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: isMobile ? 4 : 6),
       child: Row(
         children: [
-          ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [Colors.purpleAccent, Colors.cyanAccent],
-            ).createShader(bounds),
-            child: const Icon(LucideIcons.sparkles, color: Colors.white, size: 16),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Quantum AI',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-              color: Colors.white,
+          Expanded(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Colors.purpleAccent, Colors.cyanAccent],
+                  ).createShader(bounds),
+                  child: const Icon(LucideIcons.sparkles, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Quantum AI',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: _buildAgentSelector(context, ref, aiState.activeAgentKind),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
-          _buildAgentSelector(context, ref, aiState.activeAgentKind),
-          const Spacer(),
-          // New Chat Button
-          IconButton(
-            icon: const Icon(LucideIcons.plus, size: 14, color: Colors.cyanAccent),
-            onPressed: () => ref.read(aiProvider.notifier).startNewSession(),
-            tooltip: l10n.newChat,
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          // History Button
-          IconButton(
-            icon: const Icon(LucideIcons.history, size: 14, color: Colors.white70),
-            onPressed: () => _showChatHistoryDialog(context, ref),
-            tooltip: l10n.chatHistory,
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          // Settings Button (AISettingsDialog / CliAgentSettingsDialog)
-          IconButton(
-            icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.white70),
-            onPressed: () {
-              if (aiState.activeAgentKind != AgentKind.native) {
-                CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
-              } else {
-                showDialog(
-                  context: context,
-                  builder: (context) => const AISettingsDialog(),
-                );
-              }
-            },
-            tooltip: aiState.activeAgentKind != AgentKind.native ? 'Настройки CLI-агентов' : l10n.settings,
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          // Options menu
-          _buildOptionsMenu(context, ref),
-          // Close button
-          IconButton(
-            icon: const Icon(LucideIcons.x, size: 14, color: Colors.white60),
-            onPressed: () {
-              ref.read(rightChatPanelOpenProvider.notifier).state = false;
-            },
-            padding: const EdgeInsets.all(6),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          const SizedBox(width: 4),
+          // Action Buttons
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // New Chat Button
+              IconButton(
+                icon: const Icon(LucideIcons.plus, size: 14, color: Colors.cyanAccent),
+                onPressed: () => ref.read(aiProvider.notifier).startNewSession(),
+                tooltip: l10n.newChat,
+                padding: const EdgeInsets.all(5),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+              // History Button
+              if (!isMobile || MediaQuery.of(context).size.width >= 390)
+                IconButton(
+                  icon: const Icon(LucideIcons.history, size: 14, color: Colors.white70),
+                  onPressed: () => _showChatHistoryDialog(context, ref),
+                  tooltip: l10n.chatHistory,
+                  padding: const EdgeInsets.all(5),
+                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
+              // Settings Button (AISettingsDialog / CliAgentSettingsDialog)
+              IconButton(
+                icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.white70),
+                onPressed: () {
+                  if (aiState.activeAgentKind != AgentKind.native) {
+                    CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
+                  } else {
+                    showDialog(
+                      context: context,
+                      builder: (context) => const AISettingsDialog(),
+                    );
+                  }
+                },
+                tooltip: aiState.activeAgentKind != AgentKind.native ? 'Настройки CLI-агентов' : l10n.settings,
+                padding: const EdgeInsets.all(5),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+              // Options menu
+              _buildOptionsMenu(context, ref),
+              // Close button
+              IconButton(
+                icon: const Icon(LucideIcons.x, size: 14, color: Colors.white60),
+                onPressed: () {
+                  ref.read(rightChatPanelOpenProvider.notifier).state = false;
+                },
+                padding: const EdgeInsets.all(5),
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              ),
+            ],
           ),
         ],
       ),
@@ -362,12 +382,15 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           children: [
             Icon(currentKind.icon, size: 11, color: currentKind.brandColor),
             const SizedBox(width: 4),
-            Text(
-              currentKind == AgentKind.native ? 'Native AI' : currentKind.title,
-              style: GoogleFonts.inter(
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-                color: currentKind.brandColor.withValues(alpha: 0.95),
+            Flexible(
+              child: Text(
+                currentKind == AgentKind.native ? 'Native AI' : currentKind.title,
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: currentKind.brandColor.withValues(alpha: 0.95),
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 3),
@@ -964,8 +987,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 height: 1.4,
               ),
             ),
+            // Prominent Agent Selector Cards (instantly shows installed status & switch)
+            _buildAgentSelectorCardGrid(context, ref, aiState),
             if (isCli) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 4),
               InkWell(
                 onTap: () => CliAgentSettingsDialog.show(context, initialKind: kind),
                 borderRadius: BorderRadius.circular(20),
@@ -999,6 +1024,175 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAgentSelectorCardGrid(BuildContext context, WidgetRef ref, AIState aiState) {
+    final installer = ref.watch(cliInstallerProvider);
+    final activeKind = aiState.activeAgentKind;
+
+    final agents = [
+      (AgentKind.antigravity, 'Antigravity CLI', 'Gemini Code Assist', LucideIcons.sparkles, Colors.purpleAccent),
+      (AgentKind.claudeCode, 'Claude Code', 'Anthropic Agent', LucideIcons.bot, Colors.amberAccent),
+      (AgentKind.deepseekHarness, 'DeepSeek Harness', 'Open DeepSeek', LucideIcons.brain_circuit, Colors.cyanAccent),
+      (AgentKind.native, 'Native AI', 'Quantum Assistant', LucideIcons.cpu, const Color(0xFF8B5CF6)),
+    ];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Доступные ИИ-агенты:',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white70,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                InkWell(
+                  onTap: () => CliAgentSettingsDialog.show(context, initialKind: activeKind),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(LucideIcons.sliders_horizontal, size: 11, color: Colors.cyanAccent),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Настройки CLI',
+                        style: GoogleFonts.inter(fontSize: 10.5, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: agents.map((agentData) {
+                final kind = agentData.$1;
+                final title = agentData.$2;
+                final subtitle = agentData.$3;
+                final icon = agentData.$4;
+                final color = agentData.$5;
+
+                final isSelected = activeKind == kind;
+                final isInstalled = kind == AgentKind.native || installer.installedVersions[kind] != null;
+                final version = installer.installedVersions[kind];
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: InkWell(
+                    onTap: () {
+                      ref.read(aiProvider.notifier).setAgentKind(kind);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 140,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? color.withValues(alpha: 0.16) : const Color(0xFF161B26),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? color : Colors.white.withValues(alpha: 0.08),
+                          width: isSelected ? 1.5 : 0.8,
+                        ),
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: color.withValues(alpha: 0.25),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(icon, size: 14, color: color),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: (isInstalled ? Colors.greenAccent : Colors.white24).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  isInstalled ? (version != null && version != 'installed' ? '✅ $version' : '✅ Готов') : '🔴 Не устан.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: isInstalled ? Colors.greenAccent : Colors.white54,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            title,
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            decoration: BoxDecoration(
+                              color: isSelected ? color.withValues(alpha: 0.25) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              isSelected ? '✓ Выбран' : 'Выбрать',
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                color: isSelected ? color : Colors.white38,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1051,9 +1245,24 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ref.read(aiProvider.notifier).askAI('/init');
         } else if (value == 'cli_settings') {
           CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
+        } else if (value == 'history') {
+          _showChatHistoryDialog(context, ref);
         }
       },
       itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'history',
+          child: Row(
+            children: [
+              const Icon(LucideIcons.history, size: 12, color: Colors.amberAccent),
+              const SizedBox(width: 8),
+              Text(
+                l10n.chatHistory,
+                style: const TextStyle(color: Colors.white, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
         const PopupMenuItem(
           value: 'cli_settings',
           child: Row(
@@ -1134,7 +1343,6 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           // Loading status & Stop button
           Expanded(
@@ -1180,27 +1388,36 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       Expanded(
                         child: Text(
                           _getAgentStatusText(aiState),
-                           style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
+                          style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
                   )
-                : const SizedBox(),
+                : const SizedBox.shrink(),
           ),
           
-          // Agent Pipeline Status (Autopilot only)
-          if (aiState.interactionMode == AiInteractionMode.autopilot || aiState.interactionMode == AiInteractionMode.debug)
-            _buildAgentPipelineBadge(aiState),
-          
-          // Token and System Stats Badges
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildTokenBadge(aiState),
-              const SizedBox(width: 4),
-              _buildSystemStatsBadge(ref),
-            ],
+          const SizedBox(width: 6),
+
+          // Token and System Stats Badges (Horizontally scrollable to avoid 110px overflow)
+          Flexible(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Agent Pipeline Status (Autopilot only)
+                  if (aiState.interactionMode == AiInteractionMode.autopilot || aiState.interactionMode == AiInteractionMode.debug) ...[
+                    _buildAgentPipelineBadge(aiState),
+                    const SizedBox(width: 4),
+                  ],
+                  _buildTokenBadge(aiState),
+                  const SizedBox(width: 4),
+                  _buildSystemStatsBadge(ref),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -1349,15 +1566,21 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     final fileCount = aiState.proposedActions.where((a) => a.type != 'command').length;
     final label = _formatRussianFilesCount(fileCount > 0 ? fileCount : aiState.proposedActions.length);
 
+    final isMobile = MediaQuery.of(context).size.width < 700;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 12, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF141724),
         border: Border(
           top: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
       ),
-      child: Row(
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 6,
         children: [
           InkWell(
             onTap: () {
@@ -1390,42 +1613,44 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               ),
             ),
           ),
-          const Spacer(),
-          // Reject All
-          TextButton(
-            onPressed: () {
-              for (final action in List<AIAction>.from(aiState.proposedActions)) {
-                ref.read(aiProvider.notifier).removeAction(action);
-              }
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.white54,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(l10n.rejectAll, style: const TextStyle(fontSize: 11)),
-          ),
-          const SizedBox(width: 8),
-          // Accept All
-          ElevatedButton.icon(
-            onPressed: () async {
-              await ref.read(aiProvider.notifier).executeActionsManually(aiState.proposedActions);
-            },
-            icon: const Icon(LucideIcons.check, size: 13, color: Colors.white),
-            label: Text(
-              l10n.acceptAll,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E6FE6),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                onPressed: () {
+                  for (final action in List<AIAction>.from(aiState.proposedActions)) {
+                    ref.read(aiProvider.notifier).removeAction(action);
+                  }
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white54,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(l10n.rejectAll, style: const TextStyle(fontSize: 11)),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await ref.read(aiProvider.notifier).executeActionsManually(aiState.proposedActions);
+                },
+                icon: const Icon(LucideIcons.check, size: 13, color: Colors.white),
+                label: Text(
+                  l10n.acceptAll,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E6FE6),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1710,53 +1935,63 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             padding: const EdgeInsets.only(top: 6, bottom: 2, left: 2, right: 2),
             child: Row(
               children: [
-                // Context window badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(LucideIcons.cpu, size: 10, color: Colors.cyanAccent),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Контекст: ${_getContextWindowLabel(ref.watch(activeAiModelProvider))}',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                ),
-                if (aiState.totalTokens > 0) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: agentKind.brandColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: agentKind.brandColor.withValues(alpha: 0.3)),
-                    ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(LucideIcons.sparkles, size: 9, color: agentKind.brandColor),
-                        const SizedBox(width: 3),
-                        Text(
-                          'Токены: ${_formatTokenCount(aiState.totalTokens)}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                        // Context window badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.04),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(LucideIcons.cpu, size: 10, color: Colors.cyanAccent),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Контекст: ${_getContextWindowLabel(ref.watch(activeAiModelProvider))}',
+                                style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.white70),
+                              ),
+                            ],
                           ),
                         ),
+                        if (aiState.totalTokens > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: agentKind.brandColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(color: agentKind.brandColor.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(LucideIcons.sparkles, size: 9, color: agentKind.brandColor),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Токены: ${_formatTokenCount(aiState.totalTokens)}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                ],
-                const Spacer(),
+                ),
+                const SizedBox(width: 6),
                 Text(
                   '${aiState.messages.length} сообщ.',
                   style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white30),
