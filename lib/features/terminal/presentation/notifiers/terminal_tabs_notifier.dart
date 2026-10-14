@@ -172,6 +172,8 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       final xtermVc = xt.TerminalController(
         pointerInputs: const xt.PointerInputs.all(),
       );
+      int lastCols = -1;
+      int lastRows = -1;
       final xtermTerm = xt.Terminal(
         maxLines: 10000,
         platform: Platform.isAndroid
@@ -189,7 +191,13 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows < 10 ? 10 : rows;
           final safeCols = cols < 20 ? 20 : cols;
-          pty.resize(safeRows, safeCols);
+          if (safeRows != lastRows || safeCols != lastCols) {
+            lastRows = safeRows;
+            lastCols = safeCols;
+            try {
+              pty.resize(safeRows, safeCols);
+            } catch (_) {}
+          }
         },
       );
 

@@ -13,7 +13,7 @@ dependencies:
     sdk: flutter
   flutter_riverpod: ^2.6.1
   go_router: ^14.8.1
-  re_editor: ^0.9.0
+  re_editor: ^0.10.0
   re_highlight: ^0.0.3
   path_provider: ^2.1.5
   file_picker: ^11.0.2
@@ -30,7 +30,7 @@ dependencies:
   path: ^1.9.1
   uuid: ^4.5.1
   dio: ^5.8.0+1
-  archive: ^4.0.2
+  archive: ^4.5.2
   url_launcher: ^6.3.2
   open_filex: ^4.5.0
   diff_match_patch: ^0.4.1
@@ -47,7 +47,7 @@ dependencies:
   share_plus: ^10.1.4
   
   crypto: ^3.0.6
-  sqflite: ^2.4.2
+  sqflite: ^2.4.4
   ffi: ^2.1.2
   llama_flutter_android:
     path: local_plugins/llama_flutter_android
@@ -56,7 +56,7 @@ dependencies:
   watcher: ^1.2.1
   multi_split_view: ^3.6.2
   contextmenu: ^3.0.0
-  sqflite_common_ffi: ^2.4.3
+  sqflite_common_ffi: ^2.4.4
   qr_flutter: ^4.1.0
   genkit: ^1.0.0
   genkit_middleware: ^1.0.0

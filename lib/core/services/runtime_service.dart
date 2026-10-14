@@ -451,7 +451,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '11';
+    const bashrcVersion = '12';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -489,7 +489,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=11
+# BASHRC_VERSION=12
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest
@@ -512,15 +512,16 @@ export HISTSIZE=5000
 export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
 
-# Show git branch in prompt
-__git_branch() {
-    git branch 2>/dev/null | grep '^*' | sed 's/* //'
+# Starship-inspired developer prompt with git status
+__git_info() {
+    local branch=$(git branch --show-current 2>/dev/null)
+    if [ -n "$branch" ]; then
+        local status_icon=""
+        [ -n "$(git status --porcelain 2>/dev/null)" ] && status_icon="*"
+        printf " \[\e[35m\]git:(\[\e[1;31m\]%s%s\[\e[0m\e[35m\])\[\e[0m\]" "$branch" "$status_icon"
+    fi
 }
-export PS1="\[\e[1;32m\]boss@ubuntu\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\[\e[1;33m\]\$(__git_branch_str)\[\e[0m\]\$ "
-__git_branch_str() {
-    local b=$(__git_branch)
-    [ -n "$b" ] && echo " ($b)"
-}
+export PS1="\[\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;34m\]\$ \[\e[0m\]"
 
 export FLUTTER_ALLOW_SU_ROOT=true
 export FLUTTER_SUPPRESS_ANALYTICS=true

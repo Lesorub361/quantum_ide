@@ -159,6 +159,8 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       final xtermVc = xt.TerminalController(
         pointerInputs: const xt.PointerInputs.all(),
       );
+      int lastCols = -1;
+      int lastRows = -1;
       final xtermTerm = xt.Terminal(
         maxLines: 10000,
         platform: Platform.isAndroid
@@ -176,7 +178,13 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows < 10 ? 10 : rows;
           final safeCols = cols < 20 ? 20 : cols;
-          pty.resize(safeRows, safeCols);
+          if (safeRows != lastRows || safeCols != lastCols) {
+            lastRows = safeRows;
+            lastCols = safeCols;
+            try {
+              pty.resize(safeRows, safeCols);
+            } catch (_) {}
+          }
         },
       );
       // ptyOutSub is stored in TerminalSession

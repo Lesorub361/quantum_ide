@@ -1854,6 +1854,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                             fontSize: terminalFontSize,
                             fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
                             fontFamilyFallback: const [
+                              'Symbols Nerd Font',
+                              'Nerd Font',
+                              'JetBrains Mono',
+                              'Fira Code',
                               'cascadia',
                               'dejaVuSansMono',
                               'jetBrainsMono',

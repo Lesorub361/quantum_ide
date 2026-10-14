@@ -1322,6 +1322,24 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       );
     }
 
+    final aiState = ref.watch(aiAutocompleteServiceProvider);
+    final hasAiSuggestion = aiState.suggestion != null &&
+        aiState.suggestion!.trim().isNotEmpty &&
+        aiState.filePath == file.path;
+
+    if (hasAiSuggestion && !hasPendingAction) {
+      editorWidget = Stack(
+        children: [
+          editorWidget,
+          Positioned(
+            bottom: 16,
+            right: 16,
+            child: _buildCopilotGhostTextBar(file, aiState),
+          ),
+        ],
+      );
+    }
+
     return Listener(
       onPointerDown: (e) {
         _pinchPointers[e.pointer] = e.position;
@@ -1357,13 +1375,102 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           ref.read(settingsProvider.notifier).setFontSize(newSize);
         }
       },
-      child: GestureDetector(
-        onSecondaryTapDown: (details) {
-          _showDesktopContextMenu(context, details.globalPosition);
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.tab): () {
+            if (hasAiSuggestion) {
+              _applyAiSuggestion(file.controller, aiState.suggestion!, aiState.triggerWord);
+              ref.read(aiAutocompleteServiceProvider.notifier).clear();
+            }
+          },
         },
-        child: editorWidget,
+        child: GestureDetector(
+          onSecondaryTapDown: (details) {
+            _showDesktopContextMenu(context, details.globalPosition);
+          },
+          child: editorWidget,
+        ),
       ),
     );
+  }
+
+  Widget _buildCopilotGhostTextBar(EditorFile file, AiAutocompleteState aiState) {
+    final suggestion = aiState.suggestion!;
+    final preview = suggestion.trim().split('\n').first;
+    return Material(
+      color: Colors.transparent,
+      child: GlassContainer(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.45), width: 0.8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(LucideIcons.sparkles, color: Colors.deepPurpleAccent, size: 14),
+            ),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 260),
+              child: Text(
+                preview,
+                style: GoogleFonts.firaCode(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 12,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () {
+                _applyAiSuggestion(file.controller, suggestion, aiState.triggerWord);
+                ref.read(aiAutocompleteServiceProvider.notifier).clear();
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.4), width: 0.5),
+                ),
+                child: Text(
+                  'Tab ⇥',
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(LucideIcons.x, size: 14, color: Colors.white38),
+              onPressed: () => ref.read(aiAutocompleteServiceProvider.notifier).clear(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              splashRadius: 12,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _applyAiSuggestion(CodeLineEditingController controller, String suggestion, String? triggerWord) {
+    var insertText = suggestion;
+    if (triggerWord != null && triggerWord.isNotEmpty && insertText.startsWith(triggerWord)) {
+      insertText = insertText.substring(triggerWord.length);
+    }
+    controller.replaceSelection(insertText);
   }
 }
 
