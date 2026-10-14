@@ -13,6 +13,7 @@ import 'ai_scenario_executor.dart';
 import 'runtime_service.dart';
 import 'collaboration_service.dart';
 import 'ghost_qa_service.dart';
+export 'genkit_service.dart';
 
 /// Provider for BuildDiagnosticsService
 final buildDiagnosticsServiceProvider = Provider((ref) {

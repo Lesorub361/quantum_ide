@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:path/path.dart' as p;
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
 
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
@@ -200,71 +200,6 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStreamingMessage(String content) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: Color(0xFFd0bcff),
-                  width: 3,
-                ),
-              ),
-            ),
-            child: GlassContainer(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              blur: 20,
-              opacity: 0.15,
-              color: const Color(0xFF282A30),
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
-                width: 0.8,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _renderMarkdown(content, context),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 2, left: 4),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 8,
-                  height: 8,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 1.5,
-                    color: Colors.purpleAccent.withValues(alpha: 0.7),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Streaming...',
-                  style: GoogleFonts.inter(
-                    color: Colors.white24,
-                    fontSize: 9,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                const Spacer(),
-              ],
-            ),
-          ),
-        ],
-      ),
-
     );
   }
 

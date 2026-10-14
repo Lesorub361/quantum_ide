@@ -9,6 +9,7 @@ enum ProjectTemplateType {
   php('PHP', 'Traditional PHP web project', LucideIcons.file_code),
   python('Python', 'Simple Python script or app', LucideIcons.code),
   flutter('Flutter', 'Cross-platform mobile & web app', LucideIcons.layout_template),
+  genkit('Genkit AI App', 'Fullstack AI agents & flows with Dart & Genkit 1.0', LucideIcons.sparkles),
   androidCompose('Android (Compose)', 'Native Android app with Jetpack Compose & Material 3', LucideIcons.smartphone),
   androidKotlin('Android (Kotlin/Views)', 'Native Android app with Kotlin & XML layouts', LucideIcons.layers),
   rust('Rust', 'High-performance systems programming', LucideIcons.cpu);
@@ -339,6 +340,122 @@ dev_dependencies:
 flutter:
   uses-material-design: true''',
           'README.md': '# $projectName\n\nA new Flutter project created with QuantumIDE.',
+        };
+
+      case ProjectTemplateType.genkit:
+        final pkgSlug = projectName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+        return {
+          'pubspec.yaml': '''name: $pkgSlug
+description: "AI-powered application built with Genkit Dart 1.0 and Flutter."
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+
+dependencies:
+  genkit: ^1.0.0
+  genkit_google_genai: ^1.0.0
+  genkit_openai: ^1.0.0
+  genkit_middleware: ^1.0.0
+  schemantic: ^1.0.0
+
+dev_dependencies:
+  lints: ^5.0.0
+  test: ^1.25.0
+''',
+          'bin/main.dart': '''import 'dart:io';
+import 'package:genkit/genkit.dart';
+import 'package:genkit_google_genai/genkit_google_genai.dart';
+import 'package:genkit_middleware/genkit_middleware.dart';
+import 'package:schemantic/schemantic.dart';
+
+void main() async {
+  // Initialize Genkit with Gemini and production middleware
+  final ai = Genkit(plugins: [
+    googleAI(apiKey: Platform.environment['GEMINI_API_KEY']),
+    ToolApprovalPlugin(),
+  ]);
+
+  // Define a tool with Human-in-the-Loop interrupt
+  final calculateDiscount = ai.defineTool(
+    name: 'calculateDiscount',
+    description: 'Calculates a discount for a customer. Requires confirmation.',
+    inputSchema: SchemanticType.from<Map<String, dynamic>>(
+      jsonSchema: {
+        'type': 'object',
+        'properties': {
+          'percent': {'type': 'integer', 'description': 'Discount percent'},
+          'amount': {'type': 'number', 'description': 'Original price'},
+        },
+        'required': ['percent', 'amount'],
+      },
+      parse: (j) => Map<String, dynamic>.from(j as Map),
+    ),
+    fn: (input, ctx) async {
+      final percent = input['percent'] as int;
+      final amount = (input['amount'] as num).toDouble();
+
+      // Require user confirmation before applying discount
+      if (ctx.resumed == null) {
+        return ToolResult.interrupt({
+          'action': 'apply_discount',
+          'percent': percent,
+          'amount': amount,
+        });
+      }
+
+      final discounted = amount * (1.0 - percent / 100.0);
+      return ToolResult.response('Discounted price is \\\$\${discounted.toStringAsFixed(2)}');
+    },
+  );
+
+  print('🤖 Generating with Genkit Dart 1.0...');
+  final result = await ai.generate(
+    model: googleAI.gemini('gemini-2.5-flash'),
+    prompt: 'Give me a 20% discount on a 150 dollar purchase.',
+    tools: [calculateDiscount],
+    use: [
+      retry(maxRetries: 3),
+      toolApproval(approved: ['calculateDiscount']),
+    ],
+  );
+
+  print('Result: \${result.text}');
+}
+''',
+          'prompts/greeting.prompt': '''---
+model: googleai/gemini-2.5-flash
+input:
+  schema:
+    user: string
+    role: string
+---
+You are an expert developer assistant in QuantumIDE.
+Welcome {{user}} who is working as a {{role}}.
+Explain how Genkit Dart 1.0 flows and tools can help them build agentic apps.
+''',
+          'README.md': '''# $projectName
+
+AI-powered application built with **Genkit Dart 1.0**.
+
+## 🚀 Getting Started
+
+1. Set your Gemini API key:
+   ```bash
+   export GEMINI_API_KEY="your-api-key"
+   ```
+
+2. Run the application:
+   ```bash
+   dart run bin/main.dart
+   ```
+
+3. Launch Genkit Developer UI:
+   ```bash
+   genkit start -- dart run bin/main.dart
+   ```
+''',
         };
 
       case ProjectTemplateType.rust:

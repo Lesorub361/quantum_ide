@@ -7,6 +7,11 @@
 6. Добавлен Pipeline Badge — `ai_agent_panel.dart`
 7. Модифицирован `AiNotifier` для Plan → Build flow, Git-чекпоинтов, автовалидации
 8. Исправлены ошибки компиляции в `right_chat_panel.dart`
+9. **Внедрен Genkit Dart 1.0**:
+   - Добавлены зависимости `genkit`, `genkit_google_genai`, `genkit_openai`, `genkit_anthropic`, `genkit_middleware`, `schemantic`
+   - Создан сервис `lib/core/services/genkit_service.dart` с нативными Human-in-the-Loop Interrupts (`ToolResult.interrupt`) и middleware (`retry`, `skills`, `toolApproval`)
+   - Добавлен проектный шаблон `ProjectTemplateType.genkit` в `lib/features/home/domain/project_template.dart`
+   - Созданы шаблоны Dotprompt (`assets/prompts/*.prompt`)
 
 Вот обновленный, структурированный план развития AI-режимов Quantum IDE на 2026 год. В него интегрированы лучшие практики индустрии (Cursor, Claude Code), исправлены недооцененные по сложности задачи, добавлены механизмы защиты от «выгорания» токенов и интеграция с Git.
 -------------------------------

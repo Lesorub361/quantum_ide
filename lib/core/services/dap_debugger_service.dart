@@ -3,84 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+export 'package:quantum_ide/core/models/dap_models.dart';
+import 'package:quantum_ide/core/models/dap_models.dart';
+
 enum DapDebuggerState { disconnected, connecting, connected, paused, running, stopped, error }
-
-enum StepType { over, into, out, continue_ }
-
-class DapDebuggerBreakpoint {
-  final String filePath;
-  final int line;
-  final int? column;
-  final bool verified;
-  final int? id;
-
-  const DapDebuggerBreakpoint({
-    required this.filePath,
-    required this.line,
-    this.column,
-    this.verified = false,
-    this.id,
-  });
-
-  DapDebuggerBreakpoint copyWith({bool? verified, int? id}) {
-    return DapDebuggerBreakpoint(
-      filePath: filePath,
-      line: line,
-      column: column,
-      verified: verified ?? this.verified,
-      id: id ?? this.id,
-    );
-  }
-}
-
-class DapDebuggerStackFrame {
-  final int id;
-  final String name;
-  final String source;
-  final int line;
-  final int column;
-  final String? moduleId;
-
-  const DapDebuggerStackFrame({
-    required this.id,
-    required this.name,
-    required this.source,
-    required this.line,
-    required this.column,
-    this.moduleId,
-  });
-}
-
-class DapDebuggerVariable {
-  final int? variablesReference;
-  final String name;
-  final String value;
-  final String type;
-  final List<DapDebuggerVariable>? children;
-
-  const DapDebuggerVariable({
-    this.variablesReference,
-    required this.name,
-    required this.value,
-    required this.type,
-    this.children,
-  });
-}
-
-class DapDebuggerException {
-  final String description;
-  final int? code;
-  final String? details;
-
-  const DapDebuggerException({required this.description, this.code, this.details});
-}
-
-class DapDebuggerEvent {
-  final String type;
-  final Map<String, dynamic> body;
-
-  const DapDebuggerEvent({required this.type, required this.body});
-}
 
 class DapDebuggerService {
   WebSocket? _socket;

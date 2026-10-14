@@ -8,6 +8,9 @@ import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:path/path.dart' as p;
 
+export 'package:quantum_ide/core/models/dap_models.dart';
+import 'package:quantum_ide/core/models/dap_models.dart';
+
 final dapServiceProvider = Provider<DapService>((ref) {
   final runtimeService = ref.watch(runtimeServiceProvider);
   final dap = DapService(
@@ -20,60 +23,6 @@ final dapServiceProvider = Provider<DapService>((ref) {
 });
 
 enum DapState { idle, launching, running, stopped, error }
-
-class DapBreakpoint {
-  final String fileUri;
-  final int line;
-  final int? column;
-  final bool verified;
-  final int? id;
-
-  const DapBreakpoint({
-    required this.fileUri,
-    required this.line,
-    this.column,
-    this.verified = false,
-    this.id,
-  });
-
-  DapBreakpoint copyWith({bool? verified, int? id}) {
-    return DapBreakpoint(
-      fileUri: fileUri,
-      line: line,
-      column: column,
-      verified: verified ?? this.verified,
-      id: id ?? this.id,
-    );
-  }
-}
-
-class DapStackFrame {
-  final int id;
-  final String name;
-  final String source;
-  final int line;
-  final int column;
-
-  const DapStackFrame({
-    required this.id,
-    required this.name,
-    required this.source,
-    required this.line,
-    required this.column,
-  });
-}
-
-class DapVariable {
-  final String name;
-  final String value;
-  final String type;
-
-  const DapVariable({
-    required this.name,
-    required this.value,
-    required this.type,
-  });
-}
 
 class DapService {
   final Ref ref;
@@ -378,11 +327,4 @@ class DapService {
     _outputController.close();
     _breakpointsController.close();
   }
-}
-
-class DapEvent {
-  final String type;
-  final Map<String, dynamic> body;
-
-  const DapEvent({required this.type, required this.body});
 }

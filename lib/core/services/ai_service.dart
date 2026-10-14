@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
+import 'package:genkit/genkit.dart' as gk;
+import 'genkit_service.dart';
 
 // ─── Хранилище ключей и настроек ─────────────────────────────────────────────
 
@@ -85,7 +87,9 @@ class AIService {
   // Backwards compat
   String get apiKey => _settings.currentApiKey;
 
-  AIService() {
+  final Ref? _ref;
+
+  AIService([this._ref]) {
     _init();
   }
 
@@ -171,6 +175,7 @@ class AIService {
     await prefs.setString('ai_provider_id', providerId);
     _settings = _settings.copyWith(selectedProviderId: providerId);
     _rebuildGemini();
+    _ref?.read(genkitServiceProvider).invalidate();
   }
 
   Future<void> setModel(String model) async {
@@ -178,6 +183,7 @@ class AIService {
     await prefs.setString('ai_selected_model', model);
     _settings = _settings.copyWith(selectedModel: model);
     _rebuildGemini();
+    _ref?.read(genkitServiceProvider).invalidate();
   }
 
   Future<void> setApiKey(String providerId, String key) async {
@@ -187,6 +193,7 @@ class AIService {
     newKeys[providerId] = key;
     _settings = _settings.copyWith(apiKeys: newKeys);
     _rebuildGemini();
+    _ref?.read(genkitServiceProvider).invalidate();
   }
 
   Future<void> setBaseUrl(String providerId, String url) async {
@@ -195,6 +202,7 @@ class AIService {
     final newUrls = Map<String, String>.from(_settings.baseUrls);
     newUrls[providerId] = url;
     _settings = _settings.copyWith(baseUrls: newUrls);
+    _ref?.read(genkitServiceProvider).invalidate();
   }
 
   Future<void> setLocalEngine(LocalAiEngine engine) async {
@@ -618,35 +626,6 @@ class AIService {
     throw lastException ?? Exception('Failed to load Google models');
   }
 
-  Future<List<String>> _fetchOpenAiCompatModels(String pid) async {
-    final key = _settings.apiKeys[pid] ?? '';
-    if (key.isEmpty) {
-      throw Exception(
-        'API key for ${AiProviders.byId(pid).displayName} is not set',
-      );
-    }
-    try {
-      final resp = await _executeOpenAiCompatRequest(
-        pid,
-        '/models',
-        isGet: true,
-      );
-      final models =
-          (resp.data['data'] as List).map((m) => m['id'] as String).toList()
-            ..sort();
-      if (models.isEmpty) {
-        throw Exception(
-          'Received empty model list from ${AiProviders.byId(pid).displayName}',
-        );
-      }
-      return models;
-    } catch (e) {
-      throw Exception('API error for ${AiProviders.byId(pid).displayName}: $e');
-    }
-  }
-
-  List<String> _anthropicModels() => AiProviders.anthropic.defaultModels;
-
   Future<List<String>> _fetchOllamaModels() async {
     final base = getBaseUrl('local_edge');
     try {
@@ -965,6 +944,35 @@ class AIService {
     String? systemInstruction,
     String? imageBase64,
   }) async {
+    if (_ref != null && imageBase64 == null) {
+      try {
+        final genkit = _ref.read(genkitServiceProvider);
+        final messages = <gk.Message>[];
+        for (final m in history) {
+          final role = m['role'] == 'user' ? gk.Role.user : gk.Role.model;
+          messages.add(gk.Message(role: role, content: [gk.TextPart(text: m['content'] ?? '')]));
+        }
+        final resp = await genkit.generate(
+          prompt: message,
+          system: systemInstruction,
+          messages: messages,
+          enableTools: false,
+        );
+        if (resp.text.isNotEmpty) {
+          return ChatResponse(
+            resp.text,
+            tokenUsage: TokenUsage(
+              promptTokens: resp.promptTokens,
+              completionTokens: resp.completionTokens,
+              totalTokens: resp.totalTokens,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Genkit execution fallback to legacy: $e');
+      }
+    }
+
     switch (_settings.selectedProviderId) {
       case 'google':
         return await _geminiChatMessage(
@@ -1026,6 +1034,36 @@ class AIService {
     String? systemInstruction,
     void Function(String token)? onToken,
   }) async {
+    if (_ref != null) {
+      try {
+        final genkit = _ref.read(genkitServiceProvider);
+        final messages = <gk.Message>[];
+        for (final m in history) {
+          final role = m['role'] == 'user' ? gk.Role.user : gk.Role.model;
+          messages.add(gk.Message(role: role, content: [gk.TextPart(text: m['content'] ?? '')]));
+        }
+        final resp = await genkit.generate(
+          prompt: message,
+          system: systemInstruction,
+          messages: messages,
+          enableTools: false,
+          onStreamChunk: onToken,
+        );
+        if (resp.text.isNotEmpty) {
+          return ChatResponse(
+            resp.text,
+            tokenUsage: TokenUsage(
+              promptTokens: resp.promptTokens,
+              completionTokens: resp.completionTokens,
+              totalTokens: resp.totalTokens,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Genkit stream fallback to legacy: $e');
+      }
+    }
+
     final pid = _settings.selectedProviderId;
 
     if (pid == 'google') {
@@ -1506,7 +1544,7 @@ class AIService {
   }
 }
 
-final aiServiceProvider = Provider<AIService>((ref) => AIService());
+final aiServiceProvider = Provider<AIService>((ref) => AIService(ref));
 
 final activeAiModelProvider = StateProvider<String>((ref) {
   final aiSvc = ref.watch(aiServiceProvider);

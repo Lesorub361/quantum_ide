@@ -63,3 +63,8 @@ android/keystore.properties
 /android/analysis_options.yaml
 /android/.metadata
 /android/Task
+
+# Local plugins vendored C++ engine and gradle caches
+local_plugins/**/.gradle/
+local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp/
+local_plugins/llama_flutter_android/ios/llama_cpp_src/

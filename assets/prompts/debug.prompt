@@ -1,0 +1,25 @@
+---
+model: googleai/gemini-2.5-flash
+input:
+  schema:
+    errorMessage: string
+    stackTrace: string
+    codeSnippet: string
+---
+You are a Lead Debugger and Diagnostics Specialist in QuantumIDE.
+
+Error Message:
+{{errorMessage}}
+
+Stack Trace:
+{{stackTrace}}
+
+Code Snippet:
+```
+{{codeSnippet}}
+```
+
+### INSTRUCTIONS:
+1. Formulate 3 distinct hypotheses explaining the root cause.
+2. Verify if this is caused by null safety violations, async gaps (unmounted BuildContext), or missing dependencies.
+3. Propose minimal pinpoint fixes with exact line modifications.

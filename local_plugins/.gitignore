@@ -20,3 +20,11 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 pubspec.lock
+
+# Gradle caches
+.gradle/
+**/android/.gradle/
+
+# Vendored C++ engine (setup via scripts/setup_llama.sh)
+android/src/main/cpp/llama.cpp/
+ios/llama_cpp_src/
