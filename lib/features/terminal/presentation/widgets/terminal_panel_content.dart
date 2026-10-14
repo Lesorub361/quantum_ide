@@ -1832,13 +1832,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                             }
                           }
                         },
-                        onDoubleTap: () {
-                          TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+                        onSecondaryTapDown: (details) {
+                          if (session.xtermViewController.selection != null) {
+                            _copySelection(session);
+                          } else {
+                            _pasteToTerminal(session);
+                          }
                         },
-                        onLongPressStart: (details) =>
-                            _showTerminalContextMenu(context, details.globalPosition, session),
-                        onSecondaryTapDown: (details) =>
-                            _showTerminalContextMenu(context, details.globalPosition, session),
                         child: xt.TerminalView(
                           key: _getTerminalKey(keyId),
                           session.xtermTerminal,
@@ -1879,7 +1879,134 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           ],
         ),
         _buildSuggestionBox(session),
+        _buildFloatingSelectionToolbar(session),
       ],
+    );
+  }
+
+  Widget _buildFloatingSelectionToolbar(TerminalSession session) {
+    return AnimatedBuilder(
+      animation: session.xtermViewController,
+      builder: (context, _) {
+        final selection = session.xtermViewController.selection;
+        if (selection == null) return const SizedBox.shrink();
+        final selectedText = session.xtermTerminal.buffer.getText(selection);
+        if (selectedText.trim().isEmpty) return const SizedBox.shrink();
+
+        final l10n = AppLocalizations.of(context)!;
+        return Positioned(
+          top: 14,
+          right: 18,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2230).withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.45), width: 0.8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: selectedText));
+                      session.xtermViewController.clearSelection();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(l10n.copiedToClipboard),
+                            duration: const Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.copy, size: 13, color: Colors.cyanAccent),
+                          const SizedBox(width: 5),
+                          Text(
+                            l10n.copy,
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(width: 1, height: 16, margin: const EdgeInsets.symmetric(horizontal: 3), color: Colors.white12),
+                  InkWell(
+                    onTap: () async {
+                      await _pasteToTerminal(session);
+                      session.xtermViewController.clearSelection();
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.clipboard_paste, size: 13, color: Colors.white70),
+                          const SizedBox(width: 5),
+                          Text(
+                            l10n.paste,
+                            style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(width: 1, height: 16, margin: const EdgeInsets.symmetric(horizontal: 3), color: Colors.white12),
+                  InkWell(
+                    onTap: () {
+                      ref.read(rightChatPanelOpenProvider.notifier).state = true;
+                      ref.read(aiProvider.notifier).askAI(
+                        'Помоги разобраться с этой ошибкой/выводом из терминала:\n```\n$selectedText\n```',
+                      );
+                      session.xtermViewController.clearSelection();
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.sparkles, size: 13, color: Colors.purpleAccent),
+                          const SizedBox(width: 5),
+                          Text(
+                            'AI ✨',
+                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  IconButton(
+                    icon: const Icon(LucideIcons.x, size: 14, color: Colors.white38),
+                    onPressed: () => session.xtermViewController.clearSelection(),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                    splashRadius: 13,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

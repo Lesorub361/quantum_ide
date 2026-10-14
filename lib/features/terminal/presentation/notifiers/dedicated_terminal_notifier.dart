@@ -156,9 +156,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         workingDirectory: Platform.isAndroid ? runtime.appDirectory : dir,
       );
 
-      final xtermVc = xt.TerminalController(
-        pointerInputs: const xt.PointerInputs.all(),
-      );
+      final xtermVc = xt.TerminalController();
       int lastCols = -1;
       int lastRows = -1;
       final xtermTerm = xt.Terminal(
