@@ -1597,14 +1597,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   }
 
   Widget _buildDashboard(BuildContext context, WidgetRef ref, bool isDesktop, String? workspacePath) {
-    final stats = ref.watch(systemStatsProvider);
     final gitChangesCount = ref.watch(gitProvider.select((s) =>
       (s.status?.stagedFiles.length ?? 0) +
       (s.status?.modifiedFiles.length ?? 0) +
       (s.status?.untrackedFiles.length ?? 0) +
       (s.status?.conflictedFiles.length ?? 0)
     ));
-
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -1646,52 +1644,57 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               ),
               const SizedBox(height: 32),
 
-              // System Stats Dashboard with Circular Gauges
-              GlassContainer(
-                blur: 20,
-                opacity: 0.05,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'МОНИТОРИНГ СИСТЕМЫ',
-                        style: GoogleFonts.inter(
-                          color: Colors.white38,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.0,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              // System Stats Dashboard with Circular Gauges (Isolated Consumer)
+              Consumer(
+                builder: (context, ref, _) {
+                  final stats = ref.watch(systemStatsProvider);
+                  return GlassContainer(
+                    blur: 0,
+                    opacity: 0.05,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _buildCircularGauge(
-                            label: 'CPU',
-                            value: '${(stats.cpuUsage * 100).toStringAsFixed(1)}%',
-                            progress: stats.cpuUsage,
-                            color: Colors.cyanAccent,
+                          Text(
+                            'МОНИТОРИНГ СИСТЕМЫ',
+                            style: GoogleFonts.inter(
+                              color: Colors.white38,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
                           ),
-                          Container(
-                            width: 1,
-                            height: 60,
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                          _buildCircularGauge(
-                            label: 'RAM',
-                            value: '${stats.ramUsedGB.toStringAsFixed(1)} GB / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
-                            progress: stats.ramUsage,
-                            color: Colors.purpleAccent,
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _buildCircularGauge(
+                                label: 'CPU',
+                                value: '${(stats.cpuUsage * 100).toStringAsFixed(1)}%',
+                                progress: stats.cpuUsage,
+                                color: Colors.cyanAccent,
+                              ),
+                              Container(
+                                width: 1,
+                                height: 60,
+                                color: Colors.white.withValues(alpha: 0.08),
+                              ),
+                              _buildCircularGauge(
+                                label: 'RAM',
+                                value: '${stats.ramUsedGB.toStringAsFixed(1)} GB / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
+                                progress: stats.ramUsage,
+                                color: Colors.purpleAccent,
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
 

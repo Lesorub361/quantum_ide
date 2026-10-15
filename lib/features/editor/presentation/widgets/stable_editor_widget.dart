@@ -183,168 +183,134 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
     if (!currentSelection.isCollapsed || !previousSelection.isCollapsed) return;
     if (currentSelection.extentIndex != previousSelection.extentIndex) return;
-
     if (currentValue.codeLines.length > _autoCloseMaxLines) return;
+
+    final lineIndex = currentSelection.extentIndex;
+    if (lineIndex >= currentValue.codeLines.length || lineIndex >= previousValue.codeLines.length) return;
 
     final currentOffset = currentSelection.extentOffset;
     final previousOffset = previousSelection.extentOffset;
-    final currentText = controller.text;
-    final previousText = previousValue.codeLines.toString();
+    final currentLineText = currentValue.codeLines[lineIndex].text;
+    final prevLineText = previousValue.codeLines[lineIndex].text;
 
-    // Backspace matching pair
-    if (currentText.length == previousText.length - 1) {
-      if (currentSelection.extentIndex == previousSelection.extentIndex &&
-          currentOffset == previousOffset - 1) {
-        final lineIndex = currentSelection.extentIndex;
-        if (lineIndex < currentValue.codeLines.length) {
-          final currentLineText = currentValue.codeLines[lineIndex].text;
-          final prevLineText = previousValue.codeLines[lineIndex].text;
+    // 1. Backspace matching pair on the same line (O(1))
+    if (currentLineText.length == prevLineText.length - 1 && currentOffset == previousOffset - 1) {
+      if (currentOffset >= 0 && currentOffset < currentLineText.length &&
+          previousOffset > 0 && previousOffset <= prevLineText.length) {
+        final deletedChar = prevLineText[currentOffset];
+        if (currentOffset + 1 < prevLineText.length) {
+          final nextCharInPrev = prevLineText[currentOffset + 1];
 
-          if (currentOffset >= 0 && currentOffset < currentLineText.length &&
-              previousOffset > 0 && previousOffset <= prevLineText.length) {
-            final deletedChar = prevLineText[currentOffset];
-            if (currentOffset + 1 < prevLineText.length) {
-              final nextCharInPrev = prevLineText[currentOffset + 1];
-              
-              bool isPair = false;
-              if ((deletedChar == '(' && nextCharInPrev == ')') ||
-                  (deletedChar == '{' && nextCharInPrev == '}') ||
-                  (deletedChar == '[' && nextCharInPrev == ']') ||
-                  (deletedChar == '"' && nextCharInPrev == '"') ||
-                  (deletedChar == "'" && nextCharInPrev == "'") ||
-                  (deletedChar == '`' && nextCharInPrev == '`')) {
-                isPair = true;
-              }
-
-              if (isPair && currentOffset < currentLineText.length && 
-                  currentLineText[currentOffset] == nextCharInPrev) {
-                _isAutoClosing = true;
-                
-                final newLineText = currentLineText.substring(0, currentOffset) +
-                                    currentLineText.substring(currentOffset + 1);
-                
-                final List<String> newLinesList = [];
-                for (int i = 0; i < currentValue.codeLines.length; i++) {
-                  if (i == lineIndex) {
-                    newLinesList.add(newLineText);
-                  } else {
-                    newLinesList.add(currentValue.codeLines[i].text);
-                  }
-                }
-                
-                final newText = newLinesList.join('\n');
-                
-                controller.value = CodeLineEditingValue(
-                  codeLines: CodeLines.fromText(newText),
-                  selection: currentSelection,
-                );
-                
-                _previousValue = controller.value;
-                _isAutoClosing = false;
-                return;
-              }
-            }
+          bool isPair = false;
+          if ((deletedChar == '(' && nextCharInPrev == ')') ||
+              (deletedChar == '{' && nextCharInPrev == '}') ||
+              (deletedChar == '[' && nextCharInPrev == ']') ||
+              (deletedChar == '"' && nextCharInPrev == '"') ||
+              (deletedChar == "'" && nextCharInPrev == "'") ||
+              (deletedChar == '`' && nextCharInPrev == '`')) {
+            isPair = true;
           }
-        }
-      }
-    }
 
-    // Check if exactly one character was added on the same line
-    if (currentText.length == previousText.length + 1) {
-      if (currentSelection.extentIndex == previousSelection.extentIndex &&
-          currentOffset == previousOffset + 1) {
-        final lineIndex = currentSelection.extentIndex;
-        if (lineIndex >= currentValue.codeLines.length) return;
-
-        final lineText = currentValue.codeLines[lineIndex].text;
-        if (currentOffset <= 0 || currentOffset > lineText.length) return;
-
-        final typedChar = lineText[currentOffset - 1];
-
-        // Step over closing character (overtype prevention)
-        if (typedChar == ')' || typedChar == '}' || typedChar == ']' ||
-            typedChar == '"' || typedChar == "'" || typedChar == '`') {
-          final prevLineText = previousValue.codeLines[lineIndex].text;
-          if (previousOffset < prevLineText.length && 
-              prevLineText[previousOffset] == typedChar) {
+          if (isPair && currentOffset < currentLineText.length &&
+              currentLineText[currentOffset] == nextCharInPrev) {
             _isAutoClosing = true;
-            
-            final List<String> oldLinesList = [];
-            for (int i = 0; i < previousValue.codeLines.length; i++) {
-              oldLinesList.add(previousValue.codeLines[i].text);
-            }
-            final revertedText = oldLinesList.join('\n');
-            
+
+            final newLineText = currentLineText.substring(0, currentOffset) +
+                                currentLineText.substring(currentOffset + 1);
+
+            final newLines = List<CodeLine>.generate(currentValue.codeLines.length, (i) {
+              if (i == lineIndex) return CodeLine(newLineText);
+              return currentValue.codeLines[i];
+            });
+
             controller.value = CodeLineEditingValue(
-              codeLines: CodeLines.fromText(revertedText),
+              codeLines: CodeLines.of(newLines),
               selection: currentSelection,
             );
-            
+
             _previousValue = controller.value;
             _isAutoClosing = false;
             return;
           }
         }
+      }
+    }
 
-        // Auto-close opening character
-        String? closingChar;
-        switch (typedChar) {
-          case '(':
-            closingChar = ')';
-            break;
-          case '{':
-            closingChar = '}';
-            break;
-          case '[':
-            closingChar = ']';
-            break;
-          case '"':
-            closingChar = '"';
-            break;
-          case "'":
-            closingChar = "'";
-            break;
-          case '`':
-            closingChar = '`';
-            break;
-        }
+    // 2. Typing characters on the same line (O(1))
+    if (currentLineText.length == prevLineText.length + 1 && currentOffset == previousOffset + 1) {
+      if (currentOffset <= 0 || currentOffset > currentLineText.length) return;
 
-        if (closingChar != null) {
-          // Don't auto-close quotes if the next character is already a letter, number, or quote
-          if ((typedChar == '"' || typedChar == "'" || typedChar == '`') &&
-              currentOffset < lineText.length) {
-            final nextChar = lineText[currentOffset];
-            final RegExp wordChar = RegExp(r'[a-zA-Z0-9_]');
-            if (wordChar.hasMatch(nextChar) || nextChar == "'" || nextChar == '"' || nextChar == '`') {
-              return;
-            }
-          }
+      final typedChar = currentLineText[currentOffset - 1];
 
+      // Step over closing character (overtype prevention)
+      if (typedChar == ')' || typedChar == '}' || typedChar == ']' ||
+          typedChar == '"' || typedChar == "'" || typedChar == '`') {
+        if (previousOffset < prevLineText.length &&
+            prevLineText[previousOffset] == typedChar) {
           _isAutoClosing = true;
 
-          final newLineText = lineText.substring(0, currentOffset) +
-                              closingChar +
-                              lineText.substring(currentOffset);
-
-          final List<String> newLinesList = [];
-          for (int i = 0; i < currentValue.codeLines.length; i++) {
-            if (i == lineIndex) {
-              newLinesList.add(newLineText);
-            } else {
-              newLinesList.add(currentValue.codeLines[i].text);
-            }
-          }
-
-          final newText = newLinesList.join('\n');
-
-          controller.value = CodeLineEditingValue(
-            codeLines: CodeLines.fromText(newText),
+          controller.value = previousValue.copyWith(
             selection: currentSelection,
           );
 
           _previousValue = controller.value;
           _isAutoClosing = false;
+          return;
         }
+      }
+
+      // Auto-close opening character
+      String? closingChar;
+      switch (typedChar) {
+        case '(':
+          closingChar = ')';
+          break;
+        case '{':
+          closingChar = '}';
+          break;
+        case '[':
+          closingChar = ']';
+          break;
+        case '"':
+          closingChar = '"';
+          break;
+        case "'":
+          closingChar = "'";
+          break;
+        case '`':
+          closingChar = '`';
+          break;
+      }
+
+      if (closingChar != null) {
+        // Don't auto-close quotes if the next character is already a letter, number, or quote
+        if ((typedChar == '"' || typedChar == "'" || typedChar == '`') &&
+            currentOffset < currentLineText.length) {
+          final nextChar = currentLineText[currentOffset];
+          final RegExp wordChar = RegExp(r'[a-zA-Z0-9_]');
+          if (wordChar.hasMatch(nextChar) || nextChar == "'" || nextChar == '"' || nextChar == '`') {
+            return;
+          }
+        }
+
+        _isAutoClosing = true;
+
+        final newLineText = currentLineText.substring(0, currentOffset) +
+                            closingChar +
+                            currentLineText.substring(currentOffset);
+
+        final newLines = List<CodeLine>.generate(currentValue.codeLines.length, (i) {
+          if (i == lineIndex) return CodeLine(newLineText);
+          return currentValue.codeLines[i];
+        });
+
+        controller.value = CodeLineEditingValue(
+          codeLines: CodeLines.of(newLines),
+          selection: currentSelection,
+        );
+
+        _previousValue = controller.value;
+        _isAutoClosing = false;
       }
     }
   }
