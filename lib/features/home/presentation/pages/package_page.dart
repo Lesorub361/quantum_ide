@@ -13,6 +13,8 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/home/presentation/widgets/package_install_dialog.dart';
 import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/utils/path_mapper.dart';
 
 class PackagePage extends ConsumerStatefulWidget {
   const PackagePage({super.key});
@@ -1343,8 +1345,12 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
       return;
     }
 
+    final hostPath = workspace.currentPath!;
+    final runtime = ref.read(runtimeServiceProvider);
+    final guestPath = PathMapper.mapToGuest(hostPath, runtime.appDirectory);
+
     ref.read(terminalTabsProvider.notifier).sendCommand(
-      'flutter pub add ${pkg.name}',
+      'cd "$guestPath" && flutter pub add ${pkg.name}',
       createNewTab: true,
     );
     

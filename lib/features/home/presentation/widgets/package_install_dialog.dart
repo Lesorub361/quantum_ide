@@ -132,6 +132,14 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
         command = 'export HOME=/root ; export USER=root ; curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y --reinstall nodejs';
       } else if (widget.package.id == 'build-essential') {
         command = 'export HOME=/root ; export USER=root ; apt update && apt install --reinstall -y build-essential';
+      } else if (widget.package.id == 'uv') {
+        command = 'uv self update || (curl -LsSf https://astral.sh/uv/install.sh | sh)';
+      } else if (widget.package.id == 'bun') {
+        command = 'bun upgrade || (curl -fsSL https://bun.sh/install | bash)';
+      } else if (widget.package.id == 'pnpm') {
+        command = 'npm install -g pnpm@latest';
+      } else if (widget.package.id == 'flutter-distributor') {
+        command = 'dart pub global activate flutter_distributor';
       } else {
         // Run full package command for SDK components, LSPs, etc.
         command = widget.package.command;

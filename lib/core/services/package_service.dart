@@ -362,6 +362,24 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'local-ai-qwen':
               exists = _hasCommand('llama-server') || _hasCommand('llama-cli');
               break;
+            case 'uv':
+              exists = _hasCommand('uv') || File('/root/.cargo/bin/uv').existsSync() || File('/root/.local/bin/uv').existsSync() || File('/usr/local/bin/uv').existsSync();
+              break;
+            case 'bun':
+              exists = _hasCommand('bun') || File('/root/.bun/bin/bun').existsSync() || File('/usr/local/bin/bun').existsSync();
+              break;
+            case 'pnpm':
+              exists = _hasCommand('pnpm') || File('/usr/local/bin/pnpm').existsSync() || File('/usr/local/lib/nodejs/bin/pnpm').existsSync();
+              break;
+            case 'desktop-build-tools':
+              exists = (_hasCommand('clang') || File('/usr/bin/clang').existsSync()) &&
+                       (_hasCommand('cmake') || File('/usr/bin/cmake').existsSync()) &&
+                       (_hasCommand('ninja') || File('/usr/bin/ninja').existsSync()) &&
+                       (Directory('/usr/include/gtk-3.0').existsSync() || File('/usr/lib/pkgconfig/gtk+-3.0.pc').existsSync());
+              break;
+            case 'flutter-distributor':
+              exists = _hasCommand('flutter_distributor') || File('/root/.pub-cache/bin/flutter_distributor').existsSync();
+              break;
           }
         } else {
           // Check on Android inside rootfs
@@ -546,6 +564,31 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'llama-server')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'bin', 'llama-cli')).exists() ||
                        await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'llama-cli')).exists();
+              break;
+            case 'uv':
+              exists = await File(p.join(rootfsPath, 'root', '.cargo', 'bin', 'uv')).exists() ||
+                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'uv')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'uv')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'uv')).exists();
+              break;
+            case 'bun':
+              exists = await File(p.join(rootfsPath, 'root', '.bun', 'bin', 'bun')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'bun')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'bun')).exists();
+              break;
+            case 'pnpm':
+              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pnpm')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'pnpm')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'pnpm')).exists();
+              break;
+            case 'desktop-build-tools':
+              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'clang')).exists() &&
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'cmake')).exists() &&
+                       await File(p.join(rootfsPath, 'usr', 'bin', 'ninja')).exists();
+              break;
+            case 'flutter-distributor':
+              exists = await File(p.join(rootfsPath, 'root', '.pub-cache', 'bin', 'flutter_distributor')).exists() ||
+                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'flutter_distributor')).exists();
               break;
           }
         }

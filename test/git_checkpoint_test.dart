@@ -17,19 +17,6 @@ class _MockWorkspaceNotifier extends StateNotifier<WorkspaceState> implements Wo
     state = state.copyWith(currentPath: path);
   }
 
-  @override
-  Future<void> clearWorkspace() async {
-    state = state.copyWith(clearCurrentPath: true);
-  }
-
-  @override
-  Future<void> addToRecent(String path) async {}
-
-  @override
-  Future<void> removeFromRecent(String path) async {}
-
-  @override
-  Future<void> clearRecent() async {}
 
   @override
   Future<void> closeWorkspace() async {

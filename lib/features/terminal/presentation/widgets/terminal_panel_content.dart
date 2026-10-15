@@ -1105,12 +1105,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               ? Column(
                   children: [
                     _buildActionHeader(l10n.build, [
-                      if (Platform.isAndroid) ...[
-                        _buildActionButton('APK', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
-                      ] else ...[
-                        _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build linux --release')),
-                        _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
-                      ],
+                      _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build linux --release')),
+                      _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
                       _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get')),
                       _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean')),
                       _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.build)),
