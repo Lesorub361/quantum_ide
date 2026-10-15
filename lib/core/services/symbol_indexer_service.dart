@@ -373,7 +373,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
     return matched.take(50).toList();
   }
 
-  Future<List<_SearchResult>> semanticSearch(String query, {int limit = 20}) async {
+  Future<List<SearchResult>> semanticSearch(String query, {int limit = 20}) async {
     if (query.isEmpty || state.symbols.isEmpty) return [];
     
     final normalized = query.toLowerCase();
@@ -422,7 +422,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       return termIdf * tf * (k1 + 1) / (tf + k1 * (1 - b + b * docLen / avgDocLength));
     }
 
-    final results = <_SearchResult>[];
+    final results = <SearchResult>[];
     final seenFiles = <String>{};
 
     // 1. Symbol matches (high weight)
@@ -436,10 +436,13 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
         final tf = matchedTerms.where((t) => t == term).length;
           score += bm25(term, tf, nameLower.length.toDouble());
       }
-      if (nameLower == normalized) score += 5.0;
-      else if (nameLower.startsWith(normalized)) score += 3.0;
+      if (nameLower == normalized) {
+        score += 5.0;
+      } else if (nameLower.startsWith(normalized)) {
+        score += 3.0;
+      }
 
-      results.add(_SearchResult(
+      results.add(SearchResult(
         type: 'symbol',
         title: symbol.name,
         subtitle: '${symbol.type} in ${p.basename(symbol.filePath)}:${symbol.lineNumber}',
@@ -465,10 +468,13 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
         final tf = matchedTerms.where((t) => t == term).length;
           score += bm25(term, tf, docLen);
       }
-      if (fileName == normalized) score += 4.0;
-      else if (fileName.startsWith(normalized)) score += 2.0;
+      if (fileName == normalized) {
+        score += 4.0;
+      } else if (fileName.startsWith(normalized)) {
+        score += 2.0;
+      }
 
-      results.add(_SearchResult(
+      results.add(SearchResult(
         type: 'file',
         title: p.basename(filePath),
         subtitle: p.relative(filePath, from: state.files.isNotEmpty ? p.dirname(state.files.first) : ''),
@@ -507,7 +513,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
             score += bm25(term, tf, docLen) * 0.5;
           }
 
-          results.add(_SearchResult(
+          results.add(SearchResult(
             type: 'snippet',
             title: '${p.basename(filePath)}:${i + 1}',
             subtitle: line.trim().length > 80 ? '${line.trim().substring(0, 80)}...' : line.trim(),
@@ -530,7 +536,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
   }
 }
 
-class _SearchResult {
+class SearchResult {
   final String type; // 'symbol', 'file', 'snippet'
   final String title;
   final String subtitle;
@@ -539,7 +545,7 @@ class _SearchResult {
   final double score;
   final List<String> matchedTerms;
 
-  _SearchResult({
+  SearchResult({
     required this.type,
     required this.title,
     required this.subtitle,

@@ -54,7 +54,7 @@ class _DevicePreviewPageState extends ConsumerState<DevicePreviewPage> {
                     const Icon(LucideIcons.smartphone, size: 18, color: Colors.purpleAccent),
                     const SizedBox(width: 8),
                     ShaderMask(
-                      shaderCallback: (b) => LinearGradient(
+                      shaderCallback: (b) => const LinearGradient(
                         colors: [Colors.purpleAccent, Colors.deepPurpleAccent],
                       ).createShader(b),
                       child: Text(
@@ -518,7 +518,7 @@ class _GridPainter extends CustomPainter {
       ..color = Colors.white.withValues(alpha: 0.05)
       ..strokeWidth = 0.5;
 
-    final step = 40.0;
+    const step = 40.0;
     for (double x = 0; x < size.width; x += step) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
     }

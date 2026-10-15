@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:riverpod/riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../ai_service.dart';
 import '../mcp_service.dart';
 import 'agent_tool.dart';

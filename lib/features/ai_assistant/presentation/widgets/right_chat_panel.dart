@@ -28,6 +28,7 @@ import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_sel
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
 import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
+import 'package:quantum_ide/core/services/ai_mode_router.dart';
 
 final activeAiProviderIdProvider = StateProvider<String>((ref) {
   final aiSvc = ref.read(aiServiceProvider);
@@ -1320,7 +1321,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             ],
           ),
         ),
-        if (aiState.isAutopilot || aiState.isLoading)
+        if (aiState.canRollback || aiState.isAutopilot || aiState.isLoading)
           const PopupMenuItem(
             value: 'rollback',
             child: Row(
@@ -1795,6 +1796,46 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               ),
             ),
 
+          // Rollback notification bar
+          if (aiState.canRollback && !isBusy)
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.rotate_ccw, size: 13, color: Colors.amberAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Доступна точка отката изменений агента',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: Colors.amber.shade200, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () => ref.read(aiProvider.notifier).rollbackAgentChanges(),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      child: Text(
+                        'Откатить',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.amberAccent,
+                          fontWeight: FontWeight.w700,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Input Box
           Container(
             decoration: BoxDecoration(
@@ -2127,13 +2168,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
     final shouldIncludeFile = (_attachActiveFile || isActionChip) && hasActiveFile;
 
-    final suggestedMode = _suggestMode(value, hasActiveFile, activeFile);
-    if (suggestedMode != null) {
-      final currentMode = ref.read(aiProvider).interactionMode;
-      if (suggestedMode != currentMode) {
-        _showModeSuggestionDialog(context, ref, suggestedMode, value);
-        return;
-      }
+    final suggestion = _suggestMode(value, hasActiveFile, activeFile);
+    if (suggestion != null) {
+      _showModeSuggestionDialog(context, ref, suggestion, value);
+      return;
     }
 
     String fullPrompt = value;
@@ -2364,8 +2402,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
-  AiInteractionMode? _suggestMode(String prompt, bool hasActiveFile, dynamic activeFile) {
-    final lower = prompt.toLowerCase();
+  AiModeSuggestion? _suggestMode(String prompt, bool hasActiveFile, dynamic activeFile) {
     bool hasSelection = false;
     if (activeFile != null) {
       try {
@@ -2375,30 +2412,20 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         hasSelection = false;
       }
     }
-    
-    if (lower.contains('спроектируй') || lower.contains('архитектур') || lower.contains('планировщ') || lower.contains('plan') || lower.contains('design')) {
-      return AiInteractionMode.plan;
-    }
-    if (lower.contains('исправь') || lower.contains('fix') || lower.contains('ошибк') || lower.contains('bug')) {
-      return AiInteractionMode.refactor;
-    }
-    if (lower.contains('отлад') || lower.contains('debug') || lower.contains('падени') || lower.contains('trace')) {
-      return AiInteractionMode.debug;
-    }
-    if (lower.contains('сделай') || lower.contains('создай') || lower.contains('напиши') || lower.contains('build') || lower.contains('implement')) {
-      return AiInteractionMode.autopilot;
-    }
-    if (hasActiveFile && hasSelection && (lower.contains('что это') || lower.contains('объясни') || lower.contains('explain'))) {
-      return AiInteractionMode.ask;
-    }
-    return null;
+
+    final currentMode = ref.read(aiProvider).interactionMode;
+    return AiModeRouter.route(
+      prompt: prompt,
+      currentMode: currentMode,
+      hasSelection: hasSelection,
+    );
   }
 
-  void _showModeSuggestionDialog(BuildContext context, WidgetRef ref, AiInteractionMode suggestedMode, String originalPrompt) {
+  void _showModeSuggestionDialog(BuildContext context, WidgetRef ref, AiModeSuggestion suggestion, String originalPrompt) {
     final l10n = AppLocalizations.of(context)!;
-    final modeLabel = _getModeLabel(suggestedMode);
-    final modeIcon = _getModeIcon(suggestedMode);
-    final modeColor = _getModeColor(suggestedMode);
+    final modeLabel = _getModeLabel(suggestion.recommendedMode);
+    final modeIcon = _getModeIcon(suggestion.recommendedMode);
+    final modeColor = _getModeColor(suggestion.recommendedMode);
     
     showDialog(
       context: context,
@@ -2416,7 +2443,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ],
         ),
         content: Text(
-          'Похоже, этот запрос лучше обработать в режиме "$modeLabel". Переключиться?',
+          '${suggestion.reason}.\n\nПереключиться в режим "$modeLabel"?',
           style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
         actions: [
@@ -2430,7 +2457,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ref.read(aiProvider.notifier).setInteractionMode(suggestedMode);
+              ref.read(aiProvider.notifier).setInteractionMode(suggestion.recommendedMode);
               _sendMessage(context, ref);
             },
             style: ElevatedButton.styleFrom(

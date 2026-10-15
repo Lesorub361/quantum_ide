@@ -92,6 +92,10 @@ class GhostQAService {
 
   static const int defaultPort = 9988;
 
+  /// The currently active HTTP server port, or null if server is not running.
+  int? get boundPort => _server?.port;
+  int get activePort => _server?.port ?? defaultPort;
+
   bool? _authorizedCache;
   HttpServer? _server;
   int _pointerId = 1000;
@@ -209,10 +213,10 @@ class GhostQAService {
   Future<void> _startHttpServerIfAuthorized() async {
     if (!isAuthorized || _server != null) return;
 
-    for (final port in [defaultPort, 9989, 9990]) {
+    for (final port in [defaultPort, 9989, 9990, 0]) {
       try {
         _server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
-        debugPrint('[GhostQA] 🚀 Ghost QA HTTP Bridge listening on http://127.0.0.1:$port');
+        debugPrint('[GhostQA] 🚀 Ghost QA HTTP Bridge listening on http://127.0.0.1:${_server!.port}');
         _server!.listen(_handleHttpRequest);
         break;
       } catch (e) {

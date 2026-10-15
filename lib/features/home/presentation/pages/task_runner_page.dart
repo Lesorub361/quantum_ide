@@ -115,7 +115,7 @@ class _TaskRunnerPageState extends ConsumerState<TaskRunnerPage> {
                   ],
                   selected: {_selectedSource},
                   onSelectionChanged: (v) => setState(() => _selectedSource = v.first),
-                  style: ButtonStyle(
+                  style: const ButtonStyle(
                     visualDensity: VisualDensity.compact,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),

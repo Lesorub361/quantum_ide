@@ -47,9 +47,11 @@ void main() {
       final service = GhostQAService.instance;
       await service.init();
 
+      final port = service.activePort;
+
       // Query health endpoint
       final client = HttpClient();
-      final healthReq = await client.getUrl(Uri.parse('http://127.0.0.1:9988/health'));
+      final healthReq = await client.getUrl(Uri.parse('http://127.0.0.1:$port/health'));
       final healthResp = await healthReq.close();
       expect(healthResp.statusCode, equals(HttpStatus.ok));
 
@@ -64,7 +66,7 @@ void main() {
         exception: Exception('HTTP Error Test'),
       ));
 
-      final errorsReq = await client.getUrl(Uri.parse('http://127.0.0.1:9988/errors'));
+      final errorsReq = await client.getUrl(Uri.parse('http://127.0.0.1:$port/errors'));
       final errorsResp = await errorsReq.close();
       expect(errorsResp.statusCode, equals(HttpStatus.ok));
       final errorsBody = await utf8.decodeStream(errorsResp);
@@ -72,7 +74,7 @@ void main() {
       expect(errorsJson['count'], greaterThanOrEqualTo(1));
 
       // Clear via HTTP POST /clear_errors
-      final clearReq = await client.postUrl(Uri.parse('http://127.0.0.1:9988/clear_errors'));
+      final clearReq = await client.postUrl(Uri.parse('http://127.0.0.1:$port/clear_errors'));
       final clearResp = await clearReq.close();
       expect(clearResp.statusCode, equals(HttpStatus.ok));
       expect(service.getErrors(), isEmpty);

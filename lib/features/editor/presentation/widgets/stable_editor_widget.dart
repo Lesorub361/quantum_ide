@@ -493,15 +493,15 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             ],
           ),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'aiRefactor',
           child: Row(
             children: [
-              const Icon(LucideIcons.wrench, size: 14, color: Colors.orangeAccent),
-              const SizedBox(width: 8),
+              Icon(LucideIcons.wrench, size: 14, color: Colors.orangeAccent),
+              SizedBox(width: 8),
               Text(
                 'Refactor',
-                style: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
               ),
             ],
           ),

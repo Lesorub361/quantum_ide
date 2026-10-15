@@ -4,7 +4,7 @@ import 'package:re_editor/re_editor.dart';
 
 class MultiCursorService extends ChangeNotifier {
   final List<Offset> _cursors = [];
-  List<Offset> _selections = [];
+  final List<Offset> _selections = [];
   bool _isActive = false;
 
   List<Offset> get cursors => List.unmodifiable(_cursors);

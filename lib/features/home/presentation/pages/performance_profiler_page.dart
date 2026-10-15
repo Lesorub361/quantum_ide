@@ -55,7 +55,7 @@ class _PerformanceProfilerPageState extends ConsumerState<PerformanceProfilerPag
                     const Icon(LucideIcons.activity, size: 18, color: Colors.cyanAccent),
                     const SizedBox(width: 8),
                     ShaderMask(
-                      shaderCallback: (b) => LinearGradient(
+                      shaderCallback: (b) => const LinearGradient(
                         colors: [Colors.cyanAccent, Colors.blueAccent],
                       ).createShader(b),
                       child: Text(
@@ -194,7 +194,7 @@ class _PerformanceProfilerPageState extends ConsumerState<PerformanceProfilerPag
 
     return Row(
       children: [
-        _metricCard('FPS', '${fps.toStringAsFixed(1)}', _getFpsColor(fps), LucideIcons.gauge),
+        _metricCard('FPS', fps.toStringAsFixed(1), _getFpsColor(fps), LucideIcons.gauge),
         const SizedBox(width: 8),
         _metricCard('Memory', '${memory.toStringAsFixed(1)} MB', _getMemoryColor(memory), LucideIcons.memory_stick),
         const SizedBox(width: 8),
@@ -353,7 +353,7 @@ class _PerformanceProfilerPageState extends ConsumerState<PerformanceProfilerPag
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Row(
                     children: [
-                      Icon(LucideIcons.circle_play, size: 14, color: Colors.cyanAccent),
+                      const Icon(LucideIcons.circle_play, size: 14, color: Colors.cyanAccent),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(

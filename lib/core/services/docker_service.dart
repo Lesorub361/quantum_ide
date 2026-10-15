@@ -232,10 +232,6 @@ class DockerService extends ChangeNotifier {
     return '$filesDir/data:/data:rw';
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
 }
 
 final dockerServiceProvider = Provider((ref) => DockerService(ref));

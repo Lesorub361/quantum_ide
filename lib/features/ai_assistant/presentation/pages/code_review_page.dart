@@ -58,7 +58,7 @@ class _CodeReviewPageState extends ConsumerState<CodeReviewPage> {
                     const Icon(LucideIcons.scan_eye, size: 18, color: Colors.greenAccent),
                     const SizedBox(width: 8),
                     ShaderMask(
-                      shaderCallback: (b) => LinearGradient(
+                      shaderCallback: (b) => const LinearGradient(
                         colors: [Colors.greenAccent, Colors.tealAccent],
                       ).createShader(b),
                       child: Text(
@@ -243,7 +243,7 @@ class _CodeReviewPageState extends ConsumerState<CodeReviewPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (state.isReviewing)
-                SizedBox(
+                const SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.greenAccent),

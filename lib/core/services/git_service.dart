@@ -276,16 +276,25 @@ class GitService {
     final runtime = ref.read(runtimeServiceProvider);
     
     try {
-      final status = await getStatus();
-      if (status == null || (status.modifiedFiles.isEmpty && status.untrackedFiles.isEmpty)) {
-        return null;
-      }
-      
       await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
-      await runtime.runCommand('cd "$guestPath" && git add -A');
-      await runtime.runCommand('cd "$guestPath" && git stash push -m "quantum-ide-agent-checkpoint-${DateTime.now().millisecondsSinceEpoch}" --include-untracked');
-      invalidateCache();
-      return 'quantum-ide-agent-checkpoint-${DateTime.now().millisecondsSinceEpoch}';
+      final status = await getStatus();
+      final hasUncommitted = status != null && (status.modifiedFiles.isNotEmpty || status.untrackedFiles.isNotEmpty);
+      
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      if (hasUncommitted) {
+        final stashName = 'quantum-ide-agent-checkpoint-$timestamp';
+        await runtime.runCommand('cd "$guestPath" && git add -A');
+        await runtime.runCommand('cd "$guestPath" && git stash push -m "$stashName" --include-untracked');
+        invalidateCache();
+        return stashName;
+      } else {
+        // Working directory is clean; record HEAD commit hash for precise rollback
+        final headHash = (await runtime.runCommand('cd "$guestPath" && git rev-parse HEAD')).trim();
+        if (headHash.isNotEmpty) {
+          return 'clean-head:$headHash';
+        }
+        return 'clean-head';
+      }
     } catch (e) {
       debugPrint('Git checkpoint failed: $e');
       return null;
@@ -302,9 +311,27 @@ class GitService {
     
     try {
       await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
-      final output = await runtime.runCommand('cd "$guestPath" && git stash list');
-      if (!output.contains(stashRef)) return false;
-      await runtime.runCommand('cd "$guestPath" && git stash pop "stash^{/$stashRef}"');
+      
+      // 1. Discard any modifications and untracked files created by the agent
+      await runtime.runCommand('cd "$guestPath" && git reset --hard HEAD');
+      await runtime.runCommand('cd "$guestPath" && git clean -fd');
+
+      // 2. If pre-agent uncommitted work was stashed, restore it
+      if (stashRef.startsWith('quantum-ide-agent-checkpoint-')) {
+        final output = await runtime.runCommand('cd "$guestPath" && git stash list');
+        final match = RegExp(r'(stash@\{\d+\}):.*?' + RegExp.escape(stashRef)).firstMatch(output);
+        if (match != null) {
+          final stashIndex = match.group(1)!;
+          await runtime.runCommand('cd "$guestPath" && git stash pop "$stashIndex"');
+        } else if (output.contains(stashRef)) {
+          await runtime.runCommand('cd "$guestPath" && git stash pop');
+        }
+      } else if (stashRef.startsWith('clean-head:')) {
+        final targetHash = stashRef.substring('clean-head:'.length).trim();
+        if (targetHash.isNotEmpty) {
+          await runtime.runCommand('cd "$guestPath" && git reset --hard $targetHash');
+        }
+      }
       invalidateCache();
       return true;
     } catch (e) {

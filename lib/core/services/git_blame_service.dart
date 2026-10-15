@@ -75,7 +75,7 @@ class GitBlameService extends StateNotifier<GitBlameState> {
         if (block.trim().isEmpty) continue;
 
         final lines = block.split('\n');
-        String commitHash = '';
+        const commitHash = '';
         String author = '';
         String date = '';
         String message = '';

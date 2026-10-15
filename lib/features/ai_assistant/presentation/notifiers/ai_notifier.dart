@@ -108,6 +108,7 @@ class AIState {
   final List<ActivityItem> liveActivityItems;
   final AgentKind activeAgentKind;
   final DateTime? taskStartedAt;
+  final bool canRollback;
 
   AIState({
     this.isLoading = false,
@@ -129,6 +130,7 @@ class AIState {
     this.liveActivityItems = const [],
     this.activeAgentKind = AgentKind.native,
     this.taskStartedAt,
+    this.canRollback = false,
   });
 
   bool get isAutopilot => approvalMode != AiApprovalMode.manual;
@@ -154,6 +156,7 @@ class AIState {
     List<ActivityItem>? liveActivityItems,
     AgentKind? activeAgentKind,
     DateTime? taskStartedAt,
+    bool? canRollback,
   }) {
     return AIState(
       isLoading: isLoading ?? this.isLoading,
@@ -178,6 +181,7 @@ class AIState {
       liveActivityItems: liveActivityItems ?? this.liveActivityItems,
       activeAgentKind: activeAgentKind ?? this.activeAgentKind,
       taskStartedAt: taskStartedAt ?? this.taskStartedAt,
+      canRollback: canRollback ?? this.canRollback,
     );
   }
 }
@@ -527,7 +531,7 @@ class AINotifier extends StateNotifier<AIState> {
   Future<void> _loadSessions(String workspacePath) async {
     try {
       final jsonService = _ref.read(jsonChatServiceProvider);
-      List<ChatSession> sessions = await jsonService.loadSessions(workspacePath);
+      final List<ChatSession> sessions = await jsonService.loadSessions(workspacePath);
       
       debugPrint('[AINotifier] Loaded ${sessions.length} session(s) for workspace: $workspacePath');
       
@@ -873,7 +877,7 @@ class AINotifier extends StateNotifier<AIState> {
       ]);
     } finally {
       _lastCheckpointRef = null;
-      state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+      state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null, canRollback: false);
     }
   }
 
@@ -911,11 +915,12 @@ class AINotifier extends StateNotifier<AIState> {
     final userTokens = _estimateTokens(prompt);
 
     final isAutopilot = state.interactionMode == AiInteractionMode.autopilot;
+    final isRefactor = state.interactionMode == AiInteractionMode.refactor;
     final isAsk = state.interactionMode == AiInteractionMode.ask;
     final isDebug = state.interactionMode == AiInteractionMode.debug;
 
     String? checkpointRef;
-    if (isAutopilot) {
+    if (isAutopilot || isRefactor) {
       try {
         final gitService = _ref.read(gitServiceProvider);
         checkpointRef = await gitService.createAgentCheckpoint();
@@ -941,6 +946,7 @@ class AINotifier extends StateNotifier<AIState> {
       error: null,
       taskStartedAt: taskStart,
       totalTokens: state.totalTokens + userTokens,
+      canRollback: _lastCheckpointRef != null,
       activeAgentRole: isAutopilot ? 'Planner' : (isDebug ? 'Debugger' : null),
       currentStatusMessage: isAutopilot ? l10n.analyzingTaskAndPlanning : (isDebug ? 'Анализ бага...' : null),
     );
@@ -1674,17 +1680,22 @@ class AINotifier extends StateNotifier<AIState> {
           final hasErrors = currentDiagnostics.values.any(
             (list) => list.any((d) => d.severity == CodeDiagnosticSeverity.error)
           );
+          final hasTestFailures = testOutput != null &&
+              (testOutput.contains('Some tests failed') ||
+               testOutput.contains('[E]') ||
+               testOutput.contains('FAILED'));
           
-          if (hasErrors) {
-            // Collect exact error messages with file+line info
-            final errorReport = _formatDiagnosticsForPrompt(currentDiagnostics, workspacePath);
+          if (hasErrors || hasTestFailures) {
+            final errorReport = hasErrors 
+                ? _formatDiagnosticsForPrompt(currentDiagnostics, workspacePath)
+                : 'Flutter tests failed:\n$testOutput';
             final errorFiles = currentDiagnostics.entries
                 .where((e) => e.value.any((d) => d.severity == CodeDiagnosticSeverity.error))
                 .map((e) => e.key)
                 .toSet();
 
-            // Anti-loop: check if same files are failing again
-            if (lastErrorFiles.isNotEmpty && errorFiles.containsAll(lastErrorFiles)) {
+            // Anti-loop: check if same files/failures are failing again
+            if (lastErrorFiles.isNotEmpty && (errorFiles.isEmpty || errorFiles.containsAll(lastErrorFiles))) {
               consecutiveErrorFixAttempts++;
             } else {
               consecutiveErrorFixAttempts = 1;
@@ -1697,6 +1708,7 @@ class AINotifier extends StateNotifier<AIState> {
                 isLoading: false,
                 activeAgentRole: null,
                 currentStatusMessage: null,
+                canRollback: _lastCheckpointRef != null,
               );
               _updateMessagesAndSync([
                 ...state.messages,
@@ -1711,10 +1723,10 @@ class AINotifier extends StateNotifier<AIState> {
 
             state = state.copyWith(
               activeAgentRole: 'Coder',
-              currentStatusMessage: l10n.fixingCompilationErrors,
+              currentStatusMessage: hasErrors ? l10n.fixingCompilationErrors : 'Устранение падения тестов...',
             );
-            nextPrompt = 'Validation found compilation errors (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n'
-                '**Exact analyzer errors:**\n$errorReport\n\n'
+            nextPrompt = 'Validation found ${hasErrors ? "compilation errors" : "failing tests"} (attempt $consecutiveErrorFixAttempts/$maxErrorFixAttempts).\n\n'
+                '**Exact error/test report:**\n$errorReport\n\n'
                 'CRITICAL RULES FOR FIXING ERRORS:\n'
                 '1. NEVER rewrite the whole file (DO NOT use "rewrite_whole_file")!\n'
                 '2. Use surgical fixes: use "replace_code_block" with exact "search_block" and "replace_block" for ONLY the broken lines.\n'
@@ -1722,15 +1734,19 @@ class AINotifier extends StateNotifier<AIState> {
           } else {
             consecutiveErrorFixAttempts = 0;
             lastErrorFiles = {};
-            // Code applied and verified cleanly without any compilation errors.
-            state = state.copyWith(isLoading: false, activeAgentRole: null, currentStatusMessage: null);
+            // Code applied and verified cleanly without any compilation or test errors.
+            state = state.copyWith(
+              isLoading: false,
+              activeAgentRole: null,
+              currentStatusMessage: null,
+              canRollback: _lastCheckpointRef != null,
+            );
             break;
           }
         }
       }
       
-      // Clear checkpoint ref on successful completion
-      _lastCheckpointRef = null;
+      // Preserve _lastCheckpointRef so user can roll back if needed
     } catch (e) {
       if (_lastCheckpointRef != null) {
         try {
@@ -1751,7 +1767,13 @@ class AINotifier extends StateNotifier<AIState> {
         }
         _lastCheckpointRef = null;
       }
-      state = state.copyWith(isLoading: false, error: e.toString(), activeAgentRole: null, currentStatusMessage: null);
+      state = state.copyWith(
+        isLoading: false,
+        error: e.toString(),
+        activeAgentRole: null,
+        currentStatusMessage: null,
+        canRollback: false,
+      );
     }
   }
 
@@ -1776,7 +1798,7 @@ class AINotifier extends StateNotifier<AIState> {
     final workspacePath = _ref.read(workspaceProvider).currentPath;
 
     // Strip internal thoughts before parsing actions
-    var cleanText = text.replaceAll(RegExp(r'<thought>[\s\S]*?</thought>', caseSensitive: false), '');
+    final cleanText = text.replaceAll(RegExp(r'<thought>[\s\S]*?</thought>', caseSensitive: false), '');
 
     final regExp = RegExp(r'<actions>([\s\S]*?)<\/actions>', caseSensitive: false);
     var matches = regExp.allMatches(cleanText);
@@ -1864,7 +1886,7 @@ class AINotifier extends StateNotifier<AIState> {
     // XML-style tool calls (<invoke name="..."> inside <dots_function_call>, <function_call>, etc.)
     if (actions.isEmpty) {
       final invokeRegExp = RegExp(
-        r'<invoke\s+name=["'']([^"'']+)["'']>([\s\S]*?)</invoke>',
+        r'''<invoke\s+name=['"]([^'"]+)['"]>([\s\S]*?)</invoke>''',
         caseSensitive: false,
       );
       for (final match in invokeRegExp.allMatches(cleanText)) {
@@ -1872,7 +1894,7 @@ class AINotifier extends StateNotifier<AIState> {
         final body = match.group(2) ?? '';
 
         String? extractTag(String tag) {
-          final m = RegExp('<$tag>([\\s\\S]*?)<\\/$tag>', caseSensitive: false).firstMatch(body);
+          final m = RegExp('<$tag>([\\s\\S]*?)</$tag>', caseSensitive: false).firstMatch(body);
           return m?.group(1)?.trim();
         }
 
@@ -1883,7 +1905,7 @@ class AINotifier extends StateNotifier<AIState> {
 
         String rawPath = extractTag('path') ?? extractTag('file') ?? '';
         String content = extractTag('content') ?? extractTag('command') ?? extractTag('cmd') ?? extractTag('query') ?? '';
-        String description = extractTag('description') ?? '';
+        final description = extractTag('description') ?? '';
         final searchBlock = extractTag('search_block') ?? extractTag('search');
         final replaceBlock = extractTag('replace_block') ?? extractTag('replace');
 
@@ -1927,8 +1949,8 @@ class AINotifier extends StateNotifier<AIState> {
               String type = name.toLowerCase();
               if (type == 'bash' || type == 'terminal' || type == 'run_command' || type == 'sh') type = 'command';
               String path = (args['path'] ?? args['file'] ?? '').toString();
-              String content = (args['content'] ?? args['command'] ?? args['cmd'] ?? args['query'] ?? '').toString();
-              String desc = (args['description'] ?? 'Инструмент $name').toString();
+              final content = (args['content'] ?? args['command'] ?? args['cmd'] ?? args['query'] ?? '').toString();
+              final desc = (args['description'] ?? 'Инструмент $name').toString();
               if (path.isNotEmpty && workspacePath != null && !p.isAbsolute(path)) {
                 path = p.join(workspacePath, path);
               }

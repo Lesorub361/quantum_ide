@@ -131,7 +131,7 @@ class DapDebuggerService {
     _breakpointsController.add(List.unmodifiable(_breakpoints));
     await _sendRequest('setBreakpoints', {
       'source': {'path': filePath},
-      'breakpoints': [{'line': line, if (column != null) 'column': column}],
+      'breakpoints': [{'line': line, 'column': ?column}],
     });
   }
 
@@ -141,7 +141,7 @@ class DapDebuggerService {
     final remaining = _breakpoints.where((bp) => bp.filePath == filePath).toList();
     await _sendRequest('setBreakpoints', {
       'source': {'path': filePath},
-      'breakpoints': remaining.map((bp) => {'line': bp.line, if (bp.column != null) 'column': bp.column}).toList(),
+      'breakpoints': remaining.map((bp) => {'line': bp.line, 'column': ?bp.column}).toList(),
     });
   }
 

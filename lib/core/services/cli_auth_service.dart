@@ -108,7 +108,7 @@ class CliAuthState {
 // MOBILE-HARNESS PARSING & TUI HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const String _terminalHandshakeReply = "\x1B[?2026;1\$y\x1B[?2027;1\$y\x1B[?1u\n";
+const String _terminalHandshakeReply = '\x1B[?2026;1\$y\x1B[?2027;1\$y\x1B[?1u\n';
 final RegExp _authAnsi = RegExp(r'\x1B(?:\][^\x07]*(?:\x07|\x1B\\)|\[[0-?]*[ -/]*[@-~]|[()][A-Z0-9])');
 final RegExp _googleOAuthUrlRegex = RegExp(r'''https://accounts\.google\.com/[^\s"'<>]*?[?&]state=[A-Za-z0-9._~-]+''');
 final RegExp _emailRegex = RegExp(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', caseSensitive: false);
@@ -452,7 +452,7 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
         // 1. Terminal handshake response (DEC mode / Kitty query from Ink TUI)
         if (_handshakeReplies < 5 &&
             rawText.length - _lastHandshakeLength > 100 &&
-            rawText.substring(_lastHandshakeLength).contains("\x1B[?u")) {
+            rawText.substring(_lastHandshakeLength).contains('\x1B[?u')) {
           _sendToProcess(_terminalHandshakeReply);
           _handshakeReplies++;
           _lastHandshakeLength = rawText.length;
@@ -460,9 +460,9 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
 
         // 2. Select login method: 1. Google OAuth (send Enter CR+LF)
         if (!_loginMenuAdvanced &&
-            cleanText.toLowerCase().contains("select login method") &&
-            cleanText.toLowerCase().contains("google oauth")) {
-          _sendToProcess("\r\n");
+            cleanText.toLowerCase().contains('select login method') &&
+            cleanText.toLowerCase().contains('google oauth')) {
+          _sendToProcess('\r\n');
           _loginMenuAdvanced = true;
           state = state.copyWith(
             antigravityMessage: 'Google OAuth выбран — генерация ссылки для браузера...',
@@ -480,24 +480,24 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
         }
 
         // 4. Color scheme prompt
-        if (!_colorScreenCompleted && cleanText.toLowerCase().contains("choose your color scheme")) {
-          _sendToProcess("\r\n");
+        if (!_colorScreenCompleted && cleanText.toLowerCase().contains('choose your color scheme')) {
+          _sendToProcess('\r\n');
           _colorScreenCompleted = true;
         }
 
         // 5. Rendering mode prompt (select inline mode for captured terminal)
         if (!_renderingScreenCompleted &&
-            cleanText.toLowerCase().contains("no flickering") &&
-            cleanText.toLowerCase().contains("native terminal experience (inline)")) {
-          _sendToProcess("\x1B[B\r\n"); // Down arrow + Enter
+            cleanText.toLowerCase().contains('no flickering') &&
+            cleanText.toLowerCase().contains('native terminal experience (inline)')) {
+          _sendToProcess('\x1B[B\r\n'); // Down arrow + Enter
           _renderingScreenCompleted = true;
         }
 
         // 6. Privacy & Terms screen (space to opt out, tab, tab, enter)
         if (!_privacyScreenCompleted &&
-            cleanText.toLowerCase().contains("terms of service & data use") &&
-            cleanText.toLowerCase().contains("help improve antigravity cli")) {
-          final optOut = cleanText.toLowerCase().contains("[x] yes") ? " \t\t\r\n" : "\t\t\r\n";
+            cleanText.toLowerCase().contains('terms of service & data use') &&
+            cleanText.toLowerCase().contains('help improve antigravity cli')) {
+          final optOut = cleanText.toLowerCase().contains('[x] yes') ? ' \t\t\r\n' : '\t\t\r\n';
           _sendToProcess(optOut);
           _privacyScreenCompleted = true;
           state = state.copyWith(
@@ -507,8 +507,8 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
 
         // 7. Workspace trust
         if (!_workspaceTrustCompleted &&
-            cleanText.toLowerCase().contains("do you trust the contents of this project")) {
-          _sendToProcess("\r\n");
+            cleanText.toLowerCase().contains('do you trust the contents of this project')) {
+          _sendToProcess('\r\n');
           _workspaceTrustCompleted = true;
         }
 
@@ -516,12 +516,12 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
         if (_isSignedInScreen(cleanText)) {
           final email = _extractSignedInEmail(cleanText) ?? 'Google Account';
           _completeSuccessfulAuth(email);
-          _sendToProcess("/quit\r\n");
+          _sendToProcess('/quit\r\n');
         }
 
         // 9. Failure detection
-        if (cleanText.toLowerCase().contains("authentication failed") ||
-            cleanText.toLowerCase().contains("failed to exchange")) {
+        if (cleanText.toLowerCase().contains('authentication failed') ||
+            cleanText.toLowerCase().contains('failed to exchange')) {
           state = state.copyWith(
             antigravityStatus: AntigravityAuthStatus.error,
             antigravityMessage: 'Ошибка аутентификации Google. Попробуйте снова или используйте Gemini API Key.',
@@ -720,7 +720,7 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
     _authPollTimer?.cancel();
     _authPollTimer = null;
     try {
-      _sendToProcess("/quit\r\n");
+      _sendToProcess('/quit\r\n');
       _authProcess?.kill(ProcessSignal.sigterm);
       _authStdoutSub?.cancel();
       _authStderrSub?.cancel();

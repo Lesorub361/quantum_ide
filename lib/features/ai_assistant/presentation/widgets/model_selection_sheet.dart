@@ -370,7 +370,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     itemCount: filteredModels.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, _) => const SizedBox(height: 6),
                     itemBuilder: (context, index) {
                       final item = filteredModels[index];
                       final isSelected = item.id == widget.currentModel;

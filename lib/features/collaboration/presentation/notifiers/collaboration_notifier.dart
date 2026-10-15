@@ -115,7 +115,7 @@ class CollaborationNotifier extends StateNotifier<CollaborationState> {
       final sessionId = _uuid.v4();
       final sessionCode = _uuid.v4().substring(0, 8).toUpperCase();
       final userId = _uuid.v4();
-      final colorIndex = 0;
+      const colorIndex = 0;
 
       state = state.copyWith(
         isLoading: false,

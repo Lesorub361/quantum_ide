@@ -1231,7 +1231,7 @@ class AIService {
         }
       }
 
-      return ChatResponse('Error: Failed after $_maxRetries retries');
+      return const ChatResponse('Error: Failed after $_maxRetries retries');
     } catch (e) {
       return ChatResponse('Error: $e');
     }
@@ -1441,7 +1441,7 @@ class AIService {
     String? imageBase64,
   }) async {
     final key = _settings.apiKeys['anthropic'] ?? '';
-    if (key.isEmpty) return ChatResponse('Error: Set Anthropic API key.');
+    if (key.isEmpty) return const ChatResponse('Error: Set Anthropic API key.');
     try {
       // Build user content with optional image
       dynamic userContent;

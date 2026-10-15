@@ -227,7 +227,7 @@ You are operating in COMPOSE (REFACTOR) mode.
 """);
         break;
       case AiInteractionMode.autopilot:
-        buffer.writeln("""
+        buffer.writeln('''
 You are operating in BUILD (AUTOPILOT) mode — full autonomous agent.
 - You have complete autonomy: edit files, run commands, fix errors, iterate.
 - **EXECUTION PROTOCOL**:
@@ -241,10 +241,10 @@ You are operating in BUILD (AUTOPILOT) mode — full autonomous agent.
 - **API SAFETY**: Before using any class/method/package — grep_search or find_symbols to confirm it exists.
 - **NEVER STOP EARLY**: Do not ask user for confirmation mid-task unless truly blocked. Complete the full goal.
 - **TOKEN EFFICIENCY**: Always prefer `replace_code_block` over full `rewrite_whole_file` for fixes. Only rewrite a file if >50% is changing.
-""");
+''');
         break;
       case AiInteractionMode.debug:
-        buffer.writeln("""
+        buffer.writeln('''
 You are operating in DEBUG mode.
 - Your job: diagnose a bug or unexpected behavior using evidence, not guessing.
 - **DEBUG PROTOCOL**:
@@ -256,7 +256,7 @@ You are operating in DEBUG mode.
   6. Re-evaluate hypotheses against fresh evidence.
 - Do NOT make broad refactors unless a hypothesis requires it.
 - Do NOT delete or rewrite unrelated code.
-""");
+''');
         break;
     }
 
