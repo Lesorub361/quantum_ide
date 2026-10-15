@@ -1260,11 +1260,42 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ref.read(aiProvider.notifier).askAI('/init');
         } else if (value == 'cli_settings') {
           CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
+        } else if (value == 'toggle_autonomous') {
+          final newMode = aiState.approvalMode == AiApprovalMode.fullAutonomous
+              ? AiApprovalMode.manual
+              : AiApprovalMode.fullAutonomous;
+          ref.read(aiProvider.notifier).setApprovalMode(newMode);
         } else if (value == 'history') {
           _showChatHistoryDialog(context, ref);
         }
       },
       itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'toggle_autonomous',
+          child: Row(
+            children: [
+              Icon(
+                aiState.approvalMode == AiApprovalMode.fullAutonomous ? LucideIcons.zap : LucideIcons.shield_alert,
+                size: 13,
+                color: aiState.approvalMode == AiApprovalMode.fullAutonomous ? const Color(0xFF10B981) : Colors.amberAccent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  aiState.approvalMode == AiApprovalMode.fullAutonomous
+                      ? 'Автономно (без подтверждений)'
+                      : 'Запрашивать подтверждение',
+                  style: TextStyle(
+                    color: aiState.approvalMode == AiApprovalMode.fullAutonomous ? const Color(0xFF10B981) : Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
         PopupMenuItem(
           value: 'history',
           child: Row(
@@ -1355,70 +1386,115 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
   Widget _buildStatusRow(BuildContext context, WidgetRef ref, AIState aiState) {
     final l10n = AppLocalizations.of(context)!;
+    final isAutonomous = aiState.approvalMode == AiApprovalMode.fullAutonomous;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Loading status & Stop button
-          Expanded(
-            child: aiState.isLoading
-                ? Row(
-                    children: [
-                      if (aiState.isAutopilot || (aiState.isLoading && aiState.activeAgentKind != AgentKind.native)) ...[
-                        InkWell(
-                          onTap: () => ref.read(aiProvider.notifier).stopActiveAgent(),
+          // Loading status & Stop button (only shown when loading)
+          if (aiState.isLoading) ...[
+            Expanded(
+              child: Row(
+                children: [
+                  if (aiState.isAutopilot || (aiState.isLoading && aiState.activeAgentKind != AgentKind.native)) ...[
+                    InkWell(
+                      onTap: () => ref.read(aiProvider.notifier).stopActiveAgent(),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.redAccent.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.8), width: 0.8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(LucideIcons.square, size: 10, color: Colors.redAccent),
-                                const SizedBox(width: 4),
-                                Text(
-                                  l10n.stop,
-                                  style: GoogleFonts.inter(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
+                          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.8), width: 0.8),
                         ),
-                        const SizedBox(width: 6),
-                      ] else ...[
-                        const SizedBox(
-                          width: 8,
-                          height: 8,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: Colors.purpleAccent,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Expanded(
-                        child: Text(
-                          _getAgentStatusText(aiState),
-                          style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.square, size: 10, color: Colors.redAccent),
+                            const SizedBox(width: 4),
+                            Text(
+                              l10n.stop,
+                              style: GoogleFonts.inter(fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
-          ),
-          
-          const SizedBox(width: 6),
+                    ),
+                    const SizedBox(width: 6),
+                  ] else ...[
+                    const SizedBox(
+                      width: 8,
+                      height: 8,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Colors.purpleAccent,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(
+                    child: Text(
+                      _getAgentStatusText(aiState),
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.white38),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+          ] else ...[
+            // Quick autonomous mode toggle badge when idle
+            InkWell(
+              onTap: () {
+                final newMode = isAutonomous ? AiApprovalMode.manual : AiApprovalMode.fullAutonomous;
+                ref.read(aiProvider.notifier).setApprovalMode(newMode);
+              },
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: isAutonomous
+                      ? const Color(0xFF10B981).withValues(alpha: 0.14)
+                      : Colors.amberAccent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isAutonomous
+                        ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                        : Colors.amberAccent.withValues(alpha: 0.5),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isAutonomous ? LucideIcons.zap : LucideIcons.shield_alert,
+                      size: 10,
+                      color: isAutonomous ? const Color(0xFF10B981) : Colors.amberAccent,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      isAutonomous ? 'Автономно' : 'Подтверждение',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.bold,
+                        color: isAutonomous ? const Color(0xFF10B981) : Colors.amberAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
 
-          // Token and System Stats Badges (Horizontally scrollable to avoid 110px overflow)
+          // Token and System Stats Badges
           Flexible(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              reverse: true,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [

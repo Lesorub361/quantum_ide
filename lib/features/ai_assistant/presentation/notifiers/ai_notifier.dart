@@ -220,6 +220,13 @@ class AINotifier extends StateNotifier<AIState> {
     if (initPath != null) {
       loadSessionsForWorkspace(initPath);
     }
+
+    // Initialize approval mode from user settings
+    final savedMode = _ref.read(aiServiceProvider).approvalMode;
+    final initialApproval = savedMode == 'manual'
+        ? AiApprovalMode.manual
+        : (savedMode == 'semiAutonomous' ? AiApprovalMode.semiAutonomous : AiApprovalMode.fullAutonomous);
+    state = state.copyWith(approvalMode: initialApproval);
   }
 
   void setAgentKind(AgentKind kind) {
@@ -781,41 +788,29 @@ class AINotifier extends StateNotifier<AIState> {
 
   void toggleAutopilot() {
     if (state.approvalMode == AiApprovalMode.manual) {
-      state = state.copyWith(
-        approvalMode: AiApprovalMode.semiAutonomous,
-        interactionMode: AiInteractionMode.autopilot,
-      );
+      setApprovalMode(AiApprovalMode.fullAutonomous);
+      state = state.copyWith(interactionMode: AiInteractionMode.autopilot);
     } else {
-      state = state.copyWith(
-        approvalMode: AiApprovalMode.manual,
-        interactionMode: AiInteractionMode.chat,
-      );
+      setApprovalMode(AiApprovalMode.manual);
+      state = state.copyWith(interactionMode: AiInteractionMode.chat);
     }
   }
 
   void setApprovalMode(AiApprovalMode mode) {
     state = state.copyWith(
       approvalMode: mode,
-      interactionMode: mode == AiApprovalMode.manual 
-          ? (state.interactionMode == AiInteractionMode.autopilot ? AiInteractionMode.chat : state.interactionMode)
-          : AiInteractionMode.autopilot,
     );
+    final modeStr = mode == AiApprovalMode.fullAutonomous
+        ? 'fullAutonomous'
+        : (mode == AiApprovalMode.semiAutonomous ? 'semiAutonomous' : 'manual');
+    _aiService.setApprovalMode(modeStr);
   }
 
   void setInteractionMode(AiInteractionMode mode) {
-    AiApprovalMode approval;
-    switch (mode) {
-      case AiInteractionMode.chat:
-      case AiInteractionMode.ask:
-      case AiInteractionMode.refactor:
-      case AiInteractionMode.plan:
-      case AiInteractionMode.debug:
-        approval = AiApprovalMode.manual;
-        break;
-      case AiInteractionMode.autopilot:
-        approval = AiApprovalMode.semiAutonomous;
-        break;
-    }
+    // If user is in full autonomous mode, do not force them into manual confirmation!
+    final approval = state.approvalMode == AiApprovalMode.fullAutonomous
+        ? AiApprovalMode.fullAutonomous
+        : (mode == AiInteractionMode.autopilot ? AiApprovalMode.semiAutonomous : AiApprovalMode.manual);
     state = state.copyWith(
       interactionMode: mode,
       approvalMode: approval,

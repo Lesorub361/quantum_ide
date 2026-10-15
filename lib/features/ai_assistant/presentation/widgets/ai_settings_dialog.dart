@@ -8,6 +8,7 @@ import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/local_ai_service.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/right_chat_panel.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 
 class AISettingsDialog extends ConsumerStatefulWidget {
   const AISettingsDialog({super.key});
@@ -32,6 +33,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
   int _localThreads = 6;
   int _localGpuLayers = 20;
   bool _localUseFlashAttn = false;
+  bool _autoApprove = true;
 
   @override
   void initState() {
@@ -42,6 +44,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
     _selectedLocalEngine = aiSvc.selectedLocalEngine;
     _keyController.text = aiSvc.getApiKey(_selectedProviderId);
     _urlController.text = aiSvc.getBaseUrl(_selectedProviderId);
+    _autoApprove = aiSvc.autoApprove;
     
     final localAiState = ref.read(localAiServiceProvider);
     _localThreads = localAiState.threads;
@@ -632,7 +635,37 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
                   isDense: true,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 18),
+
+              // Autonomous execution mode toggle
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.03),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  activeTrackColor: const Color(0xFF10B981),
+                  title: Row(
+                    children: [
+                      const Icon(LucideIcons.zap, size: 14, color: Color(0xFF10B981)),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Автономный режим (без подтверждений)',
+                        style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  subtitle: Text(
+                    'ИИ самостоятельно создает файлы, применяет правки и запускает команды без ручного подтверждения каждого шага.',
+                    style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white54),
+                  ),
+                  value: _autoApprove,
+                  onChanged: (val) => setState(() => _autoApprove = val),
+                ),
+              ),
 
               // Actions
               Row(
@@ -657,6 +690,11 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
                       ),
                       onPressed: () async {
                         final aiSvcNotifier = ref.read(aiServiceProvider);
+
+                        await aiSvcNotifier.setAutoApprove(_autoApprove);
+                        ref.read(aiProvider.notifier).setApprovalMode(
+                          _autoApprove ? AiApprovalMode.fullAutonomous : AiApprovalMode.manual,
+                        );
 
                         await aiSvcNotifier.setProvider(_selectedProviderId);
                         ref.read(activeAiProviderIdProvider.notifier).state = _selectedProviderId;

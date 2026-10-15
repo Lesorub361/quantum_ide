@@ -1355,7 +1355,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           final pts = _pinchPointers.values.toList();
           final currentDist = (pts[0] - pts[1]).distance;
           final scale = currentDist / _pinchInitialDistance;
-          final target = (_pinchInitialFontSize * scale).clamp(8.0, 32.0);
+          final target = (_pinchInitialFontSize * scale).clamp(11.0, 32.0);
           final rounded = (target * 2).round() / 2.0;
           if ((rounded - widget.settings.fontSize).abs() >= 0.5) {
             ref.read(settingsProvider.notifier).setFontSize(rounded);
@@ -1371,7 +1371,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       onPointerSignal: (e) {
         if (e is PointerScrollEvent && HardwareKeyboard.instance.isControlPressed) {
           final delta = e.scrollDelta.dy < 0 ? 1.0 : -1.0;
-          final newSize = (widget.settings.fontSize + delta).clamp(8.0, 32.0);
+          final newSize = (widget.settings.fontSize + delta).clamp(11.0, 32.0);
           ref.read(settingsProvider.notifier).setFontSize(newSize);
         }
       },

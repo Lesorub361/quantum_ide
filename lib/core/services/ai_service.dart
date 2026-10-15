@@ -18,12 +18,17 @@ class AISettings {
   baseUrls; // providerId -> custom base url (for Ollama/LM Studio)
   final LocalAiEngine selectedLocalEngine;
 
+  final bool autoApprove;
+  final String approvalMode;
+
   const AISettings({
     this.selectedProviderId = 'google',
     this.selectedModel = 'gemini-2.5-flash',
     this.apiKeys = const {},
     this.baseUrls = const {},
     this.selectedLocalEngine = LocalAiEngine.llamaServer,
+    this.autoApprove = true,
+    this.approvalMode = 'fullAutonomous',
   });
 
   String get currentApiKey => apiKeys[selectedProviderId] ?? '';
@@ -35,6 +40,8 @@ class AISettings {
     Map<String, String>? apiKeys,
     Map<String, String>? baseUrls,
     LocalAiEngine? selectedLocalEngine,
+    bool? autoApprove,
+    String? approvalMode,
   }) {
     return AISettings(
       selectedProviderId: selectedProviderId ?? this.selectedProviderId,
@@ -42,6 +49,8 @@ class AISettings {
       apiKeys: apiKeys ?? this.apiKeys,
       baseUrls: baseUrls ?? this.baseUrls,
       selectedLocalEngine: selectedLocalEngine ?? this.selectedLocalEngine,
+      autoApprove: autoApprove ?? this.autoApprove,
+      approvalMode: approvalMode ?? this.approvalMode,
     );
   }
 }
@@ -136,12 +145,17 @@ class AIService {
       if (u != null && u.isNotEmpty) urls[p.id] = u;
     }
 
+    final autoApprove = prefs.getBool('ai_auto_approve') ?? true;
+    final approvalMode = prefs.getString('ai_approval_mode') ?? (autoApprove ? 'fullAutonomous' : 'manual');
+
     _settings = AISettings(
       selectedProviderId: providerId,
       selectedModel: model,
       apiKeys: keys,
       baseUrls: urls,
       selectedLocalEngine: localEngine,
+      autoApprove: autoApprove,
+      approvalMode: approvalMode,
     );
 
     _rebuildGemini();
@@ -169,6 +183,28 @@ class AIService {
   // ─── Сохранение настроек ─────────────────────────────────────────────────
 
   LocalAiEngine get selectedLocalEngine => _settings.selectedLocalEngine;
+  bool get autoApprove => _settings.autoApprove;
+  String get approvalMode => _settings.approvalMode;
+
+  Future<void> setAutoApprove(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('ai_auto_approve', enabled);
+    await prefs.setString('ai_approval_mode', enabled ? 'fullAutonomous' : 'manual');
+    _settings = _settings.copyWith(
+      autoApprove: enabled,
+      approvalMode: enabled ? 'fullAutonomous' : 'manual',
+    );
+  }
+
+  Future<void> setApprovalMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ai_approval_mode', mode);
+    await prefs.setBool('ai_auto_approve', mode == 'fullAutonomous');
+    _settings = _settings.copyWith(
+      approvalMode: mode,
+      autoApprove: mode == 'fullAutonomous',
+    );
+  }
 
   Future<void> setProvider(String providerId) async {
     final prefs = await SharedPreferences.getInstance();

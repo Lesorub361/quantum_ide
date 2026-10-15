@@ -515,8 +515,8 @@ final defaultPackages = [
   OptionalPackage(
     id: 'desktop-build-tools',
     name: 'Linux Desktop (PC) Build Tools',
-    description: 'Essential C++ libraries and tools (clang, cmake, ninja, pkg-config, GTK 3, epoxy) required to compile Flutter Desktop/PC apps and plugins.',
-    command: '${_aptPrefix}apt update && apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libepoxy-dev libjsoncpp-dev && (flutter config --enable-linux-desktop 2>/dev/null || true) && echo "Linux Desktop build tools installed and desktop enabled in Flutter"',
+    description: 'Essential C++ libraries and tools (clang, cmake, ninja, pkg-config, GTK 3, libsecret, epoxy) required to compile Flutter Desktop/PC apps and plugins.',
+    command: '${_aptPrefix}apt update && apt install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev liblzma-dev libepoxy-dev libjsoncpp-dev && (flutter config --enable-linux-desktop 2>/dev/null || true) && echo "Linux Desktop build tools installed and desktop enabled in Flutter"',
     icon: LucideIcons.laptop,
     category: 'Build Tools',
   ),
