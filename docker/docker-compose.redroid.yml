@@ -1,0 +1,42 @@
+version: '3.8'
+
+# Quantum IDE - Autonomous Android Server Environment (Redroid + Web Scrcpy)
+# Позволяет запускать Android APK на Linux-сервере в фоне,
+# видеть экран в браузере и автоматически тестировать приложение ИИ-агентом.
+
+services:
+  # 1. Полноценный Android 12 в Docker
+  redroid:
+    image: redroid/redroid:12.0.0-latest
+    container_name: quantum_android_server
+    privileged: true
+    restart: always
+    ports:
+      - "5555:5555" # ADB порт для подключения агента и установки APK
+    volumes:
+      - redroid-data:/data
+    command:
+      - androidboot.hardware=mt6885 # или auto
+      - ro.secure=0
+      - ro.boot.hwc=guest
+      - ro.kernel.android.checkjni=0
+      - ro.product.locale=ru-RU
+      - redroid.width=1080
+      - redroid.height=2340
+      - redroid.fps=30
+      - redroid.gpu.mode=guest # Софтверный рендеринг (работает на любом VPS без дискретной видеокарты)
+
+  # 2. Веб-интерфейс для просмотра экрана и управления с телефона или ПК (порт 8000)
+  web_viewer:
+    image: genymobile/scrcpy-ws:latest
+    container_name: quantum_web_scrcpy
+    restart: always
+    depends_on:
+      - redroid
+    ports:
+      - "8000:8000"
+    environment:
+      - ADB_SERVER_SOCKET=tcp:redroid:5555
+
+volumes:
+  redroid-data:
