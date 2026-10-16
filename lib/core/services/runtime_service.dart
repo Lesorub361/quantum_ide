@@ -188,6 +188,9 @@ class RuntimeService extends ChangeNotifier {
       '$home/.npm-global/bin',
       '$home/.cargo/bin',
       '$home/bin',
+      '/usr/local/lib/nodejs/bin',
+      '/usr/local/bin',
+      '/root/.local/bin',
     ];
     for (final nvmRoot in ['$home/.nvm/versions/node', '$home/.config/nvm/versions/node']) {
       try {
@@ -1304,7 +1307,7 @@ fi
       'ANDROID_HOME': '/root/android-sdk',
       'ANDROID_SDK_ROOT': '/root/android-sdk',
       'PATH':
-          '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin',
+          '/usr/local/sbin:/usr/local/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin',
       'JAVA_HOME': _detectedJavaHome,
       'FLUTTER_ROOT': '/root/flutter',
       'USER': 'root',

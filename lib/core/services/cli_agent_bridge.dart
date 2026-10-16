@@ -75,16 +75,16 @@ class CliAgentBridge {
         ];
       case AgentKind.deepseekHarness:
         return [
-          p.join(home, '.local', 'bin', 'dsh'),
-          '/usr/local/lib/nodejs/bin/dsh',
-          '/usr/local/lib/nodejs/bin/deepseek-harness',
-          '/usr/local/lib/dsh/node_modules/.bin/dsh',
-          '/usr/local/bin/dsh',
-          '/usr/local/bin/deepseek-harness',
-          '/usr/bin/dsh',
-          '/root/.local/bin/dsh',
-          p.join(home, '.local', 'bin', 'deepseek-harness'),
           'dsh',
+          '/usr/local/bin/dsh',
+          '/usr/bin/dsh',
+          p.join(home, '.local', 'bin', 'dsh'),
+          '/root/.local/bin/dsh',
+          '/usr/local/lib/nodejs/bin/dsh',
+          '/usr/local/lib/dsh/node_modules/.bin/dsh',
+          '/usr/local/lib/nodejs/bin/deepseek-harness',
+          '/usr/local/bin/deepseek-harness',
+          p.join(home, '.local', 'bin', 'deepseek-harness'),
           'deepseek-harness',
         ];
     }
@@ -358,11 +358,20 @@ class CliAgentBridge {
       final localBin = p.join(home, '.local', 'bin');
       final nvmBin = p.join(home, '.config', 'nvm', 'versions', 'node', 'v22.18.0', 'bin');
       var path = env['PATH'] ?? '';
-      if (Directory(localBin).existsSync() && !path.contains(localBin)) {
-        path = '$localBin:$path';
-      }
-      if (Directory(nvmBin).existsSync() && !path.contains(nvmBin)) {
-        path = '$nvmBin:$path';
+      final candidatePaths = [
+        localBin,
+        p.join(home, '.npm-global', 'bin'),
+        '/root/.local/bin',
+        '/usr/local/bin',
+        '/usr/local/lib/nodejs/bin',
+        '/usr/bin',
+        '/bin',
+        nvmBin,
+      ];
+      for (final cp in candidatePaths) {
+        if (!path.contains(cp) && Directory(cp).existsSync()) {
+          path = '$cp:$path';
+        }
       }
       env['PATH'] = path;
 
@@ -482,9 +491,12 @@ class CliAgentBridge {
         final envPairs = <String>[];
         for (final entry in env.entries) {
           if (entry.key.isNotEmpty && entry.value.isNotEmpty) {
+            if (entry.key == 'PATH' || entry.key == 'ANDROID_ROOT' || entry.key == 'ANDROID_DATA') continue;
             envPairs.add('export ${entry.key}=${_shellQuote(entry.value)}');
           }
         }
+        // Ensure guest PRoot Ubuntu PATH contains all nodejs, npm, local, and system binary dirs
+        envPairs.add('export PATH="/usr/local/sbin:/usr/local/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin:\$PATH"');
         final envExports = envPairs.isEmpty ? '' : '${envPairs.join('; ')}; ';
         final escapedArgs = commandArgs.map(_shellQuote).join(' ');
         final runCmd = '$envExports exec ${_shellQuote(binaryPath)} $escapedArgs';
@@ -607,9 +619,15 @@ class CliAgentBridge {
         }
         onComplete(duration);
       } else {
-        final errorDetail = lastErrorMessage.isNotEmpty
-            ? lastErrorMessage
-            : '$binaryPath завершился с кодом $exitCode';
+        String errorDetail;
+        if (exitCode == 127) {
+          errorDetail = 'Исполняемый файл $binaryPath или Node.js не найден в системе (код 127).\n'
+              'Убедитесь, что пакет ${agentKind.title} установлен в разделе "Пакеты", либо используйте встроенный "Native Agent".';
+        } else if (lastErrorMessage.isNotEmpty) {
+          errorDetail = lastErrorMessage;
+        } else {
+          errorDetail = '$binaryPath завершился с кодом $exitCode';
+        }
         onError(errorDetail);
       }
     } catch (e) {
