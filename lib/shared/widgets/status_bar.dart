@@ -84,188 +84,160 @@ class _StatusBarState extends ConsumerState<StatusBar> {
             ),
           ),
         ),
-        child: Row(
-          children: [
-            // Left Side: Git & Diagnostics & CPU/RAM
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    if (gitState.status != null) ...[
-                      _StatusBarPill(
-                        icon: LucideIcons.git_branch,
-                        label: gitState.status!.currentBranch,
-                        color: Colors.cyanAccent,
-                        onTap: () {
-                          ref.read(panelProvider.notifier).selectTab(PanelTab.git);
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    // Problems: Icons and numbers only (❌ errors, ⚠️ warnings)
-                    InkWell(
-                      borderRadius: BorderRadius.circular(4),
-                      onTap: () {
-                        ref.read(panelProvider.notifier).selectTab(PanelTab.problems);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: (errorsCount > 0
-                                  ? const Color(0xFFFF6B6B)
-                                  : (warningsCount > 0 ? Colors.amberAccent : Colors.white54))
-                              .withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(3.5),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              LucideIcons.circle_x,
-                              size: 10,
-                              color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white38,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '$errorsCount',
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white60,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Icon(
-                              LucideIcons.triangle_alert,
-                              size: 10,
-                              color: warningsCount > 0 ? Colors.amberAccent : Colors.white38,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '$warningsCount',
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                color: warningsCount > 0 ? Colors.amberAccent : Colors.white60,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            if (hintsCount > 0) ...[
-                              const SizedBox(width: 6),
-                              const Icon(
-                                LucideIcons.info,
-                                size: 10,
-                                color: Colors.cyanAccent,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                '$hintsCount',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: Colors.cyanAccent,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // CPU & RAM: Icons and numbers only (🔲 cpu%  💾 ram)
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final stats = ref.watch(systemStatsProvider);
-                        final cpuPercent = (stats.cpuUsage * 100).toStringAsFixed(0);
-                        final ramGB = stats.ramUsedGB.toStringAsFixed(1);
-                        final isHigh = stats.cpuUsage > 0.85 || stats.ramUsage > 0.85;
-                        final isMed = stats.cpuUsage > 0.6 || stats.ramUsage > 0.6;
-                        final color = isHigh ? const Color(0xFFFF6B6B) : (isMed ? Colors.amberAccent : Colors.cyanAccent);
-                        return InkWell(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 520;
+            final isUltraNarrow = constraints.maxWidth < 370;
+            final lineNum = (pos?.index ?? 0) + 1;
+            final colNum = (pos?.offset ?? 0) + 1;
+            final cursorLabel = isNarrow
+                ? 'Стр $lineNum:$colNum'
+                : AppLocalizations.of(context)!.lineCol(lineNum, colNum);
+
+            return Row(
+              children: [
+                // Left Side: Git & Diagnostics & CPU/RAM
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (gitState.status != null) ...[
+                          _StatusBarPill(
+                            icon: LucideIcons.git_branch,
+                            label: gitState.status!.currentBranch,
+                            color: Colors.cyanAccent,
+                            maxWidth: isNarrow ? 72 : 140,
+                            onTap: () {
+                              ref.read(panelProvider.notifier).selectTab(PanelTab.git);
+                            },
+                          ),
+                          SizedBox(width: isNarrow ? 5 : 8),
+                        ],
+                        // Problems: Icons and numbers only (❌ errors, ⚠️ warnings)
+                        InkWell(
                           borderRadius: BorderRadius.circular(4),
                           onTap: () {
-                            ref.read(panelProvider.notifier).selectTab(PanelTab.run);
+                            ref.read(panelProvider.notifier).selectTab(PanelTab.problems);
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.06),
+                              color: (errorsCount > 0
+                                      ? const Color(0xFFFF6B6B)
+                                      : (warningsCount > 0 ? Colors.amberAccent : Colors.white54))
+                                  .withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(3.5),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(LucideIcons.cpu, size: 10, color: color),
+                                Icon(
+                                  LucideIcons.circle_x,
+                                  size: 10,
+                                  color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white38,
+                                ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  '$cpuPercent%',
+                                  '$errorsCount',
                                   style: GoogleFonts.inter(
                                     fontSize: 10,
-                                    color: color,
+                                    color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white60,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                                const SizedBox(width: 6),
-                                Icon(LucideIcons.server, size: 10, color: color),
+                                const SizedBox(width: 5),
+                                Icon(
+                                  LucideIcons.triangle_alert,
+                                  size: 10,
+                                  color: warningsCount > 0 ? Colors.amberAccent : Colors.white38,
+                                ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  '${ramGB}G',
+                                  '$warningsCount',
                                   style: GoogleFonts.inter(
                                     fontSize: 10,
-                                    color: color,
+                                    color: warningsCount > 0 ? Colors.amberAccent : Colors.white60,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
+                                if (hintsCount > 0 && !isUltraNarrow) ...[
+                                  const SizedBox(width: 5),
+                                  const Icon(
+                                    LucideIcons.info,
+                                    size: 10,
+                                    color: Colors.cyanAccent,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '$hintsCount',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      color: Colors.cyanAccent,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(width: 8),
-
-            // Right Side: File status, Cursor pos, Language & Encoding
-            if (activeFile != null) ...[
-              Flexible(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  reverse: true,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      if (activeFile.isModified)
-                        const _StatusBarPill(
-                          icon: LucideIcons.circle_alert,
-                          label: 'Не сохранено',
-                          color: Colors.amberAccent,
-                        )
-                      else
-                        const _StatusBarPill(
-                          icon: LucideIcons.circle_check_big,
-                          label: 'Сохранено',
-                          color: Colors.greenAccent,
                         ),
-                      const SizedBox(width: 10),
+                        SizedBox(width: isNarrow ? 5 : 8),
+                        // CPU & RAM: adaptive (mini bars on PC, compact on phone) → tap opens system sheet
+                        _SystemStatsChip(compact: isNarrow, ultraCompact: isUltraNarrow),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 6),
+
+                // Right Side: File status, Cursor pos, Language & Encoding
+                if (activeFile != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!isNarrow) ...[
+                        if (activeFile.isModified)
+                          const _StatusBarPill(
+                            icon: LucideIcons.circle_alert,
+                            label: 'Не сохранено',
+                            color: Colors.amberAccent,
+                          )
+                        else
+                          const _StatusBarPill(
+                            icon: LucideIcons.circle_check_big,
+                            label: 'Сохранено',
+                            color: Colors.greenAccent,
+                          ),
+                        const SizedBox(width: 8),
+                      ] else if (activeFile.isModified) ...[
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: Colors.amberAccent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                      ],
 
                       _StatusBarPill(
-                        icon: LucideIcons.navigation,
-                        label: pos != null
-                            ? AppLocalizations.of(context)!.lineCol(pos.index + 1, pos.offset + 1)
-                            : AppLocalizations.of(context)!.lineCol(1, 1),
+                        icon: isNarrow ? null : LucideIcons.navigation,
+                        label: cursorLabel,
                         color: Colors.white70,
                       ),
-                      const SizedBox(width: 10),
+                      SizedBox(width: isNarrow ? 5 : 8),
 
-                      const _StatusBarPill(
-                        label: 'UTF-8',
-                        color: Colors.white38,
-                      ),
-                      const SizedBox(width: 10),
+                      if (!isNarrow) ...[
+                        const _StatusBarPill(
+                          label: 'UTF-8',
+                          color: Colors.white38,
+                        ),
+                        const SizedBox(width: 8),
+                      ],
 
                       // Language pill with genuine file/language icon from FileIconHelper
                       Builder(
@@ -275,15 +247,15 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                             icon: fileInfo.icon,
                             label: _getLanguageName(activeFile.path),
                             color: fileInfo.color,
+                            maxWidth: isNarrow ? 68 : null,
                           );
                         },
                       ),
                     ],
                   ),
-                ),
-              ),
-            ],
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
@@ -341,21 +313,220 @@ class _StatusBarState extends ConsumerState<StatusBar> {
   }
 }
 
+class _SystemStatsChip extends ConsumerWidget {
+  final bool compact;
+  final bool ultraCompact;
+  const _SystemStatsChip({required this.compact, required this.ultraCompact});
+
+  static Color loadColor(double v) {
+    if (v < 0.6) return Colors.cyanAccent;
+    if (v < 0.85) return Colors.amberAccent;
+    return const Color(0xFFFF6B6B);
+  }
+
+  Widget _miniBar(double value, Color color) {
+    return Container(
+      width: 26,
+      height: 4,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      alignment: Alignment.centerLeft,
+      child: FractionallySizedBox(
+        widthFactor: value.clamp(0.02, 1.0),
+        child: Container(
+          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(systemStatsProvider);
+    final cpuColor = loadColor(stats.cpuUsage);
+    final ramColor = loadColor(stats.ramUsage);
+    final worst = stats.cpuUsage > stats.ramUsage ? cpuColor : ramColor;
+    final textStyle = GoogleFonts.jetBrainsMono(fontSize: 9.5, fontWeight: FontWeight.w600);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(4),
+      onTap: () => _showSystemSheet(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+        decoration: BoxDecoration(
+          color: worst.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(3.5),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(LucideIcons.cpu, size: 10, color: cpuColor),
+            const SizedBox(width: 3),
+            Text('${(stats.cpuUsage * 100).toStringAsFixed(0)}%', style: textStyle.copyWith(color: cpuColor)),
+            if (!compact) ...[
+              const SizedBox(width: 4),
+              _miniBar(stats.cpuUsage, cpuColor),
+            ],
+            if (!ultraCompact) ...[
+              const SizedBox(width: 6),
+              Icon(LucideIcons.memory_stick, size: 10, color: ramColor),
+              const SizedBox(width: 3),
+              Text(
+                compact
+                    ? '${(stats.ramUsage * 100).toStringAsFixed(0)}%'
+                    : '${stats.ramUsedGB.toStringAsFixed(1)}/${stats.ramTotalGB.toStringAsFixed(0)}G',
+                style: textStyle.copyWith(color: ramColor),
+              ),
+              if (!compact) ...[
+                const SizedBox(width: 4),
+                _miniBar(stats.ramUsage, ramColor),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSystemSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF12141B),
+      constraints: const BoxConstraints(maxWidth: 520),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) => const _SystemSheet(),
+    );
+  }
+}
+
+class _SystemSheet extends ConsumerWidget {
+  const _SystemSheet();
+
+  Widget _row(String label, String value, double usage, IconData icon) {
+    final color = _SystemStatsChip.loadColor(usage);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 15, color: color),
+              const SizedBox(width: 8),
+              Text(label, style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: color, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: usage.clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: Colors.white.withValues(alpha: 0.06),
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(systemStatsProvider);
+    final high = stats.cpuUsage > 0.85 || stats.ramUsage > 0.85;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                const Icon(LucideIcons.activity, size: 16, color: Colors.cyanAccent),
+                const SizedBox(width: 8),
+                Text('Система', style: GoogleFonts.inter(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _row('Процессор (CPU)', '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', stats.cpuUsage, LucideIcons.cpu),
+            _row(
+              'Память (RAM)',
+              '${stats.ramUsedGB.toStringAsFixed(1)} / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
+              stats.ramUsage,
+              LucideIcons.memory_stick,
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: (high ? const Color(0xFFFF6B6B) : Colors.greenAccent).withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(high ? LucideIcons.triangle_alert : LucideIcons.circle_check,
+                      size: 14, color: high ? const Color(0xFFFF6B6B) : Colors.greenAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      high
+                          ? 'Высокая нагрузка. Закройте лишние вкладки терминала и неиспользуемые файлы, остановите Gradle-демон (gradle --stop).'
+                          : 'Нагрузка в норме.',
+                      style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _StatusBarPill extends StatelessWidget {
   final IconData? icon;
   final String label;
   final Color? color;
   final VoidCallback? onTap;
+  final double? maxWidth;
 
   const _StatusBarPill({
     this.icon,
     required this.label,
     this.color,
     this.onTap,
+    this.maxWidth,
   });
 
   @override
   Widget build(BuildContext context) {
+    final textWidget = Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: GoogleFonts.inter(
+        fontSize: 10,
+        color: color ?? Colors.white60,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+
     return InkWell(
       borderRadius: BorderRadius.circular(4),
       onTap: onTap,
@@ -372,14 +543,13 @@ class _StatusBarPill extends StatelessWidget {
               Icon(icon, size: 9.5, color: color ?? Colors.white54),
               const SizedBox(width: 3),
             ],
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                color: color ?? Colors.white60,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            if (maxWidth != null)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth!),
+                child: textWidget,
+              )
+            else
+              textWidget,
           ],
         ),
       ),

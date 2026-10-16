@@ -8,6 +8,7 @@ import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/local_format_gateway.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_checkpoints_service.dart';
+import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -336,9 +337,12 @@ class CliAgentBridge {
     }
 
     final isGeminiCli = binaryPath.endsWith('gemini');
-    final commandArgs = _buildCommand(agentKind, prompt, model, isGeminiCli: isGeminiCli, projectPath: projectPath);
+    final guestProjectPath = (Platform.isAndroid || Platform.isIOS) && projectPath.isNotEmpty
+        ? PathMapper.mapToGuest(projectPath, _runtime.appDirectory)
+        : projectPath;
+    final commandArgs = _buildCommand(agentKind, prompt, model, isGeminiCli: isGeminiCli, projectPath: guestProjectPath);
 
-    debugPrint('CliAgentBridge: Launching $binaryPath in $projectPath with args: $commandArgs');
+    debugPrint('CliAgentBridge: Launching $binaryPath in $guestProjectPath with args: $commandArgs');
 
     LocalFormatGateway? localGateway;
     WorkspaceCheckpointsService? checkpoints;

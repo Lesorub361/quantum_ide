@@ -27,6 +27,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
   bool _isLoading = false;
   bool _showSearch = false;
   String? _cloningRepoName;
+  String? _cloneProgressText;
 
   @override
   void initState() {
@@ -97,6 +98,13 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
             'GitHub',
             style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
           ),
+          actions: [
+            TextButton.icon(
+              onPressed: () => _showCloneByUrlDialog(context),
+              icon: const Icon(LucideIcons.link, size: 14, color: Colors.cyanAccent),
+              label: const Text('Клонировать по URL', style: TextStyle(color: Colors.cyanAccent, fontSize: 12)),
+            ),
+          ],
         ),
         body: Center(
           child: SingleChildScrollView(
@@ -159,6 +167,12 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: () => _showCloneByUrlDialog(context),
+                    icon: const Icon(LucideIcons.download, size: 14, color: Colors.white70),
+                    label: const Text('Клонировать публичный репозиторий по ссылке', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ),
                 ],
               ),
             ),
@@ -202,6 +216,11 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Клонировать по URL',
+            icon: const Icon(LucideIcons.link, size: 18, color: Colors.cyanAccent),
+            onPressed: () => _showCloneByUrlDialog(context),
+          ),
+          IconButton(
             icon: Icon(_showSearch ? LucideIcons.x : LucideIcons.search, size: 18, color: Colors.white70),
             onPressed: () {
               setState(() {
@@ -237,7 +256,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                 autofocus: true,
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: 'Search repositories...',
+                  hintText: 'Поиск репозиториев или вставьте URL...',
                   hintStyle: GoogleFonts.inter(color: Colors.white38, fontSize: 13),
                   isDense: true,
                   filled: true,
@@ -267,7 +286,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '${l10n.cloningRepository} ($_cloningRepoName)',
+                      _cloneProgressText ?? '${l10n.cloningRepository} ($_cloningRepoName)',
                       style: GoogleFonts.inter(fontSize: 12, color: Colors.cyanAccent),
                     ),
                   ),
@@ -279,9 +298,21 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                 ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
                 : _repos.isEmpty
                     ? Center(
-                        child: Text(
-                          'No repositories found',
-                          style: GoogleFonts.inter(color: Colors.white38, fontSize: 13),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Репозитории не найдены',
+                              style: GoogleFonts.inter(color: Colors.white54, fontSize: 13),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: () => _showCloneByUrlDialog(context),
+                              icon: const Icon(LucideIcons.link, size: 14),
+                              label: const Text('Клонировать по URL / owner/repo'),
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.cyanAccent),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.separated(
@@ -291,14 +322,16 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                           final repo = _repos[index];
                           final isPrivate = repo['private'] == true;
                           final name = repo['name'] ?? '';
+                          final fullName = repo['full_name'] ?? name;
                           final desc = repo['description'] ?? '';
                           final stars = repo['stargazers_count'] ?? 0;
+                          final defaultBranch = repo['default_branch'] as String? ?? 'main';
                           final language = repo['language'] as String?;
                           final isThisCloning = _cloningRepoName == name;
 
                           return ListTile(
                             onTap: _cloningRepoName != null ? null : () => _cloneAndOpenRepo(repo),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                             leading: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
@@ -317,7 +350,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                               children: [
                                 Flexible(
                                   child: Text(
-                                    name,
+                                    fullName,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.inter(
                                       fontSize: 13.5,
@@ -370,7 +403,11 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                                       ),
                                       const SizedBox(width: 12),
                                     ],
+                                    const Icon(LucideIcons.git_branch, size: 10, color: Colors.white38),
+                                    const SizedBox(width: 3),
+                                    Text(defaultBranch, style: const TextStyle(fontSize: 10, color: Colors.white38)),
                                     if (stars > 0) ...[
+                                      const SizedBox(width: 12),
                                       const Icon(LucideIcons.star, size: 11, color: Colors.amberAccent),
                                       const SizedBox(width: 3),
                                       Text('$stars', style: const TextStyle(fontSize: 10, color: Colors.white38)),
@@ -406,6 +443,104 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
     );
   }
 
+  void _showCloneByUrlDialog(BuildContext context) {
+    final urlController = TextEditingController();
+    final branchController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF161B22),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.folder_git_2, size: 18, color: Colors.cyanAccent),
+            const SizedBox(width: 8),
+            Text(
+              'Клонировать репозиторий',
+              style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Введите URL репозитория GitHub или формат owner/repo:',
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.white60),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: urlController,
+              autofocus: true,
+              style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12.5),
+              decoration: InputDecoration(
+                hintText: 'https://github.com/user/project.git',
+                hintStyle: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 12),
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.4),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                suffixIcon: IconButton(
+                  icon: const Icon(LucideIcons.clipboard_paste, size: 16, color: Colors.cyanAccent),
+                  onPressed: () async {
+                    final data = await Clipboard.getData('text/plain');
+                    if (data?.text != null) {
+                      urlController.text = data!.text!.trim();
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: branchController,
+              style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'Ветка (необязательно, например main)',
+                hintStyle: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 11.5),
+                filled: true,
+                fillColor: Colors.black.withValues(alpha: 0.4),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Отмена', style: TextStyle(color: Colors.white60)),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              final rawUrl = urlController.text.trim();
+              if (rawUrl.isEmpty) return;
+              final branch = branchController.text.trim();
+              Navigator.pop(dialogCtx);
+              final name = rawUrl
+                  .replaceAll(RegExp(r'\.git$'), '')
+                  .replaceAll(RegExp(r'/+$'), '')
+                  .split('/')
+                  .last;
+              _cloneAndOpenRepo({
+                'name': name.isNotEmpty ? name : 'project',
+                'clone_url': rawUrl,
+                if (branch.isNotEmpty) 'default_branch': branch,
+              }, explicitBranch: branch.isNotEmpty ? branch : null);
+            },
+            icon: const Icon(LucideIcons.download, size: 14),
+            label: const Text('Скачать полностью'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF238636),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showTokenDialog(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final tokenController = TextEditingController();
@@ -435,7 +570,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
               obscureText: true,
               style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12.5),
               decoration: InputDecoration(
-                hintText: 'ghp_xxxxxxxxxxxx',
+                hintText: 'ghp_xxxxxxxxxxxx / github_pat_xxxx',
                 hintStyle: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 12),
                 filled: true,
                 fillColor: Colors.black.withValues(alpha: 0.4),
@@ -467,6 +602,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
                 Navigator.pop(dialogCtx);
                 await _githubService.authenticateWithToken(token);
                 if (mounted) {
+                  setState(() {});
                   _loadRepos();
                 }
               }
@@ -482,7 +618,7 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
     );
   }
 
-  Future<void> _cloneAndOpenRepo(Map<String, dynamic> repo) async {
+  Future<void> _cloneAndOpenRepo(Map<String, dynamic> repo, {String? explicitBranch}) async {
     final l10n = AppLocalizations.of(context)!;
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     final url = repo['clone_url'] as String? ?? repo['html_url'] as String?;
@@ -490,11 +626,13 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
 
     if (url == null || url.isEmpty) return;
 
-    setState(() => _cloningRepoName = repoName);
+    setState(() {
+      _cloningRepoName = repoName;
+      _cloneProgressText = '${l10n.cloningRepository} ($repoName)...';
+    });
 
     try {
       final runtime = ref.read(runtimeServiceProvider);
-      // Destination directory inside projects folder
       final projectsDir = Directory('${runtime.appDirectory}/projects');
       if (!await projectsDir.exists()) {
         await projectsDir.create(recursive: true);
@@ -506,14 +644,17 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
         url,
         destinationPath,
         guestDestinationPath: guestPath,
+        branch: explicitBranch,
         runner: (cmd) => runtime.runCommand(cmd),
+        onProgress: (status) {
+          if (mounted) {
+            setState(() => _cloneProgressText = '$repoName: $status');
+          }
+        },
       );
 
       if (result != null && mounted) {
-        // Automatically setup Cloud APK workflow if not present
-        await _githubService.setupCloudApkWorkflow(destinationPath);
-
-        // Import and open project in workspace
+        // Import and open project in workspace without polluting working tree
         await ref.read(projectServiceProvider.notifier).importProject(destinationPath);
         await ref.read(workspaceProvider.notifier).setWorkspace(destinationPath);
 
@@ -524,14 +665,14 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
           ),
         );
 
-        // Navigate to editor
         if (mounted) {
           context.go('/editor');
         }
       } else if (mounted) {
+        final errDetail = _githubService.lastError != null ? '\n${_githubService.lastError}' : '';
         scaffoldMessenger.showSnackBar(
           SnackBar(
-            content: Text(l10n.cloneFailed),
+            content: Text('${l10n.cloneFailed}$errDetail'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -547,7 +688,10 @@ class _GitHubPageState extends ConsumerState<GitHubPage> {
       }
     } finally {
       if (mounted) {
-        setState(() => _cloningRepoName = null);
+        setState(() {
+          _cloningRepoName = null;
+          _cloneProgressText = null;
+        });
       }
     }
   }

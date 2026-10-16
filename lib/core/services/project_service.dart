@@ -462,18 +462,18 @@ class ProjectService extends StateNotifier<List<Project>> {
   Future<void> importProject(String path) async {
     final name = p.basename(path);
     final runtime = _ref.read(runtimeServiceProvider);
-    
+
     // Always migrate to internal projects folder
     final String finalPath = p.join(runtime.appDirectory, 'projects', name);
-    
+
     if (path != finalPath) {
       debugPrint('Importing/Migrating $path to $finalPath');
       final sourceDir = Directory(path);
       final targetDir = Directory(finalPath);
       if (!await targetDir.exists()) {
         await targetDir.create(recursive: true);
-        await _copyDirectory(sourceDir, targetDir);
       }
+      await _copyDirectory(sourceDir, targetDir);
     }
 
     // Identify type based on files
@@ -487,20 +487,31 @@ class ProjectService extends StateNotifier<List<Project>> {
       lastOpened: DateTime.now(),
       isInternal: true,
     );
-    
+
     await saveProject(project);
-    // Ensure it's mirrored to SD card
-    await _mirrorInitialFiles(finalPath, name);
+    // Mirror user-visible files in background without blocking import or failing on .git packfiles
+    _mirrorInitialFiles(finalPath, name);
   }
 
   Future<void> _copyDirectory(Directory source, Directory destination) async {
-    await for (var entity in source.list(recursive: false)) {
-      if (entity is Directory) {
-        final newDirectory = Directory(p.join(destination.path, p.basename(entity.path)));
-        await newDirectory.create();
-        await _copyDirectory(entity, newDirectory);
-      } else if (entity is File) {
-        await entity.copy(p.join(destination.path, p.basename(entity.path)));
+    await for (final entity in source.list(recursive: false, followLinks: false)) {
+      final baseName = p.basename(entity.path);
+      if (baseName == 'build' || baseName == '.dart_tool' || baseName == 'node_modules') {
+        continue;
+      }
+      try {
+        if (entity is Directory) {
+          final newDirectory = Directory(p.join(destination.path, baseName));
+          if (!await newDirectory.exists()) {
+            await newDirectory.create(recursive: true);
+          }
+          await _copyDirectory(entity, newDirectory);
+        } else if (entity is File) {
+          final targetFile = File(p.join(destination.path, baseName));
+          await entity.copy(targetFile.path);
+        }
+      } catch (e) {
+        debugPrint('Skipped copying ${entity.path}: $e');
       }
     }
   }
@@ -1365,23 +1376,32 @@ exec gradle "\$@"
 
 
   Future<void> _mirrorInitialFiles(String internalPath, String name) async {
+    if (!Platform.isAndroid) return;
     // Only mirror if it's an internal project
     if (!internalPath.contains('/files/projects/')) return;
-    
+
     try {
       final externalBase = '/storage/emulated/0/QuantumIDE/$name';
       final internalDir = Directory(internalPath);
       if (!await internalDir.exists()) return;
 
-      await for (final entity in internalDir.list(recursive: true)) {
+      await for (final entity in internalDir.list(recursive: true, followLinks: false)) {
         if (entity is File) {
           final relative = p.relative(entity.path, from: internalPath);
-          final externalPath = p.join(externalBase, relative);
-          final extFile = File(externalPath);
-          if (!await extFile.parent.exists()) {
-            await extFile.parent.create(recursive: true);
+          if (relative.startsWith('.git/') ||
+              relative.startsWith('build/') ||
+              relative.startsWith('.dart_tool/') ||
+              relative.startsWith('node_modules/')) {
+            continue;
           }
-          await entity.copy(externalPath);
+          try {
+            final externalPath = p.join(externalBase, relative);
+            final extFile = File(externalPath);
+            if (!await extFile.parent.exists()) {
+              await extFile.parent.create(recursive: true);
+            }
+            await entity.copy(externalPath);
+          } catch (_) {}
         }
       }
     } catch (e) {

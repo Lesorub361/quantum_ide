@@ -172,8 +172,11 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       final xtermVc = xt.TerminalController();
       int lastCols = -1;
       int lastRows = -1;
+      Timer? resizeDebounceTimer;
+      bool hadUserCommandRecently = false;
+
       final xtermTerm = xt.Terminal(
-        maxLines: 10000,
+        maxLines: 8000,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : (Platform.isIOS
@@ -184,21 +187,28 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
                         ? xt.TerminalTargetPlatform.windows
                         : xt.TerminalTargetPlatform.linux))),
         onOutput: (data) {
+          if (data.contains('\r') || data.contains('\n')) {
+            hadUserCommandRecently = true;
+          }
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
-          final safeRows = rows < 10 ? 10 : rows;
-          final safeCols = cols < 20 ? 20 : cols;
+          final safeRows = rows.clamp(6, 250);
+          final safeCols = cols.clamp(20, 400);
           if (safeRows != lastRows || safeCols != lastCols) {
-            lastRows = safeRows;
-            lastCols = safeCols;
-            try {
-              pty.resize(safeRows, safeCols);
-            } catch (_) {}
+            resizeDebounceTimer?.cancel();
+            resizeDebounceTimer = Timer(const Duration(milliseconds: 110), () {
+              if (safeRows != lastRows || safeCols != lastCols) {
+                lastRows = safeRows;
+                lastCols = safeCols;
+                try {
+                  pty.resize(safeRows, safeCols);
+                } catch (_) {}
+              }
+            });
           }
         },
       );
-
 
       final session = TerminalSession(
         id: id,
@@ -217,25 +227,30 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         (text) {
           xtermTerm.write(text);
 
-          gitRefreshDebounceTimer?.cancel();
-          gitRefreshDebounceTimer = Timer(
-            const Duration(milliseconds: 800),
-            () {
-              try {
-                _ref.read(gitProvider.notifier).refreshStatus();
-              } catch (_) {}
-            },
-          );
+          if (hadUserCommandRecently) {
+            gitRefreshDebounceTimer?.cancel();
+            gitRefreshDebounceTimer = Timer(
+              const Duration(milliseconds: 2800),
+              () {
+                hadUserCommandRecently = false;
+                try {
+                  _ref.read(gitProvider.notifier).refreshStatus(silent: true);
+                } catch (_) {}
+              },
+            );
+          }
         },
         onDone: () {
+          resizeDebounceTimer?.cancel();
           gitRefreshDebounceTimer?.cancel();
           _markSessionAsExited(id);
           xtermTerm.write('\r\n\x1b[1;31m[Process exited]\x1b[0m\r\n');
           try {
-            _ref.read(gitProvider.notifier).refreshStatus();
+            _ref.read(gitProvider.notifier).refreshStatus(silent: true);
           } catch (_) {}
         },
         onError: (e) {
+          resizeDebounceTimer?.cancel();
           gitRefreshDebounceTimer?.cancel();
           xtermTerm.write('\r\n\x1b[1;31m[Error: $e]\r\n');
         },
@@ -331,24 +346,51 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       term.eraseScrollbackOnly();
       term.eraseDisplay();
 
+      int lastRestartCols = -1;
+      int lastRestartRows = -1;
+      Timer? restartResizeDebounce;
+
       term.onOutput = (data) {
         newPty.write(Uint8List.fromList(utf8.encode(data)));
       };
       term.onResize = (cols, rows, int pixelWidth, int pixelHeight) {
-        newPty.resize(rows, cols);
+        final safeRows = rows.clamp(6, 250);
+        final safeCols = cols.clamp(20, 400);
+        restartResizeDebounce?.cancel();
+        restartResizeDebounce = Timer(const Duration(milliseconds: 110), () {
+          if (safeRows != lastRestartRows || safeCols != lastRestartCols) {
+            lastRestartRows = safeRows;
+            lastRestartCols = safeCols;
+            try {
+              newPty.resize(safeRows, safeCols);
+            } catch (_) {}
+          }
+        });
       };
 
-      // Set initial size
-      newPty.resize(term.viewHeight, term.viewWidth);
-      // ptyOutSub is stored in TerminalSession
-      // and cancelled when the session is closed via ptyOutSubscription?.cancel()
+      // Set initial size safely
+      try {
+        newPty.resize(
+          term.viewHeight.clamp(6, 250),
+          term.viewWidth.clamp(20, 400),
+        );
+      } catch (_) {}
+
       // ignore: cancel_subscriptions
-      final ptyOutSub = newPty.output.listen(
-        (data) {
-          term.write(oldSession.utf8decoder.convert(data));
+      final ptyOutSub = newPty.output
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen(
+        (text) {
+          term.write(text);
         },
-        onDone: () => _markSessionAsExited(oldSession.id),
-        onError: (_) {},
+        onDone: () {
+          restartResizeDebounce?.cancel();
+          _markSessionAsExited(oldSession.id);
+        },
+        onError: (_) {
+          restartResizeDebounce?.cancel();
+        },
       );
 
       state[index] = TerminalSession(

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:go_router/go_router.dart';
 import 'package:quantum_ide/core/services/rest_client_service.dart';
 
 class RestClientPage extends StatefulWidget {
@@ -67,39 +68,53 @@ class _RestClientPageState extends State<RestClientPage> {
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest,
-              border: Border(
-                bottom: BorderSide(color: colorScheme.outlineVariant),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: _getMethodColor(_selectedMethod).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: DropdownButton<String>(
-                    value: _selectedMethod,
-                    underline: const SizedBox(),
-                    isDense: true,
-                    items: _methods.map((m) => DropdownMenuItem(
-                      value: m,
-                      child: Text(m, style: TextStyle(
-                        color: _getMethodColor(m),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      )),
-                    )).toList(),
-                    onChanged: (v) => setState(() => _selectedMethod = v ?? 'GET'),
-                  ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                border: Border(
+                  bottom: BorderSide(color: colorScheme.outlineVariant),
                 ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.arrow_left, size: 18),
+                    tooltip: 'Назад',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go('/');
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: _getMethodColor(_selectedMethod).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _selectedMethod,
+                      underline: const SizedBox(),
+                      isDense: true,
+                      items: _methods.map((m) => DropdownMenuItem(
+                        value: m,
+                        child: Text(m, style: TextStyle(
+                          color: _getMethodColor(m),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        )),
+                      )).toList(),
+                      onChanged: (v) => setState(() => _selectedMethod = v ?? 'GET'),
+                    ),
+                  ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
@@ -225,7 +240,8 @@ class _RestClientPageState extends State<RestClientPage> {
             ),
           ),
           if (_response != null) _buildResponsePanel(colorScheme),
-        ],
+          ],
+        ),
       ),
     );
   }

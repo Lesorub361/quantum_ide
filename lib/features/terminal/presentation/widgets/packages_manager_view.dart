@@ -220,7 +220,25 @@ class _PackagesManagerViewState extends ConsumerState<PackagesManagerView> {
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            if (pkg.version != null && pkg.version!.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  pkg.version!,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    color: Colors.white70,
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 5),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                               decoration: BoxDecoration(

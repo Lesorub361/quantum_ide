@@ -8,6 +8,7 @@ class OptionalPackage {
   final String command;
   final IconData icon;
   final String category;
+  final String? version;
   bool isInstalled;
   bool isInstalling;
 
@@ -18,6 +19,7 @@ class OptionalPackage {
     required this.command,
     required this.icon,
     this.category = 'Tools',
+    this.version,
     this.isInstalled = false,
     this.isInstalling = false,
   });
@@ -52,7 +54,8 @@ final defaultPackages = [
   OptionalPackage(
     id: 'python',
     name: 'Python 3',
-    description: 'General-purpose programming language',
+    version: '3.12',
+    description: 'General-purpose programming language (python3, pip, venv)',
     command: '${_aptPrefix}apt install -y python3 python3-pip python3-venv python-is-python3',
     icon: LucideIcons.terminal,
     category: 'Languages',
@@ -60,6 +63,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'nodejs',
     name: 'Node.js & npm (LTS)',
+    version: '20.x LTS',
     description: 'JavaScript runtime and npm package manager for modern tools and CLI',
     command: 'if which node >/dev/null 2>&1 && which npm >/dev/null 2>&1; then echo "Node.js & npm already installed: \$(node -v), npm \$(npm -v)"; else echo "Installing Node.js (found: \$(node -v 2>/dev/null || echo none))"; ${_aptPrefix}apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs; hash -r; node -v; fi',
     icon: LucideIcons.zap,
@@ -68,14 +72,25 @@ final defaultPackages = [
   OptionalPackage(
     id: 'git',
     name: 'Git',
+    version: '2.43+',
     description: 'Distributed version control system',
     command: '${_aptPrefix}apt install -y git ca-certificates',
     icon: LucideIcons.git_branch,
     category: 'Tools',
   ),
   OptionalPackage(
+    id: 'git-lfs',
+    name: 'Git LFS (Large File Storage)',
+    version: '3.5+',
+    description: 'Git extension for versioning large assets, APKs, and AI model weights',
+    command: '${_aptPrefix}apt install -y git git-lfs && git lfs install',
+    icon: LucideIcons.hard_drive_download,
+    category: 'Tools',
+  ),
+  OptionalPackage(
     id: 'flutter',
-    name: 'Flutter & Dart SDK (Language Support)',
+    name: 'Flutter & Dart SDK (Stable)',
+    version: '3.29+ Stable',
     description: 'Google\'s UI toolkit for building natively compiled Dart and Flutter applications with full IDE language server support.',
     command: '${_aptPrefix}apt install -y git curl unzip xz-utils libglu1-mesa debianutils ca-certificates && git config --global --add safe.directory \'*\' 2>/dev/null || true && if [ -d /root/flutter/.git ]; then cd /root/flutter && git pull && /root/flutter/bin/flutter precache; else rm -rf /root/flutter && git clone --depth 1 https://github.com/flutter/flutter.git -b stable /root/flutter && /root/flutter/bin/flutter precache; fi && ln -sf /root/flutter/bin/flutter /usr/local/bin/flutter 2>/dev/null || true && ln -sf /root/flutter/bin/dart /usr/local/bin/dart 2>/dev/null || true && (grep -q "/root/flutter/bin" /root/.bashrc 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.bashrc) && (grep -q "/root/flutter/bin" /root/.profile 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.profile)',
     icon: LucideIcons.code,
@@ -84,6 +99,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'antigravity-cli',
     name: 'Antigravity CLI (agy)',
+    version: '1.3.4',
     description: 'Official CLI tool for Google Antigravity AI models and autonomous agent orchestration',
     command: '${_aptPrefix}apt install -y curl tar gzip && ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then URL="https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-arm/cli_linux_arm64.tar.gz"; else URL="https://storage.googleapis.com/antigravity-public/antigravity-cli/1.1.27-5211191891591168/linux-x64/cli_linux_x64.tar.gz"; fi && mkdir -p /tmp/agy_dl && curl -fL --retry 3 "\$URL" | tar -xz -C /tmp/agy_dl && mkdir -p /usr/local/bin && mv /tmp/agy_dl/antigravity /usr/local/bin/agy && ln -sf /usr/local/bin/agy /usr/local/bin/antigravity && chmod +x /usr/local/bin/agy && rm -rf /tmp/agy_dl && echo "Antigravity CLI installed successfully"',
     icon: LucideIcons.sparkles,
@@ -92,6 +108,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'claude-code',
     name: 'Claude Code CLI (claude)',
+    version: 'Latest',
     description: 'Anthropic\'s autonomous coding assistant CLI with full terminal execution and file editing',
     command: 'if which npm >/dev/null 2>&1; then (npm install -g @anthropic-ai/claude-code || sudo npm install -g @anthropic-ai/claude-code); else ${_aptPrefix}apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs) && (npm install -g @anthropic-ai/claude-code || sudo npm install -g @anthropic-ai/claude-code); fi && (ln -sf /usr/local/lib/nodejs/bin/claude /usr/local/bin/claude 2>/dev/null || true)',
     icon: LucideIcons.bot,
@@ -100,6 +117,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'deepseek-harness',
     name: 'DeepSeek Harness CLI (dsh)',
+    version: '0.2.0',
     description: 'DeepSeek autonomous agent runner for complex refactoring, reasoning, and test generation',
     command: '${_aptPrefix}apt install -y curl && (which node >/dev/null 2>&1 || (curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs)) && npm install -g @deepseek-ai/dsh && (ln -sf /usr/local/lib/nodejs/bin/dsh /usr/local/bin/dsh 2>/dev/null || true) && (ln -sf /usr/local/lib/nodejs/bin/deepseek-harness /usr/local/bin/deepseek-harness 2>/dev/null || true) && (if [ ! -f /usr/local/bin/dsh ]; then printf "#!/bin/sh\\nexec node /usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh/lib/bin.js \\"\$@\\"\\n" > /usr/local/bin/dsh && chmod +x /usr/local/bin/dsh; fi) && echo "DeepSeek Harness installed successfully"',
     icon: LucideIcons.brain_circuit,
@@ -108,6 +126,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'ollama-cli',
     name: 'Ollama CLI',
+    version: 'Latest',
     description: 'Run large language models locally (Llama 3, Mistral, Qwen, etc.)',
     command: '${_aptPrefix}apt install -y curl && curl -fsSL https://ollama.com/install.sh | sh',
     icon: LucideIcons.brain,
@@ -116,6 +135,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'kilocode-cli',
     name: 'KiloCode CLI',
+    version: 'Latest',
     description: 'Command-line interface for KiloCode development',
     command: 'if which npm >/dev/null 2>&1; then (npm install -g @kilocode/cli || sudo npm install -g @kilocode/cli); else ${_aptPrefix}apt install -y curl && curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs && (npm install -g @kilocode/cli || sudo npm install -g @kilocode/cli); fi && (ln -sf /usr/local/lib/nodejs/bin/kilocode /usr/local/bin/kilocode 2>/dev/null || true)',
     icon: LucideIcons.code,
@@ -124,6 +144,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'opencode-ai',
     name: 'OpenCode AI',
+    version: 'Latest',
     description: 'AI-powered coding assistant and tools',
     command: 'if which npm >/dev/null 2>&1; then (npm i -g opencode-ai || sudo npm i -g opencode-ai) && (curl -4 -fsSL https://opencode.ai/install | bash || true); else ${_aptPrefix}apt install -y curl && curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs && (npm i -g opencode-ai || sudo npm i -g opencode-ai) && (curl -4 -fsSL https://opencode.ai/install | bash || true); fi && (ln -sf /usr/local/lib/nodejs/bin/opencode /usr/local/bin/opencode 2>/dev/null || true) && (ln -sf /usr/local/lib/nodejs/bin/opencode-ai /usr/local/bin/opencode-ai 2>/dev/null || true)',
     icon: LucideIcons.brain_circuit,
@@ -132,6 +153,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'local-ai-qwen',
     name: 'Local Llama Server',
+    version: 'b11541',
     description: 'Local engine to run offline AI models (llama-server and llama-cli).',
     command: '${_aptPrefix}apt install -y curl wget tar ca-certificates && ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then LLAMA_ARCH="arm64"; else LLAMA_ARCH="x64"; fi && mkdir -p /tmp/llama_dl && cd /tmp/llama_dl && (wget --no-check-certificate -qO llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz" || curl -k -fL --retry 3 -o llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz") && tar -xzf llama.tar.gz && (find . -type f -name "llama-server" -exec cp {} /usr/bin/llama-server \\; ; find . -type f -name "llama-cli" -exec cp {} /usr/bin/llama-cli \\; ; find . -type f -name "*.so*" -exec cp {} /usr/lib/ \\; 2>/dev/null || true) && chmod +x /usr/bin/llama-server /usr/bin/llama-cli 2>/dev/null || true && cd / && rm -rf /tmp/llama_dl && echo "Llama Server installed successfully"',
     icon: LucideIcons.brain,
@@ -139,23 +161,53 @@ final defaultPackages = [
   ),
   OptionalPackage(
     id: 'build-essential',
-    name: 'C++ Build Tools',
-    description: 'GCC, G++, and other essential tools for C/C++ development',
-    command: '${_aptPrefix}apt update && apt install -y build-essential',
+    name: 'C++ Build Tools (GCC / Clang)',
+    version: '13.x',
+    description: 'GCC, G++, Make, and essential headers for C/C++ and native plugin compilation',
+    command: '${_aptPrefix}apt update && apt install -y build-essential pkg-config',
     icon: LucideIcons.box,
     category: 'System',
   ),
   OptionalPackage(
     id: 'android-sdk',
-    name: 'Android SDK & Java',
-    description: 'Essential for Android builds (Java 17, cmdline-tools, platform-tools)',
+    name: 'Android SDK & Java 17',
+    version: 'API 34 + JDK 17',
+    description: 'Essential for Android builds (Java 17, cmdline-tools, platform-tools, Android 34)',
     command: '${_aptPrefix}apt install -y openjdk-17-jdk-headless wget curl unzip debianutils libstdc++6 zlib1g ca-certificates && mkdir -p /root/android-sdk/cmdline-tools /tmp/cmdline-extracted && (wget --no-check-certificate -qO /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || curl -k -fL --retry 3 -o /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip) && rm -rf /root/android-sdk/cmdline-tools/latest && unzip -qo /tmp/sdk.zip -d /tmp/cmdline-extracted && mkdir -p /root/android-sdk/cmdline-tools/latest && (if [ -d /tmp/cmdline-extracted/cmdline-tools ]; then cp -r /tmp/cmdline-extracted/cmdline-tools/* /root/android-sdk/cmdline-tools/latest/; else cp -r /tmp/cmdline-extracted/* /root/android-sdk/cmdline-tools/latest/; fi) && rm -rf /tmp/sdk.zip /tmp/cmdline-extracted && chmod +x /root/android-sdk/cmdline-tools/latest/bin/* 2>/dev/null || true && mkdir -p ~/.gradle && echo "systemProp.java.net.preferIPv4Stack=true" >> ~/.gradle/gradle.properties && export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-*-openjdk-* 2>/dev/null | head -n 1)} && export PATH=\$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:\$PATH && (yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34" && ln -sf /root/android-sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/bin/sdkmanager 2>/dev/null || true && ln -sf /root/android-sdk/platform-tools/adb /usr/local/bin/adb 2>/dev/null || true && (grep -q "ANDROID_HOME" /root/.bashrc 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.bashrc) && (grep -q "ANDROID_HOME" /root/.profile 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.profile) && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && echo "Android SDK and Java installed successfully"',
     icon: LucideIcons.settings_2,
     category: 'System',
   ),
   OptionalPackage(
+    id: 'openjdk-21',
+    name: 'Java OpenJDK 21 (LTS)',
+    version: '21 LTS',
+    description: 'Modern Java 21 JDK required for Android Gradle Plugin 8.5+, Gradle 8.10+, and newer Flutter builds',
+    command: '${_aptPrefix}apt install -y openjdk-21-jdk openjdk-21-jdk-headless && update-java-alternatives -s \$(update-java-alternatives -l | grep "21" | awk \'{print \$1}\' | head -n 1) 2>/dev/null || true && java -version',
+    icon: LucideIcons.coffee,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'gradle-8.13',
+    name: 'Gradle 8.13 & Build Accelerator',
+    version: '8.13',
+    description: 'Installs Gradle 8.13 distribution and pre-caches wrapper for fast offline/online APK builds',
+    command: '${_aptPrefix}apt install -y wget curl unzip openjdk-21-jdk-headless && mkdir -p /opt/gradle /root/.gradle/wrapper/dists && (wget --no-check-certificate -qO /tmp/gradle-8.13-bin.zip https://services.gradle.org/distributions/gradle-8.13-bin.zip || curl -k -fL --retry 3 -o /tmp/gradle-8.13-bin.zip https://services.gradle.org/distributions/gradle-8.13-bin.zip) && unzip -qo /tmp/gradle-8.13-bin.zip -d /opt/gradle && ln -sf /opt/gradle/gradle-8.13/bin/gradle /usr/local/bin/gradle && ln -sf /opt/gradle/gradle-8.13/bin/gradle /usr/bin/gradle && rm -f /tmp/gradle-8.13-bin.zip && gradle -v',
+    icon: LucideIcons.gauge,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'apk-signing-tools',
+    name: 'APK Signer, Zipalign & Bundletool',
+    version: '1.17.2',
+    description: 'Tools for signing release APKs, aligning binaries, and converting AAB App Bundles to universal APK',
+    command: '${_aptPrefix}apt install -y apksigner zipalign aapt adb openjdk-21-jdk-headless wget curl && (wget --no-check-certificate -qO /usr/local/bin/bundletool.jar https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar || curl -k -fL --retry 3 -o /usr/local/bin/bundletool.jar https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar) && printf "#!/bin/sh\\nexec java -jar /usr/local/bin/bundletool.jar \\"\$@\\"\\n" > /usr/local/bin/bundletool && chmod +x /usr/local/bin/bundletool && echo "APK Signing & Bundletool ready"',
+    icon: LucideIcons.shield_check,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
     id: 'build-fix',
     name: 'Build Environment Fix',
+    version: 'v2.4 ARM64',
     description: 'Fixes AAPT2 daemon errors, project permissions, and forces IPv4 Gradle settings (global)',
     command: '${_aptPrefix}apt update && apt install -y adb aapt zipalign apksigner clang lld cmake ninja-build openjdk-21-jdk pkg-config libgtk-3-dev libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 libc6 && chown -R root:root /root/projects 2>/dev/null || true && chmod -R 755 /root/projects 2>/dev/null || true && git config --global --add safe.directory \'*\' 2>/dev/null || true && mkdir -p ~/.gradle && echo "systemProp.java.net.preferIPv4Stack=true" > ~/.gradle/gradle.properties && echo "android.aapt2.daemon=false" >> ~/.gradle/gradle.properties && echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties && echo "org.gradle.parallel=false" >> ~/.gradle/gradle.properties && echo "org.gradle.workers.max=1" >> ~/.gradle/gradle.properties && echo "android.aapt2FromMaven=false" >> ~/.gradle/gradle.properties && echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> ~/.gradle/gradle.properties && ( if [ -f /usr/bin/aapt2 ] && /usr/bin/aapt2 version 2>/dev/null | grep -q "debian"; then echo "Upgrading aapt2 to modern ARM64 binary..." && mkdir -p /tmp/aapt2_download && ( curl -L -o /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a || wget -O /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a ) && chmod +x /tmp/aapt2_download/aapt2 && mv /tmp/aapt2_download/aapt2 /usr/bin/aapt2 && rm -rf /tmp/aapt2_download && echo "aapt2 successfully upgraded."; fi ) && rm -rf ~/.gradle/caches && ( find /root/android-sdk -name "aapt2" -exec cp /usr/bin/aapt2 {} \\; 2>/dev/null || true ) && ( find /root/.gradle -name "aapt2" -exec cp /usr/bin/aapt2 {} \\; 2>/dev/null || true ) && touch /root/.quantum_build_fix_installed ~/.quantum_build_fix_installed 2>/dev/null || true && echo "Fixed global build environment, C++ dependencies, Git directories, disabled AAPT2 daemon, upgraded aapt2 binary, and cleared Gradle cache"',
     icon: LucideIcons.wrench,
@@ -164,18 +216,20 @@ final defaultPackages = [
   OptionalPackage(
     id: 'build-clean',
     name: 'Clean & Repair Build',
+    version: 'Utility',
     description: 'Runs flutter clean, removes gradle caches, and resets build state',
     command: 'rm -rf ~/.gradle/caches && rm -rf build && if [ -f pubspec.yaml ]; then flutter clean; echo "Project and Global caches cleaned"; else echo "Global Gradle caches cleared. (Note: Run inside project folder to clean flutter specific files)"; fi',
     icon: LucideIcons.refresh_ccw,
     category: 'System',
   ),
   // ==========================================
-  // CMAKE VERSIONS
+  // CMAKE & NATIVE BUILD LIBRARIES
   // ==========================================
   OptionalPackage(
     id: 'cmake-3.22',
     name: 'CMake 3.22.1',
-    description: 'Build tool for C++ (Recommended LTS)',
+    version: '3.22.1 LTS',
+    description: 'Build tool for C++ (Recommended LTS for Android NDK)',
     command: '$_sdkPrefix "cmake;3.22.1"',
     icon: LucideIcons.box,
     category: 'Build Tools',
@@ -183,9 +237,28 @@ final defaultPackages = [
   OptionalPackage(
     id: 'cmake-3.31',
     name: 'CMake 3.31.0',
-    description: 'Build tool for C++ (Latest)',
+    version: '3.31.0',
+    description: 'Build tool for C++ (Latest Modern Release)',
     command: '$_sdkPrefix "cmake;3.31.0"',
     icon: LucideIcons.box,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'protobuf-compiler',
+    name: 'Protobuf & gRPC Compiler (protoc)',
+    version: '3.21+',
+    description: 'Protocol Buffers compiler and headers for gRPC and binary serialization builds',
+    command: '${_aptPrefix}apt install -y protobuf-compiler libprotobuf-dev',
+    icon: LucideIcons.network,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'sqlite-dev',
+    name: 'SQLite3, OpenSSL & FFI Dev Libraries',
+    version: '3.45+',
+    description: 'Native headers and libraries (libsqlite3-dev, libssl-dev, libffi-dev) for Drift, SQLite, and FFI builds',
+    command: '${_aptPrefix}apt install -y sqlite3 libsqlite3-dev libssl-dev libffi-dev',
+    icon: LucideIcons.database,
     category: 'Build Tools',
   ),
 
@@ -195,7 +268,8 @@ final defaultPackages = [
   OptionalPackage(
     id: 'ndk-r25c',
     name: 'NDK r25c (LTS)',
-    description: 'Android Native Development Kit (25.1.8937393 - Recommended)',
+    version: '25.1.8937393',
+    description: 'Android Native Development Kit (25.1.8937393 - Recommended Classic)',
     command: '$_sdkPrefix "ndk;25.1.8937393"',
     icon: LucideIcons.cpu,
     category: 'Build Tools',
@@ -203,15 +277,26 @@ final defaultPackages = [
   OptionalPackage(
     id: 'ndk-r27b',
     name: 'NDK r27b (LTS)',
-    description: 'Android Native Development Kit (27.0.12077973 - Modern)',
+    version: '27.0.12077973',
+    description: 'Android Native Development Kit (27.0.12077973 - Modern Flutter Default)',
     command: '$_sdkPrefix "ndk;27.0.12077973"',
+    icon: LucideIcons.cpu,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'ndk-r28',
+    name: 'NDK r28 (16KB Page Support)',
+    version: '28.0.12433547',
+    description: 'Android Native Development Kit r28 with full Android 15/16 16KB page size alignment support',
+    command: '$_sdkPrefix "ndk;28.0.12433547"',
     icon: LucideIcons.cpu,
     category: 'Build Tools',
   ),
   OptionalPackage(
     id: 'ndk-r29',
     name: 'NDK r29 (Latest)',
-    description: 'Android Native Development Kit (29.0.14206865)',
+    version: '29.0.14206865',
+    description: 'Android Native Development Kit (29.0.14206865 - Bleeding Edge)',
     command: '$_sdkPrefix "ndk;29.0.14206865"',
     icon: LucideIcons.cpu,
     category: 'Build Tools',
@@ -223,6 +308,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'build-tools-28.0.3',
     name: 'Build-Tools 28.0.3',
+    version: '28.0.3',
     description: 'Android SDK Build-Tools 28.0.3 (Android 9)',
     command: '$_sdkPrefix "build-tools;28.0.3"',
     icon: LucideIcons.wrench,
@@ -231,6 +317,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'build-tools-29.0.3',
     name: 'Build-Tools 29.0.3',
+    version: '29.0.3',
     description: 'Android SDK Build-Tools 29.0.3 (Android 10)',
     command: '$_sdkPrefix "build-tools;29.0.3"',
     icon: LucideIcons.wrench,
@@ -239,6 +326,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'build-tools-30.0.3',
     name: 'Build-Tools 30.0.3',
+    version: '30.0.3',
     description: 'Android SDK Build-Tools 30.0.3 (Android 11)',
     command: '$_sdkPrefix "build-tools;30.0.3"',
     icon: LucideIcons.wrench,
@@ -247,6 +335,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'build-tools-33.0.2',
     name: 'Build-Tools 33.0.2',
+    version: '33.0.2',
     description: 'Android SDK Build-Tools 33.0.2 (Android 13)',
     command: '$_sdkPrefix "build-tools;33.0.2"',
     icon: LucideIcons.wrench,
@@ -255,6 +344,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'build-tools-34.0.0',
     name: 'Build-Tools 34.0.0',
+    version: '34.0.0',
     description: 'Android SDK Build-Tools 34.0.0 (Android 14)',
     command: '$_sdkPrefix "build-tools;34.0.0"',
     icon: LucideIcons.wrench,
@@ -263,15 +353,26 @@ final defaultPackages = [
   OptionalPackage(
     id: 'build-tools-35.0.0',
     name: 'Build-Tools 35.0.0',
+    version: '35.0.0',
     description: 'Android SDK Build-Tools 35.0.0 (Android 15)',
     command: '$_sdkPrefix "build-tools;35.0.0"',
     icon: LucideIcons.wrench,
     category: 'Build Tools',
   ),
   OptionalPackage(
+    id: 'build-tools-35.0.1',
+    name: 'Build-Tools 35.0.1',
+    version: '35.0.1',
+    description: 'Android SDK Build-Tools 35.0.1 (Android 15 Rev 1)',
+    command: '$_sdkPrefix "build-tools;35.0.1"',
+    icon: LucideIcons.wrench,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
     id: 'build-tools-36.0.0',
     name: 'Build-Tools 36.0.0',
-    description: 'Android SDK Build-Tools 36.0.0 (Android 16)',
+    version: '36.0.0',
+    description: 'Android SDK Build-Tools 36.0.0 (Android 16 Latest)',
     command: '$_sdkPrefix "build-tools;36.0.0"',
     icon: LucideIcons.wrench,
     category: 'Build Tools',

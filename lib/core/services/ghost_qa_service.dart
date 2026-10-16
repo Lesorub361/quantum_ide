@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:quantum_ide/core/router/app_router.dart';
 
 /// Recorded runtime Flutter error / RenderFlex overflow event.
 class QARuntimeError {
@@ -101,6 +102,9 @@ class GhostQAService {
   int _pointerId = 1000;
   final List<QARuntimeError> _errorLog = [];
   static const int _maxErrorLogSize = 50;
+
+  /// Optional simulated phone viewport dimensions for multi-screen testing.
+  final ValueNotifier<Size?> simulatedViewport = ValueNotifier<Size?>(null);
 
   String? _activeWorkspacePath;
 
@@ -317,7 +321,7 @@ class GhostQAService {
     }
 
     final mediaQuery = MediaQuery.maybeOf(context);
-    final screenSize = mediaQuery?.size ?? const Size(1080, 2400);
+    final screenSize = simulatedViewport.value ?? mediaQuery?.size ?? const Size(1080, 2400);
 
     final List<QAElementInfo> discovered = [];
     int counter = 0;
@@ -752,6 +756,30 @@ class GhostQAService {
       } else if (path == '/audit' && request.method == 'POST') {
         final auditReport = await runAutonomousAudit();
         _sendJsonResponse(request.response, auditReport);
+      } else if (path == '/viewport' && request.method == 'POST') {
+        final bodyStr = await utf8.decodeStream(request);
+        final data = bodyStr.isNotEmpty ? jsonDecode(bodyStr) as Map<String, dynamic> : <String, dynamic>{};
+        if (data['reset'] == true) {
+          simulatedViewport.value = null;
+        } else {
+          final w = (data['width'] as num? ?? 390).toDouble();
+          final h = (data['height'] as num? ?? 844).toDouble();
+          simulatedViewport.value = Size(w, h);
+        }
+        await Future.delayed(const Duration(milliseconds: 200));
+        _sendJsonResponse(request.response, {
+          'success': true,
+          'viewport': simulatedViewport.value != null
+              ? {'width': simulatedViewport.value!.width, 'height': simulatedViewport.value!.height}
+              : null,
+        });
+      } else if (path == '/navigate' && request.method == 'POST') {
+        final bodyStr = await utf8.decodeStream(request);
+        final data = bodyStr.isNotEmpty ? jsonDecode(bodyStr) as Map<String, dynamic> : <String, dynamic>{};
+        final route = data['route']?.toString() ?? '/';
+        appRouter.go(route);
+        await Future.delayed(const Duration(milliseconds: 250));
+        _sendJsonResponse(request.response, {'success': true, 'route': route});
       } else {
         request.response.statusCode = HttpStatus.notFound;
         request.response.write('Not Found');

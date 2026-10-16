@@ -978,14 +978,14 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () {},
+            onTap: () => PackageInstallDialog.show(context, pkg, isUpdate: pkg.isInstalled),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
                   Container(
-                    width: 52,
-                    height: 52,
+                    width: 50,
+                    height: 50,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
@@ -995,12 +995,12 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(15),
                       border: Border.all(color: accentColor.withValues(alpha: 0.3)),
                     ),
-                    child: Icon(pkg.icon, color: accentColor, size: 24),
+                    child: Icon(pkg.icon, color: accentColor, size: 22),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1015,28 +1015,47 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                                 style: GoogleFonts.inter(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 15,
+                                  fontSize: 14.5,
                                 ),
                               ),
                             ),
-                            if (pkg.isInstalled) ...[
-                              const SizedBox(width: 8),
+                            if (pkg.version != null && pkg.version!.isNotEmpty) ...[
+                              const SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.cyanAccent.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3), width: 0.6),
+                                ),
+                                child: Text(
+                                  pkg.version!,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.cyanAccent,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (pkg.isInstalled) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(5),
                                   border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(LucideIcons.badge_check, color: Color(0xFF10B981), size: 12),
-                                    const SizedBox(width: 4),
+                                    const Icon(LucideIcons.badge_check, color: Color(0xFF10B981), size: 11),
+                                    const SizedBox(width: 3),
                                     Text(
                                       AppLocalizations.of(context)!.statusInstalledCaps,
                                       style: GoogleFonts.inter(
-                                        fontSize: 8.5,
+                                        fontSize: 8,
                                         fontWeight: FontWeight.w900,
                                         color: const Color(0xFF10B981),
                                       ),
@@ -1047,14 +1066,14 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                             ],
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 5),
                         Text(
                           pkg.description,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             color: Colors.white60,
-                            fontSize: 12,
+                            fontSize: 11.5,
                             height: 1.3,
                           ),
                         ),

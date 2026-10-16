@@ -42,6 +42,14 @@ class FileDrawer extends ConsumerStatefulWidget {
 
 
 class FileDrawerState extends ConsumerState<FileDrawer> {
+  // Persistent controller: recreating it on every build reset the cursor and caused jank while typing.
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Widget _buildFilterChip(WidgetRef ref, String label, String query, bool isSelected) {
     return InkWell(
@@ -338,7 +346,15 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                               children: [
                                 TextField(
                                   onChanged: (value) => ref.read(fileSearchQueryProvider.notifier).state = value,
-                                  controller: TextEditingController(text: currentQuery)..selection = TextSelection.fromPosition(TextPosition(offset: currentQuery.length)),
+                                  controller: () {
+                                    if (_searchController.text != currentQuery) {
+                                      _searchController.value = TextEditingValue(
+                                        text: currentQuery,
+                                        selection: TextSelection.collapsed(offset: currentQuery.length),
+                                      );
+                                    }
+                                    return _searchController;
+                                  }(),
                                   decoration: InputDecoration(
                                     hintText: AppLocalizations.of(context)!.searchFiles,
                                     hintStyle: const TextStyle(fontSize: 12.5, color: Colors.white30),

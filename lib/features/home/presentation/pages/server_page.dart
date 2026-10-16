@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/project_detector.dart';
@@ -62,7 +63,6 @@ class _ServerPageState extends ConsumerState<ServerPage>
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     final workspacePath = ref.watch(workspaceProvider).currentPath;
     final projectTypeAsync = ref.watch(_serverProjectTypeProvider);
@@ -71,15 +71,17 @@ class _ServerPageState extends ConsumerState<ServerPage>
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      body: projectTypeAsync.when(
-        loading: () => Center(child: CircularProgressIndicator(color: theme.colorScheme.primary)),
-        error: (_, e) => _noProjectView(),
-        data: (type) {
-          if (workspacePath == null) return _noProjectView();
-          final guestPath = _toGuestPath(workspacePath);
-          final config = ProjectDetector.runConfig(type, guestPath);
-          return _buildMain(workspacePath, type, config, isRunning);
-        },
+      body: SafeArea(
+        child: projectTypeAsync.when(
+          loading: () => Center(child: CircularProgressIndicator(color: theme.colorScheme.primary)),
+          error: (_, e) => _noProjectView(),
+          data: (type) {
+            if (workspacePath == null) return _noProjectView();
+            final guestPath = _toGuestPath(workspacePath);
+            final config = ProjectDetector.runConfig(type, guestPath);
+            return _buildMain(workspacePath, type, config, isRunning);
+          },
+        ),
       ),
     );
   }
@@ -113,7 +115,7 @@ class _ServerPageState extends ConsumerState<ServerPage>
     final theme = Theme.of(context);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 52, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLow,
         border: Border(
@@ -123,8 +125,22 @@ class _ServerPageState extends ConsumerState<ServerPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Project type badge + name
+          // Back button + Project type badge + name
           Row(children: [
+            IconButton(
+              icon: Icon(LucideIcons.arrow_left, size: 18, color: theme.colorScheme.onSurface),
+              tooltip: 'Назад',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/');
+                }
+              },
+            ),
+            const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -602,33 +618,68 @@ class _ServerPageState extends ConsumerState<ServerPage>
   // ─── No Project ────────────────────────────────────────────────────────────
   Widget _noProjectView() {
     final theme = Theme.of(context);
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerLow,
-              shape: BoxShape.circle,
-              border:
-                  Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.06)),
-            ),
-            child: Icon(LucideIcons.folder_open,
-                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4), size: 40),
-          ),
-          const SizedBox(height: 20),
-          Text(AppLocalizations.of(context)!.projectNotOpened,
-              style: GoogleFonts.inter(
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+          child: Row(
+            children: [
+              IconButton(
+                icon: Icon(LucideIcons.arrow_left, size: 18, color: theme.colorScheme.onSurface),
+                tooltip: 'Назад',
+                onPressed: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/');
+                  }
+                },
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Серверы и запуск',
+                style: GoogleFonts.inter(
                   color: theme.colorScheme.onSurface,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text(AppLocalizations.of(context)!.openProjectToSeeCommands,
-              style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 13),
-              textAlign: TextAlign.center),
-        ],
-      ),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerLow,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.06)),
+                    ),
+                    child: Icon(LucideIcons.folder_open,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4), size: 40),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(AppLocalizations.of(context)!.projectNotOpened,
+                      style: GoogleFonts.inter(
+                          color: theme.colorScheme.onSurface,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Text(AppLocalizations.of(context)!.openProjectToSeeCommands,
+                      style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 13),
+                      textAlign: TextAlign.center),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -19,15 +19,13 @@ import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
-import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
-import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_panel.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
@@ -76,6 +74,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   bool _isSidebarOpen = false;
   bool _isTerminalSplit = false;
   bool _isMobileKeyboardActive = false;
+  bool _inlineSelectionMode = false;
+  String _inlineSelectedText = '';
+  int _problemsSeverityFilter = 0; // 0: Все, 1: Ошибки, 2: Предупреждения, 3: Инфо
   int _buildSubTab = 0;
   double _pinchBaseFontSize = 13.0;
 
@@ -95,6 +96,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   void _openTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+    if (_inlineSelectionMode) return;
+    if (session.xtermViewController.selection != null) return;
+
+    final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = true;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
@@ -107,19 +112,26 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         focusNode.allowAutoKeyboard = false;
       }
     });
-    if (mounted) setState(() {});
+    if (mounted && !wasActive) setState(() {});
   }
 
   void _closeTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+    final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     _getTerminalKey(keyId).currentState?.closeKeyboard();
     FocusManager.instance.primaryFocus?.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');
-    if (mounted) setState(() {});
+    if (mounted && wasActive) setState(() {});
   }
 
   void _toggleTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+    if (_inlineSelectionMode) {
+      setState(() {
+        _inlineSelectionMode = false;
+        _inlineSelectedText = '';
+      });
+    }
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     if (bottomInset > 20) {
       _closeTerminalKeyboard(session, isSecondary: isSecondary);
@@ -396,6 +408,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     };
   }
 
+  void _toggleInlineSelectionMode(TerminalSession session) {
+    setState(() {
+      _inlineSelectionMode = !_inlineSelectionMode;
+      _inlineSelectedText = '';
+    });
+    if (_inlineSelectionMode) {
+      _closeTerminalKeyboard(session);
+    }
+  }
+
   void _onKeyTap(String value, TerminalSession session) async {
     final term = session.xtermTerminal;
     if (value == 'ctrl') {
@@ -435,8 +457,27 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       _toggleTerminalKeyboard(session);
       return;
     }
+    if (value == 'inline_selection_mode') {
+      _toggleInlineSelectionMode(session);
+      return;
+    }
     if (value == 'selection_mode') {
       TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+      return;
+    }
+    if (value == 'copy_all_output') {
+      _copyTerminalOutputDirect(session);
+      return;
+    }
+    if (value.startsWith('cmd:')) {
+      final cmd = value.substring(4);
+      if (_inlineSelectionMode) {
+        setState(() {
+          _inlineSelectionMode = false;
+          _inlineSelectedText = '';
+        });
+      }
+      session.pty.write(Uint8List.fromList(utf8.encode(cmd)));
       return;
     }
     if (value == 'paste') {
@@ -444,6 +485,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
     if (value == 'copy') {
+      if (_inlineSelectionMode && _inlineSelectedText.trim().isNotEmpty) {
+        await Clipboard.setData(ClipboardData(text: _inlineSelectedText));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppLocalizations.of(context)!.copiedToClipboard),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+        return;
+      }
       await _copySelection(session);
       return;
     }
@@ -498,10 +552,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       term.keyInput(xt.TerminalKey.arrowLeft, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
     } else if (value == '\x1b[C') {
       term.keyInput(xt.TerminalKey.arrowRight, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
-    } else if (value == '\x1b[H') {
-      session.pty.write(Uint8List.fromList(utf8.encode('\x1b[H')));
-    } else if (value == '\x1b[F') {
-      session.pty.write(Uint8List.fromList(utf8.encode('\x1b[F')));
+    } else if (value == '\x1b[H' || value == '\x1b[F' || value == '\x1b[5~' || value == '\x1b[6~') {
+      session.pty.write(Uint8List.fromList(utf8.encode(value)));
     } else if (value.length == 1 && hadCtrl) {
       final code = value.toUpperCase().codeUnitAt(0);
       if (code >= 65 && code <= 90) {
@@ -516,7 +568,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       _handleInputForAutocomplete(session, value);
     }
     if (!mounted) return;
-    setState(() {});
+    if (hadCtrl || hadAlt || hadShift) {
+      setState(() {});
+    }
   }
 
   @override
@@ -578,323 +632,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildGitView() {
-    final l10n = AppLocalizations.of(context)!;
-    final gitState = ref.watch(gitProvider);
-    final gitNotifier = ref.read(gitProvider.notifier);
-
-    if (gitState.isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
-    }
-
-    if (gitState.status == null) {
-      return Center(
-        child: SingleChildScrollView(
-          child: Container(
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.01),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.amberAccent.withValues(alpha: 0.05),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.15)),
-                  ),
-                  child: const Icon(LucideIcons.git_branch, color: Colors.amberAccent, size: 38),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  l10n.repositoryNotFound,
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.initGitRepoDescription,
-                  style: GoogleFonts.inter(color: Colors.white38, fontSize: 12, height: 1.4),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () => gitNotifier.init(),
-                  icon: const Icon(LucideIcons.git_fork, size: 14),
-                  label: Text(l10n.initGitAction),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amberAccent.withValues(alpha: 0.15),
-                    foregroundColor: Colors.amberAccent,
-                    elevation: 0,
-                    side: BorderSide(color: Colors.amberAccent.withValues(alpha: 0.3)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final status = gitState.status!;
-
-    return RefreshIndicator(
-      onRefresh: () => gitNotifier.refreshStatus(),
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Row(
-            children: [
-              const Icon(LucideIcons.git_branch, size: 14, color: Colors.cyanAccent),
-              const SizedBox(width: 8),
-              Text(
-                status.currentBranch,
-                style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 13),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(LucideIcons.refresh_cw, size: 14, color: Colors.white38),
-                onPressed: () => gitNotifier.refreshStatus(),
-              ),
-            ],
-          ),
-          const Divider(color: Colors.white10),
-          if (status.conflictedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitConflicted, status.conflictedFiles.length),
-            ...status.conflictedFiles.map((f) => _buildGitFileItem(f, isStaged: false, isConflicted: true)),
-          ],
-          if (status.stagedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitStaged, status.stagedFiles.length),
-            ...status.stagedFiles.map((f) => _buildGitFileItem(f, isStaged: true)),
-          ],
-          if (status.modifiedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitModified, status.modifiedFiles.length),
-            ...status.modifiedFiles.map((f) => _buildGitFileItem(f, isStaged: false)),
-          ],
-          if (status.untrackedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitUntracked, status.untrackedFiles.length),
-            ...status.untrackedFiles.map((f) => _buildGitFileItem(f, isStaged: false, isUntracked: true)),
-          ],
-          const SizedBox(height: 20),
-          if (status.hasChanges) ...[
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.02),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              ),
-              child: Column(
-                children: [
-                  TextField(
-                    decoration: InputDecoration(
-                      hintText: l10n.commitMessageHint,
-                      hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
-                      filled: true,
-                      fillColor: Colors.black.withValues(alpha: 0.2),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8), 
-                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8), 
-                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8), 
-                        borderSide: const BorderSide(color: Colors.amberAccent, width: 0.8),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    ),
-                    style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
-                    onSubmitted: (msg) {
-                      if (msg.isNotEmpty) {
-                        gitNotifier.commit(msg);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => gitNotifier.push(),
-                          icon: const Icon(LucideIcons.arrow_up, size: 14),
-                          label: const Text('Push'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueAccent.withValues(alpha: 0.15), 
-                            foregroundColor: Colors.blueAccent,
-                            elevation: 0,
-                            side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.25)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => gitNotifier.pull(),
-                          icon: const Icon(LucideIcons.arrow_down, size: 14),
-                          label: const Text('Pull'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.greenAccent.withValues(alpha: 0.15), 
-                            foregroundColor: Colors.greenAccent,
-                            elevation: 0,
-                            side: BorderSide(color: Colors.greenAccent.withValues(alpha: 0.25)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGitSectionHeader(String title, int count) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 16, bottom: 8),
-      child: Row(
-        children: [
-          Text(
-            title, 
-            style: GoogleFonts.inter(
-              fontSize: 10, 
-              color: Colors.white24, 
-              fontWeight: FontWeight.bold, 
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05), 
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            ),
-            child: Text(
-              '$count', 
-              style: GoogleFonts.inter(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGitFileItem(String path, {required bool isStaged, bool isUntracked = false, bool isConflicted = false}) {
-    final l10n = AppLocalizations.of(context)!;
-    final notifier = ref.read(gitProvider.notifier);
-    final Color statusColor = isConflicted 
-        ? Colors.redAccent 
-        : (isStaged ? Colors.greenAccent : (isUntracked ? Colors.orangeAccent : Colors.amberAccent));
-    final String statusLabel = isConflicted
-        ? 'CONFLICT'
-        : (isStaged ? 'STAGED' : (isUntracked ? 'UNTRACKED' : 'MODIFIED'));
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.01),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 4, color: statusColor),
-            Expanded(
-              child: ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.only(left: 12, right: 6),
-                leading: Icon(
-                  isConflicted
-                      ? LucideIcons.git_pull_request
-                      : (isUntracked ? LucideIcons.file_plus : LucideIcons.file_text),
-                  size: 16,
-                  color: statusColor,
-                ),
-                title: Text(
-                  path.split('/').last, 
-                  style: GoogleFonts.inter(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600),
-                ),
-                subtitle: Text(
-                  path, 
-                  style: GoogleFonts.jetBrainsMono(fontSize: 9, color: Colors.white24),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () {
-                  if (isConflicted) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => GitMergeConflictPage(relativePath: path),
-                      ),
-                    );
-                  } else {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => GitDiffPage(relativePath: path, initiallyStaged: isStaged),
-                      ),
-                    );
-                  }
-                },
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: GoogleFonts.inter(color: statusColor, fontSize: 7, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    if (isConflicted)
-                      IconButton(
-                        icon: const Icon(LucideIcons.git_pull_request, size: 14, color: Colors.redAccent),
-                        tooltip: l10n.resolveConflictTooltip,
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (context) => GitMergeConflictPage(relativePath: path),
-                            ),
-                          );
-                        },
-                      )
-                    else
-                      IconButton(
-                        icon: Icon(isStaged ? LucideIcons.minus : LucideIcons.plus, size: 14, color: Colors.white54),
-                        tooltip: isStaged ? l10n.unstageAction : l10n.stageAction,
-                        onPressed: () => isStaged ? notifier.unstageFile(path) : notifier.stageFile(path),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return const SidebarGitPanel(isBottomPanel: true);
   }
 
   Widget _buildRunView({Key? key}) {
@@ -1577,7 +1315,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Flexible(
+                  Expanded(
                     child: Text(
                       currentSession.title,
                       style: GoogleFonts.inter(
@@ -1588,23 +1326,25 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      ref.watch(workspaceProvider).currentPath?.split('/').last ?? 'workspace',
-                      style: GoogleFonts.jetBrainsMono(
-                        color: Colors.white30,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
+                  if (!isCompact) ...[
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        ref.watch(workspaceProvider).currentPath?.split('/').last ?? 'workspace',
+                        style: GoogleFonts.jetBrainsMono(
+                          color: Colors.white30,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
+                  ],
                   _buildTerminalActionButton(
-                    LucideIcons.text_cursor_input,
-                    'Режим выделения текста курсором',
-                    () => TerminalTextSelectionModal.show(context, currentSession.xtermTerminal, currentSession.title),
-                    color: Colors.cyanAccent,
+                    _inlineSelectionMode ? LucideIcons.square_check : LucideIcons.mouse_pointer_click,
+                    _inlineSelectionMode ? 'Выйти из режима выделения' : 'Выделить текст прямо в терминале',
+                    () => _toggleInlineSelectionMode(currentSession),
+                    color: _inlineSelectionMode ? Colors.amberAccent : Colors.cyanAccent,
                   ),
                   const SizedBox(width: 3),
                   _buildTerminalActionButton(
@@ -1756,6 +1496,202 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
+  Widget _buildInlineSelectableTerminal(
+    TerminalSession session,
+    xt.TerminalTheme theme,
+    double terminalFontSize,
+  ) {
+    final fullText = _extractTerminalText(session.xtermTerminal);
+    final l10n = AppLocalizations.of(context)!;
+
+    return Container(
+      margin: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: theme.background,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.45), width: 1.0),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF151924),
+              border: Border(
+                bottom: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.25)),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.mouse_pointer_click, size: 13, color: Colors.cyanAccent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _inlineSelectedText.isNotEmpty
+                        ? 'Выделено символов: ${_inlineSelectedText.length}'
+                        : 'Выделяйте текст прямо в терминале (зажмите или проведите)',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.cyanAccent,
+                    ),
+                  ),
+                ),
+                if (_inlineSelectedText.isNotEmpty) ...[
+                  InkWell(
+                    onTap: () async {
+                      await Clipboard.setData(ClipboardData(text: _inlineSelectedText));
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(l10n.copiedToClipboard),
+                            duration: const Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.cyanAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.copy, size: 12, color: Colors.cyanAccent),
+                          const SizedBox(width: 4),
+                          Text(
+                            l10n.copy,
+                            style: GoogleFonts.inter(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () {
+                      final sel = _inlineSelectedText;
+                      ref.read(rightChatPanelOpenProvider.notifier).state = true;
+                      ref.read(aiProvider.notifier).askAI(
+                        'Помоги разобраться с этим выводом из терминала:\n```\n$sel\n```',
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.purpleAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        'AI ✨',
+                        style: GoogleFonts.inter(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purpleAccent,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                InkWell(
+                  onTap: () => _copyTerminalOutputDirect(session),
+                  borderRadius: BorderRadius.circular(5),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      'Копировать всё',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white70),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () => setState(() {
+                    _inlineSelectionMode = false;
+                    _inlineSelectedText = '';
+                  }),
+                  borderRadius: BorderRadius.circular(5),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.amberAccent.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      'К вводу ✕',
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amberAccent,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                reverse: true,
+                padding: const EdgeInsets.all(10),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: SelectableText(
+                    fullText.isEmpty ? '(Пустой вывод терминала)' : fullText,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: terminalFontSize,
+                      color: theme.foreground,
+                      height: 1.35,
+                    ),
+                    onSelectionChanged: (selection, cause) {
+                      if (selection.start >= 0 &&
+                          selection.end <= fullText.length &&
+                          selection.start != selection.end) {
+                        final selected = fullText.substring(selection.start, selection.end);
+                        if (selected != _inlineSelectedText) {
+                          setState(() => _inlineSelectedText = selected);
+                        }
+                      } else if (_inlineSelectedText.isNotEmpty) {
+                        setState(() => _inlineSelectedText = '');
+                      }
+                    },
+                    contextMenuBuilder: (context, editableTextState) {
+                      final List<ContextMenuButtonItem> buttonItems =
+                          editableTextState.contextMenuButtonItems;
+                      return AdaptiveTextSelectionToolbar.buttonItems(
+                        anchors: editableTextState.contextMenuAnchors,
+                        buttonItems: buttonItems,
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTerminalWidget(TerminalSession session, {bool isSecondary = false}) {
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
@@ -1774,6 +1710,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       if (!_initializedSessions.contains(session)) {
         _initializedSessions.add(session);
       }
+    }
+
+    if (_inlineSelectionMode && !isSecondary) {
+      return _buildInlineSelectableTerminal(session, theme, terminalFontSize);
     }
 
     return Stack(
@@ -1814,7 +1754,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       },
                       child: GestureDetector(
                         behavior: HitTestBehavior.translucent,
-                        onTap: () => _openTerminalKeyboard(session, isSecondary: isSecondary),
                         onScaleStart: (details) {
                           if (details.pointerCount >= 2) {
                             _pinchBaseFontSize = ref.read(settingsProvider).terminalFontSize;
@@ -1842,7 +1781,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           focusNode: _getFocusNode(keyId),
                           autofocus: !isMobile,
                           hardwareKeyboardOnly: false,
-                          onTapUp: (details, offset) => _openTerminalKeyboard(session, isSecondary: isSecondary),
+                          onTapUp: (details, offset) {
+                            // Only open soft keyboard if user did not just finish selecting text
+                            if (session.xtermViewController.selection == null) {
+                              _openTerminalKeyboard(session, isSecondary: isSecondary);
+                            }
+                          },
                           padding: const EdgeInsets.all(10),
                           theme: theme,
                           backgroundOpacity: 0,
@@ -1891,113 +1835,129 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
         final l10n = AppLocalizations.of(context)!;
         return Positioned(
-          top: 14,
-          right: 18,
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E2230).withValues(alpha: 0.95),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.45), width: 0.8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: () async {
-                      await Clipboard.setData(ClipboardData(text: selectedText));
-                      session.xtermViewController.clearSelection();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(l10n.copiedToClipboard),
-                            duration: const Duration(seconds: 1),
-                            behavior: SnackBarBehavior.floating,
-                          ),
+          top: 12,
+          right: 14,
+          left: 14,
+          child: Align(
+            alignment: Alignment.topRight,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1E2D).withValues(alpha: 0.97),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.5), width: 0.9),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 2,
+                  children: [
+                    InkWell(
+                      onTap: () async {
+                        await Clipboard.setData(ClipboardData(text: selectedText));
+                        session.xtermViewController.clearSelection();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(l10n.copiedToClipboard),
+                              duration: const Duration(seconds: 1),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.copy, size: 13, color: Colors.cyanAccent),
+                            const SizedBox(width: 5),
+                            Text(
+                              l10n.copy,
+                              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(width: 1, height: 15, color: Colors.white12),
+                    InkWell(
+                      onTap: () => _selectAllInTerminal(session),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                        child: Text(
+                          'Всё',
+                          style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                    Container(width: 1, height: 15, color: Colors.white12),
+                    InkWell(
+                      onTap: () async {
+                        await _pasteToTerminal(session);
+                        session.xtermViewController.clearSelection();
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.clipboard_paste, size: 12, color: Colors.white70),
+                            const SizedBox(width: 4),
+                            Text(
+                              l10n.paste,
+                              style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(width: 1, height: 15, color: Colors.white12),
+                    InkWell(
+                      onTap: () {
+                        ref.read(rightChatPanelOpenProvider.notifier).state = true;
+                        ref.read(aiProvider.notifier).askAI(
+                          'Помоги разобраться с этой ошибкой/выводом из терминала:\n```\n$selectedText\n```',
                         );
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(LucideIcons.copy, size: 13, color: Colors.cyanAccent),
-                          const SizedBox(width: 5),
-                          Text(
-                            l10n.copy,
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
-                          ),
-                        ],
+                        session.xtermViewController.clearSelection();
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.sparkles, size: 12, color: Colors.purpleAccent),
+                            const SizedBox(width: 4),
+                            Text(
+                              'AI ✨',
+                              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  Container(width: 1, height: 16, margin: const EdgeInsets.symmetric(horizontal: 3), color: Colors.white12),
-                  InkWell(
-                    onTap: () async {
-                      await _pasteToTerminal(session);
-                      session.xtermViewController.clearSelection();
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(LucideIcons.clipboard_paste, size: 13, color: Colors.white70),
-                          const SizedBox(width: 5),
-                          Text(
-                            l10n.paste,
-                            style: GoogleFonts.inter(fontSize: 12, color: Colors.white70),
-                          ),
-                        ],
-                      ),
+                    IconButton(
+                      icon: const Icon(LucideIcons.x, size: 13, color: Colors.white38),
+                      onPressed: () => session.xtermViewController.clearSelection(),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      splashRadius: 12,
                     ),
-                  ),
-                  Container(width: 1, height: 16, margin: const EdgeInsets.symmetric(horizontal: 3), color: Colors.white12),
-                  InkWell(
-                    onTap: () {
-                      ref.read(rightChatPanelOpenProvider.notifier).state = true;
-                      ref.read(aiProvider.notifier).askAI(
-                        'Помоги разобраться с этой ошибкой/выводом из терминала:\n```\n$selectedText\n```',
-                      );
-                      session.xtermViewController.clearSelection();
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(LucideIcons.sparkles, size: 13, color: Colors.purpleAccent),
-                          const SizedBox(width: 5),
-                          Text(
-                            'AI ✨',
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  IconButton(
-                    icon: const Icon(LucideIcons.x, size: 14, color: Colors.white38),
-                    onPressed: () => session.xtermViewController.clearSelection(),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                    splashRadius: 13,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -2192,101 +2152,168 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         allDiagnostics[filePath] = diags;
       }
     });
-    final filesWithErrors = allDiagnostics.keys.where((k) => allDiagnostics[k]!.isNotEmpty).toList();
-    
-    final totalErrors = allDiagnostics.values.fold<int>(0, (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.error).length);
-    final totalWarnings = allDiagnostics.values.fold<int>(0, (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.warning).length);
-    final totalProblems = totalErrors + totalWarnings;
+
+    final totalErrors = allDiagnostics.values.fold<int>(
+      0,
+      (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.error).length,
+    );
+    final totalWarnings = allDiagnostics.values.fold<int>(
+      0,
+      (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.warning).length,
+    );
+    final totalHints = allDiagnostics.values.fold<int>(
+      0,
+      (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.hint).length,
+    );
+    final totalProblems = totalErrors + totalWarnings + totalHints;
 
     final l10n = AppLocalizations.of(context)!;
 
+    // Flatten and filter diagnostics into a sleek compact list
+    final flatEntries = <MapEntry<String, CodeDiagnostic>>[];
+    allDiagnostics.forEach((filePath, diags) {
+      for (final d in diags) {
+        if (_problemsSeverityFilter == 1 && d.severity != CodeDiagnosticSeverity.error) continue;
+        if (_problemsSeverityFilter == 2 && d.severity != CodeDiagnosticSeverity.warning) continue;
+        if (_problemsSeverityFilter == 3 && d.severity != CodeDiagnosticSeverity.hint) continue;
+        flatEntries.add(MapEntry(filePath, d));
+      }
+    });
+
+    Widget buildFilterPill(int index, String label, int count, Color color, IconData icon) {
+      final isSelected = _problemsSeverityFilter == index;
+      return InkWell(
+        onTap: () => setState(() => _problemsSeverityFilter = index),
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isSelected ? color.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.07),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 11, color: isSelected ? color : Colors.white54),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? Colors.white : Colors.white60,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$count',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final headerWidget = Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2230),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: const Color(0xFF12151E),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
       ),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  l10n.projectAnalysis,
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.problemsFound(totalProblems, totalErrors, totalWarnings),
-                  style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  buildFilterPill(0, 'Все', totalProblems, Colors.cyanAccent, LucideIcons.list_filter),
+                  const SizedBox(width: 6),
+                  buildFilterPill(1, 'Ошибки', totalErrors, Colors.redAccent, LucideIcons.circle_x),
+                  const SizedBox(width: 6),
+                  buildFilterPill(2, 'Предупр.', totalWarnings, Colors.amberAccent, LucideIcons.triangle_alert),
+                  if (totalHints > 0) ...[
+                    const SizedBox(width: 6),
+                    buildFilterPill(3, 'Инфо', totalHints, Colors.blueAccent, LucideIcons.info),
+                  ],
+                ],
+              ),
             ),
           ),
-          ElevatedButton.icon(
-            onPressed: _fixErrorsWithAI,
-            icon: const Icon(LucideIcons.sparkles, size: 14, color: Colors.cyanAccent),
-            label: Text(
-              l10n.fixWithAi,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E60FF),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: _fixErrorsWithAI,
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.sparkles, size: 12, color: Colors.white),
+                  const SizedBox(width: 5),
+                  Text(
+                    l10n.fixWithAi,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
 
-    if (filesWithErrors.isEmpty) {
+    if (flatEntries.isEmpty) {
       return Column(
         children: [
           headerWidget,
           Expanded(
             child: Center(
-              child: SingleChildScrollView(
-                child: Container(
-                  margin: const EdgeInsets.all(24),
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.01),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.greenAccent.withValues(alpha: 0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(LucideIcons.shield_check, color: Colors.greenAccent, size: 22),
                   ),
-                  child: Column(
+                  const SizedBox(width: 12),
+                  Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: Colors.greenAccent.withValues(alpha: 0.05),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.15)),
-                        ),
-                        child: const Icon(LucideIcons.shield_check, color: Colors.greenAccent, size: 38),
-                      ),
-                      const SizedBox(height: 20),
                       Text(
                         l10n.noErrorsFound,
-                        style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 8),
                       Text(
                         l10n.noErrorsDescription,
-                        style: GoogleFonts.inter(color: Colors.white38, fontSize: 12, height: 1.4),
-                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -2298,54 +2325,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       children: [
         headerWidget,
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 8),
-            itemCount: filesWithErrors.length,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            itemCount: flatEntries.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 3),
             itemBuilder: (context, index) {
-              final filePath = filesWithErrors[index];
-              final diagnostics = allDiagnostics[filePath]!;
-              final fileName = filePath.split('/').last;
-
-              return Theme(
-                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  initiallyExpanded: true,
-                  iconColor: Colors.white60,
-                  collapsedIconColor: Colors.white24,
-                  title: Row(
-                    children: [
-                      const Icon(LucideIcons.file_code, size: 14, color: Colors.cyanAccent),
-                      const SizedBox(width: 8),
-                      Text(
-                        fileName, 
-                        style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          '${diagnostics.length}',
-                          style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 9, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(left: 22.0),
-                    child: Text(
-                      filePath, 
-                      style: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 9),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  children: diagnostics.map((d) => _buildDiagnosticTile(filePath, d)).toList(),
-                ),
-              );
+              final entry = flatEntries[index];
+              return _buildDiagnosticTile(entry.key, entry.value);
             },
           ),
         ),
@@ -2356,83 +2342,102 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   Widget _buildDiagnosticTile(String path, CodeDiagnostic d) {
     Color color;
     IconData icon;
-    String label;
     switch (d.severity) {
       case CodeDiagnosticSeverity.error:
-        color = Colors.redAccent;
+        color = const Color(0xFFFF5555);
         icon = LucideIcons.circle_x;
-        label = 'ERROR';
         break;
       case CodeDiagnosticSeverity.warning:
-        color = Colors.orangeAccent;
+        color = const Color(0xFFFFB86C);
         icon = LucideIcons.triangle_alert;
-        label = 'WARNING';
         break;
       case CodeDiagnosticSeverity.hint:
-        color = Colors.blueAccent;
+        color = const Color(0xFF58A6FF);
         icon = LucideIcons.info;
-        label = 'INFO';
         break;
     }
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 4, color: color),
-            Expanded(
-              child: ListTile(
-                dense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                leading: Icon(icon, color: color, size: 16),
-                title: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        label,
-                        style: GoogleFonts.inter(color: color, fontSize: 8, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        d.message,
-                        style: GoogleFonts.inter(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(
-                    AppLocalizations.of(context)!.lineColumn(d.range.index + 1, d.range.start + 1),
-                    style: GoogleFonts.jetBrainsMono(color: Colors.white24, fontSize: 10),
+    final fileName = path.split('/').last;
+    final lineNum = d.range.index + 1;
+    final colNum = d.range.start + 1;
+
+    return Material(
+      color: Colors.white.withValues(alpha: 0.02),
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: () async {
+          await ref.read(editorProvider.notifier).openFile(path);
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border(
+              left: BorderSide(color: color, width: 2.5),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 13),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  d.message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 11.5,
+                    height: 1.25,
                   ),
                 ),
-                onTap: () async {
-                  await ref.read(editorProvider.notifier).openFile(path);
-                },
-                trailing: IconButton(
-                  icon: const Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 16),
-                  tooltip: AppLocalizations.of(context)!.fixWithAi,
-                  onPressed: () => _handleAiFix(path, d),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '$fileName:$lineNum:$colNum',
+                  style: GoogleFonts.jetBrainsMono(
+                    color: Colors.cyanAccent.withValues(alpha: 0.85),
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: '$fileName:$lineNum:$colNum - ${d.message}'));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Ошибка скопирована'),
+                      duration: Duration(seconds: 1),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(LucideIcons.copy, color: Colors.white38, size: 12),
+                ),
+              ),
+              InkWell(
+                onTap: () => _handleAiFix(path, d),
+                borderRadius: BorderRadius.circular(4),
+                child: const Padding(
+                  padding: EdgeInsets.all(4),
+                  child: Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 13),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2518,13 +2523,13 @@ Also explain what exactly went wrong and how you fixed it.
       ),
       items: [
         const PopupMenuItem(
-          value: 'selection_mode',
+          value: 'inline_selection',
           height: 38,
           child: Row(
             children: [
-              Icon(LucideIcons.text_cursor_input, size: 15, color: Colors.cyanAccent),
+              Icon(LucideIcons.mouse_pointer_click, size: 15, color: Colors.cyanAccent),
               SizedBox(width: 10),
-              Text('Режим выделения (капельки)', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
+              Text('Выделить текст в терминале', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
             ],
           ),
         ),
@@ -2590,7 +2595,9 @@ Also explain what exactly went wrong and how you fixed it.
 
     if (!mounted || !context.mounted) return;
 
-    if (result == 'selection_mode') {
+    if (result == 'inline_selection') {
+      _toggleInlineSelectionMode(session);
+    } else if (result == 'selection_mode') {
       TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
     } else if (result == 'copy') {
       final selectedText = session.xtermViewController.selection != null
@@ -2685,13 +2692,13 @@ Also explain what exactly went wrong and how you fixed it.
                 ),
                 const Divider(height: 12, color: Colors.white10),
                 _buildMenuTile(
-                  icon: LucideIcons.text_cursor_input,
+                  icon: LucideIcons.mouse_pointer_click,
                   iconColor: Colors.cyanAccent,
-                  title: 'Режим выделения курсором',
-                  subtitle: 'Выбор текста курсорами, поиск и копирование',
+                  title: _inlineSelectionMode ? 'Выйти из выделения в терминале' : 'Выделение прямо в терминале',
+                  subtitle: 'Удобное выделение текста курсорами и копирование без лишних окон',
                   onTap: () {
                     Navigator.pop(ctx);
-                    TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+                    _toggleInlineSelectionMode(session);
                   },
                 ),
                 _buildMenuTile(
@@ -2821,6 +2828,8 @@ Also explain what exactly went wrong and how you fixed it.
       activeKeys: {
         ..._activeModifiers,
         if (isKeyboardOpen) 'KEYB',
+        if (_inlineSelectionMode) 'SEL',
+        if (_inlineSelectionMode) 'inline_selection_mode',
       },
       onKeyTap: (value) => _onKeyTap(value, currentSession),
     );

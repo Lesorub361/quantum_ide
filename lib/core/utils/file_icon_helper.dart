@@ -173,6 +173,60 @@ class FileIconHelper {
           const Color(0xFF78909C), // Blue grey
         );
       }
+      if (segment == 'features' || segment == 'modules') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_kanban,
+          const Color(0xFF00E5FF), // Cyan Accent
+        );
+      }
+      if (segment == 'core' || segment == 'shared' || segment == 'common') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_key,
+          const Color(0xFF7C4DFF), // Deep Purple Accent
+        );
+      }
+      if (segment == 'models' || segment == 'entities' || segment == 'data' || segment == 'domain') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_tree,
+          const Color(0xFF26C6DA), // Cyan 400
+        );
+      }
+      if (segment == 'services' || segment == 'repositories' || segment == 'api' || segment == 'network') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_sync,
+          const Color(0xFF42A5F5), // Blue 400
+        );
+      }
+      if (segment == 'widgets' || segment == 'components' || segment == 'ui' || segment == 'presentation') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_heart,
+          const Color(0xFFFF4081), // Pink Accent
+        );
+      }
+      if (segment == 'pages' || segment == 'screens' || segment == 'views' || segment == 'routes') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_symlink,
+          const Color(0xFF69F0AE), // Green Accent
+        );
+      }
+      if (segment == 'notifiers' || segment == 'providers' || segment == 'controllers' || segment == 'bloc' || segment == 'state') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_dot,
+          const Color(0xFFFFAB40), // Orange Accent
+        );
+      }
+      if (segment == 'utils' || segment == 'helpers' || segment == 'extensions') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_cog,
+          const Color(0xFF80CBC4), // Teal 200
+        );
+      }
+      if (segment == 'l10n' || segment == 'i18n' || segment == 'translations' || segment == 'locales') {
+        return FileIconInfo(
+          isExpanded ? LucideIcons.folder_open : LucideIcons.folder_input,
+          const Color(0xFFBA68C8), // Purple 300
+        );
+      }
 
       // Default folder
       return FileIconInfo(

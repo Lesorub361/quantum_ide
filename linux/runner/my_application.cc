@@ -52,7 +52,17 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "quantum_ide");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  int win_width = 1280;
+  int win_height = 720;
+  const gchar* env_w = g_getenv("QUANTUM_WINDOW_WIDTH");
+  const gchar* env_h = g_getenv("QUANTUM_WINDOW_HEIGHT");
+  if (env_w != nullptr && atoi(env_w) > 100) {
+    win_width = atoi(env_w);
+  }
+  if (env_h != nullptr && atoi(env_h) > 100) {
+    win_height = atoi(env_h);
+  }
+  gtk_window_set_default_size(window, win_width, win_height);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

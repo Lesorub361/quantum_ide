@@ -12,14 +12,16 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
   final Ref _ref;
   static const _key = 'installed_packages';
   Timer? _syncTimer;
-  
+  bool _isChecking = false;
+
   PackageService(this._ref) : super(defaultPackages) {
     _init();
     _startPeriodicCheck();
   }
 
   void _startPeriodicCheck() {
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    // Poll every 120s instead of 30s to save CPU and battery
+    _syncTimer = Timer.periodic(const Duration(seconds: 120), (_) {
       _checkActualInstallation();
     });
   }
@@ -31,35 +33,52 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     await _checkActualInstallation();
   }
 
-  bool _hasCommand(String cmd) {
-    try {
-      final home = Platform.environment['HOME'] ?? '';
-      if (home.isNotEmpty && File(p.join(home, '.local', 'bin', cmd)).existsSync()) {
-        return true;
-      }
-      if (File('/usr/local/bin/$cmd').existsSync() ||
-          File('/usr/bin/$cmd').existsSync() ||
-          File('/usr/local/lib/nodejs/bin/$cmd').existsSync() ||
-          File('/root/.local/bin/$cmd').existsSync()) {
-        return true;
-      }
-      final res = Process.runSync('which', [cmd]);
-      return res.exitCode == 0;
-    } catch (_) {
-      return false;
-    }
+  List<String> _getBinarySearchDirs() {
+    final home = Platform.environment['HOME'] ?? '/root';
+    final pathEnv = Platform.environment['PATH'] ?? '';
+    final dirs = <String>{
+      '/usr/local/bin',
+      '/usr/bin',
+      '/bin',
+      '/usr/local/lib/nodejs/bin',
+      '/opt/gradle/gradle-8.13/bin',
+      p.join(home, '.local', 'bin'),
+      p.join(home, '.cargo', 'bin'),
+      p.join(home, '.bun', 'bin'),
+      p.join(home, '.pub-cache', 'bin'),
+      p.join(home, 'flutter', 'bin'),
+      '/root/.local/bin',
+      '/root/.cargo/bin',
+      '/root/.bun/bin',
+      '/root/.pub-cache/bin',
+      '/root/flutter/bin',
+      for (final part in pathEnv.split(':'))
+        if (part.trim().isNotEmpty) part.trim(),
+    };
+    return dirs.toList();
   }
 
-  String _getAndroidSdkPath() {
-    if (Directory('/root/android-sdk').existsSync()) {
+  Future<bool> _hasCommandAsync(String cmd, List<String> searchDirs) async {
+    for (final dir in searchDirs) {
+      try {
+        if (await File(p.join(dir, cmd)).exists()) {
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  Future<String> _getAndroidSdkPathAsync() async {
+    if (await Directory('/root/android-sdk').exists()) {
       return '/root/android-sdk';
     }
-    if (Directory('/usr/lib/android-sdk').existsSync()) {
+    if (await Directory('/usr/lib/android-sdk').exists()) {
       return '/usr/lib/android-sdk';
     }
     final home = Platform.environment['HOME'] ?? '/root';
     final userSdk = p.join(home, 'Android', 'Sdk');
-    if (Directory(userSdk).existsSync()) {
+    if (await Directory(userSdk).exists()) {
       return userSdk;
     }
     final runtime = _ref.read(runtimeServiceProvider);
@@ -70,62 +89,59 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
         '/data/data/com.example.quantum_ide/files/rootfs/ubuntu/root/android-sdk',
       ];
       for (final candidate in prootCandidates) {
-        if (Directory(candidate).existsSync()) return candidate;
+        if (await Directory(candidate).exists()) return candidate;
       }
     }
-    return Platform.environment['ANDROID_HOME'] ?? 
-           Platform.environment['ANDROID_SDK_ROOT'] ?? 
-           p.join(home, 'android-sdk');
+    return Platform.environment['ANDROID_HOME'] ??
+        Platform.environment['ANDROID_SDK_ROOT'] ??
+        p.join(home, 'android-sdk');
   }
 
   String _translateCommandForPC(String cmd) {
-    // If running as root (e.g. inside Linux chroot/PRoot or root container), keep root paths and do not use sudo
     final isRoot = (Platform.environment['USER'] == 'root') || (Platform.environment['HOME'] == '/root');
     if (isRoot) {
       return cmd;
     }
 
     String translated = cmd;
-    // 1. Strip Android-specific apt/dpkg lock clearing and root export prefix
     const lockMarker = 'ca-certificates 2>/dev/null || true ; ';
     if (translated.contains(lockMarker)) {
       final index = translated.indexOf(lockMarker);
       translated = translated.substring(index + lockMarker.length);
     } else if (translated.contains('kill -9 \$(pgrep')) {
       final parts = translated.split(' ; ');
-      translated = parts.where((p) => 
-        !p.contains('pgrep') && 
-        !p.contains('/var/lib/') && 
-        !p.contains('/var/cache/') && 
-        !p.contains('dpkg --configure') &&
-        !p.contains('export HOME=/root') &&
-        !p.contains('export USER=root')
-      ).join(' ; ');
+      translated = parts
+          .where((p) =>
+              !p.contains('pgrep') &&
+              !p.contains('/var/lib/') &&
+              !p.contains('/var/cache/') &&
+              !p.contains('dpkg --configure') &&
+              !p.contains('export HOME=/root') &&
+              !p.contains('export USER=root'))
+          .join(' ; ');
     }
-    
-    // 2. Prepend sudo to apt commands with resilient fallback
-    translated = translated.replaceAll('apt update', '(sudo apt-get update -o Acquire::Retries=1 2>/dev/null || sudo apt update 2>/dev/null || true)');
+
+    translated = translated.replaceAll(
+      'apt update',
+      '(sudo apt-get update -o Acquire::Retries=1 2>/dev/null || sudo apt update 2>/dev/null || true)',
+    );
     translated = translated.replaceAll('apt install', 'sudo apt install');
-    
-    // 3. Replace paths /root/ with ~/ or appropriate home paths
+
     translated = translated.replaceAll('/root/android-sdk', '~/Android/Sdk');
     translated = translated.replaceAll('/root/flutter', '~/flutter');
     translated = translated.replaceAll('/root/.bashrc', '~/.bashrc');
     translated = translated.replaceAll('/root/.profile', '~/.profile');
     translated = translated.replaceAll('/root/projects', '~/projects');
     translated = translated.replaceAll('/root/', '~/');
-    
-    // 4. Adapt architectures only if on x86_64
+
     final arch = Platform.version.toLowerCase();
     if (!arch.contains('arm') && !arch.contains('aarch64')) {
       translated = translated.replaceAll('arm64', 'x64');
     }
-    
-    // 5. Prepend sudo to global npm installs if npm is used
+
     translated = translated.replaceAll('npm install -g', 'sudo npm install -g');
     translated = translated.replaceAll('npm i -g', 'sudo npm i -g');
-    
-    // 6. Prepend sudo to script pipes and moves in system paths
+
     translated = translated.replaceAll('| bash', '| sudo bash');
     translated = translated.replaceAll('cp bin/llama-server /usr/bin', 'sudo cp bin/llama-server /usr/bin');
     translated = translated.replaceAll('cp bin/llama-cli /usr/bin', 'sudo cp bin/llama-cli /usr/bin');
@@ -137,7 +153,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     translated = translated.replaceAll('ln -sf /root/', 'sudo ln -sf ~/');
     translated = translated.replaceAll('ln -sf ', 'sudo ln -sf ');
     translated = translated.replaceAll('chown -R root:root', 'chown -R \$(id -u):\$(id -g)');
-    
+
     return translated;
   }
 
@@ -159,463 +175,402 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
   }
 
   Future<void> _checkActualInstallation() async {
-    final runtime = _ref.read(runtimeServiceProvider);
-    final isAndroid = Platform.isAndroid;
-    String rootfsPath = '';
-    if (isAndroid) {
-      final candidatePaths = [
-        if (runtime.filesDir.isNotEmpty) p.join(runtime.filesDir, 'rootfs', 'ubuntu'),
-        if (runtime.filesDir.isNotEmpty) runtime.filesDir,
-        '/data/user/0/com.example.quantum_ide/files/rootfs/ubuntu',
-        '/data/data/com.example.quantum_ide/files/rootfs/ubuntu',
-        '/data/user/0/com.quantum.ide/files/rootfs/ubuntu',
-        '/data/data/com.quantum.ide/files/rootfs/ubuntu',
-      ];
-      for (final cp in candidatePaths) {
-        if (Directory(cp).existsSync()) {
-          rootfsPath = cp;
-          break;
+    if (_isChecking) return;
+    _isChecking = true;
+    try {
+      final runtime = _ref.read(runtimeServiceProvider);
+      final isAndroid = Platform.isAndroid;
+      String rootfsPath = '';
+      if (isAndroid) {
+        final candidatePaths = [
+          if (runtime.filesDir.isNotEmpty) p.join(runtime.filesDir, 'rootfs', 'ubuntu'),
+          if (runtime.filesDir.isNotEmpty) runtime.filesDir,
+          '/data/user/0/com.example.quantum_ide/files/rootfs/ubuntu',
+          '/data/data/com.example.quantum_ide/files/rootfs/ubuntu',
+          '/data/user/0/com.quantum.ide/files/rootfs/ubuntu',
+          '/data/data/com.quantum.ide/files/rootfs/ubuntu',
+        ];
+        for (final cp in candidatePaths) {
+          if (await Directory(cp).exists()) {
+            rootfsPath = cp;
+            break;
+          }
         }
+        if (rootfsPath.isEmpty && runtime.filesDir.isNotEmpty) {
+          rootfsPath = p.join(runtime.filesDir, 'rootfs', 'ubuntu');
+        }
+        if (rootfsPath.isEmpty) return;
       }
-      if (rootfsPath.isEmpty && runtime.filesDir.isNotEmpty) {
-        rootfsPath = p.join(runtime.filesDir, 'rootfs', 'ubuntu');
+
+      final prefs = await SharedPreferences.getInstance();
+      final installedIds = prefs.getStringList(_key) ?? [];
+
+      final updatedPackages = <OptionalPackage>[];
+      final sdkPath = await _getAndroidSdkPathAsync();
+      final searchDirs = _getBinarySearchDirs();
+      final newlyInstalledIds = <String>{};
+
+      Future<bool> hasCmd(String cmd) => _hasCommandAsync(cmd, searchDirs);
+      Future<bool> hasRootfsBin(String bin) async {
+        return await File(p.join(rootfsPath, 'usr', 'bin', bin)).exists() ||
+            await File(p.join(rootfsPath, 'usr', 'local', 'bin', bin)).exists() ||
+            await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', bin)).exists() ||
+            await File(p.join(rootfsPath, 'root', '.local', 'bin', bin)).exists();
       }
-      if (rootfsPath.isEmpty) return;
-    }
 
-    final prefs = await SharedPreferences.getInstance();
-    final installedIds = prefs.getStringList(_key) ?? [];
+      for (final pkg in state) {
+        bool exists = false;
 
-    final updatedPackages = <OptionalPackage>[];
-    final sdkPath = _getAndroidSdkPath();
-    final newlyInstalledIds = <String>{};
-    
-    for (final pkg in state) {
-      bool exists = false;
-      
-      if (pkg.id.startsWith('platform-android-')) {
-        final version = pkg.id.replaceFirst('platform-android-', '');
-        exists = await Directory(p.join(sdkPath, 'platforms', 'android-$version')).exists();
-      } else if (pkg.id.startsWith('build-tools-')) {
-        final version = pkg.id.replaceFirst('build-tools-', '');
-        exists = await Directory(p.join(sdkPath, 'build-tools', version)).exists();
-      } else if (pkg.id.startsWith('cmake-')) {
-        final version = pkg.id.replaceFirst('cmake-', '');
-        final dirName = version == '3.6' ? '3.6.4111459'
-            : (version == '3.10' ? '3.10.2.4988404'
-            : (version == '3.18' ? '3.18.1'
-            : (version == '3.22' ? '3.22.1'
-            : (version == '3.31' ? '3.31.0' : version))));
-        exists = await Directory(p.join(sdkPath, 'cmake', dirName)).exists() ||
-                 _hasCommand('cmake');
-      } else if (pkg.id.startsWith('ndk-')) {
-        final version = pkg.id.replaceFirst('ndk-', '');
-        final dirName = version == 'r21e' ? '21.4.7075529'
-            : (version == 'r22b' ? '22.1.7171670'
-            : (version == 'r23b' ? '23.1.7779620'
-            : (version == 'r24' ? '24.0.8215888'
-            : (version == 'r25c' ? '25.1.8937393'
-            : (version == 'r26b' ? '26.1.10909125'
-            : (version == 'r27b' ? '27.0.12077973'
-            : (version == 'r28' ? '28.0.12433547'
-            : (version == 'r29' ? '29.0.14206865' : version))))))));
-        exists = await Directory(p.join(sdkPath, 'ndk', dirName)).exists();
-      } else {
-        if (!isAndroid) {
-          // Check on PC / Container using PATH and host filesystem
+        if (pkg.id.startsWith('platform-android-')) {
+          final version = pkg.id.replaceFirst('platform-android-', '');
+          exists = await Directory(p.join(sdkPath, 'platforms', 'android-$version')).exists();
+        } else if (pkg.id.startsWith('build-tools-')) {
+          final version = pkg.id.replaceFirst('build-tools-', '');
+          exists = await Directory(p.join(sdkPath, 'build-tools', version)).exists();
+        } else if (pkg.id.startsWith('cmake-')) {
+          final version = pkg.id.replaceFirst('cmake-', '');
+          final dirName = version == '3.6'
+              ? '3.6.4111459'
+              : (version == '3.10'
+                  ? '3.10.2.4988404'
+                  : (version == '3.18'
+                      ? '3.18.1'
+                      : (version == '3.22'
+                          ? '3.22.1'
+                          : (version == '3.31' ? '3.31.0' : version))));
+          exists = await Directory(p.join(sdkPath, 'cmake', dirName)).exists() ||
+              await hasCmd('cmake');
+        } else if (pkg.id.startsWith('ndk-')) {
+          final version = pkg.id.replaceFirst('ndk-', '');
+          final dirName = version == 'r21e'
+              ? '21.4.7075529'
+              : (version == 'r22b'
+                  ? '22.1.7171670'
+                  : (version == 'r23b'
+                      ? '23.1.7779620'
+                      : (version == 'r24'
+                          ? '24.0.8215888'
+                          : (version == 'r25c'
+                              ? '25.1.8937393'
+                              : (version == 'r26b'
+                                  ? '26.1.10909125'
+                                  : (version == 'r27b'
+                                      ? '27.0.12077973'
+                                      : (version == 'r28'
+                                          ? '28.0.12433547'
+                                          : (version == 'r29' ? '29.0.14206865' : version))))))));
+          exists = await Directory(p.join(sdkPath, 'ndk', dirName)).exists();
+        } else if (!isAndroid) {
           switch (pkg.id) {
             case 'python':
-              exists = _hasCommand('python3') || _hasCommand('python');
+              exists = await hasCmd('python3') || await hasCmd('python');
               break;
             case 'nodejs':
-              exists = _hasCommand('node') ||
-                       File('/usr/local/lib/nodejs/bin/node').existsSync() ||
-                       File('/usr/local/bin/node').existsSync() ||
-                       File('/usr/bin/node').existsSync();
+              exists = await hasCmd('node');
               break;
             case 'git':
-              exists = _hasCommand('git');
+              exists = await hasCmd('git');
+              break;
+            case 'git-lfs':
+              exists = await hasCmd('git-lfs');
               break;
             case 'flutter':
-              exists = _hasCommand('flutter') ||
-                       File(p.join(Platform.environment['HOME'] ?? '', 'flutter', 'bin', 'flutter')).existsSync() ||
-                       File('/root/flutter/bin/flutter').existsSync();
+              exists = await hasCmd('flutter');
               break;
             case 'antigravity-cli':
-              exists = _hasCommand('agy') || _hasCommand('antigravity') ||
-                       File('/usr/local/bin/agy').existsSync() ||
-                       File('/usr/local/bin/antigravity').existsSync() ||
-                       File('/usr/bin/agy').existsSync() ||
-                       File('/usr/bin/antigravity').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/agy').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/antigravity').existsSync() ||
-                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'agy')).existsSync() ||
-                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'antigravity')).existsSync();
+              exists = await hasCmd('agy') || await hasCmd('antigravity');
               break;
             case 'claude-code':
-              exists = _hasCommand('claude') ||
-                       File('/usr/local/bin/claude').existsSync() ||
-                       File('/usr/bin/claude').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/claude').existsSync() ||
-                       Directory('/usr/local/lib/nodejs/lib/node_modules/@anthropic-ai/claude-code').existsSync() ||
-                       Directory('/usr/local/lib/node_modules/@anthropic-ai/claude-code').existsSync() ||
-                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'claude')).existsSync();
+              exists = await hasCmd('claude') ||
+                  await Directory('/usr/local/lib/nodejs/lib/node_modules/@anthropic-ai/claude-code').exists() ||
+                  await Directory('/usr/local/lib/node_modules/@anthropic-ai/claude-code').exists();
               break;
             case 'deepseek-harness':
-              exists = _hasCommand('dsh') || _hasCommand('deepseek-harness') ||
-                       File('/usr/local/bin/dsh').existsSync() ||
-                       File('/usr/bin/dsh').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/dsh').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/deepseek-harness').existsSync() ||
-                       Directory('/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh').existsSync() ||
-                       Directory('/usr/local/lib/node_modules/@deepseek-ai/dsh').existsSync() ||
-                       File(p.join(Platform.environment['HOME'] ?? '', '.local', 'bin', 'dsh')).existsSync();
+              exists = await hasCmd('dsh') ||
+                  await hasCmd('deepseek-harness') ||
+                  await Directory('/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh').exists() ||
+                  await Directory('/usr/local/lib/node_modules/@deepseek-ai/dsh').exists();
               break;
             case 'ollama-cli':
-              exists = _hasCommand('ollama') ||
-                       File('/usr/local/bin/ollama').existsSync() ||
-                       File('/usr/bin/ollama').existsSync();
+              exists = await hasCmd('ollama');
               break;
             case 'kilocode-cli':
-              exists = _hasCommand('kilocode') ||
-                       File('/usr/local/bin/kilocode').existsSync() ||
-                       File('/usr/bin/kilocode').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/kilocode').existsSync() ||
-                       Directory('/usr/local/lib/nodejs/lib/node_modules/@kilocode/cli').existsSync() ||
-                       Directory('/usr/local/lib/node_modules/@kilocode/cli').existsSync();
+              exists = await hasCmd('kilocode');
               break;
             case 'opencode-ai':
-              exists = _hasCommand('opencode-ai') || _hasCommand('opencode') ||
-                       File('/usr/local/bin/opencode-ai').existsSync() ||
-                       File('/usr/local/bin/opencode').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/opencode-ai').existsSync() ||
-                       File('/usr/local/lib/nodejs/bin/opencode').existsSync() ||
-                       Directory('/usr/local/lib/nodejs/lib/node_modules/opencode-ai').existsSync() ||
-                       Directory('/usr/local/lib/node_modules/opencode-ai').existsSync();
+              exists = await hasCmd('opencode-ai') || await hasCmd('opencode');
               break;
             case 'build-essential':
-              exists = _hasCommand('gcc') || _hasCommand('g++');
+              exists = await hasCmd('gcc') || await hasCmd('g++');
               break;
             case 'android-sdk':
-              exists = await Directory(sdkPath).exists() || _hasCommand('sdkmanager');
+              exists = await Directory(sdkPath).exists() || await hasCmd('sdkmanager');
+              break;
+            case 'openjdk-21':
+              exists = await Directory('/usr/lib/jvm/java-21-openjdk-arm64').exists() ||
+                  await Directory('/usr/lib/jvm/java-21-openjdk-amd64').exists();
+              break;
+            case 'gradle-8.13':
+              exists = await Directory('/opt/gradle/gradle-8.13').exists() || await hasCmd('gradle');
+              break;
+            case 'apk-signing-tools':
+              exists = await hasCmd('apksigner') && await hasCmd('zipalign');
+              break;
+            case 'protobuf-compiler':
+              exists = await hasCmd('protoc');
+              break;
+            case 'sqlite-dev':
+              exists = await hasCmd('sqlite3') &&
+                  (await File('/usr/include/sqlite3.h').exists() || installedIds.contains('sqlite-dev'));
               break;
             case 'build-fix':
               final homeDir = Platform.environment['HOME'] ?? '/root';
               final marker = File(p.join(homeDir, '.quantum_build_fix_installed'));
               final rootMarker = File('/root/.quantum_build_fix_installed');
-              final gradleProp = File(p.join(homeDir, '.gradle', 'gradle.properties'));
-              bool hasGradleFix = false;
-              if (gradleProp.existsSync()) {
-                try {
-                  final text = gradleProp.readAsStringSync();
-                  hasGradleFix = text.contains('aapt2.daemon=false') || text.contains('aapt2FromMavenOverride');
-                } catch (_) {}
-              }
-              final hasAapt2 = _hasCommand('aapt2') || File('/usr/bin/aapt2').existsSync();
-              exists = marker.existsSync() || rootMarker.existsSync() || (hasAapt2 && hasGradleFix);
+              exists = await marker.exists() || await rootMarker.exists() || installedIds.contains('build-fix');
               break;
             case 'build-clean':
               exists = installedIds.contains('build-clean');
               break;
             case 'clangd-lsp':
-              exists = _hasCommand('clangd') || File('/usr/bin/clangd').existsSync();
+              exists = await hasCmd('clangd');
               break;
             case 'rust-lsp':
-              exists = _hasCommand('rust-analyzer') || _hasCommand('rustc') || File('/usr/bin/rust-analyzer').existsSync();
+              exists = await hasCmd('rust-analyzer') || await hasCmd('rustc');
               break;
             case 'go-lsp':
-              exists = _hasCommand('gopls') || _hasCommand('go') || File('/usr/bin/gopls').existsSync();
+              exists = await hasCmd('gopls') || await hasCmd('go');
               break;
             case 'ripgrep':
-              exists = _hasCommand('rg') || File('/usr/bin/rg').existsSync();
+              exists = await hasCmd('rg');
               break;
             case 'gh-cli':
-              exists = _hasCommand('gh') || File('/usr/bin/gh').existsSync();
+              exists = await hasCmd('gh');
               break;
             case 'java-lsp':
-              exists = _hasCommand('jdtls') || File('/usr/bin/jdtls').existsSync() || Directory('/usr/share/jdtls').existsSync();
+              exists = await hasCmd('jdtls') || await Directory('/usr/share/jdtls').exists();
               break;
             case 'kotlin-lsp':
-              exists = _hasCommand('kotlin-language-server') || File('/usr/bin/kotlin-language-server').existsSync() || Directory('/usr/share/kotlin-language-server').existsSync();
+              exists = await hasCmd('kotlin-language-server') || await Directory('/usr/share/kotlin-language-server').exists();
               break;
             case 'typescript-lsp':
-              exists = _hasCommand('typescript-language-server');
+              exists = await hasCmd('typescript-language-server');
               break;
             case 'html-css-lsp':
-              exists = _hasCommand('html-languageserver') || _hasCommand('vscode-html-language-server') || _hasCommand('vscode-html-languageserver');
+              exists = await hasCmd('html-languageserver') ||
+                  await hasCmd('vscode-html-language-server') ||
+                  await hasCmd('vscode-html-languageserver');
               break;
             case 'yaml-json-lsp':
-              exists = _hasCommand('yaml-language-server');
+              exists = await hasCmd('yaml-language-server');
               break;
             case 'markdown-lsp':
-              exists = _hasCommand('marksman') || File('/usr/bin/marksman').existsSync() || File('/usr/local/bin/marksman').existsSync();
+              exists = await hasCmd('marksman');
               break;
             case 'vue-lsp':
-              exists = _hasCommand('vue-language-server');
+              exists = await hasCmd('vue-language-server');
               break;
             case 'php-lsp':
-              exists = _hasCommand('intelephense');
+              exists = await hasCmd('intelephense');
               break;
             case 'python-lsp':
-              exists = _hasCommand('pyright') || _hasCommand('pyright-langserver');
+              exists = await hasCmd('pyright') || await hasCmd('pyright-langserver');
               break;
             case 'local-ai-qwen':
-              exists = _hasCommand('llama-server') || _hasCommand('llama-cli');
+              exists = await hasCmd('llama-server') || await hasCmd('llama-cli');
               break;
             case 'uv':
-              exists = _hasCommand('uv') || File('/root/.cargo/bin/uv').existsSync() || File('/root/.local/bin/uv').existsSync() || File('/usr/local/bin/uv').existsSync();
+              exists = await hasCmd('uv');
               break;
             case 'bun':
-              exists = _hasCommand('bun') || File('/root/.bun/bin/bun').existsSync() || File('/usr/local/bin/bun').existsSync();
+              exists = await hasCmd('bun');
               break;
             case 'pnpm':
-              exists = _hasCommand('pnpm') || File('/usr/local/bin/pnpm').existsSync() || File('/usr/local/lib/nodejs/bin/pnpm').existsSync();
+              exists = await hasCmd('pnpm');
               break;
             case 'desktop-build-tools':
-              exists = (_hasCommand('clang') || File('/usr/bin/clang').existsSync()) &&
-                       (_hasCommand('cmake') || File('/usr/bin/cmake').existsSync()) &&
-                       (_hasCommand('ninja') || File('/usr/bin/ninja').existsSync()) &&
-                       (Directory('/usr/include/gtk-3.0').existsSync() || File('/usr/lib/pkgconfig/gtk+-3.0.pc').existsSync());
+              exists = await hasCmd('clang') && await hasCmd('cmake') && await hasCmd('ninja');
               break;
             case 'flutter-distributor':
-              exists = _hasCommand('flutter_distributor') || File('/root/.pub-cache/bin/flutter_distributor').existsSync();
+              exists = await hasCmd('flutter_distributor');
               break;
           }
         } else {
-          // Check on Android inside rootfs
+          // Android rootfs checks (100% async)
           switch (pkg.id) {
             case 'python':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'python3')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'python')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'python3')).exists();
+              exists = await hasRootfsBin('python3') || await hasRootfsBin('python');
               break;
             case 'nodejs':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'node')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'node')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'node')).exists();
+              exists = await hasRootfsBin('node');
               break;
             case 'git':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'git')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'git')).exists();
+              exists = await hasRootfsBin('git');
+              break;
+            case 'git-lfs':
+              exists = await hasRootfsBin('git-lfs');
               break;
             case 'flutter':
               exists = await File(p.join(rootfsPath, 'root', 'flutter', 'bin', 'flutter')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'flutter')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'flutter')).exists();
+                  await hasRootfsBin('flutter');
               break;
             case 'antigravity-cli':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'agy')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'agy')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'agy')).exists() ||
-                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'agy')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'antigravity')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'antigravity')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'antigravity')).exists() ||
-                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'antigravity')).exists();
+              exists = await hasRootfsBin('agy') || await hasRootfsBin('antigravity');
               break;
             case 'claude-code':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'claude')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'claude')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'claude')).exists() ||
-                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'claude')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@anthropic-ai', 'claude-code')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code')).exists();
+              exists = await hasRootfsBin('claude') ||
+                  await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@anthropic-ai', 'claude-code')).exists() ||
+                  await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@anthropic-ai', 'claude-code')).exists();
               break;
             case 'deepseek-harness':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'dsh')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'dsh')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'dsh')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'deepseek-harness')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'deepseek-harness')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'deepseek-harness')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@deepseek-ai', 'dsh')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh')).exists();
+              exists = await hasRootfsBin('dsh') ||
+                  await hasRootfsBin('deepseek-harness') ||
+                  await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@deepseek-ai', 'dsh')).exists() ||
+                  await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@deepseek-ai', 'dsh')).exists();
               break;
             case 'ollama-cli':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'ollama')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'ollama')).exists();
+              exists = await hasRootfsBin('ollama');
               break;
             case 'kilocode-cli':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kilocode')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'kilocode')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'kilocode')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', '@kilocode', 'cli')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', '@kilocode', 'cli')).exists();
+              exists = await hasRootfsBin('kilocode');
               break;
             case 'opencode-ai':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode-ai')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode-ai')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'opencode')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'opencode')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'opencode-ai')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'opencode')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'lib', 'node_modules', 'opencode-ai')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'local', 'lib', 'node_modules', 'opencode-ai')).exists();
+              exists = await hasRootfsBin('opencode-ai') || await hasRootfsBin('opencode');
               break;
             case 'build-essential':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gcc')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'g++')).exists();
+              exists = await hasRootfsBin('gcc') || await hasRootfsBin('g++');
               break;
             case 'android-sdk':
-              final jvmDir = Directory(p.join(rootfsPath, 'usr', 'lib', 'jvm'));
-              bool hasJvm = false;
-              if (jvmDir.existsSync()) {
-                hasJvm = jvmDir.listSync().any((entity) =>
-                    entity is Directory &&
-                    p.basename(entity.path).startsWith('java-') &&
-                    p.basename(entity.path).contains('-openjdk-'));
-              }
-              final hasJava = await File(p.join(rootfsPath, 'usr', 'bin', 'java')).exists() || hasJvm;
+              final hasJava = await hasRootfsBin('java');
               final hasSdkManager = await File(p.join(sdkPath, 'cmdline-tools', 'latest', 'bin', 'sdkmanager')).exists() ||
-                                   await File(p.join(sdkPath, 'cmdline-tools', 'bin', 'sdkmanager')).exists() ||
-                                   await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'sdkmanager')).exists() ||
-                                   await File(p.join(rootfsPath, 'usr', 'bin', 'sdkmanager')).exists();
+                  await hasRootfsBin('sdkmanager');
               exists = hasJava && hasSdkManager;
+              break;
+            case 'openjdk-21':
+              exists = await Directory(p.join(rootfsPath, 'usr', 'lib', 'jvm', 'java-21-openjdk-arm64')).exists() ||
+                  await Directory(p.join(rootfsPath, 'usr', 'lib', 'jvm', 'java-21-openjdk-amd64')).exists();
+              break;
+            case 'gradle-8.13':
+              exists = await Directory(p.join(rootfsPath, 'opt', 'gradle', 'gradle-8.13')).exists() ||
+                  await hasRootfsBin('gradle');
+              break;
+            case 'apk-signing-tools':
+              exists = await hasRootfsBin('apksigner') && await hasRootfsBin('zipalign');
+              break;
+            case 'protobuf-compiler':
+              exists = await hasRootfsBin('protoc');
+              break;
+            case 'sqlite-dev':
+              exists = await hasRootfsBin('sqlite3') &&
+                  await File(p.join(rootfsPath, 'usr', 'include', 'sqlite3.h')).exists();
               break;
             case 'build-fix':
               final marker = File(p.join(rootfsPath, 'root', '.quantum_build_fix_installed'));
-              final gradleProp = File(p.join(rootfsPath, 'root', '.gradle', 'gradle.properties'));
-              bool hasGradleFix = false;
-              if (await gradleProp.exists()) {
-                try {
-                  final text = await gradleProp.readAsString();
-                  hasGradleFix = text.contains('aapt2.daemon=false') || text.contains('aapt2FromMavenOverride');
-                } catch (_) {}
-              }
-              final hasAapt2 = await File(p.join(rootfsPath, 'usr', 'bin', 'aapt2')).exists();
-              exists = (await marker.exists()) || (hasAapt2 && hasGradleFix);
+              final hasAapt2 = await hasRootfsBin('aapt2');
+              exists = (await marker.exists()) || (hasAapt2 && installedIds.contains('build-fix'));
               break;
             case 'build-clean':
               exists = installedIds.contains('build-clean');
               break;
             case 'clangd-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'clangd')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'clangd')).exists();
+              exists = await hasRootfsBin('clangd');
               break;
             case 'rust-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'rust-analyzer')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'rust-analyzer')).exists() ||
-                       await File(p.join(rootfsPath, 'root', '.cargo', 'bin', 'rust-analyzer')).exists();
+              exists = await hasRootfsBin('rust-analyzer') ||
+                  await File(p.join(rootfsPath, 'root', '.cargo', 'bin', 'rust-analyzer')).exists();
               break;
             case 'go-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gopls')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'gopls')).exists() ||
-                       await File(p.join(rootfsPath, 'root', 'go', 'bin', 'gopls')).exists();
+              exists = await hasRootfsBin('gopls') ||
+                  await File(p.join(rootfsPath, 'root', 'go', 'bin', 'gopls')).exists();
               break;
             case 'ripgrep':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'rg')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'rg')).exists();
+              exists = await hasRootfsBin('rg');
               break;
             case 'gh-cli':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'gh')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'gh')).exists();
+              exists = await hasRootfsBin('gh');
               break;
             case 'java-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'jdtls')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'jdtls')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'share', 'jdtls')).exists();
+              exists = await hasRootfsBin('jdtls') ||
+                  await Directory(p.join(rootfsPath, 'usr', 'share', 'jdtls')).exists();
               break;
             case 'kotlin-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'kotlin-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'kotlin-language-server')).exists() ||
-                       await Directory(p.join(rootfsPath, 'usr', 'share', 'kotlin-language-server')).exists();
+              exists = await hasRootfsBin('kotlin-language-server') ||
+                  await Directory(p.join(rootfsPath, 'usr', 'share', 'kotlin-language-server')).exists();
               break;
             case 'typescript-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'typescript-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'typescript-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'typescript-language-server')).exists();
+              exists = await hasRootfsBin('typescript-language-server');
               break;
             case 'html-css-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vscode-html-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'vscode-html-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'vscode-html-languageserver')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vscode-html-languageserver')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'vscode-html-languageserver')).exists();
+              exists = await hasRootfsBin('vscode-html-language-server') ||
+                  await hasRootfsBin('vscode-html-languageserver');
               break;
             case 'yaml-json-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'yaml-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'yaml-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'yaml-language-server')).exists();
+              exists = await hasRootfsBin('yaml-language-server');
               break;
             case 'markdown-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'marksman')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'marksman')).exists();
+              exists = await hasRootfsBin('marksman');
               break;
             case 'vue-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'vue-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'vue-language-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'vue-language-server')).exists();
+              exists = await hasRootfsBin('vue-language-server');
               break;
             case 'php-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'intelephense')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'intelephense')).exists();
+              exists = await hasRootfsBin('intelephense');
               break;
             case 'python-lsp':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'pyright-langserver')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright-langserver')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'pyright-langserver')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'pyright')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pyright')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'pyright')).exists();
+              exists = await hasRootfsBin('pyright-langserver') || await hasRootfsBin('pyright');
               break;
             case 'local-ai-qwen':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'llama-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'llama-server')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'llama-cli')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'llama-cli')).exists();
+              exists = await hasRootfsBin('llama-server') || await hasRootfsBin('llama-cli');
               break;
             case 'uv':
-              exists = await File(p.join(rootfsPath, 'root', '.cargo', 'bin', 'uv')).exists() ||
-                       await File(p.join(rootfsPath, 'root', '.local', 'bin', 'uv')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'uv')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'uv')).exists();
+              exists = await hasRootfsBin('uv') ||
+                  await File(p.join(rootfsPath, 'root', '.cargo', 'bin', 'uv')).exists();
               break;
             case 'bun':
-              exists = await File(p.join(rootfsPath, 'root', '.bun', 'bin', 'bun')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'bun')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'bun')).exists();
+              exists = await hasRootfsBin('bun') ||
+                  await File(p.join(rootfsPath, 'root', '.bun', 'bin', 'bun')).exists();
               break;
             case 'pnpm':
-              exists = await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'pnpm')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', 'pnpm')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'pnpm')).exists();
+              exists = await hasRootfsBin('pnpm');
               break;
             case 'desktop-build-tools':
-              exists = await File(p.join(rootfsPath, 'usr', 'bin', 'clang')).exists() &&
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'cmake')).exists() &&
-                       await File(p.join(rootfsPath, 'usr', 'bin', 'ninja')).exists();
+              exists = await hasRootfsBin('clang') &&
+                  await hasRootfsBin('cmake') &&
+                  await hasRootfsBin('ninja');
               break;
             case 'flutter-distributor':
               exists = await File(p.join(rootfsPath, 'root', '.pub-cache', 'bin', 'flutter_distributor')).exists() ||
-                       await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'flutter_distributor')).exists();
+                  await hasRootfsBin('flutter_distributor');
               break;
           }
         }
-      }
 
-      if (exists) {
-        pkg.isInstalled = true;
-        newlyInstalledIds.add(pkg.id);
-      } else {
-        if (installedIds.contains(pkg.id) && (
-            pkg.id == 'build-clean' ||
-            pkg.id == 'build-fix' ||
-            pkg.id == 'antigravity-cli' ||
-            pkg.id == 'claude-code' ||
-            pkg.id == 'deepseek-harness'
-        )) {
+        if (exists) {
           pkg.isInstalled = true;
           newlyInstalledIds.add(pkg.id);
         } else {
-          pkg.isInstalled = false;
+          if (installedIds.contains(pkg.id) &&
+              (pkg.id == 'build-clean' ||
+                  pkg.id == 'build-fix' ||
+                  pkg.id == 'antigravity-cli' ||
+                  pkg.id == 'claude-code' ||
+                  pkg.id == 'deepseek-harness')) {
+            pkg.isInstalled = true;
+            newlyInstalledIds.add(pkg.id);
+          } else {
+            pkg.isInstalled = false;
+          }
         }
+        updatedPackages.add(pkg);
       }
-      updatedPackages.add(pkg);
+
+      if (mounted) {
+        state = updatedPackages;
+      }
+      await prefs.setStringList(_key, newlyInstalledIds.toList());
+    } finally {
+      _isChecking = false;
     }
-    
-    state = updatedPackages;
-    await prefs.setStringList(_key, newlyInstalledIds.toList());
   }
 
   Future<void> _loadState() async {

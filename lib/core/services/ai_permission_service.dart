@@ -56,7 +56,12 @@ class AiPermissionService {
   /// Evaluates the risk level of an AIAction and determines if it is safe to auto-approve.
   AiRiskLevel evaluateActionRisk(AIAction action, String workspaceRoot) {
     // 1. Check path scope for file actions
-    if (action.type == 'edit' || action.type == 'create' || action.type == 'delete' || action.type == 'rewrite_whole_file') {
+    if (action.type == 'edit' ||
+        action.type == 'create' ||
+        action.type == 'delete' ||
+        action.type == 'rewrite_whole_file' ||
+        action.type == 'replace_code_block' ||
+        action.type == 'insert_log') {
       if (action.path.isEmpty) {
         return AiRiskLevel.high;
       }

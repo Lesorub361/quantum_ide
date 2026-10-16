@@ -319,9 +319,10 @@ class AINotifier extends StateNotifier<AIState> {
     String prompt, {
     String? imageBase64,
     List<String>? contextFiles,
+    AgentKind? overrideKind,
   }) async {
     final workspacePath = _ref.read(workspaceProvider).currentPath ?? '';
-    final agentKind = state.activeAgentKind;
+    final agentKind = overrideKind ?? state.activeAgentKind;
     final bridge = _ref.read(cliAgentBridgeProvider);
     final auth = _ref.read(cliAuthProvider);
 
@@ -382,10 +383,12 @@ class AINotifier extends StateNotifier<AIState> {
     }
 
     final activeModel = _ref.read(activeAiModelProvider);
-    final effectiveModel = activeModel.isNotEmpty
+    final isCompatibleModel = activeModel.isNotEmpty &&
+        bridge.getCliModels(agentKind).contains(activeModel);
+    final effectiveModel = isCompatibleModel
         ? activeModel
         : (agentKind == AgentKind.antigravity
-            ? 'gemini-3.8-flash-high'
+            ? 'gemini-2.5-flash'
             : (agentKind == AgentKind.claudeCode
                 ? (auth.claudeProviderType == 'openrouter'
                     ? 'anthropic/claude-3.7-sonnet'
@@ -891,6 +894,13 @@ class AINotifier extends StateNotifier<AIState> {
     
     if (prompt.trim() == '/runplan') {
       await _executeRunPlan();
+      if (_pendingRunPlanContent == null) {
+        return;
+      }
+    }
+
+    if (prompt.trim() == '/diff') {
+      await _executeDiffCommand();
       return;
     }
     
@@ -898,6 +908,25 @@ class AINotifier extends StateNotifier<AIState> {
       final goal = prompt.trim().substring(6).trim();
       state = state.copyWith(sessionGoal: goal);
       // We will proceed to pass this goal to the LLM to start Autopilot
+    }
+
+    // If Native AI is selected but no cloud API key is configured, and Antigravity CLI is available,
+    // seamlessly route through Antigravity CLI so the chat works out-of-the-box.
+    final providerId = _aiService.selectedProviderId;
+    final hasCloudKey = providerId == 'local_edge' || _aiService.getApiKey(providerId).trim().isNotEmpty;
+    if (!hasCloudKey) {
+      final bridge = _ref.read(cliAgentBridgeProvider);
+      if (bridge.resolveBinary(AgentKind.antigravity) != null) {
+        final effectivePrompt = _pendingRunPlanContent ?? prompt;
+        _pendingRunPlanContent = null;
+        await executeCliTask(
+          effectivePrompt,
+          imageBase64: imageBase64,
+          contextFiles: contextFiles,
+          overrideKind: AgentKind.antigravity,
+        );
+        return;
+      }
     }
     
     final userMessage = ChatMessage(
@@ -1524,7 +1553,12 @@ class AINotifier extends StateNotifier<AIState> {
           final risk = _permissionService.evaluateActionRisk(action, workspacePath);
           
           // Check if path scope is violated (risk evaluation detects out of scope as HIGH)
-          if ((action.type == 'edit' || action.type == 'create' || action.type == 'delete') &&
+          if ((action.type == 'edit' ||
+                  action.type == 'create' ||
+                  action.type == 'delete' ||
+                  action.type == 'replace_code_block' ||
+                  action.type == 'rewrite_whole_file' ||
+                  action.type == 'insert_log') &&
               !_permissionService.isPathInScope(action.path, workspacePath)) {
             blockedActions.add(action);
             continue;
@@ -1844,13 +1878,16 @@ class AINotifier extends StateNotifier<AIState> {
             }
           }
           final action = AIAction.fromJson(actionJson);
-          if (action.type == 'edit') {
+          if (action.type == 'edit' || action.type == 'replace_code_block' || action.type == 'rewrite_whole_file') {
             try {
               final file = File(action.path);
               if (file.existsSync()) {
                 final original = file.readAsStringSync();
+                final targetPreview = (action.oldText != null && action.oldText!.isNotEmpty)
+                    ? original.replaceFirst(action.oldText!, action.newText ?? action.content)
+                    : (action.content.isNotEmpty ? action.content : (action.newText ?? original));
                 final dmp = DiffMatchPatch();
-                final diffs = dmp.diff(original, action.content);
+                final diffs = dmp.diff(original, targetPreview);
                 dmp.diffCleanupSemantic(diffs);
                 int additions = 0;
                 int deletions = 0;
@@ -2066,6 +2103,9 @@ class AINotifier extends StateNotifier<AIState> {
           break;
         case 'edit':
         case 'create':
+        case 'replace_code_block':
+        case 'rewrite_whole_file':
+        case 'insert_log':
           statusMsg = l10n.savingFile(relPath);
           break;
         case 'delete':
@@ -2100,7 +2140,12 @@ class AINotifier extends StateNotifier<AIState> {
     
     // Safety guard
     if (workspacePath != null && 
-        (action.type == 'edit' || action.type == 'create' || action.type == 'delete') &&
+        (action.type == 'edit' ||
+            action.type == 'create' ||
+            action.type == 'delete' ||
+            action.type == 'replace_code_block' ||
+            action.type == 'rewrite_whole_file' ||
+            action.type == 'insert_log') &&
         !_permissionService.isPathInScope(action.path, workspacePath)) {
       return l10n.safetyGuardFileOutsideWorkspace;
     }
@@ -2131,8 +2176,11 @@ class AINotifier extends StateNotifier<AIState> {
               ? '${content.substring(0, 8000)}$truncatedSuffix'
               : content;
           return l10n.fileContentsHeader(relPath, lineCount, truncated);
+        case 'replace_code_block':
         case 'edit':
         case 'create':
+        case 'rewrite_whole_file':
+        case 'insert_log':
           final file = File(action.path);
           String originalContent = '';
           if (await file.exists()) {
@@ -2147,8 +2195,35 @@ class AINotifier extends StateNotifier<AIState> {
           }
           // Ensure parent dir exists
           await file.parent.create(recursive: true);
+
+          String updatedContent = action.content;
+          if (action.type == 'replace_code_block' ||
+              (action.type == 'edit' && action.oldText != null && action.oldText!.isNotEmpty)) {
+            final searchBlock = action.oldText ?? '';
+            final replaceBlock = action.newText ?? action.content;
+            if (searchBlock.isNotEmpty && originalContent.contains(searchBlock)) {
+              updatedContent = originalContent.replaceFirst(searchBlock, replaceBlock);
+            } else if (searchBlock.trim().isNotEmpty && originalContent.contains(searchBlock.trim())) {
+              updatedContent = originalContent.replaceFirst(searchBlock.trim(), replaceBlock.trim());
+            } else if (action.content.isNotEmpty && action.type == 'edit') {
+              updatedContent = action.content;
+            } else {
+              removeAction(action);
+              return 'Блок для замены не найден в файле $relPath. Сперва прочитайте актуальное содержимое файла (read_file).';
+            }
+          } else if (action.type == 'insert_log') {
+            final logStatement = action.content.isNotEmpty ? action.content : (action.newText ?? '');
+            if (action.oldText != null && action.oldText!.isNotEmpty && originalContent.contains(action.oldText!)) {
+              updatedContent = originalContent.replaceFirst(action.oldText!, '${action.oldText!}\n$logStatement');
+            } else {
+              updatedContent = '$originalContent\n$logStatement';
+            }
+          } else if (updatedContent.isEmpty && action.newText != null && action.newText!.isNotEmpty) {
+            updatedContent = action.newText!;
+          }
+
           // Write new content to disk
-          await file.writeAsString(action.content);
+          await file.writeAsString(updatedContent);
           // Open in editor in normal view with the applied content
           await _ref.read(editorProvider.notifier).openFile(
             action.path,
@@ -2739,13 +2814,6 @@ $history
       );
 
       _pendingRunPlanContent = 'Execute the following plan exactly as described:\n\n$planContent';
-
-      final userMessage = ChatMessage(
-        role: MessageRole.user,
-        content: '/runplan\n\nВыполни следующий план:\n\n$planContent',
-        timestamp: DateTime.now(),
-      );
-      _updateMessagesAndSync([...state.messages, userMessage]);
     } catch (e) {
       _updateMessagesAndSync([
         ...state.messages,
@@ -2754,6 +2822,75 @@ $history
           content: 'Не удалось прочитать план: $e',
           timestamp: DateTime.now(),
         )
+      ]);
+    }
+  }
+
+  Future<void> _executeDiffCommand() async {
+    final workspacePath = _ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null || workspacePath.isEmpty) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Откройте проект, чтобы просмотреть Git diff.',
+          timestamp: DateTime.now(),
+        ),
+      ]);
+      return;
+    }
+
+    _updateMessagesAndSync([
+      ...state.messages,
+      ChatMessage(
+        role: MessageRole.user,
+        content: '/diff',
+        timestamp: DateTime.now(),
+      ),
+    ]);
+
+    try {
+      final runtime = _ref.read(runtimeServiceProvider);
+      final stat = (await runtime.runCommand('git status --short', workingDirectory: workspacePath)).trim();
+      final diffStat = (await runtime.runCommand('git diff --stat', workingDirectory: workspacePath)).trim();
+      final rawDiff = (await runtime.runCommand('git diff', workingDirectory: workspacePath)).trim();
+
+      if (stat.isEmpty && rawDiff.isEmpty) {
+        _updateMessagesAndSync([
+          ...state.messages,
+          ChatMessage(
+            role: MessageRole.assistant,
+            content: '✅ **Рабочая область чиста**\n\nВ текущем репозитории нет незакоммиченных изменений (`git status` пуст).',
+            timestamp: DateTime.now(),
+          ),
+        ]);
+        return;
+      }
+
+      final truncatedDiff = rawDiff.length > 3500
+          ? '${rawDiff.substring(0, 3500)}\n... (diff обрезан)'
+          : rawDiff;
+      final summary = '📊 **Текущие изменения Git (`/diff`):**\n\n'
+          '**Статус файлов:**\n```text\n$stat\n```\n'
+          '${diffStat.isNotEmpty ? '**Статистика:**\n```text\n$diffStat\n```\n' : ''}'
+          '${truncatedDiff.isNotEmpty ? '**Фрагмент Diff:**\n```diff\n$truncatedDiff\n```' : ''}';
+
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.assistant,
+          content: summary,
+          timestamp: DateTime.now(),
+        ),
+      ]);
+    } catch (e) {
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.system,
+          content: 'Не удалось получить Git diff: $e',
+          timestamp: DateTime.now(),
+        ),
       ]);
     }
   }
@@ -2922,7 +3059,11 @@ $history
       case 'grep_search': return '🔍';
       case 'find_symbols': return '🔎';
       case 'create': return '✨';
-      case 'edit': return '✏️';
+      case 'edit':
+      case 'replace_code_block':
+      case 'rewrite_whole_file':
+      case 'insert_log':
+        return '✏️';
       case 'delete': return '🗑️';
       case 'command': return '💻';
       case 'web_search': return '🌐';
@@ -2940,7 +3081,11 @@ $history
       case 'grep_search': return l10n.actionSearchingCode;
       case 'find_symbols': return l10n.actionFindingSymbol;
       case 'create': return l10n.actionCreatingFile;
-      case 'edit': return l10n.actionEditingFile;
+      case 'edit':
+      case 'replace_code_block':
+      case 'rewrite_whole_file':
+      case 'insert_log':
+        return l10n.actionEditingFile;
       case 'delete': return l10n.actionDeletingFile;
       case 'command': return l10n.actionRunningCommand;
       case 'web_search': return l10n.actionWebSearch;
@@ -2967,6 +3112,9 @@ $history
       case 'create':
         return '✨ **Создание нового файла:** `$relPath`';
       case 'edit':
+      case 'replace_code_block':
+      case 'rewrite_whole_file':
+      case 'insert_log':
         return '✏️ **Редактирование файла:** `$relPath`';
       case 'delete':
         return '🗑️ **Удаление файла:** `$relPath`';

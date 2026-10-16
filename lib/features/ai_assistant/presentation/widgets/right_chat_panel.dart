@@ -216,6 +216,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           // 2. Visible Provider & Model Selector Bar
           _buildProviderAndModelBar(context, ref, aiState),
 
+          // 2b. Interaction Mode Bar (Chat / Ask / Agent / Refactor / Plan / Debug)
+          if (aiState.activeAgentKind == AgentKind.native)
+            _buildInteractionModeBar(context, ref, aiState),
+
           const Divider(height: 1, color: Colors.white10),
 
           // 3. Live Agent Process Banner (if running)
@@ -831,6 +835,57 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildInteractionModeBar(BuildContext context, WidgetRef ref, AIState aiState) {
+    final currentMode = aiState.interactionMode;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: AiInteractionMode.values.map((mode) {
+            final isSelected = mode == currentMode;
+            final color = _getModeColor(mode);
+            final icon = _getModeIcon(mode);
+            final label = _getModeLabel(mode);
+            return Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(7),
+                onTap: () => ref.read(aiProvider.notifier).setInteractionMode(mode),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: isSelected ? color.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color: isSelected ? color.withValues(alpha: 0.5) : Colors.white10,
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 10.5, color: isSelected ? color : Colors.white54),
+                      const SizedBox(width: 4),
+                      Text(
+                        label,
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                          color: isSelected ? color : Colors.white60,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -1763,19 +1818,40 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         ? p.relative(action.path, from: workspacePath)
         : action.path;
 
+    String previewContent = action.content;
+    if ((action.type == 'replace_code_block' || action.type == 'edit') &&
+        action.oldText != null &&
+        action.oldText!.isNotEmpty) {
+      final replaceBlock = action.newText ?? action.content;
+      if (originalContent.contains(action.oldText!)) {
+        previewContent = originalContent.replaceFirst(action.oldText!, replaceBlock);
+      } else if (originalContent.contains(action.oldText!.trim())) {
+        previewContent = originalContent.replaceFirst(action.oldText!.trim(), replaceBlock.trim());
+      } else if (previewContent.isEmpty) {
+        previewContent = replaceBlock;
+      }
+    } else if (previewContent.isEmpty && action.newText != null && action.newText!.isNotEmpty) {
+      previewContent = action.newText!;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF1A1D27),
-        title: Text(AppLocalizations.of(context)!.changesInFile(action.path.split('/').last), style: const TextStyle(color: Colors.white, fontSize: 14)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        title: Text(
+          AppLocalizations.of(context)!.changesInFile(action.path.split('/').last),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          overflow: TextOverflow.ellipsis,
+        ),
         content: SizedBox(
-          width: MediaQuery.of(context).size.width * 0.75,
-          height: MediaQuery.of(context).size.height * 0.5,
+          width: double.maxFinite,
+          height: MediaQuery.of(context).size.height * 0.55,
           child: GitDiffPage(
             relativePath: relPath, 
             initiallyStaged: false,
             originalOverride: originalContent,
-            previewContent: action.content,
+            previewContent: previewContent,
           ),
         ),
         actions: [
@@ -2173,173 +2249,217 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
-  Future<void> _sendMessage(BuildContext context, WidgetRef ref) async {
+  Future<void> _sendMessage(
+    BuildContext context,
+    WidgetRef ref, {
+    String? overrideText,
+    bool skipModeSuggestion = false,
+  }) async {
     if (_isSendingMessage) return;
-    final value = _aiChatController.text.trim();
-    if (value.isEmpty && _selectedImageBase64 == null) return;
+    final rawValue = (overrideText ?? _aiChatController.text).trim();
+    if (rawValue.isEmpty && _selectedImageBase64 == null) return;
 
     _isSendingMessage = true;
-    _aiChatController.clear();
+    if (overrideText == null) {
+      _aiChatController.clear();
+    }
 
     try {
       final editor = ref.read(editorProvider);
-    final hasActiveFile = editor.activeFilePath != null;
-    final currentFileName = editor.activeFilePath?.split('/').last ?? '';
-    final activeFile = editor.openFiles.isNotEmpty && editor.activeTabIndex < editor.openFiles.length ? editor.openFiles[editor.activeTabIndex] : null;
-    final currentCode = activeFile?.controller.text ?? '';
+      final hasActiveFile = editor.activeFilePath != null;
+      final currentFileName = editor.activeFilePath?.split('/').last ?? '';
+      final activeFile = editor.openFiles.isNotEmpty && editor.activeTabIndex < editor.openFiles.length
+          ? editor.openFiles[editor.activeTabIndex]
+          : null;
+      final currentCode = activeFile?.controller.text ?? '';
 
-    final lowerVal = value.toLowerCase();
+      var value = rawValue;
+      final lowerVal = value.toLowerCase();
 
-    if (lowerVal == '/clear') {
-      _aiChatController.clear();
-      ref.read(aiProvider.notifier).startNewSession();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Контекст очищен. Начата новая сессия.'), duration: Duration(seconds: 1)),
-      );
-      return;
-    }
-
-    if (lowerVal == '/model' || lowerVal == '/models') {
-      _aiChatController.clear();
-      final activeProviderId = ref.read(activeAiProviderIdProvider);
-      final activeModel = ref.read(activeAiModelProvider);
-      final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
-      final selected = await showModelPickerModal(
-        context,
-        providerId: activeProviderId,
-        currentModel: activeModel,
-        apiKey: apiKey,
-      );
-      if (selected != null && selected.isNotEmpty) {
-        ref.read(activeAiModelProvider.notifier).state = selected;
-        await ref.read(aiServiceProvider).setModel(selected);
+      if (lowerVal == '/clear') {
+        _aiChatController.clear();
+        ref.read(aiProvider.notifier).startNewSession();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Контекст очищен. Начата новая сессия.'), duration: Duration(seconds: 1)),
+        );
+        return;
       }
-      return;
-    }
 
-    if (lowerVal == '/stats') {
-      _aiChatController.clear();
-      final aiState = ref.read(aiProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Токены сессии: ${aiState.totalTokens} | Вход: ${aiState.lastPromptTokens} | Выход: ${aiState.lastCompletionTokens} | Сообщений: ${aiState.messages.length}'),
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      return;
-    }
+      if (lowerVal == '/model' || lowerVal == '/models') {
+        _aiChatController.clear();
+        final activeProviderId = ref.read(activeAiProviderIdProvider);
+        final activeModel = ref.read(activeAiModelProvider);
+        final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
+        final selected = await showModelPickerModal(
+          context,
+          providerId: activeProviderId,
+          currentModel: activeModel,
+          apiKey: apiKey,
+        );
+        if (selected != null && selected.isNotEmpty) {
+          ref.read(activeAiModelProvider.notifier).state = selected;
+          await ref.read(aiServiceProvider).setModel(selected);
+        }
+        return;
+      }
 
-    if (lowerVal == '/rollback') {
-      _aiChatController.clear();
-      ref.read(aiProvider.notifier).rollbackAgentChanges();
-      return;
-    }
+      if (lowerVal == '/stats') {
+        _aiChatController.clear();
+        final aiState = ref.read(aiProvider);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Токены сессии: ${aiState.totalTokens} | Вход: ${aiState.lastPromptTokens} | Выход: ${aiState.lastCompletionTokens} | Сообщений: ${aiState.messages.length}'),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
 
-    final isActionChip = lowerVal.startsWith('/fix') || 
-                        lowerVal.startsWith('/refactor') || 
-                        lowerVal.startsWith('/explain') || 
-                        lowerVal.startsWith('/tests') || 
-                        lowerVal.startsWith('/doc') ||
-                        lowerVal.contains('исправь');
+      if (lowerVal == '/rollback') {
+        _aiChatController.clear();
+        ref.read(aiProvider.notifier).rollbackAgentChanges();
+        return;
+      }
 
-    final shouldIncludeFile = (_attachActiveFile || isActionChip) && hasActiveFile;
+      if (lowerVal == '/diff') {
+        _aiChatController.clear();
+        await ref.read(aiProvider.notifier).askAI('/diff');
+        return;
+      }
 
-    final suggestion = _suggestMode(value, hasActiveFile, activeFile);
-    if (suggestion != null) {
-      _showModeSuggestionDialog(context, ref, suggestion, value);
-      return;
-    }
+      // Expand bare quick-action slash chips into clear prompts and switch to appropriate mode
+      bool skipSuggestionForSlash = skipModeSuggestion;
+      if (lowerVal == '/plan') {
+        ref.read(aiProvider.notifier).setInteractionMode(AiInteractionMode.plan);
+        skipSuggestionForSlash = true;
+        value = hasActiveFile
+            ? 'Составь подробный пошаговый план доработки и улучшения файла $currentFileName и связанных модулей проекта.'
+            : 'Составь подробный пошаговый архитектурный план развития и улучшения текущего проекта.';
+      } else if (lowerVal.startsWith('/plan ')) {
+        ref.read(aiProvider.notifier).setInteractionMode(AiInteractionMode.plan);
+        skipSuggestionForSlash = true;
+        value = value.substring(6).trim();
+      } else if (lowerVal == '/fix') {
+        ref.read(aiProvider.notifier).setInteractionMode(AiInteractionMode.debug);
+        skipSuggestionForSlash = true;
+        value = hasActiveFile
+            ? 'Проанализируй файл $currentFileName, найди все потенциальные баги или ошибки и исправь их.'
+            : 'Проверь проект на наличие ошибок компиляции, багов и проблем в логике, и предложи исправления.';
+      } else if (lowerVal == '/explain') {
+        ref.read(aiProvider.notifier).setInteractionMode(AiInteractionMode.ask);
+        skipSuggestionForSlash = true;
+        value = hasActiveFile
+            ? 'Объясни подробно, как работает код в файле $currentFileName, его архитектуру и ключевые методы.'
+            : 'Объясни архитектуру и устройство текущего проекта.';
+      }
 
-    String fullPrompt = value;
-    if (shouldIncludeFile && currentCode.isNotEmpty) {
-      fullPrompt = '⚠️ Рабочий файл: **$currentFileName**\n'
-          'Исходный код ($currentFileName):\n```dart\n$currentCode\n```\n\n'
-          'Инструкция: $value\n'
-          'ОБЯЗАТЕЛЬНО: Предложи рабочий код и внеси исправления!';
-    }
+      final isActionChip = lowerVal.startsWith('/fix') || 
+                          lowerVal.startsWith('/refactor') || 
+                          lowerVal.startsWith('/explain') || 
+                          lowerVal.startsWith('/tests') || 
+                          lowerVal.startsWith('/doc') ||
+                          lowerVal.contains('исправь');
 
-    final List<String> contextFiles = [];
-    if (shouldIncludeFile && editor.activeFilePath != null) {
-      contextFiles.add(editor.activeFilePath!);
-    }
+      final shouldIncludeFile = (_attachActiveFile || isActionChip) && hasActiveFile;
 
-    // Process @codebase / @search mentions
-    final lowerPrompt = fullPrompt.toLowerCase();
-    if (lowerPrompt.contains('@codebase') || lowerPrompt.contains('@search')) {
-      final workspacePath = ref.read(workspaceProvider).currentPath;
-      if (workspacePath != null) {
-        final dir = Directory(workspacePath);
-        final fileEntries = <String>[];
-        if (await dir.exists()) {
-          try {
-            final entities = dir.listSync(recursive: true);
-            for (final entity in entities) {
-              if (entity is File) {
-                final ext = p.extension(entity.path).toLowerCase();
-                if (['.dart', '.yaml', '.json', '.md', '.gradle', '.xml'].contains(ext) &&
-                    !entity.path.contains('.git/') &&
-                    !entity.path.contains('.dart_tool/') &&
-                    !entity.path.contains('build/')) {
-                  fileEntries.add(p.relative(entity.path, from: workspacePath));
+      if (!skipSuggestionForSlash) {
+        final suggestion = _suggestMode(value, hasActiveFile, activeFile);
+        if (suggestion != null) {
+          _showModeSuggestionDialog(context, ref, suggestion, value);
+          return;
+        }
+      }
+
+      String fullPrompt = value;
+      if (shouldIncludeFile && currentCode.isNotEmpty) {
+        fullPrompt = '⚠️ Рабочий файл: **$currentFileName**\n'
+            'Исходный код ($currentFileName):\n```dart\n$currentCode\n```\n\n'
+            'Инструкция: $value\n'
+            'ОБЯЗАТЕЛЬНО: Предложи рабочий код и внеси исправления!';
+      }
+
+      final List<String> contextFiles = [];
+      if (shouldIncludeFile && editor.activeFilePath != null) {
+        contextFiles.add(editor.activeFilePath!);
+      }
+
+      // Process @codebase / @search mentions
+      final lowerPrompt = fullPrompt.toLowerCase();
+      if (lowerPrompt.contains('@codebase') || lowerPrompt.contains('@search')) {
+        final workspacePath = ref.read(workspaceProvider).currentPath;
+        if (workspacePath != null) {
+          final dir = Directory(workspacePath);
+          final fileEntries = <String>[];
+          if (await dir.exists()) {
+            try {
+              final entities = dir.listSync(recursive: true);
+              for (final entity in entities) {
+                if (entity is File) {
+                  final ext = p.extension(entity.path).toLowerCase();
+                  if (['.dart', '.yaml', '.json', '.md', '.gradle', '.xml'].contains(ext) &&
+                      !entity.path.contains('.git/') &&
+                      !entity.path.contains('.dart_tool/') &&
+                      !entity.path.contains('build/')) {
+                    fileEntries.add(p.relative(entity.path, from: workspacePath));
+                  }
                 }
+                if (fileEntries.length >= 30) break;
               }
-              if (fileEntries.length >= 30) break;
+            } catch (e) {
+              debugPrint('Failed to scan codebase: $e');
             }
-          } catch (e) {
-            debugPrint('Failed to scan codebase: $e');
           }
+          final treePreview = fileEntries.map((f) => '- $f').join('\n');
+          fullPrompt = fullPrompt
+              .replaceAll(RegExp(r'@codebase', caseSensitive: false), '### ИНДЕКС ФАЙЛОВ ПРОЕКТА (@codebase):\n$treePreview\n')
+              .replaceAll(RegExp(r'@search', caseSensitive: false), '### ИНДЕКС ФАЙЛОВ ПРОЕКТА:\n$treePreview\n');
         }
-        final treePreview = fileEntries.map((f) => '- $f').join('\n');
-        fullPrompt = fullPrompt
-            .replaceAll(RegExp(r'@codebase', caseSensitive: false), '### ИНДЕКС ФАЙЛОВ ПРОЕКТА (@codebase):\n$treePreview\n')
-            .replaceAll(RegExp(r'@search', caseSensitive: false), '### ИНДЕКС ФАЙЛОВ ПРОЕКТА:\n$treePreview\n');
       }
-    }
 
-    // Process #-mentions for file context
-    final mentionPattern = RegExp(r'#file:([^\s]+)', caseSensitive: false);
-    final mentions = mentionPattern.allMatches(fullPrompt);
-    if (mentions.isNotEmpty) {
-      final workspacePath = ref.read(workspaceProvider).currentPath;
-      if (workspacePath != null) {
-        for (final match in mentions) {
-          final filePath = match.group(1)!;
-          final fullPath = filePath.startsWith('/')
-              ? filePath
-              : '$workspacePath/$filePath';
-          final file = File(fullPath);
-          if (await file.exists()) {
-            contextFiles.add(fullPath);
-            final content = await file.readAsString();
-            final preview = content.length > 2000
-                ? '${content.substring(0, 2000)}\n... (truncated)'
-                : content;
-            final replacement = '**File: $filePath**\n```dart\n$preview\n```';
-            fullPrompt = fullPrompt.replaceAll(match.group(0)!, replacement);
+      // Process #-mentions for file context
+      final mentionPattern = RegExp(r'#file:([^\s]+)', caseSensitive: false);
+      final mentions = mentionPattern.allMatches(fullPrompt);
+      if (mentions.isNotEmpty) {
+        final workspacePath = ref.read(workspaceProvider).currentPath;
+        if (workspacePath != null) {
+          for (final match in mentions) {
+            final filePath = match.group(1)!;
+            final fullPath = filePath.startsWith('/')
+                ? filePath
+                : '$workspacePath/$filePath';
+            final file = File(fullPath);
+            if (await file.exists()) {
+              contextFiles.add(fullPath);
+              final content = await file.readAsString();
+              final preview = content.length > 2000
+                  ? '${content.substring(0, 2000)}\n... (truncated)'
+                  : content;
+              final replacement = '**File: $filePath**\n```dart\n$preview\n```';
+              fullPrompt = fullPrompt.replaceAll(match.group(0)!, replacement);
+            }
           }
         }
       }
-    }
 
-    final activeKind = ref.read(aiProvider).activeAgentKind;
-    if (activeKind != AgentKind.native) {
-      ref.read(aiProvider.notifier).executeCliTask(
-        fullPrompt,
-        imageBase64: _selectedImageBase64,
-        contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
-      );
-    } else {
-      ref.read(aiProvider.notifier).askAI(
-        fullPrompt,
-        imageBase64: _selectedImageBase64,
-        contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
-      );
-    }
-    setState(() {
-      _attachActiveFile = false;
-      _selectedImagePath = null;
-      _selectedImageBase64 = null;
-    });
+      final activeKind = ref.read(aiProvider).activeAgentKind;
+      if (activeKind != AgentKind.native) {
+        ref.read(aiProvider.notifier).executeCliTask(
+          fullPrompt,
+          imageBase64: _selectedImageBase64,
+          contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
+        );
+      } else {
+        ref.read(aiProvider.notifier).askAI(
+          fullPrompt,
+          imageBase64: _selectedImageBase64,
+          contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
+        );
+      }
+      setState(() {
+        _attachActiveFile = false;
+        _selectedImagePath = null;
+        _selectedImageBase64 = null;
+      });
     } finally {
       _isSendingMessage = false;
     }
@@ -2348,7 +2468,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   String _getModeLabel(AiInteractionMode mode) {
     switch (mode) {
       case AiInteractionMode.chat: return 'Чат';
-      case AiInteractionMode.ask: return 'Запроc';
+      case AiInteractionMode.ask: return 'Запрос';
       case AiInteractionMode.autopilot: return 'Агент';
       case AiInteractionMode.refactor: return 'Редактор';
       case AiInteractionMode.plan: return 'Планер';
@@ -2390,76 +2510,82 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             
             return AlertDialog(
               backgroundColor: const Color(0xFF1E2230),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
                 children: [
                   const Icon(LucideIcons.history, color: Colors.cyanAccent, size: 18),
                   const SizedBox(width: 8),
-                  Text(
-                    l10n.chatHistory,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  Expanded(
+                    child: Text(
+                      l10n.chatHistory,
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
-              content: SizedBox(
-                width: 320,
-                height: 400,
-                child: aiState.sessions.isEmpty
-                    ? Center(
-                        child: Text(
-                          l10n.noHistoryFound,
-                          style: const TextStyle(color: Colors.white38, fontSize: 13),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: aiState.sessions.length,
-                        itemBuilder: (context, index) {
-                          final session = aiState.sessions[index];
-                          final isCurrent = session.id == aiState.currentSessionId;
-                          
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: isCurrent 
-                                  ? Colors.cyanAccent.withValues(alpha: 0.08) 
-                                  : Colors.white.withValues(alpha: 0.03),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
+              content: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 360, maxHeight: 400),
+                child: SizedBox(
+                  width: double.maxFinite,
+                  child: aiState.sessions.isEmpty
+                      ? Center(
+                          child: Text(
+                            l10n.noHistoryFound,
+                            style: const TextStyle(color: Colors.white38, fontSize: 13),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: aiState.sessions.length,
+                          itemBuilder: (context, index) {
+                            final session = aiState.sessions[index];
+                            final isCurrent = session.id == aiState.currentSessionId;
+                            
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              decoration: BoxDecoration(
                                 color: isCurrent 
-                                    ? Colors.cyanAccent.withValues(alpha: 0.3) 
-                                    : Colors.white.withValues(alpha: 0.05),
-                              ),
-                            ),
-                            child: ListTile(
-                              dense: true,
-                              title: Text(
-                                session.title.isNotEmpty ? session.title : l10n.untitled,
-                                style: TextStyle(
-                                  color: isCurrent ? Colors.cyanAccent : Colors.white,
-                                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                                  fontSize: 12,
+                                    ? Colors.cyanAccent.withValues(alpha: 0.08) 
+                                    : Colors.white.withValues(alpha: 0.03),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isCurrent 
+                                      ? Colors.cyanAccent.withValues(alpha: 0.3) 
+                                      : Colors.white.withValues(alpha: 0.05),
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                              subtitle: Text(
-                                '${l10n.messagesCount(session.messages.length)} • ${_formatDate(session.createdAt)}',
-                                style: const TextStyle(color: Colors.white30, fontSize: 9.5),
-                              ),
-                              onTap: () {
-                                notifier.selectSession(session.id);
-                                Navigator.pop(context);
-                              },
-                              trailing: IconButton(
-                                icon: const Icon(LucideIcons.trash_2, size: 14, color: Colors.redAccent),
-                                onPressed: () {
-                                  notifier.deleteSession(session.id);
+                              child: ListTile(
+                                dense: true,
+                                title: Text(
+                                  session.title.isNotEmpty ? session.title : l10n.untitled,
+                                  style: TextStyle(
+                                    color: isCurrent ? Colors.cyanAccent : Colors.white,
+                                    fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                                    fontSize: 12,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  '${l10n.messagesCount(session.messages.length)} • ${_formatDate(session.createdAt)}',
+                                  style: const TextStyle(color: Colors.white30, fontSize: 9.5),
+                                ),
+                                onTap: () {
+                                  notifier.selectSession(session.id);
+                                  Navigator.pop(context);
                                 },
+                                trailing: IconButton(
+                                  icon: const Icon(LucideIcons.trash_2, size: 14, color: Colors.redAccent),
+                                  onPressed: () {
+                                    notifier.deleteSession(session.id);
+                                  },
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
+                ),
               ),
               actions: [
                 TextButton(
@@ -2507,14 +2633,18 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E2230),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
             Icon(modeIcon, color: modeColor, size: 18),
             const SizedBox(width: 8),
-            Text(
-              'Рекомендуемый режим: $modeLabel',
-              style: TextStyle(color: modeColor, fontSize: 14, fontWeight: FontWeight.bold),
+            Expanded(
+              child: Text(
+                'Рекомендуемый режим: $modeLabel',
+                style: TextStyle(color: modeColor, fontSize: 14, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -2526,7 +2656,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              _sendMessage(context, ref);
+              _sendMessage(
+                context,
+                ref,
+                overrideText: originalPrompt,
+                skipModeSuggestion: true,
+              );
             },
             child: Text(l10n.cancel, style: const TextStyle(color: Colors.white54)),
           ),
@@ -2534,7 +2669,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             onPressed: () {
               Navigator.pop(ctx);
               ref.read(aiProvider.notifier).setInteractionMode(suggestion.recommendedMode);
-              _sendMessage(context, ref);
+              _sendMessage(
+                context,
+                ref,
+                overrideText: originalPrompt,
+                skipModeSuggestion: true,
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: modeColor.withValues(alpha: 0.2),

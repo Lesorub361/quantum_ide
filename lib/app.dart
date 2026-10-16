@@ -31,9 +31,29 @@ class QuantumApp extends ConsumerWidget {
       themeMode: settings.themeMode,
       routerConfig: appRouter,
       builder: (context, child) {
-        return RepaintBoundary(
-          key: GhostQAService.repaintKey,
-          child: child ?? const SizedBox.shrink(),
+        return ValueListenableBuilder<Size?>(
+          valueListenable: GhostQAService.instance.simulatedViewport,
+          builder: (context, viewport, _) {
+            Widget content = child ?? const SizedBox.shrink();
+            if (viewport != null) {
+              final mq = MediaQuery.of(context);
+              content = Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: viewport.width,
+                  height: viewport.height,
+                  child: MediaQuery(
+                    data: mq.copyWith(size: viewport),
+                    child: content,
+                  ),
+                ),
+              );
+            }
+            return RepaintBoundary(
+              key: GhostQAService.repaintKey,
+              child: content,
+            );
+          },
         );
       },
       locale: locale,

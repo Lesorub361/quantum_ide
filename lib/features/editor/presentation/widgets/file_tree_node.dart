@@ -1088,12 +1088,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                       color: Colors.blueAccent,
                       onTap: () {
                         Navigator.pop(context);
-                        setState(() {
-                          _inlineController = TextEditingController();
-                          _isCreatingFile = true;
-                          _isCreatingFolder = false;
-                          _inlineFocusNode.requestFocus();
-                        });
+                        _startInlineCreation(isDir: false);
                       },
                     ),
                     _buildBottomSheetItem(
@@ -1103,12 +1098,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                       color: Colors.orangeAccent,
                       onTap: () {
                         Navigator.pop(context);
-                        setState(() {
-                          _inlineController = TextEditingController();
-                          _isCreatingFolder = true;
-                          _isCreatingFile = false;
-                          _inlineFocusNode.requestFocus();
-                        });
+                        _startInlineCreation(isDir: true);
                       },
                     ),
                     const Divider(color: Colors.white10),
@@ -1440,6 +1430,49 @@ Please fulfill this request. If you need to modify the file, create a new one, d
     );
   }
 
+  void _startInlineCreation({required bool isDir}) {
+    final isCurrentlyExpanded = ref.read(expandedFoldersProvider).contains(widget.path);
+    if (!isCurrentlyExpanded) {
+      ref.read(expandedFoldersProvider.notifier).toggleExpanded(widget.path);
+      if (_children == null) _loadChildren();
+    }
+    setState(() {
+      _inlineController?.dispose();
+      _inlineController = TextEditingController();
+      _isCreatingFile = !isDir;
+      _isCreatingFolder = isDir;
+      _isRenaming = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _inlineFocusNode.requestFocus();
+    });
+  }
+
+  Widget _buildFolderQuickActionButton({
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(5),
+        child: Container(
+          padding: const EdgeInsets.all(3.5),
+          margin: const EdgeInsets.only(left: 3),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: color.withValues(alpha: 0.25), width: 0.5),
+          ),
+          child: Icon(icon, size: 11.5, color: color),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final expandedFolders = ref.watch(expandedFoldersProvider);
@@ -1531,12 +1564,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
             dense: true,
             onTap: () {
               Navigator.pop(context);
-              setState(() {
-                _inlineController = TextEditingController();
-                _isCreatingFile = true;
-                _isCreatingFolder = false;
-                _inlineFocusNode.requestFocus();
-              });
+              _startInlineCreation(isDir: false);
             },
           ),
           ListTile(
@@ -1545,12 +1573,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
             dense: true,
             onTap: () {
               Navigator.pop(context);
-              setState(() {
-                _inlineController = TextEditingController();
-                _isCreatingFolder = true;
-                _isCreatingFile = false;
-                _inlineFocusNode.requestFocus();
-              });
+              _startInlineCreation(isDir: true);
             },
           ),
           const Divider(),
@@ -1592,19 +1615,40 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                 children: indentGuides,
               ),
             if (widget.isDirectory)
-              Icon(isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right, size: isMobile ? 13 : 14, color: Colors.grey)
+              Icon(
+                isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
+                size: isMobile ? 12.5 : 13.5,
+                color: isExpanded ? Colors.white70 : Colors.white38,
+              )
             else
               SizedBox(width: isMobile ? 10 : 12),
-            const SizedBox(width: 3),
+            const SizedBox(width: 4),
             () {
               final iconInfo = FileIconHelper.getIconInfo(widget.visualName ?? widget.name, widget.isDirectory, isExpanded);
-              return Icon(
-                iconInfo.icon,
-                size: isMobile ? 14 : 15,
-                color: iconInfo.color,
+              if (!widget.isDirectory) {
+                return Icon(iconInfo.icon, size: isMobile ? 14 : 15, color: iconInfo.color);
+              }
+              return Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      iconInfo.color.withValues(alpha: isExpanded ? 0.24 : 0.14),
+                      iconInfo.color.withValues(alpha: 0.04),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(
+                    color: iconInfo.color.withValues(alpha: isExpanded ? 0.4 : 0.2),
+                    width: 0.6,
+                  ),
+                ),
+                child: Icon(iconInfo.icon, size: isMobile ? 12.5 : 13.5, color: iconInfo.color),
               );
             }(),
-            SizedBox(width: isMobile ? 5 : 6),
+            SizedBox(width: isMobile ? 6 : 7),
             Expanded(
               child: _isRenaming
                   ? _buildInlineRenameField()
@@ -1634,6 +1678,20 @@ Please fulfill this request. If you need to modify the file, create a new one, d
               _buildAIBadge(ref),
               if (gitColor != Colors.white70 && gitColor != Colors.white)
                 _buildGitBadge(gitColor, ref),
+              if (widget.isDirectory) ...[
+                _buildFolderQuickActionButton(
+                  icon: LucideIcons.file_plus,
+                  tooltip: 'Создать файл в "${widget.name}"',
+                  color: const Color(0xFF4CD7F6),
+                  onTap: () => _startInlineCreation(isDir: false),
+                ),
+                _buildFolderQuickActionButton(
+                  icon: LucideIcons.folder_plus,
+                  tooltip: 'Создать папку в "${widget.name}"',
+                  color: const Color(0xFFFFCA28),
+                  onTap: () => _startInlineCreation(isDir: true),
+                ),
+              ],
             ],
             if (!_isRenaming)
               GestureDetector(

@@ -10,11 +10,16 @@ class GitState {
 
   GitState({this.status, this.isLoading = false, this.error});
 
-  GitState copyWith({GitStatus? status, bool? isLoading, String? error}) {
+  GitState copyWith({
+    GitStatus? status,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) {
     return GitState(
       status: status ?? this.status,
       isLoading: isLoading ?? this.isLoading,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
@@ -24,11 +29,13 @@ class GitNotifier extends StateNotifier<GitState> {
 
   GitNotifier(this._gitService) : super(GitState());
 
-  Future<void> refreshStatus() async {
-    state = state.copyWith(isLoading: true);
+  Future<void> refreshStatus({bool silent = false, bool force = false}) async {
+    if (!silent && state.status == null) {
+      state = state.copyWith(isLoading: true, clearError: true);
+    }
     try {
-      final status = await _gitService.getStatus();
-      state = state.copyWith(isLoading: false, status: status);
+      final status = await _gitService.getStatus(forceRefresh: force);
+      state = GitState(status: status, isLoading: false, error: null);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -36,47 +43,130 @@ class GitNotifier extends StateNotifier<GitState> {
 
   Future<void> stageFile(String path) async {
     await _gitService.add(path);
-    await refreshStatus();
+    await refreshStatus(silent: true, force: true);
+  }
+
+  Future<void> stageAll() async {
+    await _gitService.stageAll();
+    await refreshStatus(silent: true, force: true);
   }
 
   Future<void> unstageFile(String path) async {
     await _gitService.unstage(path);
-    await refreshStatus();
+    await refreshStatus(silent: true, force: true);
   }
 
-  Future<void> commit(String message) async {
-    state = state.copyWith(isLoading: true);
+  Future<void> unstageAll() async {
+    await _gitService.unstageAll();
+    await refreshStatus(silent: true, force: true);
+  }
+
+  Future<void> discardFile(String path) async {
+    await _gitService.discardChanges(path);
+    await refreshStatus(silent: true, force: true);
+  }
+
+  Future<void> discardAll() async {
+    await _gitService.discardAllChanges();
+    await refreshStatus(silent: true, force: true);
+  }
+
+  Future<void> commit(String message, {bool amend = false, bool autoStageIfEmpty = true}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
     try {
-      await _gitService.commit(message);
-      await refreshStatus();
+      final current = state.status;
+      if (autoStageIfEmpty &&
+          current != null &&
+          current.stagedFiles.isEmpty &&
+          (current.modifiedFiles.isNotEmpty || current.untrackedFiles.isNotEmpty)) {
+        await _gitService.stageAll();
+      }
+      await _gitService.commit(message, amend: amend);
+      await refreshStatus(silent: true, force: true);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
   Future<void> push() async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _gitService.push();
-      await refreshStatus();
+      await refreshStatus(silent: true, force: true);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
   Future<void> pull() async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, clearError: true);
     try {
       await _gitService.pull();
-      await refreshStatus();
+      await refreshStatus(silent: true, force: true);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
 
+  Future<void> checkoutBranch(String branchName, {bool createNew = false}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _gitService.checkoutBranch(branchName, createNew: createNew);
+      await refreshStatus(silent: true, force: true);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<void> createVersionTag(String tagName, String message, {bool pushToRemote = false}) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _gitService.createTag(tagName, message.isNotEmpty ? message : 'Release $tagName');
+      if (pushToRemote) {
+        await _gitService.pushWithTags();
+      }
+      await refreshStatus(silent: true, force: true);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<void> deleteTag(String tagName) async {
+    await _gitService.deleteTag(tagName);
+    await refreshStatus(silent: true, force: true);
+  }
+
+  Future<void> stashSave([String? message]) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _gitService.stashSave(message);
+      await refreshStatus(silent: true, force: true);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<void> stashPop() async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      await _gitService.stashPop();
+      await refreshStatus(silent: true, force: true);
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<String> getCommitDetails(String commitHash) {
+    return _gitService.getCommitDetails(commitHash);
+  }
+
+  Future<String> getFileDiff(String filePath, {bool staged = false}) {
+    return _gitService.getFileDiff(filePath, staged: staged);
+  }
+
   Future<void> init() async {
     await _gitService.initRepo();
-    await refreshStatus();
+    await refreshStatus(force: true);
   }
 
   Future<void> releaseAndBuildApk({
@@ -84,21 +174,17 @@ class GitNotifier extends StateNotifier<GitState> {
     required String commitMessage,
     required String releaseNotes,
   }) async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, clearError: true);
     try {
-      // 1. Stage all changes if any
-      final status = await _gitService.getStatus();
+      final status = await _gitService.getStatus(forceRefresh: true);
       if (status != null && status.hasChanges) {
-        await _gitService.add('.');
+        await _gitService.stageAll();
         await _gitService.commit(commitMessage.isNotEmpty ? commitMessage : 'Release $tagName');
       }
 
-      // 2. Create annotated git tag
       await _gitService.createTag(tagName, releaseNotes.isNotEmpty ? releaseNotes : 'Release $tagName');
-
-      // 3. Push commit and tag to remote
       await _gitService.pushWithTags();
-      await refreshStatus();
+      await refreshStatus(silent: true, force: true);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
       rethrow;
@@ -108,7 +194,10 @@ class GitNotifier extends StateNotifier<GitState> {
 
 final StateNotifierProvider<GitNotifier, GitState> gitProvider = StateNotifierProvider<GitNotifier, GitState>((ref) {
   ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
-    ref.read(gitProvider.notifier).refreshStatus();
+    if (previous?.currentPath != next.currentPath) {
+      ref.read(gitProvider.notifier).refreshStatus(force: true);
+    }
   });
   return GitNotifier(ref.watch(gitServiceProvider));
 });
+

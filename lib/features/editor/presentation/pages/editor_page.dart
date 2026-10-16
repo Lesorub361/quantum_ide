@@ -2026,7 +2026,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
       final aiState = ref.read(aiProvider);
       final action = aiState.proposedActions.firstWhere(
-        (a) => a.path == file.path && (a.type == 'edit' || a.type == 'create'),
+        (a) =>
+            a.path == file.path &&
+            (a.type == 'edit' ||
+                a.type == 'create' ||
+                a.type == 'replace_code_block' ||
+                a.type == 'rewrite_whole_file'),
         orElse: () => AIAction(type: 'edit', path: file.path, content: file.controller.text, description: ''),
       );
 

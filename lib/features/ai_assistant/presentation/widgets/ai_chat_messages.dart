@@ -209,7 +209,7 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
     final executed = message.executedActions ?? [];
 
     final readTypes = ['read_file', 'list_dir', 'grep_search', 'find_symbols', 'web_search', 'web_fetch'];
-    final writeTypes = ['create', 'edit', 'delete'];
+    final writeTypes = ['create', 'edit', 'delete', 'replace_code_block', 'rewrite_whole_file', 'insert_log'];
 
     final readingActions = executed.where((a) => readTypes.contains(a.type)).toList();
     final writingActions = executed.where((a) => writeTypes.contains(a.type)).toList();

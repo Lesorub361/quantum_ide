@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/git_status.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
@@ -22,88 +24,224 @@ class GitService {
     return PathMapper.mapToGuest(hostPath, runtime.appDirectory);
   }
 
-  Future<GitStatus?> getStatus() async {
+  Future<String?> _detectProjectVersion(String hostPath) async {
+    try {
+      final pubspec = File(p.join(hostPath, 'pubspec.yaml'));
+      if (await pubspec.exists()) {
+        final content = await pubspec.readAsString();
+        final match = RegExp(r'^version:\s*([^\s#]+)', multiLine: true).firstMatch(content);
+        if (match != null) return match.group(1)?.trim();
+      }
+      final pkgJson = File(p.join(hostPath, 'package.json'));
+      if (await pkgJson.exists()) {
+        final content = await pkgJson.readAsString();
+        final match = RegExp(r'"version"\s*:\s*"([^"]+)"').firstMatch(content);
+        if (match != null) return match.group(1)?.trim();
+      }
+      final gradleKts = File(p.join(hostPath, 'android', 'app', 'build.gradle.kts'));
+      if (await gradleKts.exists()) {
+        final content = await gradleKts.readAsString();
+        final nameMatch = RegExp(r'versionName\s*=\s*"([^"]+)"').firstMatch(content);
+        final codeMatch = RegExp(r'versionCode\s*=\s*(\d+)').firstMatch(content);
+        if (nameMatch != null) {
+          final vName = nameMatch.group(1);
+          final vCode = codeMatch?.group(1);
+          return vCode != null ? '$vName+$vCode' : vName;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<GitStatus?> getStatus({bool forceRefresh = false}) async {
     final workspace = ref.read(workspaceProvider);
     final hostPath = workspace.currentPath;
     if (hostPath == null) return null;
 
-    if (_cachedStatus != null && _cachedPath == hostPath && _lastStatusTime != null && DateTime.now().difference(_lastStatusTime!) < _statusCacheTtl) {
+    if (!forceRefresh &&
+        _cachedStatus != null &&
+        _cachedPath == hostPath &&
+        _lastStatusTime != null &&
+        DateTime.now().difference(_lastStatusTime!) < _statusCacheTtl) {
       return _cachedStatus;
     }
 
     final guestPath = await _getGuestPath(hostPath);
-    
+
     try {
       final runtime = ref.read(runtimeServiceProvider);
-      
-      final isRepoKey = '$hostPath|$guestPath';
-      if (!_repoCache.containsKey(isRepoKey)) {
-        final isRepo = await runtime.runCommand('cd "$guestPath" && git rev-parse --is-inside-work-tree 2>/dev/null')
-            .then((value) => value.trim() == 'true')
-            .catchError((_) => false);
-        _repoCache[isRepoKey] = isRepo;
-      }
-          
-      if (!_repoCache[isRepoKey]!) return null;
 
-      String branch = 'main';
-      try {
-        final b = await runtime.runCommand('cd "$guestPath" && git rev-parse --abbrev-ref HEAD 2>/dev/null');
-        if (b.trim().isNotEmpty) branch = b.trim();
-      } catch (_) {
-        branch = 'main';
+      // Run a single batched shell script to get repo check, branch, ahead/behind,
+      // porcelain status, diff stats, recent commits, tags, branches, and remote URL.
+      // This avoids spawning 7 separate shell processes on every status check!
+      final batchCmd = [
+        'cd "$guestPath" 2>/dev/null || exit 0',
+        'if [ "\$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then echo "__NOT_GIT_REPO__"; exit 0; fi',
+        'echo "__SECTION_BRANCH__"',
+        'git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "main"',
+        'echo "__SECTION_AHEAD_BEHIND__"',
+        'git rev-list --left-right --count HEAD...@{u} 2>/dev/null || echo "0\t0"',
+        'echo "__SECTION_STATUS__"',
+        'git status --porcelain 2>/dev/null',
+        'echo "__SECTION_NUMSTAT__"',
+        'git diff --numstat 2>/dev/null; git diff --cached --numstat 2>/dev/null',
+        'echo "__SECTION_COMMITS__"',
+        'git log -n 35 --pretty=format:"%H\t%h\t%s\t%an\t%ar\t%D" 2>/dev/null',
+        'echo ""',
+        'echo "__SECTION_TAGS__"',
+        'git for-each-ref --sort=-creatordate --format="%(refname:short)\t%(objectname:short)\t%(creatordate:short)\t%(contents:subject)" refs/tags 2>/dev/null | head -n 25',
+        'echo "__SECTION_BRANCHES__"',
+        'git for-each-ref --format="%(refname:short)" refs/heads 2>/dev/null',
+        'echo "__SECTION_REMOTE__"',
+        'git config --get remote.origin.url 2>/dev/null || true',
+      ].join(' && ');
+
+      final rawOut = await runtime.runCommand(batchCmd);
+      if (rawOut.contains('__NOT_GIT_REPO__') || !rawOut.contains('__SECTION_BRANCH__')) {
+        _repoCache['$hostPath|$guestPath'] = false;
+        return null;
+      }
+      _repoCache['$hostPath|$guestPath'] = true;
+
+      String extractSection(String startMarker, String? endMarker) {
+        final startIdx = rawOut.indexOf(startMarker);
+        if (startIdx == -1) return '';
+        final contentStart = startIdx + startMarker.length;
+        if (endMarker == null) {
+          return rawOut.substring(contentStart).trim();
+        }
+        final endIdx = rawOut.indexOf(endMarker, contentStart);
+        if (endIdx == -1) return rawOut.substring(contentStart).trim();
+        return rawOut.substring(contentStart, endIdx).trim();
       }
 
-      String output = '';
-      try {
-        output = await runtime.runCommand('cd "$guestPath" && git status --porcelain');
-      } catch (_) {
-        output = '';
+      final branchRaw = extractSection('__SECTION_BRANCH__', '__SECTION_AHEAD_BEHIND__');
+      final branch = branchRaw.split('\n').first.trim().isNotEmpty
+          ? branchRaw.split('\n').first.trim()
+          : 'main';
+
+      int ahead = 0;
+      int behind = 0;
+      final abRaw = extractSection('__SECTION_AHEAD_BEHIND__', '__SECTION_STATUS__');
+      if (abRaw.isNotEmpty) {
+        final parts = abRaw.split(RegExp(r'\s+'));
+        if (parts.length >= 2) {
+          ahead = int.tryParse(parts[0]) ?? 0;
+          behind = int.tryParse(parts[1]) ?? 0;
+        }
       }
-      
+
+      final statusRaw = extractSection('__SECTION_STATUS__', '__SECTION_NUMSTAT__');
       final modified = <String>[];
       final staged = <String>[];
       final untracked = <String>[];
       final conflicted = <String>[];
 
-      for (var line in output.split('\n')) {
-        if (line.isEmpty) continue;
+      // Note: Do NOT trim leading spaces of statusRaw because porcelain format uses leading space!
+      final statusStartIdx = rawOut.indexOf('__SECTION_STATUS__');
+      final numstatStartIdx = rawOut.indexOf('__SECTION_NUMSTAT__');
+      final rawStatusLines = (statusStartIdx != -1 && numstatStartIdx != -1)
+          ? rawOut.substring(statusStartIdx + '__SECTION_STATUS__'.length, numstatStartIdx).split('\n')
+          : statusRaw.split('\n');
+
+      for (var line in rawStatusLines) {
+        if (line.trim().isEmpty) continue;
         if (line.length < 3) continue;
+        final x = line[0];
+        final y = line[1];
         final status = line.substring(0, 2);
-        final file = line.substring(3).trim();
+        var file = line.substring(3).trim();
+        if (file.contains(' -> ')) {
+          file = file.split(' -> ').last.trim();
+        }
+        if (file.startsWith('"') && file.endsWith('"') && file.length >= 2) {
+          file = file.substring(1, file.length - 1);
+        }
 
         const conflictStatuses = {'DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'};
         if (conflictStatuses.contains(status)) {
-          conflicted.add(file);
+          if (!conflicted.contains(file)) conflicted.add(file);
         } else if (status == '??') {
-          untracked.add(file);
-        } else if (status.startsWith(' ') && status[1] != ' ') {
-          modified.add(file);
-        } else if (status[0] != ' ' && status[1] == ' ') {
-          staged.add(file);
+          if (!untracked.contains(file)) untracked.add(file);
+        } else {
+          if (x != ' ' && x != '?') {
+            if (!staged.contains(file)) staged.add(file);
+          }
+          if (y != ' ' && y != '?') {
+            if (!modified.contains(file)) modified.add(file);
+          }
         }
       }
 
       final diffStats = <String, GitFileDiffStats>{};
-      try {
-        final numstat = await runtime.runCommand('cd "$guestPath" && git diff --numstat 2>/dev/null; git diff --cached --numstat 2>/dev/null');
-        for (final line in numstat.split('\n')) {
-          final trimmed = line.trim();
-          if (trimmed.isEmpty) continue;
-          final parts = trimmed.split(RegExp(r'\s+'));
-          if (parts.length >= 3) {
-            final add = int.tryParse(parts[0]) ?? 0;
-            final del = int.tryParse(parts[1]) ?? 0;
-            final file = parts.sublist(2).join(' ').trim();
-            final existing = diffStats[file];
-            if (existing != null) {
-              diffStats[file] = GitFileDiffStats(existing.additions + add, existing.deletions + del);
-            } else {
-              diffStats[file] = GitFileDiffStats(add, del);
-            }
+      final numstatRaw = extractSection('__SECTION_NUMSTAT__', '__SECTION_COMMITS__');
+      for (final line in numstatRaw.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        final parts = trimmed.split(RegExp(r'\s+'));
+        if (parts.length >= 3) {
+          final add = int.tryParse(parts[0]) ?? 0;
+          final del = int.tryParse(parts[1]) ?? 0;
+          final file = parts.sublist(2).join(' ').trim();
+          final existing = diffStats[file];
+          if (existing != null) {
+            diffStats[file] = GitFileDiffStats(existing.additions + add, existing.deletions + del);
+          } else {
+            diffStats[file] = GitFileDiffStats(add, del);
           }
         }
-      } catch (_) {}
+      }
+
+      final recentCommits = <GitCommitEntry>[];
+      final commitsRaw = extractSection('__SECTION_COMMITS__', '__SECTION_TAGS__');
+      for (final line in commitsRaw.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        final parts = trimmed.split('\t');
+        if (parts.length >= 5) {
+          recentCommits.add(GitCommitEntry(
+            hash: parts[0].trim(),
+            shortHash: parts[1].trim(),
+            message: parts[2].trim(),
+            author: parts[3].trim(),
+            relativeTime: parts[4].trim(),
+            refs: parts.length >= 6 ? parts[5].trim() : '',
+          ));
+        }
+      }
+
+      final tags = <GitTagEntry>[];
+      final tagsRaw = extractSection('__SECTION_TAGS__', '__SECTION_BRANCHES__');
+      for (final line in tagsRaw.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        final parts = trimmed.split('\t');
+        if (parts.isNotEmpty && parts[0].trim().isNotEmpty) {
+          tags.add(GitTagEntry(
+            name: parts[0].trim(),
+            shortHash: parts.length > 1 ? parts[1].trim() : '',
+            date: parts.length > 2 ? parts[2].trim() : '',
+            subject: parts.length > 3 ? parts[3].trim() : '',
+          ));
+        }
+      }
+
+      final branches = <String>[];
+      final branchesRaw = extractSection('__SECTION_BRANCHES__', '__SECTION_REMOTE__');
+      for (final line in branchesRaw.split('\n')) {
+        final b = line.trim();
+        if (b.isNotEmpty && !branches.contains(b)) {
+          branches.add(b);
+        }
+      }
+      if (!branches.contains(branch)) {
+        branches.insert(0, branch);
+      }
+
+      final remoteRaw = extractSection('__SECTION_REMOTE__', null);
+      final remoteUrl = remoteRaw.split('\n').first.trim();
+
+      final projectVersion = await _detectProjectVersion(hostPath);
 
       final result = GitStatus(
         modifiedFiles: modified,
@@ -111,7 +249,14 @@ class GitService {
         untrackedFiles: untracked,
         conflictedFiles: conflicted,
         currentBranch: branch,
+        branches: branches,
+        ahead: ahead,
+        behind: behind,
         diffStats: diffStats,
+        recentCommits: recentCommits,
+        tags: tags,
+        projectVersion: projectVersion,
+        remoteUrl: remoteUrl.isNotEmpty ? remoteUrl : null,
       );
       _cachedStatus = result;
       _cachedPath = hostPath;
@@ -135,17 +280,15 @@ class GitService {
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
-    
+
     try {
-      await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
-      await runtime.runCommand('cd "$guestPath" && git add "$filePath"');
+      await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*" && git add "$filePath"');
       invalidateCache();
     } catch (e) {
-      if (e.toString().contains('unable to write file') || e.toString().contains('No such file or directory') || e.toString().contains('fatal')) {
-        debugPrint('Git structure error, attempting aggressive repair...');
-        await runtime.runCommand('cd "$guestPath" && mkdir -p .git/objects && git init');
-        await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
-        await runtime.runCommand('cd "$guestPath" && git add "$filePath"');
+      if (e.toString().contains('unable to write file') ||
+          e.toString().contains('No such file or directory') ||
+          e.toString().contains('fatal')) {
+        await runtime.runCommand('cd "$guestPath" && mkdir -p .git/objects && git init && git config --global --add safe.directory "*" && git add "$filePath"');
         invalidateCache();
       } else {
         rethrow;
@@ -153,23 +296,52 @@ class GitService {
     }
   }
 
+  Future<void> stageAll() async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git add -A');
+    invalidateCache();
+  }
+
   Future<void> unstage(String filePath) async {
     final workspace = ref.read(workspaceProvider);
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
+
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git reset HEAD "$filePath"');
     invalidateCache();
   }
 
-  Future<void> commit(String message) async {
+  Future<void> unstageAll() async {
     final workspace = ref.read(workspaceProvider);
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git commit -m "$message"');
+
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git reset HEAD');
+    invalidateCache();
+  }
+
+  Future<void> commit(String message, {bool amend = false}) async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    final escaped = message.replaceAll('"', '\\"');
+    final amendFlag = amend ? ' --amend' : '';
+
+    // Ensure git user.name and user.email exist so commit never fails on fresh setups
+    final cmd = [
+      'cd "$guestPath"',
+      'git config user.name >/dev/null 2>&1 || git config user.name "Quantum Developer"',
+      'git config user.email >/dev/null 2>&1 || git config user.email "dev@quantum-ide.local"',
+      'git commit$amendFlag -m "$escaped"',
+    ].join(' && ');
+
+    await ref.read(runtimeServiceProvider).runCommand(cmd);
     invalidateCache();
   }
 
@@ -178,8 +350,11 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git push');
+
+    await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && (git push 2>&1 || git push -u origin HEAD 2>&1)',
+    );
+    invalidateCache();
   }
 
   Future<void> createTag(String tagName, String message) async {
@@ -187,8 +362,21 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git tag -a "$tagName" -m "$message"');
+    final escapedMsg = message.replaceAll('"', '\\"');
+
+    await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git config user.name >/dev/null 2>&1 || git config user.name "Quantum Developer" && git config user.email >/dev/null 2>&1 || git config user.email "dev@quantum-ide.local" && git tag -f -a "$tagName" -m "$escapedMsg"',
+    );
+    invalidateCache();
+  }
+
+  Future<void> deleteTag(String tagName) async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git tag -d "$tagName"');
     invalidateCache();
   }
 
@@ -197,9 +385,56 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git push && git push --tags');
+
+    await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && (git push || git push -u origin HEAD) && git push --tags',
+    );
     invalidateCache();
+  }
+
+  Future<void> checkoutBranch(String branchName, {bool createNew = false}) async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    final flag = createNew ? '-b ' : '';
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git checkout $flag"$branchName"');
+    invalidateCache();
+  }
+
+  Future<String> getCommitDetails(String commitHash) async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return '';
+    final guestPath = await _getGuestPath(hostPath);
+
+    try {
+      return await ref.read(runtimeServiceProvider).runCommand(
+        'cd "$guestPath" && git show --stat --patch --no-color "$commitHash" 2>/dev/null',
+      );
+    } catch (e) {
+      return 'Ошибка получения деталей коммита: $e';
+    }
+  }
+
+  Future<String> getFileDiff(String relativePath, {bool staged = false}) async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return '';
+    final guestPath = await _getGuestPath(hostPath);
+
+    try {
+      final cachedFlag = staged ? '--cached ' : '';
+      final out = await ref.read(runtimeServiceProvider).runCommand(
+        'cd "$guestPath" && git diff --no-color $cachedFlag-- "$relativePath" 2>/dev/null',
+      );
+      if (out.trim().isNotEmpty) return out;
+      return await ref.read(runtimeServiceProvider).runCommand(
+        'cd "$guestPath" && git diff --no-color HEAD -- "$relativePath" 2>/dev/null',
+      );
+    } catch (e) {
+      return '';
+    }
   }
 
   Future<String?> getRemoteUrl() async {
@@ -207,7 +442,7 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return null;
     final guestPath = await _getGuestPath(hostPath);
-    
+
     try {
       final out = await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git config --get remote.origin.url');
       return out.trim().isNotEmpty ? out.trim() : null;
@@ -221,8 +456,29 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git pull');
+
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git pull --rebase=false');
+    invalidateCache();
+  }
+
+  Future<void> stashSave([String? message]) async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    final msgPart = (message != null && message.trim().isNotEmpty)
+        ? 'push -m "${message.replaceAll('"', '\\"')}" --include-untracked'
+        : 'push --include-untracked';
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git stash $msgPart');
+    invalidateCache();
+  }
+
+  Future<void> stashPop() async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git stash pop');
     invalidateCache();
   }
 
@@ -231,7 +487,7 @@ class GitService {
     final hostPath = workspace.currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    
+
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git init');
     _repoCache.removeWhere((key, _) => key.startsWith(hostPath));
     invalidateCache();
@@ -243,9 +499,9 @@ class GitService {
     if (hostPath == null) return '';
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
-    
+
     try {
-      final output = await runtime.runCommand('cd "$guestPath" && git show HEAD:"$relativePath"');
+      final output = await runtime.runCommand('cd "$guestPath" && git show HEAD:"$relativePath" 2>/dev/null');
       return output;
     } catch (e) {
       debugPrint('Git show failed: $e');
@@ -259,12 +515,27 @@ class GitService {
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
-    
+
     try {
-      await runtime.runCommand('cd "$guestPath" && git checkout -- "$relativePath"');
+      await runtime.runCommand('cd "$guestPath" && (git checkout -- "$relativePath" 2>/dev/null || rm -rf "$relativePath")');
       invalidateCache();
     } catch (e) {
       debugPrint('Git discard failed: $e');
+    }
+  }
+
+  Future<void> discardAllChanges() async {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    final runtime = ref.read(runtimeServiceProvider);
+
+    try {
+      await runtime.runCommand('cd "$guestPath" && git reset --hard HEAD && git clean -fd');
+      invalidateCache();
+    } catch (e) {
+      debugPrint('Git discard all failed: $e');
     }
   }
 
@@ -274,12 +545,12 @@ class GitService {
     if (hostPath == null) return null;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
-    
+
     try {
       await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
       final status = await getStatus();
       final hasUncommitted = status != null && (status.modifiedFiles.isNotEmpty || status.untrackedFiles.isNotEmpty);
-      
+
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       if (hasUncommitted) {
         final stashName = 'quantum-ide-agent-checkpoint-$timestamp';
@@ -288,7 +559,6 @@ class GitService {
         invalidateCache();
         return stashName;
       } else {
-        // Working directory is clean; record HEAD commit hash for precise rollback
         final headHash = (await runtime.runCommand('cd "$guestPath" && git rev-parse HEAD')).trim();
         if (headHash.isNotEmpty) {
           return 'clean-head:$headHash';
@@ -308,15 +578,13 @@ class GitService {
     if (hostPath == null) return false;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
-    
+
     try {
       await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*"');
-      
-      // 1. Discard any modifications and untracked files created by the agent
+
       await runtime.runCommand('cd "$guestPath" && git reset --hard HEAD');
       await runtime.runCommand('cd "$guestPath" && git clean -fd');
 
-      // 2. If pre-agent uncommitted work was stashed, restore it
       if (stashRef.startsWith('quantum-ide-agent-checkpoint-')) {
         final output = await runtime.runCommand('cd "$guestPath" && git stash list');
         final match = RegExp(r'(stash@\{\d+\}):.*?' + RegExp.escape(stashRef)).firstMatch(output);
@@ -342,3 +610,4 @@ class GitService {
 }
 
 final gitServiceProvider = Provider((ref) => GitService(ref));
+

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -129,10 +130,21 @@ class AIService {
       model = 'gemini-2.5-flash';
     }
 
-    // Load all keys
+    // Load all keys with fallbacks from CLI auth settings and environment
     final keys = <String, String>{};
+    final env = Platform.environment;
+    final fallbackCliKeys = <String, String?>{
+      'google': prefs.getString('cli_gemini_api_key') ?? env['GEMINI_API_KEY'] ?? env['GOOGLE_API_KEY'],
+      'openrouter': prefs.getString('cli_openrouter_api_key') ?? env['OPENROUTER_API_KEY'],
+      'deepseek': prefs.getString('cli_deepseek_api_key') ?? env['DEEPSEEK_API_KEY'],
+      'anthropic': prefs.getString('cli_anthropic_api_key') ?? env['ANTHROPIC_API_KEY'],
+      'openai': env['OPENAI_API_KEY'],
+    };
     for (final p in AiProviders.all) {
-      final k = prefs.getString('ai_key_${p.id}');
+      var k = prefs.getString('ai_key_${p.id}');
+      if (k == null || k.isEmpty) {
+        k = fallbackCliKeys[p.id];
+      }
       if (k != null && k.isNotEmpty) {
         keys[p.id] = k;
       }
@@ -209,7 +221,17 @@ class AIService {
   Future<void> setProvider(String providerId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('ai_provider_id', providerId);
-    _settings = _settings.copyWith(selectedProviderId: providerId);
+    final providerInfo = AiProviders.byId(providerId);
+    var nextModel = _settings.selectedModel;
+    if (providerInfo.defaultModels.isNotEmpty &&
+        !providerInfo.defaultModels.contains(nextModel)) {
+      nextModel = providerInfo.defaultModels.first;
+      await prefs.setString('ai_selected_model', nextModel);
+    }
+    _settings = _settings.copyWith(
+      selectedProviderId: providerId,
+      selectedModel: nextModel,
+    );
     _rebuildGemini();
     _ref?.read(genkitServiceProvider).invalidate();
   }
