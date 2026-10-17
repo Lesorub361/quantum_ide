@@ -32,16 +32,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## QuantumIDE v1.2.26 - APK Build Out-of-the-Box Fixes, Modern AAPT2 QEMU Runner & Updated IDE Packages
+        ## QuantumIDE v1.2.27 - Enhanced Mobile IDE Toolset & Developer Productivity
 
         - **Надёжная сборка Android APK «из коробки»**:
-          - Интеграция современного `aapt2` (v2.20) через `qemu-x86_64-static` с полной поддержкой Android SDK 35/36 (`compileSdk 36`).
+          - Интеграция современного `aapt2` (v2.20) через `qemu-x86_64-static` с поддержкой Android SDK 35/36 (`compileSdk 36`).
           - Автоматическая генерация валидного скрипта-обёртки `apksigner`.
-          - Исправление циклических ссылок в SDK `build-tools/36.0.0` и защита от зацикливания симлинков.
-          - Устранение принудительного занижения `compileSdk` до 35.
-        - **Обновление пакетов и плагинов**:
-          - Обновлены ключевые системные плагины (`shared_preferences`, `permission_handler`, `device_info_plus`, `package_info_plus`, `file_picker`, `sqflite`).
-          - Добавлены `android_intent_plus` (для прямой установки собранных APK) и `flutter_local_notifications`.
+          - Устранение циклических ссылок и принудительного занижения `compileSdk` до 35.
+        - **Новые инструменты мобильного разработчика**:
+          - `flutter_keyboard_visibility`: точный трекинг клавиатуры и адаптация панелей.
+          - `flutter_animate`: плавные современные микровзаимодействия и анимации интерфейса.
+          - `dartssh2`: полноценный SSH-клиент для подключения к удаленным серверам прямо из терминала.
+          - `flutter_archive`: высокоскоростная распаковка архивов проектов.
+          - `flutter_svg`: встроенный просмотр векторных иконок и графики в проводнике файлов.
+          - `flutter_json_view`: интерактивный просмотр и инспекция JSON в REST-клиенте.
+          - `hive_flutter`: быстрый локальный кэш состояния сессий и истории.
+          - `android_intent_plus` & `flutter_local_notifications`: авто-установка собранных APK и фоновые уведомления.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
