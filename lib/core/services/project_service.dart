@@ -389,6 +389,15 @@ class ProjectService extends StateNotifier<List<Project>> {
     } else if (File(p.join(path, 'index.html')).existsSync()) {
       return ProjectType.web;
     }
+    // Also check nested same-named directory
+    try {
+      final name = p.basename(path);
+      final nested = p.join(path, name);
+      if (Directory(nested).existsSync()) {
+        final nestedType = _identifyProjectType(nested);
+        if (nestedType != ProjectType.other) return nestedType;
+      }
+    } catch (_) {}
     return ProjectType.other;
   }
 

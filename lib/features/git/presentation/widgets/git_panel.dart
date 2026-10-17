@@ -1388,7 +1388,10 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
     final Color statusColor = isConflicted
         ? Colors.redAccent
         : (isStaged ? Colors.greenAccent : (isUntracked ? Colors.orangeAccent : Colors.amberAccent));
-    final diffStat = status.diffStats[path];
+    final cleanPath = path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+    final fileName = cleanPath.split('/').last;
+    final parentDir = cleanPath.contains('/') ? cleanPath.substring(0, cleanPath.lastIndexOf('/')) : '';
+    final diffStat = status.diffStats[cleanPath] ?? status.diffStats[path];
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
@@ -1403,14 +1406,14 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
           if (isConflicted) {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (context) => GitMergeConflictPage(relativePath: path),
+                builder: (context) => GitMergeConflictPage(relativePath: cleanPath),
               ),
             );
           } else {
             Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (context) => GitDiffPage(
-                  relativePath: path,
+                  relativePath: cleanPath,
                   initiallyStaged: isStaged,
                 ),
               ),
@@ -1439,7 +1442,7 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                       children: [
                         Flexible(
                           child: Text(
-                            path.split('/').last,
+                            fileName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
@@ -1475,7 +1478,7 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                       ],
                     ),
                     Text(
-                      path,
+                      parentDir.isNotEmpty ? parentDir : cleanPath,
                       style: GoogleFonts.jetBrainsMono(fontSize: 8.5, color: Colors.white38),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

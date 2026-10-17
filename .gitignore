@@ -66,3 +66,4 @@ android/keystore.properties
 
 # Local plugins vendored C++ engine and gradle caches
 local_plugins/**/.gradle/
+.local/

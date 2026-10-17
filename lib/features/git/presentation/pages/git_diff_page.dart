@@ -94,9 +94,16 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
         modifiedContent = widget.previewContent!;
       } else {
         final localFilePath = p.join(workspacePath, widget.relativePath);
+        if (await Directory(localFilePath).exists()) {
+          throw Exception('Выбранный путь является папкой. Пожалуйста, выберите файл внутри папки.');
+        }
         final file = File(localFilePath);
         if (await file.exists()) {
-          modifiedContent = await file.readAsString();
+          try {
+            modifiedContent = await file.readAsString();
+          } catch (_) {
+            modifiedContent = '[Бинарный файл или недоступен для чтения в текстовом виде]';
+          }
         }
       }
 

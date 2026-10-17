@@ -171,8 +171,32 @@ class FileExplorerNotifier extends StateNotifier<FileExplorerState> {
       final bytes = await File(zipPath).readAsBytes();
       final archive = ZipDecoder().decodeBytes(bytes);
       
+      // Detect if all archive entries share a single common root directory
+      String? singleRootDir;
       for (final file in archive) {
-        final filename = file.name;
+        final cleanName = file.name.replaceAll('\\', '/').trim();
+        final parts = cleanName.split('/').where((s) => s.isNotEmpty && s != '.').toList();
+        if (parts.isEmpty) continue;
+        final root = parts.first;
+        if (singleRootDir == null) {
+          singleRootDir = root;
+        } else if (singleRootDir != root) {
+          singleRootDir = null;
+          break;
+        }
+      }
+
+      final currentFolder = p.basename(state.currentPath);
+      final zipBase = p.basenameWithoutExtension(zipPath);
+      final shouldStrip = singleRootDir != null && (currentFolder == singleRootDir || currentFolder == zipBase);
+
+      for (final file in archive) {
+        var filename = file.name.replaceAll('\\', '/');
+        if (shouldStrip && filename.startsWith('$singleRootDir/')) {
+          filename = filename.substring(singleRootDir.length + 1);
+        }
+        if (filename.isEmpty || filename == '.') continue;
+
         final destPath = p.join(state.currentPath, filename);
         if (file.isFile) {
           final data = file.content as List<int>;

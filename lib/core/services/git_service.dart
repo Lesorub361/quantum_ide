@@ -19,6 +19,28 @@ class GitService {
   static DateTime? _lastStatusTime;
   static const Duration _statusCacheTtl = Duration(seconds: 3);
 
+  String? _resolveRepoHostPath() {
+    final workspace = ref.read(workspaceProvider);
+    final hostPath = workspace.currentPath;
+    if (hostPath == null) return null;
+
+    final parentGit = Directory(p.join(hostPath, '.git'));
+    final nested = p.join(hostPath, p.basename(hostPath));
+    final nestedGit = Directory(p.join(nested, '.git'));
+
+    if (nestedGit.existsSync()) {
+      if (!parentGit.existsSync()) {
+        return nested;
+      }
+      final parentHead = File(p.join(hostPath, '.git', 'refs', 'heads', 'main'));
+      final nestedHead = File(p.join(nested, '.git', 'refs', 'heads', 'main'));
+      if (!parentHead.existsSync() && nestedHead.existsSync()) {
+        return nested;
+      }
+    }
+    return hostPath;
+  }
+
   Future<String> _getGuestPath(String hostPath) async {
     final runtime = ref.read(runtimeServiceProvider);
     return PathMapper.mapToGuest(hostPath, runtime.appDirectory);
@@ -54,8 +76,7 @@ class GitService {
   }
 
   Future<GitStatus?> getStatus({bool forceRefresh = false}) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return null;
 
     if (!forceRefresh &&
@@ -72,28 +93,28 @@ class GitService {
       final runtime = ref.read(runtimeServiceProvider);
 
       // Run a single batched shell script to get repo check, branch, ahead/behind,
-      // porcelain status, diff stats, recent commits, tags, branches, and remote URL.
-      // This avoids spawning 7 separate shell processes on every status check!
+      // porcelain status with -uall to list all untracked files individually instead
+      // of collapsing whole folders into single entries!
       final batchCmd = [
         'cd "$guestPath" 2>/dev/null || exit 0',
         'if [ "\$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then echo "__NOT_GIT_REPO__"; exit 0; fi',
         'echo "__SECTION_BRANCH__"',
         'git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || echo "main"',
         'echo "__SECTION_AHEAD_BEHIND__"',
-        'git rev-list --left-right --count HEAD...@{u} 2>/dev/null || echo "0\t0"',
+        '(git rev-list --left-right --count HEAD...@{u} 2>/dev/null || echo "0\t0")',
         'echo "__SECTION_STATUS__"',
-        'git status --porcelain 2>/dev/null',
+        'git status --porcelain -uall 2>/dev/null',
         'echo "__SECTION_NUMSTAT__"',
-        'git diff --numstat 2>/dev/null; git diff --cached --numstat 2>/dev/null',
+        '(git diff --numstat 2>/dev/null || true; git diff --cached --numstat 2>/dev/null || true)',
         'echo "__SECTION_COMMITS__"',
-        'git log -n 35 --pretty=format:"%H\t%h\t%s\t%an\t%ar\t%D" 2>/dev/null',
+        '(git log -n 35 --pretty=format:"%H\t%h\t%s\t%an\t%ar\t%D" 2>/dev/null || true)',
         'echo ""',
         'echo "__SECTION_TAGS__"',
-        'git for-each-ref --sort=-creatordate --format="%(refname:short)\t%(objectname:short)\t%(creatordate:short)\t%(contents:subject)" refs/tags 2>/dev/null | head -n 25',
+        '(git for-each-ref --sort=-creatordate --format="%(refname:short)\t%(objectname:short)\t%(creatordate:short)\t%(contents:subject)" refs/tags 2>/dev/null | head -n 25 || true)',
         'echo "__SECTION_BRANCHES__"',
-        'git for-each-ref --format="%(refname:short)" refs/heads 2>/dev/null',
+        '(git for-each-ref --format="%(refname:short)" refs/heads 2>/dev/null || true)',
         'echo "__SECTION_REMOTE__"',
-        'git config --get remote.origin.url 2>/dev/null || true',
+        '(git config --get remote.origin.url 2>/dev/null || true)',
       ].join(' && ');
 
       final rawOut = await runtime.runCommand(batchCmd);
@@ -160,15 +181,35 @@ class GitService {
 
         const conflictStatuses = {'DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'};
         if (conflictStatuses.contains(status)) {
-          if (!conflicted.contains(file)) conflicted.add(file);
+          final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
+          if (!conflicted.contains(cleanRel)) conflicted.add(cleanRel);
         } else if (status == '??') {
-          if (!untracked.contains(file)) untracked.add(file);
+          // If file ends with '/' or is a directory on host, recursively expand it into individual files
+          final fullHostPath = p.join(hostPath, file);
+          final hostDir = Directory(fullHostPath);
+          if (file.endsWith('/') || hostDir.existsSync()) {
+            try {
+              if (hostDir.existsSync()) {
+                final subEntities = hostDir.listSync(recursive: true, followLinks: false);
+                for (final ent in subEntities) {
+                  if (ent is File) {
+                    final rel = p.relative(ent.path, from: hostPath).replaceAll('\\', '/');
+                    if (!untracked.contains(rel)) untracked.add(rel);
+                  }
+                }
+                continue;
+              }
+            } catch (_) {}
+          }
+          final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
+          if (!untracked.contains(cleanRel)) untracked.add(cleanRel);
         } else {
+          final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
           if (x != ' ' && x != '?') {
-            if (!staged.contains(file)) staged.add(file);
+            if (!staged.contains(cleanRel)) staged.add(cleanRel);
           }
           if (y != ' ' && y != '?') {
-            if (!modified.contains(file)) modified.add(file);
+            if (!modified.contains(cleanRel)) modified.add(cleanRel);
           }
         }
       }
@@ -275,20 +316,19 @@ class GitService {
   }
 
   Future<void> add(String filePath) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
 
     try {
-      await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*" && git add "$filePath"');
+      await runtime.runCommand('cd "$guestPath" && git config --global --add safe.directory "*" && git add -A -- "$filePath"');
       invalidateCache();
     } catch (e) {
       if (e.toString().contains('unable to write file') ||
           e.toString().contains('No such file or directory') ||
           e.toString().contains('fatal')) {
-        await runtime.runCommand('cd "$guestPath" && mkdir -p .git/objects && git init && git config --global --add safe.directory "*" && git add "$filePath"');
+        await runtime.runCommand('cd "$guestPath" && mkdir -p .git/objects && git init && git config --global --add safe.directory "*" && git add -A -- "$filePath"');
         invalidateCache();
       } else {
         rethrow;
@@ -297,8 +337,7 @@ class GitService {
   }
 
   Future<void> stageAll() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git add -A');
@@ -306,8 +345,7 @@ class GitService {
   }
 
   Future<void> unstage(String filePath) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -316,8 +354,7 @@ class GitService {
   }
 
   Future<void> unstageAll() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -326,8 +363,7 @@ class GitService {
   }
 
   Future<void> commit(String message, {bool amend = false}) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final escaped = message.replaceAll('"', '\\"');
@@ -346,8 +382,7 @@ class GitService {
   }
 
   Future<void> push() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -358,8 +393,7 @@ class GitService {
   }
 
   Future<void> createTag(String tagName, String message) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final escapedMsg = message.replaceAll('"', '\\"');
@@ -371,8 +405,7 @@ class GitService {
   }
 
   Future<void> deleteTag(String tagName) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -381,8 +414,7 @@ class GitService {
   }
 
   Future<void> pushWithTags() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -393,8 +425,7 @@ class GitService {
   }
 
   Future<void> checkoutBranch(String branchName, {bool createNew = false}) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final flag = createNew ? '-b ' : '';
@@ -403,8 +434,7 @@ class GitService {
   }
 
   Future<String> getCommitDetails(String commitHash) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return '';
     final guestPath = await _getGuestPath(hostPath);
 
@@ -418,8 +448,7 @@ class GitService {
   }
 
   Future<String> getFileDiff(String relativePath, {bool staged = false}) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return '';
     final guestPath = await _getGuestPath(hostPath);
 
@@ -438,8 +467,7 @@ class GitService {
   }
 
   Future<String?> getRemoteUrl() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return null;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -452,8 +480,7 @@ class GitService {
   }
 
   Future<void> pull() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -462,8 +489,7 @@ class GitService {
   }
 
   Future<void> stashSave([String? message]) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final msgPart = (message != null && message.trim().isNotEmpty)
@@ -474,8 +500,7 @@ class GitService {
   }
 
   Future<void> stashPop() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git stash pop');
@@ -483,8 +508,7 @@ class GitService {
   }
 
   Future<void> initRepo() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath() ?? ref.read(workspaceProvider).currentPath;
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
@@ -494,8 +518,7 @@ class GitService {
   }
 
   Future<String> getFileContentFromGit(String relativePath) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return '';
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
@@ -510,8 +533,7 @@ class GitService {
   }
 
   Future<void> discardChanges(String relativePath) async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
@@ -525,8 +547,7 @@ class GitService {
   }
 
   Future<void> discardAllChanges() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
@@ -540,8 +561,7 @@ class GitService {
   }
 
   Future<String?> createAgentCheckpoint() async {
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return null;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
@@ -573,8 +593,7 @@ class GitService {
 
   Future<bool> rollbackAgentCheckpoint(String? stashRef) async {
     if (stashRef == null) return false;
-    final workspace = ref.read(workspaceProvider);
-    final hostPath = workspace.currentPath;
+    final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return false;
     final guestPath = await _getGuestPath(hostPath);
     final runtime = ref.read(runtimeServiceProvider);
