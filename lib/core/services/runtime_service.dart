@@ -1481,11 +1481,11 @@ if [ -d "$SDK_ROOT" ]; then
 
     # Build tools
     for bt in "$SDK_ROOT/build-tools/"*; do
-        if [ -d "$bt" ]; then
-            [ ! -L "$bt/aapt" ] && ln -sf /usr/bin/aapt "$bt/aapt"
-            [ ! -L "$bt/aapt2" ] && ln -sf /usr/bin/aapt2 "$bt/aapt2"
-            [ ! -L "$bt/zipalign" ] && ln -sf /usr/bin/zipalign "$bt/zipalign"
-            [ ! -L "$bt/apksigner" ] && ln -sf /usr/bin/apksigner "$bt/apksigner"
+        if [ -d "$bt" ] && [ "$bt" != "$SDK_ROOT/build-tools/debian" ]; then
+            [ -f /usr/bin/aapt ] && [ ! -L /usr/bin/aapt ] && ln -sf /usr/bin/aapt "$bt/aapt"
+            [ -f /usr/bin/aapt2 ] && [ ! -L /usr/bin/aapt2 ] && ln -sf /usr/bin/aapt2 "$bt/aapt2"
+            [ -f /usr/bin/zipalign ] && [ ! -L /usr/bin/zipalign ] && ln -sf /usr/bin/zipalign "$bt/zipalign"
+            [ -f /usr/bin/apksigner ] && [ ! -L /usr/bin/apksigner ] && ln -sf /usr/bin/apksigner "$bt/apksigner"
         fi
     done
 
@@ -1647,38 +1647,31 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 \( -name "settings.gradle
     sed -i -E "s/id\s+'org.jetbrains.kotlin.android'\s+version\s+'[^']+'/id 'org.jetbrains.kotlin.android' version '2.2.20'/g" "$f"
 done
 
-# Patch build.gradle.kts and build.gradle inside app module to force compileSdk and targetSdk to 35
-find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 5 \( -name "build.gradle.kts" -o -name "build.gradle" \) 2>/dev/null | while read f; do
-    if [[ "$f" == *"/app/build.gradle"* ]]; then
-        # Force compileSdk to 35 if it is set to flutter.compileSdkVersion or 36 or greater
-        sed -i -E 's/compileSdk\s*=\s*(flutter\.compileSdkVersion|[3-9][6-9])/compileSdk = 35/g' "$f"
-        sed -i -E 's/compileSdkVersion\s+(flutter\.compileSdkVersion|[3-9][6-9])/compileSdkVersion 35/g' "$f"
-        sed -i -E 's/compileSdkVersion\s*=\s*(flutter\.compileSdkVersion|[3-9][6-9])/compileSdkVersion = 35/g' "$f"
-        
-        # Force targetSdk to 35 if it is set to flutter.targetSdkVersion or 36 or greater
-        sed -i -E 's/targetSdk\s*=\s*(flutter\.targetSdkVersion|[3-9][6-9])/targetSdk = 35/g' "$f"
-        sed -i -E 's/targetSdkVersion\s+(flutter\.targetSdkVersion|[3-9][6-9])/targetSdkVersion 35/g' "$f"
-        sed -i -E 's/targetSdkVersion\s*=\s*(flutter\.targetSdkVersion|[3-9][6-9])/targetSdkVersion = 35/g' "$f"
+# Ensure modern aapt2 wrapper via QEMU is present and functional (supports Android 35/36+)
+if [ -f /usr/local/lib/aapt2-bin ] && [ -x /usr/bin/qemu-x86_64-static ]; then
+    if [ ! -f /usr/bin/aapt2 ] || [ -L /usr/bin/aapt2 ] || ! grep -q "qemu-x86_64-static" /usr/bin/aapt2 2>/dev/null; then
+        rm -f /usr/bin/aapt2
+        cat << 'AAPT2_EOF' > /usr/bin/aapt2
+#!/bin/sh
+if [ "$1" = "version" ]; then
+    exec /usr/bin/qemu-x86_64-static /usr/local/lib/aapt2-bin "$@" 2>&1
+fi
+exec /usr/bin/qemu-x86_64-static /usr/local/lib/aapt2-bin "$@"
+AAPT2_EOF
+        chmod +x /usr/bin/aapt2
     fi
-done
+fi
 
-# Upgrade aapt2 to a modern statically-linked arm64 binary if it is the old Debian package version.
-# This prevents RES_TABLE_TYPE_TYPE resource table errors on compileSdk >= 35.
-if [ -f /usr/bin/aapt2 ] && /usr/bin/aapt2 version 2>/dev/null | grep -q "debian"; then
-    echo "Upgrading aapt2 to modern ARM64 binary..."
-    mkdir -p /tmp/aapt2_download
-    if curl -L -o /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a; then
-        chmod +x /tmp/aapt2_download/aapt2
-        mv /tmp/aapt2_download/aapt2 /usr/bin/aapt2
-        echo "aapt2 successfully upgraded."
-    elif wget -O /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a; then
-        chmod +x /tmp/aapt2_download/aapt2
-        mv /tmp/aapt2_download/aapt2 /usr/bin/aapt2
-        echo "aapt2 successfully upgraded."
-    else
-        echo "Warning: Failed to download modern aapt2. Project builds using compileSdk >= 35 may fail."
+# Ensure apksigner wrapper is present
+if [ -f /usr/lib/android-sdk/build-tools/debian/apksigner.jar ]; then
+    if [ ! -f /usr/bin/apksigner ] || [ -L /usr/bin/apksigner ] || ! grep -q "apksigner.jar" /usr/bin/apksigner 2>/dev/null; then
+        rm -f /usr/bin/apksigner
+        cat << 'APKSIGNER_EOF' > /usr/bin/apksigner
+#!/bin/sh
+exec /usr/lib/jvm/java-17-openjdk-arm64/bin/java -jar /usr/lib/android-sdk/build-tools/debian/apksigner.jar "$@"
+APKSIGNER_EOF
+        chmod +x /usr/bin/apksigner
     fi
-    rm -rf /tmp/aapt2_download
 fi
 
 # 3. AAPT2 background overwrite (for those in .gradle cache)
@@ -1757,23 +1750,11 @@ SDK_ROOT="/root/android-sdk"
 # Symlink SDK build-tools to native tools on the fly
 if [ -d "$SDK_ROOT/build-tools" ]; then
     for bt in "$SDK_ROOT/build-tools/"*; do
-        if [ -d "$bt" ]; then
-            if [ -f "$bt/aapt2" ] && [ ! -L "$bt/aapt2" ]; then
-                rm -f "$bt/aapt2"
-                ln -sf /usr/bin/aapt2 "$bt/aapt2"
-            fi
-            if [ -f "$bt/aapt" ] && [ ! -L "$bt/aapt" ]; then
-                rm -f "$bt/aapt"
-                ln -sf /usr/bin/aapt "$bt/aapt"
-            fi
-            if [ -f "$bt/zipalign" ] && [ ! -L "$bt/zipalign" ]; then
-                rm -f "$bt/zipalign"
-                ln -sf /usr/bin/zipalign "$bt/zipalign"
-            fi
-            if [ -f "$bt/apksigner" ] && [ ! -L "$bt/apksigner" ]; then
-                rm -f "$bt/apksigner"
-                ln -sf /usr/bin/apksigner "$bt/apksigner"
-            fi
+        if [ -d "$bt" ] && [ "$bt" != "$SDK_ROOT/build-tools/debian" ]; then
+            [ -f /usr/bin/aapt2 ] && [ ! -L /usr/bin/aapt2 ] && ln -sf /usr/bin/aapt2 "$bt/aapt2"
+            [ -f /usr/bin/aapt ] && [ ! -L /usr/bin/aapt ] && ln -sf /usr/bin/aapt "$bt/aapt"
+            [ -f /usr/bin/zipalign ] && [ ! -L /usr/bin/zipalign ] && ln -sf /usr/bin/zipalign "$bt/zipalign"
+            [ -f /usr/bin/apksigner ] && [ ! -L /usr/bin/apksigner ] && ln -sf /usr/bin/apksigner "$bt/apksigner"
         fi
     done
 fi

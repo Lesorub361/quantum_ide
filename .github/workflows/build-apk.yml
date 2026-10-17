@@ -32,22 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## QuantumIDE v1.2.25 - OpenRouter Free Models, Agent Context Memory, Android APK Build Fixes & In-Chat Agent Updates
+        ## QuantumIDE v1.2.26 - APK Build Out-of-the-Box Fixes, Modern AAPT2 QEMU Runner & Updated IDE Packages
 
-        - **Каталог моделей OpenRouter и квоты**:
-          - Полноценный модальный каталог моделей с онлайн-подгрузкой и оффлайн-кэшем 16 бесплатных моделей (1M+ контекст, рассуждения, код).
-          - Отображение баланса аккаунта, лимита и остатка бесплатных суточных запросов (1000/день).
-          - Быстрые фильтры, карточки параметров и ввод кастомных slug.
-        - **Память и контекст диалога агентов**:
-          - Передача `<conversation_history>` в CLI-агенты (DeepSeek Harness, Claude Code, Antigravity) — агент помнит предыдущие реплики и файлы сессии.
-        - **Обновление агентов из интерфейса чата**:
-          - Слэш-команда `/update` в поле ввода чата.
-          - Автоматический бейдж доступного обновления в шапке панели чата с 1-клик обновлением.
-        - **Беспроблемная сборка Android APK**:
-          - Глобальный Gradle init-скрипт с нативным ARM64 AAPT2 оверрайдом.
-          - Автоматическое определение и установка debug APK.
-        - **Отказоустойчивость и независимость**:
-          - Мульти-зеркальный fallback для базового образа Ubuntu.
+        - **Надёжная сборка Android APK «из коробки»**:
+          - Интеграция современного `aapt2` (v2.20) через `qemu-x86_64-static` с полной поддержкой Android SDK 35/36 (`compileSdk 36`).
+          - Автоматическая генерация валидного скрипта-обёртки `apksigner`.
+          - Исправление циклических ссылок в SDK `build-tools/36.0.0` и защита от зацикливания симлинков.
+          - Устранение принудительного занижения `compileSdk` до 35.
+        - **Обновление пакетов и плагинов**:
+          - Обновлены ключевые системные плагины (`shared_preferences`, `permission_handler`, `device_info_plus`, `package_info_plus`, `file_picker`, `sqflite`).
+          - Добавлены `android_intent_plus` (для прямой установки собранных APK) и `flutter_local_notifications`.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
