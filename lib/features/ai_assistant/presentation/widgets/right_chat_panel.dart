@@ -25,6 +25,7 @@ import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/agent_activity_widgets.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/cli_agent_model_picker_dialog.dart';
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
 import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
@@ -137,6 +138,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
       {'cmd': '/explain', 'desc': 'Объяснить код открытого файла'},
       {'cmd': '/fix', 'desc': 'Найти и исправить ошибки в активном файле'},
       {'cmd': '/init', 'desc': 'Создать конфигурацию .quantum/AGENTS.md'},
+      {'cmd': '/update', 'desc': 'Обновить CLI агенты (DeepSeek Harness, Claude, Antigravity)'},
     ];
     
     final query = _aiChatController.text.substring(1).toLowerCase();
@@ -518,42 +520,33 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   }
 
   void _showCliAgentModelPicker(BuildContext context, WidgetRef ref, AgentKind kind) {
-    List<String> models;
-    switch (kind) {
-      case AgentKind.antigravity:
-        models = [
-          'gemini-3.8-flash-high',
-          'gemini-3.8-flash-medium',
-          'gemini-3.8-flash-low',
-          'gemini-3.7-flash-high',
-          'gemini-3.1-pro-high',
-          'claude-sonnet-4-6',
-          'claude-opus-4-6-thinking',
-          'gpt-oss-120b-medium',
-        ];
-        break;
-      case AgentKind.claudeCode:
-        models = [
-          'claude-3-7-sonnet-20250219',
-          'claude-3-5-sonnet-20241022',
-          'claude-3-5-haiku-20241022',
-          'anthropic/claude-3.7-sonnet',
-          'deepseek/deepseek-chat',
-        ];
-        break;
-      case AgentKind.deepseekHarness:
-        models = [
-          'deepseek-chat',
-          'deepseek-reasoner',
-          'google/gemma-4-31b-it:free',
-          'meta-llama/llama-3.3-70b-instruct',
-        ];
-        break;
-      case AgentKind.native:
-        return;
-    }
+    if (kind == AgentKind.native) return;
 
     final currentModel = ref.read(activeAiModelProvider);
+
+    // Open rich OpenRouter catalog modal for DeepSeek Harness & Claude Code
+    if (kind == AgentKind.deepseekHarness || kind == AgentKind.claudeCode) {
+      CliAgentModelPickerDialog.show(
+        context,
+        kind: kind,
+        currentModel: currentModel,
+        onSelected: (modelId) {
+          ref.read(activeAiModelProvider.notifier).state = modelId;
+        },
+      );
+      return;
+    }
+
+    final models = [
+      'gemini-3.8-flash-high',
+      'gemini-3.8-flash-medium',
+      'gemini-3.8-flash-low',
+      'gemini-3.7-flash-high',
+      'gemini-3.1-pro-high',
+      'claude-sonnet-4-6',
+      'claude-opus-4-6-thinking',
+      'gpt-oss-120b-medium',
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -688,6 +681,113 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   ],
                 ),
               ),
+            ),
+            Builder(
+              builder: (ctx) {
+                final cliInstaller = ref.watch(cliInstallerProvider);
+                final updateInfo = cliInstaller.availableUpdates[agentKind];
+                final hasUpdate = updateInfo?.hasUpdate ?? false;
+                final isUpdating = cliInstaller.installingAgent == agentKind;
+
+                if (isUpdating) {
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 5),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.cyanAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 8,
+                            height: 8,
+                            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.cyanAccent),
+                          ),
+                          const SizedBox(width: 4),
+                          Text('Обновление...', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.cyanAccent)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                if (hasUpdate && updateInfo != null) {
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 5),
+                    child: InkWell(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (dCtx) => AlertDialog(
+                            backgroundColor: const Color(0xFF131824),
+                            title: Row(
+                              children: [
+                                const Icon(LucideIcons.arrow_up, color: Colors.amberAccent, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Обновление ${agentKind.title}',
+                                  style: GoogleFonts.inter(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            content: Text(
+                              'Доступна новая версия v${updateInfo.latestVersion} (текущая: v${updateInfo.currentVersion}). Обновить сейчас?',
+                              style: GoogleFonts.inter(fontSize: 13, color: Colors.white70),
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(dCtx),
+                                child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+                              ),
+                              ElevatedButton(
+                                style: ElevatedButton.styleFrom(backgroundColor: agentKind.brandColor),
+                                onPressed: () {
+                                  Navigator.pop(dCtx);
+                                  ref.read(cliInstallerProvider.notifier).installOrUpdateAgent(agentKind);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Обновление ${agentKind.title} до v${updateInfo.latestVersion} запущено...')),
+                                  );
+                                },
+                                child: const Text('Обновить', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.amberAccent.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.arrow_up, size: 10, color: Colors.amberAccent),
+                            const SizedBox(width: 3),
+                            Text(
+                              'v${updateInfo.latestVersion}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amberAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return const SizedBox.shrink();
+              },
             ),
           ] else ...[
             // 1. Universal Provider Selector Dropdown Chip with all providers
@@ -2368,6 +2468,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Контекст очищен. Начата новая сессия.'), duration: Duration(seconds: 1)),
         );
+        return;
+      }
+
+      if (lowerVal == '/update' || lowerVal == '/upgrade') {
+        _aiChatController.clear();
+        final currentKind = ref.read(aiProvider).activeAgentKind;
+        CliAgentSettingsDialog.show(context, initialKind: currentKind);
         return;
       }
 

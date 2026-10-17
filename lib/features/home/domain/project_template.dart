@@ -507,6 +507,7 @@ android.nonTransitiveRClass=true
 org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
 org.gradle.daemon=false
 org.gradle.parallel=false
+org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
 ''',
           'app/build.gradle.kts': '''plugins {
     id("com.android.application")
@@ -648,6 +649,7 @@ android.nonTransitiveRClass=true
 org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
 org.gradle.daemon=false
 org.gradle.parallel=false
+org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
 ''',
           'app/build.gradle.kts': '''plugins {
     id("com.android.application")

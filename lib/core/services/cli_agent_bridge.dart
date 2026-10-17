@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/agent_activity_item.dart';
+import 'package:quantum_ide/models/chat_message.dart';
 import 'package:quantum_ide/core/services/local_format_gateway.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_checkpoints_service.dart';
@@ -83,6 +84,7 @@ class CliAgentBridge {
           '/root/.local/bin/dsh',
           '/usr/local/lib/nodejs/bin/dsh',
           '/usr/local/lib/dsh/node_modules/.bin/dsh',
+          '/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh/lib/bin.js',
           '/usr/local/lib/nodejs/bin/deepseek-harness',
           '/usr/local/bin/deepseek-harness',
           p.join(home, '.local', 'bin', 'deepseek-harness'),
@@ -305,6 +307,7 @@ class CliAgentBridge {
     required AgentKind agentKind,
     String? model,
     String? apiKey,
+    List<ChatMessage>? conversationHistory,
     required void Function(ActivityItem item) onActivity,
     required void Function(String textDelta) onDeltaText,
     required void Function(String thinking) onThinking,
@@ -340,7 +343,14 @@ class CliAgentBridge {
     final guestProjectPath = (Platform.isAndroid || Platform.isIOS) && projectPath.isNotEmpty
         ? PathMapper.mapToGuest(projectPath, _runtime.appDirectory)
         : projectPath;
-    final commandArgs = _buildCommand(agentKind, prompt, model, isGeminiCli: isGeminiCli, projectPath: guestProjectPath);
+    final commandArgs = _buildCommand(
+      agentKind,
+      prompt,
+      model,
+      isGeminiCli: isGeminiCli,
+      projectPath: guestProjectPath,
+      conversationHistory: conversationHistory,
+    );
 
     debugPrint('CliAgentBridge: Launching $binaryPath in $guestProjectPath with args: $commandArgs');
 
@@ -400,7 +410,7 @@ class CliAgentBridge {
                 targetModel: targetModel,
                 extraHeaders: apiKey.startsWith('sk-or-')
                     ? {
-                        'HTTP-Referer': 'https://github.com/techjarves/Mobile-Harness',
+                        'HTTP-Referer': 'https://github.com/Lesorub361/quantum_ide',
                         'X-Title': 'QuantumIDE Mobile',
                       }
                     : {},
@@ -441,12 +451,23 @@ class CliAgentBridge {
         final dshHome = p.join(home, '.dsh');
         env['DSH_HOME'] = dshHome;
 
-        final m = (model != null && model.isNotEmpty) ? model : 'google/gemma-4-31b-it:free';
-        if (apiKey != null && apiKey.isNotEmpty && apiKey.startsWith('sk-or-')) {
-          env['OPENROUTER_API_KEY'] = apiKey;
-          try {
-            final patchFile = File(p.join(dshHome, 'profiles', 'headless', 'cordis.patch.yml'));
-            patchFile.parent.createSync(recursive: true);
+        final isOrKey = apiKey != null && apiKey.isNotEmpty && apiKey.startsWith('sk-or-');
+        final isOrModel = model != null && model.contains('/');
+        final isOpenRouter = isOrKey || isOrModel;
+
+        final m = (model != null && model.isNotEmpty)
+            ? model
+            : (isOpenRouter ? 'deepseek/deepseek-r1:free' : 'deepseek-chat');
+
+        try {
+          final patchFile = File(p.join(dshHome, 'profiles', 'headless', 'cordis.patch.yml'));
+          patchFile.parent.createSync(recursive: true);
+
+          final settingsFile = File(p.join(dshHome, 'settings.yaml'));
+          settingsFile.parent.createSync(recursive: true);
+
+          if (isOpenRouter) {
+            env['OPENROUTER_API_KEY'] = apiKey ?? '';
             patchFile.writeAsStringSync('''
 - id: agent-default-model
   name: "@deepseek-ai/dsh-agent-default-model"
@@ -464,9 +485,38 @@ class CliAgentBridge {
         models:
           - id: $m
 ''');
-          } catch (_) {}
-        } else if (apiKey != null && apiKey.isNotEmpty) {
-          env['DEEPSEEK_API_KEY'] = apiKey;
+            settingsFile.writeAsStringSync('''
+agent-default-model:
+  provider: openrouter
+  model: '$m'
+llm-pi-ai:
+  providers:
+    openrouter:
+      apiKeyEnv: OPENROUTER_API_KEY
+      api: openai-completions
+      baseURL: 'https://openrouter.ai/api/v1'
+      models:
+        - id: '$m'
+''');
+          } else {
+            if (apiKey != null && apiKey.isNotEmpty) {
+              env['DEEPSEEK_API_KEY'] = apiKey;
+            }
+            patchFile.writeAsStringSync('''
+- id: agent-default-model
+  name: "@deepseek-ai/dsh-agent-default-model"
+  config:
+    provider: deepseek-official
+    model: $m
+''');
+            settingsFile.writeAsStringSync('''
+agent-default-model:
+  provider: deepseek-official
+  model: '$m'
+''');
+          }
+        } catch (e) {
+          debugPrint('CliAgentBridge: Warning writing dsh profile patch: $e');
         }
       } else if (agentKind == AgentKind.antigravity) {
         env.remove('SSH_CONNECTION');
@@ -526,13 +576,20 @@ class CliAgentBridge {
             } else {
               final trimmed = line.trim();
               if (trimmed.isEmpty || trimmed.startsWith('bash: warning:')) return;
-              if (trimmed.toLowerCase().contains('reasoning') || trimmed.toLowerCase().contains('thinking')) {
+              if (trimmed.startsWith('dsh:')) {
+                if (trimmed.startsWith('dsh: reasoning:')) {
+                  onThinking(trimmed.replaceFirst(RegExp(r'^dsh:\s*reasoning:\s*'), ''));
+                } else if (trimmed.startsWith('dsh: warning:')) {
+                  debugPrint('DSH Warning: $trimmed');
+                } else {
+                  debugPrint('CliAgentBridge PRoot DSH STDERR: $trimmed');
+                  lastErrorMessage = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '');
+                }
+              } else if (trimmed.toLowerCase().contains('reasoning') || trimmed.toLowerCase().contains('thinking')) {
                 onThinking(trimmed);
               } else {
                 debugPrint('CliAgentBridge PRoot STDERR: $trimmed');
-                if (trimmed.startsWith('dsh:')) {
-                  lastErrorMessage = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '');
-                } else if (trimmed.toLowerCase().contains('error') || trimmed.toLowerCase().contains('failed')) {
+                if (trimmed.toLowerCase().contains('error') || trimmed.toLowerCase().contains('failed')) {
                   lastErrorMessage = trimmed;
                 }
               }
@@ -579,13 +636,20 @@ class CliAgentBridge {
           final trimmed = line.trim();
           if (trimmed.isEmpty || trimmed.startsWith('bash: warning:')) return;
 
-          if (trimmed.toLowerCase().contains('reasoning') || trimmed.toLowerCase().contains('thinking')) {
+          if (trimmed.startsWith('dsh:')) {
+            if (trimmed.startsWith('dsh: reasoning:')) {
+              onThinking(trimmed.replaceFirst(RegExp(r'^dsh:\s*reasoning:\s*'), ''));
+            } else if (trimmed.startsWith('dsh: warning:')) {
+              debugPrint('DSH Warning: $trimmed');
+            } else {
+              debugPrint('CliAgentBridge DSH STDERR: $trimmed');
+              lastErrorMessage = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '');
+            }
+          } else if (trimmed.toLowerCase().contains('reasoning') || trimmed.toLowerCase().contains('thinking')) {
             onThinking(trimmed);
           } else {
             debugPrint('CliAgentBridge STDERR: $trimmed');
-            if (trimmed.startsWith('dsh:')) {
-              lastErrorMessage = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '');
-            } else if (trimmed.toLowerCase().contains('error') || trimmed.toLowerCase().contains('failed')) {
+            if (trimmed.toLowerCase().contains('error') || trimmed.toLowerCase().contains('failed')) {
               lastErrorMessage = trimmed;
             }
           }
@@ -664,7 +728,14 @@ class CliAgentBridge {
     if (line.trim().isEmpty) return;
 
     if (line.startsWith('dsh:')) {
-      final msg = line.replaceFirst(RegExp(r'^dsh:\s*'), '').trim();
+      final trimmed = line.trim();
+      if (trimmed.startsWith('dsh: reasoning:')) {
+        onThinking(trimmed.replaceFirst(RegExp(r'^dsh:\s*reasoning:\s*'), ''));
+        return;
+      } else if (trimmed.startsWith('dsh: warning:')) {
+        return;
+      }
+      final msg = trimmed.replaceFirst(RegExp(r'^dsh:\s*'), '').trim();
       onErrorDetected?.call(msg);
       return;
     }
@@ -675,21 +746,74 @@ class CliAgentBridge {
       final type = json['type'] as String?;
 
       // DeepSeek Harness JSON events
-      if (type == 'delta') {
+      if (type == 'text' || type == 'delta') {
         final text = json['text'] as String?;
         if (text != null && text.isNotEmpty) {
           onDeltaText(text);
           return;
         }
-      } else if (type == 'final') {
+      } else if (type == 'thinking') {
         final text = json['text'] as String?;
-        if (!hasStreamedText && text != null && text.isNotEmpty) {
-          onDeltaText(text);
+        if (text != null && text.isNotEmpty) {
+          onThinking(text);
+          return;
         }
+      } else if (type == 'tool_call') {
+        final tool = json['tool'] as String? ?? 'Tool';
+        final input = json['input'];
+        final displayName = _mapToolDisplayName(tool);
+        String detail = '';
+        String? targetFile;
+        String? instruction;
+        String? targetContent;
+        String? replacementContent;
+        if (input is Map<String, dynamic>) {
+          targetFile = input['path'] as String? ?? input['file_path'] as String?;
+          instruction = input['command'] as String? ?? input['query'] as String? ?? input['pattern'] as String?;
+          targetContent = input['target'] as String? ?? input['old_string'] as String?;
+          replacementContent = input['replacement'] as String? ?? input['new_string'] as String? ?? input['content'] as String?;
+          detail = _extractToolDetail({'tool_info': {'parameters': input}}, tool, targetFile: targetFile, instruction: instruction);
+        } else if (input != null) {
+          detail = input.toString();
+        }
+        onActivity(ActivityItem(
+          title: displayName,
+          detail: detail.isNotEmpty ? detail : displayName,
+          isComplete: false,
+          isCommand: tool.toLowerCase().contains('bash') || tool.toLowerCase().contains('command'),
+          targetFile: targetFile,
+          instruction: instruction,
+          targetContent: targetContent,
+          replacementContent: replacementContent,
+        ));
+        return;
+      } else if (type == 'tool_result') {
+        final status = json['status'] as String? ?? 'completed';
+        final result = json['result']?.toString() ?? '';
+        final isError = status == 'error';
+        final summary = result.length > 200 ? '${result.substring(0, 197)}...' : result;
+        onActivity(ActivityItem(
+          title: isError ? 'Tool Error' : 'Tool Result',
+          detail: summary.isNotEmpty ? summary : (isError ? 'Команда завершилась с ошибкой' : 'Выполнено'),
+          isComplete: true,
+          output: result.isNotEmpty ? result : null,
+        ));
         return;
       } else if (type == 'status') {
         final phase = json['phase'] as String?;
-        if (phase == 'turn_end') {
+        if (phase == 'turn_start') {
+          final turn = json['turn'];
+          onActivity(ActivityItem(
+            title: 'DeepSeek',
+            detail: 'Шаг $turn: планирование и выполнение...',
+            isComplete: false,
+          ));
+        } else if (phase == 'step_end') {
+          final usage = json['usage'] as Map<String, dynamic>?;
+          if (usage != null && onUsage != null) {
+            onUsage(usage);
+          }
+        } else if (phase == 'turn_end') {
           final reason = json['reason'] as Map<String, dynamic>?;
           if (reason?['kind'] == 'error') {
             final err = reason?['error'] as Map<String, dynamic>?;
@@ -698,7 +822,14 @@ class CliAgentBridge {
           }
         }
         return;
+      } else if (type == 'final') {
+        final text = json['text'] as String?;
+        if (!hasStreamedText && text != null && text.isNotEmpty) {
+          onDeltaText(text);
+        }
+        return;
       }
+
 
       // Claude Code / Antigravity error detection
       if (json['is_error'] == true || json['error'] != null) {
@@ -820,23 +951,44 @@ class CliAgentBridge {
     switch (name.toLowerCase()) {
       case 'run_command':
       case 'bash':
+      case 'shell':
         return 'Bash';
       case 'write_to_file':
       case 'replace_file_content':
       case 'multi_replace_file_content':
       case 'write':
       case 'edit':
+      case 'fs_write':
+      case 'fs_edit':
         return 'Write';
       case 'view_file':
       case 'read':
+      case 'fs_read':
         return 'Read';
       case 'list_dir':
+      case 'fs_dir':
         return 'List files';
       case 'grep_search':
       case 'search_files':
       case 'grep':
       case 'glob':
+      case 'fs_grep':
+      case 'fs_glob':
+      case 'fs_search':
         return 'Search';
+      case 'web_search':
+        return 'Web search';
+      case 'web_fetch':
+        return 'Web fetch';
+      case 'subagent':
+      case 'subagent_fork':
+        return 'Subagent';
+      case 'todo_write':
+      case 'todo':
+        return 'Todo';
+      case 'exit_plan_mode':
+      case 'plan':
+        return 'Plan';
       default:
         return name.replaceAll('_', ' ').replaceFirstChar((c) => c.toUpperCase());
     }
@@ -874,15 +1026,55 @@ class CliAgentBridge {
     return '';
   }
 
-  List<String> _buildCommand(AgentKind kind, String prompt, String? model, {bool isGeminiCli = false, String projectPath = ''}) {
-    final workspacePrompt = projectPath.isNotEmpty
-        ? '<project_workspace>\n'
-          'The active project workspace is $projectPath.\n'
-          'Create, edit, read, run, and build project files directly in this directory.\n'
-          'Do not create project output under scratch or outer directories.\n'
-          'When giving commands to the user, make them runnable from this project root.\n'
-          '</project_workspace>\n\n$prompt'
-        : prompt;
+  List<String> _buildCommand(
+    AgentKind kind,
+    String prompt,
+    String? model, {
+    bool isGeminiCli = false,
+    String projectPath = '',
+    List<ChatMessage>? conversationHistory,
+  }) {
+    final sb = StringBuffer();
+
+    if (projectPath.isNotEmpty) {
+      sb.writeln('<project_workspace>');
+      sb.writeln('The active project workspace is $projectPath.');
+      sb.writeln('Create, edit, read, run, and build project files directly in this directory.');
+      sb.writeln('Do not create project output under scratch or outer directories.');
+      sb.writeln('When giving commands to the user, make them runnable from this project root.');
+      sb.writeln('</project_workspace>');
+      sb.writeln();
+    }
+
+    if (conversationHistory != null && conversationHistory.isNotEmpty) {
+      final relevant = conversationHistory
+          .where((m) => m.content.trim().isNotEmpty)
+          .toList();
+      final recent = relevant.length > 10
+          ? relevant.sublist(relevant.length - 10)
+          : relevant;
+
+      if (recent.isNotEmpty) {
+        sb.writeln('<conversation_history>');
+        sb.writeln('The following is our prior conversation in this project. Continue naturally from where we left off.');
+        sb.writeln();
+        for (final m in recent) {
+          final role = m.role == MessageRole.user ? 'User' : 'Assistant';
+          var text = m.content.trim();
+          if (text.length > 2000) {
+            text = '${text.substring(0, 1950)}\n...(truncated prior output)...';
+          }
+          sb.writeln('$role: $text');
+          sb.writeln();
+        }
+        sb.writeln('</conversation_history>');
+        sb.writeln();
+        sb.writeln('Now, respond to this new message from the user:');
+      }
+    }
+
+    sb.write(prompt);
+    final workspacePrompt = sb.toString();
 
     switch (kind) {
       case AgentKind.native:

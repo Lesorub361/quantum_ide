@@ -37,8 +37,10 @@ class RuntimeService extends ChangeNotifier {
   final List<Completer<void>> _commandQueue = [];
 
   // High-performance pre-built ARM64 Core rootfs (Ubuntu + Node.js 24 + Git + npm)
-  static const _rootfsUrl =
-      'https://github.com/techjarves/Mobile-Harness/releases/download/runtime-2026.09.4/pocketdev-core-arm64-2026.09.5.tar.zst';
+  static const List<String> _rootfsUrls = [
+    'https://github.com/Lesorub361/quantum_ide/releases/download/v1.0.0/pocketdev-core-arm64-2026.09.5.tar.zst',
+    'https://github.com/techjarves/Mobile-Harness/releases/download/runtime-2026.09.4/pocketdev-core-arm64-2026.09.5.tar.zst',
+  ];
 
   bool _isInitializing = false;
 
@@ -447,6 +449,12 @@ class RuntimeService extends ChangeNotifier {
       debugPrint('Warning: Failed to write setup-arm64.sh: $e');
     }
 
+    try {
+      await _ensureAndroidLicenses();
+    } catch (e) {
+      debugPrint('Warning: Failed to ensure android licenses: $e');
+    }
+
       // Enhanced .bashrc with robust PATH, Ubuntu prompt and greeting
       // Written if missing OR if version tag has changed (to push updates to users)
     final bashrc = File(
@@ -454,7 +462,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '12';
+    const bashrcVersion = '13';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -492,19 +500,27 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=12
+# BASHRC_VERSION=13
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
-# Dynamically detect JAVA_HOME inside guest
+# Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
 if [ -d "/root/jdk-17" ]; then
     export JAVA_HOME="/root/jdk-17"
+elif [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
+    export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
+elif [ -d "/usr/lib/jvm/java-21-openjdk-arm64" ]; then
+    export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-arm64"
 else
-    DETECTED_JVM=$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)
+    DETECTED_JVM=$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | grep -E '17|21' | head -n 1)
+    [ -z "$DETECTED_JVM" ] && DETECTED_JVM=$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)
     if [ -n "$DETECTED_JVM" ]; then
         export JAVA_HOME="$DETECTED_JVM"
     else
         export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
     fi
+fi
+if command -v flutter >/dev/null 2>&1 && [ -d "$JAVA_HOME" ]; then
+    flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1 || true
 fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
@@ -727,15 +743,24 @@ fi
         const zshrcContent = r'''
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
+# Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
 if [ -d "/root/jdk-17" ]; then
     export JAVA_HOME="/root/jdk-17"
+elif [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
+    export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
+elif [ -d "/usr/lib/jvm/java-21-openjdk-arm64" ]; then
+    export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-arm64"
 else
-    DETECTED_JVM=$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)
+    DETECTED_JVM=$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | grep -E '17|21' | head -n 1)
+    [ -z "$DETECTED_JVM" ] && DETECTED_JVM=$(ls -d /usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)
     if [ -n "$DETECTED_JVM" ]; then
         export JAVA_HOME="$DETECTED_JVM"
     else
         export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
     fi
+fi
+if command -v flutter >/dev/null 2>&1 && [ -d "$JAVA_HOME" ]; then
+    flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1 || true
 fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
@@ -797,6 +822,40 @@ fi
 
   Future<void> updateScripts() async {
     await _ensureBinaries();
+  }
+
+  Future<void> _ensureAndroidLicenses() async {
+    final licenseDirs = [
+      Directory('/root/android-sdk/licenses'),
+      Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'licenses')),
+    ];
+
+    const licenses = {
+      'android-sdk-license': '24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\n',
+      'android-sdk-preview-license': '84831b9409646a918e30573bab4c9c91346d8abd\n',
+      'android-sdk-arm-dbt-license': '859f317696f67ef3d7f30a50a5560e7834b43903\n',
+      'android-googletv-license': '601085b94cd77f0b54ff86406957099ebe79c4d6\n',
+      'android-googlexr-license': 'ceff83576aac4f7f37cb98fe189e9fb3c49d3b81\n',
+      'google-gdk-license': '33b6a2b64607f11b759f320ef9dff4ae5c47d97a\n',
+      'microxr-sysimage-license': '3a7848b1d7366ca5cfa0be477627644ca73f47e3\n',
+      'mips-android-sysimage-license': 'e9acab5b5fbb560a72cfaecce8946896ff6aab9d\n',
+    };
+
+    for (final dir in licenseDirs) {
+      try {
+        if (await dir.parent.exists()) {
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          for (final entry in licenses.entries) {
+            final file = File(p.join(dir.path, entry.key));
+            if (!await file.exists()) {
+              await file.writeAsString(entry.value);
+            }
+          }
+        }
+      } catch (_) {}
+    }
   }
 
   String _generateTermFetchScript() {
@@ -1037,12 +1096,17 @@ export PROOT_LOADER_32="\$PROOT_LIB_DIR/libprootloader32.so"
 export LD_LIBRARY_PATH="\$FILES_DIR/lib:\$PROOT_LIB_DIR"
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin:\$PATH"
 
-# Prefer /root/jdk-17 if available
+# Prefer /root/jdk-17, Java 17, or Java 21 if available
 if [ -d "\$ROOTFS/root/jdk-17" ]; then
     export JAVA_HOME="/root/jdk-17"
+elif [ -d "\$ROOTFS/usr/lib/jvm/java-17-openjdk-arm64" ]; then
+    export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
+elif [ -d "\$ROOTFS/usr/lib/jvm/java-21-openjdk-arm64" ]; then
+    export JAVA_HOME="/usr/lib/jvm/java-21-openjdk-arm64"
 else
     # Dynamically detect JVM folder inside \$ROOTFS/usr/lib/jvm/
-    DETECTED_JVM=\$(ls -d "\$ROOTFS"/usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)
+    DETECTED_JVM=\$(ls -d "\$ROOTFS"/usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | grep -E '17|21' | head -n 1)
+    [ -z "\$DETECTED_JVM" ] && DETECTED_JVM=\$(ls -d "\$ROOTFS"/usr/lib/jvm/java-*-openjdk-arm64 2>/dev/null | head -n 1)
     if [ -n "\$DETECTED_JVM" ]; then
         # Remove the \$ROOTFS prefix to get the path inside the guest
         export JAVA_HOME="\${DETECTED_JVM#\$ROOTFS}"
@@ -1174,21 +1238,38 @@ fi
       await file.delete();
     }
 
-    await _dio.download(
-      _rootfsUrl,
-      archivePath,
-      onReceiveProgress: (count, total) {
-        final mb = (count / 1048576).toStringAsFixed(1);
-        if (total > 0) {
-          _progress = count / total * 0.7;
-          final totalMb = (total / 1048576).toStringAsFixed(1);
-          _status = 'Скачивание Ubuntu: $mb / $totalMb МБ (${(count * 100 / total).toStringAsFixed(0)}%)';
-        } else {
-          _status = 'Скачивание Ubuntu: $mb МБ';
-        }
-        notifyListeners();
-      },
-    );
+    bool downloadSuccess = false;
+    dynamic lastError;
+
+    for (final url in _rootfsUrls) {
+      try {
+        debugPrint('RuntimeService: Attempting to download rootfs from $url');
+        await _dio.download(
+          url,
+          archivePath,
+          onReceiveProgress: (count, total) {
+            final mb = (count / 1048576).toStringAsFixed(1);
+            if (total > 0) {
+              _progress = count / total * 0.7;
+              final totalMb = (total / 1048576).toStringAsFixed(1);
+              _status = 'Скачивание Ubuntu: $mb / $totalMb МБ (${(count * 100 / total).toStringAsFixed(0)}%)';
+            } else {
+              _status = 'Скачивание Ubuntu: $mb МБ';
+            }
+            notifyListeners();
+          },
+        );
+        downloadSuccess = true;
+        break;
+      } catch (e) {
+        lastError = e;
+        debugPrint('RuntimeService: Download from $url failed ($e), trying next fallback mirror...');
+      }
+    }
+
+    if (!downloadSuccess) {
+      throw Exception('Не удалось скачать базовый образ Ubuntu: $lastError');
+    }
 
     _status = 'Распаковка Ubuntu (zstd)… это может занять 1–3 минуты';
     _progress = 0.7;
@@ -1382,9 +1463,19 @@ if [ -f "$LOCKFILE" ]; then
 fi
 echo "$$" > "$LOCKFILE"
 
-# 1. SDK Toolchain Symlinking (Redirect x86_64 to native ARM64 tools)
+# 1. SDK Toolchain Symlinking & Licenses
 SDK_ROOT="/root/android-sdk"
 if [ -d "$SDK_ROOT" ]; then
+    mkdir -p "$SDK_ROOT/licenses"
+    [ ! -f "$SDK_ROOT/licenses/android-sdk-license" ] && printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\nd56f5187479451eabf01fb78af6dfcb131a6481e\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\n" > "$SDK_ROOT/licenses/android-sdk-license"
+    [ ! -f "$SDK_ROOT/licenses/android-sdk-preview-license" ] && printf "84831b9409646a918e30573bab4c9c91346d8abd\n" > "$SDK_ROOT/licenses/android-sdk-preview-license"
+    [ ! -f "$SDK_ROOT/licenses/android-sdk-arm-dbt-license" ] && printf "859f317696f67ef3d7f30a50a5560e7834b43903\n" > "$SDK_ROOT/licenses/android-sdk-arm-dbt-license"
+    [ ! -f "$SDK_ROOT/licenses/android-googletv-license" ] && printf "601085b94cd77f0b54ff86406957099ebe79c4d6\n" > "$SDK_ROOT/licenses/android-googletv-license"
+    [ ! -f "$SDK_ROOT/licenses/android-googlexr-license" ] && printf "ceff83576aac4f7f37cb98fe189e9fb3c49d3b81\n" > "$SDK_ROOT/licenses/android-googlexr-license"
+    [ ! -f "$SDK_ROOT/licenses/google-gdk-license" ] && printf "33b6a2b64607f11b759f320ef9dff4ae5c47d97a\n" > "$SDK_ROOT/licenses/google-gdk-license"
+    [ ! -f "$SDK_ROOT/licenses/microxr-sysimage-license" ] && printf "3a7848b1d7366ca5cfa0be477627644ca73f47e3\n" > "$SDK_ROOT/licenses/microxr-sysimage-license"
+    [ ! -f "$SDK_ROOT/licenses/mips-android-sysimage-license" ] && printf "e9acab5b5fbb560a72cfaecce8946896ff6aab9d\n" > "$SDK_ROOT/licenses/mips-android-sysimage-license"
+
     mkdir -p "$SDK_ROOT/platform-tools"
     [ ! -L "$SDK_ROOT/platform-tools/adb" ] && ln -sf /usr/bin/adb "$SDK_ROOT/platform-tools/adb"
 
@@ -1655,6 +1746,11 @@ org.gradle.daemon=false
 org.gradle.parallel=false
 org.gradle.workers.max=1
 EOF
+if [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
+    echo "org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64" >> /root/.gradle/gradle.properties
+elif [ -d "/usr/lib/jvm/java-21-openjdk-arm64" ]; then
+    echo "org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-arm64" >> /root/.gradle/gradle.properties
+fi
 
 # 7. Run one-time auto-heal for AAPT2 / SDK toolchain binaries & patch projects
 SDK_ROOT="/root/android-sdk"
@@ -1700,6 +1796,13 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties"
         echo "org.gradle.daemon=false" >> "$f"
         echo "org.gradle.parallel=false" >> "$f"
         echo "org.gradle.workers.max=1" >> "$f"
+    fi
+    if ! grep -q "org.gradle.java.home" "$f"; then
+        if [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
+            echo "org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64" >> "$f"
+        elif [ -d "/usr/lib/jvm/java-21-openjdk-arm64" ]; then
+            echo "org.gradle.java.home=/usr/lib/jvm/java-21-openjdk-arm64" >> "$f"
+        fi
     fi
 done
 

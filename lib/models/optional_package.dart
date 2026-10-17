@@ -45,8 +45,12 @@ const String _ensureCmdlineTools = '(if [ ! -f /root/android-sdk/cmdline-tools/l
     '[ -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ]';
 
 const String _sdkPrefix = '$_ensureCmdlineTools && '
-    'export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-*-openjdk-* 2>/dev/null | head -n 1)} && '
+    'export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/java-21-openjdk-* /usr/lib/jvm/java-*-openjdk-* 2>/dev/null | head -n 1)} && '
     'export PATH=\$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:\$PATH && '
+    'mkdir -p /root/android-sdk/licenses && '
+    '(printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\\nd56f5187479451eabf01fb78af6dfcb131a6481e\\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\\n" > /root/android-sdk/licenses/android-sdk-license 2>/dev/null || true) && '
+    '(printf "84831b9409646a918e30573bab4c9c91346d8abd\\n" > /root/android-sdk/licenses/android-sdk-preview-license 2>/dev/null || true) && '
+    '(printf "859f317696f67ef3d7f30a50a5560e7834b43903\\n" > /root/android-sdk/licenses/android-sdk-arm-dbt-license 2>/dev/null || true) && '
     '(yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && '
     '/root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk';
 
@@ -66,7 +70,7 @@ final defaultPackages = [
     version: '20.x LTS',
     description: 'JavaScript runtime and npm package manager for modern tools and CLI',
     command: 'if which node >/dev/null 2>&1 && which npm >/dev/null 2>&1; then echo "Node.js & npm already installed: \$(node -v), npm \$(npm -v)"; else echo "Installing Node.js (found: \$(node -v 2>/dev/null || echo none))"; ${_aptPrefix}apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs; hash -r; node -v; fi',
-    icon: LucideIcons.zap,
+    icon: LucideIcons.globe,
     category: 'Web',
   ),
   OptionalPackage(
@@ -93,7 +97,7 @@ final defaultPackages = [
     version: '3.29+ Stable',
     description: 'Google\'s UI toolkit for building natively compiled Dart and Flutter applications with full IDE language server support.',
     command: '${_aptPrefix}apt install -y git curl unzip xz-utils libglu1-mesa debianutils ca-certificates && git config --global --add safe.directory \'*\' 2>/dev/null || true && if [ -d /root/flutter/.git ]; then cd /root/flutter && git pull && /root/flutter/bin/flutter precache; else rm -rf /root/flutter && git clone --depth 1 https://github.com/flutter/flutter.git -b stable /root/flutter && /root/flutter/bin/flutter precache; fi && ln -sf /root/flutter/bin/flutter /usr/local/bin/flutter 2>/dev/null || true && ln -sf /root/flutter/bin/dart /usr/local/bin/dart 2>/dev/null || true && (grep -q "/root/flutter/bin" /root/.bashrc 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.bashrc) && (grep -q "/root/flutter/bin" /root/.profile 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.profile)',
-    icon: LucideIcons.code,
+    icon: LucideIcons.smartphone,
     category: 'Languages',
   ),
   OptionalPackage(
@@ -119,7 +123,7 @@ final defaultPackages = [
     name: 'DeepSeek Harness CLI (dsh)',
     version: '0.2.0',
     description: 'DeepSeek autonomous agent runner for complex refactoring, reasoning, and test generation',
-    command: '${_aptPrefix}apt install -y curl && (which node >/dev/null 2>&1 || (curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs)) && npm install -g @deepseek-ai/dsh && (ln -sf /usr/local/lib/nodejs/bin/dsh /usr/local/bin/dsh 2>/dev/null || true) && (ln -sf /usr/local/lib/nodejs/bin/deepseek-harness /usr/local/bin/deepseek-harness 2>/dev/null || true) && (if [ ! -f /usr/local/bin/dsh ]; then printf "#!/bin/sh\\nexec node /usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh/lib/bin.js \\"\$@\\"\\n" > /usr/local/bin/dsh && chmod +x /usr/local/bin/dsh; fi) && echo "DeepSeek Harness installed successfully"',
+    command: '${_aptPrefix}apt install -y curl && (which node >/dev/null 2>&1 || (curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs)) && npm install -g @deepseek-ai/dsh && (ln -sf /usr/local/lib/nodejs/bin/dsh /usr/local/bin/dsh 2>/dev/null || true) && (ln -sf /usr/local/lib/nodejs/bin/deepseek-harness /usr/local/bin/deepseek-harness 2>/dev/null || true) && node -e "const fs = require(\'fs\'); const f1 = \'/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/node-addon-system/lib/flock.js\'; if (fs.existsSync(f1)) { let s = fs.readFileSync(f1, \'utf8\'); s = s.replace(/loadBinding\\(\\)\\.tryLock\\(fd,\\s*resolve\\);/, \'resolve(0);\'); fs.writeFileSync(f1, s); } const f2 = \'/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js\'; if (fs.existsSync(f2)) { let s = fs.readFileSync(f2, \'utf8\'); s = s.replace(\'await link(tmp, finalPath);\', \'await copyFile(tmp, finalPath, 1);\'); fs.writeFileSync(f2, s); } const f3 = \'/usr/local/lib/nodejs/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-fs-local/lib/index.js\'; if (fs.existsSync(f3)) { let s = fs.readFileSync(f3, \'utf8\'); s = s.replace(\'await linkFile(tempPath, absolutePath);\', \'await copyFile(tempPath, absolutePath, 1);\'); fs.writeFileSync(f3, s); }" && echo "DeepSeek Harness installed successfully"',
     icon: LucideIcons.brain_circuit,
     category: 'AI Tools',
   ),
@@ -165,7 +169,7 @@ final defaultPackages = [
     version: '13.x',
     description: 'GCC, G++, Make, and essential headers for C/C++ and native plugin compilation',
     command: '${_aptPrefix}apt update && apt install -y build-essential pkg-config',
-    icon: LucideIcons.box,
+    icon: LucideIcons.hammer,
     category: 'System',
   ),
   OptionalPackage(
@@ -173,8 +177,8 @@ final defaultPackages = [
     name: 'Android SDK & Java 17',
     version: 'API 34 + JDK 17',
     description: 'Essential for Android builds (Java 17, cmdline-tools, platform-tools, Android 34)',
-    command: '${_aptPrefix}apt install -y openjdk-17-jdk-headless wget curl unzip debianutils libstdc++6 zlib1g ca-certificates && mkdir -p /root/android-sdk/cmdline-tools /tmp/cmdline-extracted && (wget --no-check-certificate -qO /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || curl -k -fL --retry 3 -o /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip) && rm -rf /root/android-sdk/cmdline-tools/latest && unzip -qo /tmp/sdk.zip -d /tmp/cmdline-extracted && mkdir -p /root/android-sdk/cmdline-tools/latest && (if [ -d /tmp/cmdline-extracted/cmdline-tools ]; then cp -r /tmp/cmdline-extracted/cmdline-tools/* /root/android-sdk/cmdline-tools/latest/; else cp -r /tmp/cmdline-extracted/* /root/android-sdk/cmdline-tools/latest/; fi) && rm -rf /tmp/sdk.zip /tmp/cmdline-extracted && chmod +x /root/android-sdk/cmdline-tools/latest/bin/* 2>/dev/null || true && mkdir -p ~/.gradle && echo "systemProp.java.net.preferIPv4Stack=true" >> ~/.gradle/gradle.properties && export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-*-openjdk-* 2>/dev/null | head -n 1)} && export PATH=\$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:\$PATH && (yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34" && ln -sf /root/android-sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/bin/sdkmanager 2>/dev/null || true && ln -sf /root/android-sdk/platform-tools/adb /usr/local/bin/adb 2>/dev/null || true && (grep -q "ANDROID_HOME" /root/.bashrc 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.bashrc) && (grep -q "ANDROID_HOME" /root/.profile 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.profile) && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && echo "Android SDK and Java installed successfully"',
-    icon: LucideIcons.settings_2,
+    command: '${_aptPrefix}apt install -y openjdk-17-jdk-headless wget curl unzip debianutils libstdc++6 zlib1g ca-certificates && mkdir -p /root/android-sdk/cmdline-tools /tmp/cmdline-extracted && (wget --no-check-certificate -qO /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || curl -k -fL --retry 3 -o /tmp/sdk.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip) && rm -rf /root/android-sdk/cmdline-tools/latest && unzip -qo /tmp/sdk.zip -d /tmp/cmdline-extracted && mkdir -p /root/android-sdk/cmdline-tools/latest && (if [ -d /tmp/cmdline-extracted/cmdline-tools ]; then cp -r /tmp/cmdline-extracted/cmdline-tools/* /root/android-sdk/cmdline-tools/latest/; else cp -r /tmp/cmdline-extracted/* /root/android-sdk/cmdline-tools/latest/; fi) && rm -rf /tmp/sdk.zip /tmp/cmdline-extracted && chmod +x /root/android-sdk/cmdline-tools/latest/bin/* 2>/dev/null || true && mkdir -p ~/.gradle /root/android-sdk/licenses && echo "systemProp.java.net.preferIPv4Stack=true" >> ~/.gradle/gradle.properties && echo "org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64" >> ~/.gradle/gradle.properties && printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\\nd56f5187479451eabf01fb78af6dfcb131a6481e\\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\\n" > /root/android-sdk/licenses/android-sdk-license && printf "84831b9409646a918e30573bab4c9c91346d8abd\\n" > /root/android-sdk/licenses/android-sdk-preview-license && printf "859f317696f67ef3d7f30a50a5560e7834b43903\\n" > /root/android-sdk/licenses/android-sdk-arm-dbt-license && printf "601085b94cd77f0b54ff86406957099ebe79c4d6\\n" > /root/android-sdk/licenses/android-googletv-license && printf "ceff83576aac4f7f37cb98fe189e9fb3c49d3b81\\n" > /root/android-sdk/licenses/android-googlexr-license && printf "33b6a2b64607f11b759f320ef9dff4ae5c47d97a\\n" > /root/android-sdk/licenses/google-gdk-license && printf "3a7848b1d7366ca5cfa0be477627644ca73f47e3\\n" > /root/android-sdk/licenses/microxr-sysimage-license && printf "e9acab5b5fbb560a72cfaecce8946896ff6aab9d\\n" > /root/android-sdk/licenses/mips-android-sysimage-license && export JAVA_HOME=\${JAVA_HOME:-\$(ls -d /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/java-21-openjdk-* /usr/lib/jvm/java-*-openjdk-* 2>/dev/null | head -n 1)} && export PATH=\$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:\$PATH && (yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk "platform-tools" "build-tools;34.0.0" "platforms;android-34" && ln -sf /root/android-sdk/cmdline-tools/latest/bin/sdkmanager /usr/local/bin/sdkmanager 2>/dev/null || true && ln -sf /root/android-sdk/platform-tools/adb /usr/local/bin/adb 2>/dev/null || true && (grep -q "ANDROID_HOME" /root/.bashrc 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.bashrc) && (grep -q "ANDROID_HOME" /root/.profile 2>/dev/null || echo "export ANDROID_HOME=/root/android-sdk" >> /root/.profile) && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && (flutter config --jdk-dir \$JAVA_HOME 2>/dev/null || true) && echo "Android SDK and Java installed successfully"',
+    icon: LucideIcons.smartphone,
     category: 'System',
   ),
   OptionalPackage(
@@ -200,7 +204,7 @@ final defaultPackages = [
     name: 'APK Signer, Zipalign & Bundletool',
     version: '1.17.2',
     description: 'Tools for signing release APKs, aligning binaries, and converting AAB App Bundles to universal APK',
-    command: '${_aptPrefix}apt install -y apksigner zipalign aapt adb openjdk-21-jdk-headless wget curl && (wget --no-check-certificate -qO /usr/local/bin/bundletool.jar https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar || curl -k -fL --retry 3 -o /usr/local/bin/bundletool.jar https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar) && printf "#!/bin/sh\\nexec java -jar /usr/local/bin/bundletool.jar \\"\$@\\"\\n" > /usr/local/bin/bundletool && chmod +x /usr/local/bin/bundletool && echo "APK Signing & Bundletool ready"',
+    command: '${_aptPrefix}apt install -y apksigner zipalign aapt adb openjdk-21-jdk-headless wget curl && (wget --no-check-certificate -qO /usr/local/bin/bundletool.jar https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar || curl -k -fL --retry 3 -o /usr/local/bin/bundletool.jar https://github.com/google/bundletool/releases/download/1.17.2/bundletool-all-1.17.2.jar) && printf "#!/bin/sh\\nexec java -jar /usr/local/bin/bundletool.jar \\"\$@\\"\\n" > /usr/local/bin/bundletool && chmod +x /usr/local/bin/bundletool && printf "#!/bin/sh\\nexec java -jar /usr/lib/android-sdk/build-tools/debian/apksigner.jar \\"\$@\\"\\n" > /usr/local/bin/apksigner && chmod +x /usr/local/bin/apksigner && echo "APK Signing & Bundletool ready"',
     icon: LucideIcons.shield_check,
     category: 'Build Tools',
   ),
@@ -231,7 +235,7 @@ final defaultPackages = [
     version: '3.22.1 LTS',
     description: 'Build tool for C++ (Recommended LTS for Android NDK)',
     command: '$_sdkPrefix "cmake;3.22.1"',
-    icon: LucideIcons.box,
+    icon: LucideIcons.package_open,
     category: 'Build Tools',
   ),
   OptionalPackage(
@@ -240,7 +244,7 @@ final defaultPackages = [
     version: '3.31.0',
     description: 'Build tool for C++ (Latest Modern Release)',
     command: '$_sdkPrefix "cmake;3.31.0"',
-    icon: LucideIcons.box,
+    icon: LucideIcons.package_open,
     category: 'Build Tools',
   ),
   OptionalPackage(
@@ -249,7 +253,7 @@ final defaultPackages = [
     version: '3.21+',
     description: 'Protocol Buffers compiler and headers for gRPC and binary serialization builds',
     command: '${_aptPrefix}apt install -y protobuf-compiler libprotobuf-dev',
-    icon: LucideIcons.network,
+    icon: LucideIcons.binary,
     category: 'Build Tools',
   ),
   OptionalPackage(
@@ -481,23 +485,23 @@ final defaultPackages = [
     id: 'java-lsp',
     name: 'Java Language Server (JDTLS)',
     description: 'Eclipse JDT Language Server for Java code completion, errors, and analysis',
-    command: _aptPrefix + r'apt install -y openjdk-21-jdk-headless wget curl unzip tar ca-certificates && mkdir -p /usr/share/jdtls && (wget --no-check-certificate -qO /tmp/jdtls.tar.gz https://download.eclipse.org/jdtls/milestones/1.31.0/jdt-language-server-1.31.0-202401111522.tar.gz || curl -k -fL --retry 3 -o /tmp/jdtls.tar.gz https://download.eclipse.org/jdtls/milestones/1.31.0/jdt-language-server-1.31.0-202401111522.tar.gz) && tar -xzf /tmp/jdtls.tar.gz -C /usr/share/jdtls && rm -f /tmp/jdtls.tar.gz && echo "#!/bin/sh\nLAUNCHER_JAR=\$(ls /usr/share/jdtls/plugins/org.eclipse.equinox.launcher_*.jar | head -n 1)\njava -Declipse.application=org.eclipse.jdt.ls.core.id1 -Dosgi.bundles.defaultStartLevel=4 -Declipse.product=org.eclipse.jdt.ls.core.product -Dlog.level=ALL -noverify -Xmx1G -jar \"$LAUNCHER_JAR\" -configuration /usr/share/jdtls/config_linux -data /root/.jdtls-workspace --add-modules=ALL-SYSTEM --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.lang=ALL-UNNAMED \"$@\"" > /usr/bin/jdtls && chmod +x /usr/bin/jdtls',
-    icon: LucideIcons.binary,
+    command: _aptPrefix + r'apt install -y openjdk-21-jdk-headless wget curl unzip tar ca-certificates && mkdir -p /usr/share/jdtls && (curl -k -fL --retry 3 -o /tmp/jdtls.tar.gz https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz || wget --no-check-certificate -qO /tmp/jdtls.tar.gz https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz) && tar -xzf /tmp/jdtls.tar.gz -C /usr/share/jdtls && rm -f /tmp/jdtls.tar.gz && printf "#!/bin/sh\nLAUNCHER_JAR=\$(ls /usr/share/jdtls/plugins/org.eclipse.equinox.launcher_*.jar | head -n 1)\nexec java -jar \$LAUNCHER_JAR -configuration /usr/share/jdtls/config_linux -data /root/.jdtls-workspace \"\$@\"\n" > /usr/local/bin/jdtls && chmod +x /usr/local/bin/jdtls && ln -sf /usr/local/bin/jdtls /usr/bin/jdtls 2>/dev/null || true',
+    icon: LucideIcons.coffee,
     category: 'Languages',
   ),
   OptionalPackage(
     id: 'kotlin-lsp',
     name: 'Kotlin Language Server',
     description: 'Kotlin Language Server for code autocompletion, diagnostics, and hover information',
-    command: _aptPrefix + r'apt install -y openjdk-21-jdk-headless wget curl unzip ca-certificates && mkdir -p /usr/share/kotlin-language-server && (wget --no-check-certificate -qO /tmp/ktls.zip https://github.com/fwcd/kotlin-language-server/releases/download/1.3.1/server.zip || curl -k -fL --retry 3 -o /tmp/ktls.zip https://github.com/fwcd/kotlin-language-server/releases/download/1.3.1/server.zip) && unzip -q /tmp/ktls.zip -d /usr/share && mv /usr/share/server/* /usr/share/kotlin-language-server/ && rm -rf /usr/share/server && echo "#!/bin/sh\njava -jar /usr/share/kotlin-language-server/lib/kotlin-language-server-all.jar \"$@\"" > /usr/bin/kotlin-language-server && chmod +x /usr/bin/kotlin-language-server && rm -f /tmp/ktls.zip',
-    icon: LucideIcons.binary,
+    command: _aptPrefix + r'apt install -y openjdk-21-jdk-headless wget curl unzip ca-certificates && mkdir -p /usr/share/kotlin-language-server && (wget --no-check-certificate -qO /tmp/ktls.zip https://github.com/fwcd/kotlin-language-server/releases/latest/download/server.zip || curl -k -fL --retry 3 -o /tmp/ktls.zip https://github.com/fwcd/kotlin-language-server/releases/latest/download/server.zip) && unzip -qo /tmp/ktls.zip -d /usr/share/kotlin-language-server && rm -f /tmp/ktls.zip && chmod +x /usr/share/kotlin-language-server/server/bin/kotlin-language-server 2>/dev/null || true && ln -sf /usr/share/kotlin-language-server/server/bin/kotlin-language-server /usr/local/bin/kotlin-language-server 2>/dev/null || true && ln -sf /usr/local/bin/kotlin-language-server /usr/bin/kotlin-language-server 2>/dev/null || true',
+    icon: LucideIcons.file_code,
     category: 'Languages',
   ),
   OptionalPackage(
     id: 'typescript-lsp',
     name: 'JavaScript & TypeScript IDE Plugin',
     description: 'Provides autocomplete, hover, diagnostics, and code outline for JavaScript and TypeScript projects.',
-    command: _aptPrefix + r'apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g typescript typescript-language-server',
+    command: _aptPrefix + r'apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g typescript typescript-language-server && (ln -sf /usr/local/lib/nodejs/bin/typescript-language-server /usr/local/bin/typescript-language-server 2>/dev/null || true)',
     icon: LucideIcons.code,
     category: 'Languages',
   ),
@@ -505,23 +509,23 @@ final defaultPackages = [
     id: 'html-css-lsp',
     name: 'HTML & CSS IDE Plugin',
     description: 'Provides autocomplete, tags helper, and CSS validation for HTML and CSS files.',
-    command: _aptPrefix + r'apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g vscode-langservers-extracted',
-    icon: LucideIcons.file_code,
+    command: _aptPrefix + r'apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g vscode-langservers-extracted && (for b in vscode-html-language-server vscode-css-language-server; do ln -sf /usr/local/lib/nodejs/bin/$b /usr/local/bin/$b 2>/dev/null || true; done)',
+    icon: LucideIcons.globe,
     category: 'Languages',
   ),
   OptionalPackage(
     id: 'yaml-json-lsp',
     name: 'YAML & JSON IDE Plugin',
     description: 'Provides autocomplete, validation, and schema support for configuration files (YAML, JSON, Pubspec).',
-    command: _aptPrefix + r'apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g yaml-language-server vscode-langservers-extracted',
-    icon: LucideIcons.settings,
+    command: _aptPrefix + r'apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g yaml-language-server vscode-langservers-extracted && (for b in yaml-language-server vscode-json-language-server; do ln -sf /usr/local/lib/nodejs/bin/$b /usr/local/bin/$b 2>/dev/null || true; done)',
+    icon: LucideIcons.file_text,
     category: 'Languages',
   ),
   OptionalPackage(
     id: 'markdown-lsp',
     name: 'Markdown IDE Plugin (Marksman)',
     description: 'Provides smart autocomplete, link tracking, wiki-link support, and formatting for Markdown documents.',
-    command: _aptPrefix + r'apt install -y curl wget ca-certificates && ARCH=$(uname -m) && if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then M_ARCH="arm64"; else M_ARCH="x64"; fi && ( wget --no-check-certificate -qO /usr/bin/marksman "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${M_ARCH}" || curl -k -fL --retry 3 -o /usr/bin/marksman "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${M_ARCH}" || wget --no-check-certificate -qO /usr/bin/marksman https://github.com/artempyanykh/marksman/releases/download/2023-12-09/marksman-linux-arm64 ) && chmod +x /usr/bin/marksman',
+    command: _aptPrefix + r'apt install -y curl wget ca-certificates && ARCH=$(uname -m) && if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then M_ARCH="arm64"; else M_ARCH="x64"; fi && ( wget --no-check-certificate -qO /usr/local/bin/marksman-bin "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${M_ARCH}" || curl -k -fL --retry 3 -o /usr/local/bin/marksman-bin "https://github.com/artempyanykh/marksman/releases/latest/download/marksman-linux-${M_ARCH}" ) && chmod +x /usr/local/bin/marksman-bin && printf "#!/bin/sh\nexport DOTNET_GCHeapHardLimit=0x10000000\nexec /usr/local/bin/marksman-bin \"\$@\"\n" > /usr/local/bin/marksman && chmod +x /usr/local/bin/marksman && ln -sf /usr/local/bin/marksman /usr/bin/marksman 2>/dev/null || true',
     icon: LucideIcons.file_text,
     category: 'Languages',
   ),
@@ -529,24 +533,24 @@ final defaultPackages = [
     id: 'vue-lsp',
     name: 'Vue.js IDE Plugin',
     description: 'Provides Vue 3 autocomplete, formatting, diagnostics, and template checking (Volar language server).',
-    command: _aptPrefix + r'apt update && apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g @vue/language-server',
-    icon: LucideIcons.code,
+    command: _aptPrefix + r'apt update && apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g @vue/language-server && (ln -sf /usr/local/lib/nodejs/bin/vue-language-server /usr/local/bin/vue-language-server 2>/dev/null || true)',
+    icon: LucideIcons.layout_template,
     category: 'Languages',
   ),
   OptionalPackage(
     id: 'php-lsp',
     name: 'PHP IDE Plugin',
     description: 'Provides PHP autocomplete, signature help, code diagnostics, and formatting (Intelephense).',
-    command: _aptPrefix + r'apt update && apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g intelephense',
-    icon: LucideIcons.code,
+    command: _aptPrefix + r'apt update && apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g intelephense && (ln -sf /usr/local/lib/nodejs/bin/intelephense /usr/local/bin/intelephense 2>/dev/null || true)',
+    icon: LucideIcons.server,
     category: 'Languages',
   ),
   OptionalPackage(
     id: 'python-lsp',
     name: 'Python IDE Plugin',
     description: 'Provides type checking, auto-imports, autocompletions, and diagnostics for Python projects (Pyright).',
-    command: _aptPrefix + r'apt update && apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g pyright',
-    icon: LucideIcons.code,
+    command: _aptPrefix + r'apt update && apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs && npm install -g pyright && (ln -sf /usr/local/lib/nodejs/bin/pyright /usr/local/bin/pyright 2>/dev/null || true)',
+    icon: LucideIcons.terminal,
     category: 'Languages',
   ),
   OptionalPackage(
@@ -554,7 +558,7 @@ final defaultPackages = [
     name: 'C/C++ Language Server (Clangd)',
     description: 'Provides fast autocompletion, compile errors, goto definition, and refactoring for C and C++.',
     command: '${_aptPrefix}apt update && apt install -y clangd clang-tools',
-    icon: LucideIcons.file_code,
+    icon: LucideIcons.cpu,
     category: 'Languages',
   ),
   OptionalPackage(
@@ -562,7 +566,7 @@ final defaultPackages = [
     name: 'Rust Analyzer & Cargo',
     description: 'Official Rust language server for code intelligence, completion, and linting.',
     command: '${_aptPrefix}apt update && (apt install -y rustc cargo rust-analyzer 2>/dev/null || (curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && (grep -q ".cargo/bin" /root/.bashrc 2>/dev/null || echo "export PATH=\\\$PATH:/root/.cargo/bin" >> /root/.bashrc)))',
-    icon: LucideIcons.code,
+    icon: LucideIcons.cog,
     category: 'Languages',
   ),
   OptionalPackage(
@@ -570,7 +574,7 @@ final defaultPackages = [
     name: 'Go & Gopls Language Server',
     description: 'Google Go compiler and official gopls language server for full Go language support.',
     command: '${_aptPrefix}apt update && apt install -y golang-go gopls 2>/dev/null || (apt install -y golang-go && go install golang.org/x/tools/gopls@latest && cp ~/go/bin/gopls /usr/local/bin/ 2>/dev/null || true)',
-    icon: LucideIcons.code,
+    icon: LucideIcons.send,
     category: 'Languages',
   ),
   OptionalPackage(
@@ -609,7 +613,7 @@ final defaultPackages = [
     id: 'pnpm',
     name: 'pnpm (Fast Package Manager)',
     description: 'Fast, disk space efficient package manager for modern web projects.',
-    command: 'if which npm >/dev/null 2>&1; then npm install -g pnpm; else ${_aptPrefix}apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs) && npm install -g pnpm; fi && (ln -sf /usr/local/lib/nodejs/bin/pnpm /usr/local/bin/pnpm 2>/dev/null || true)',
+    command: 'if which npm >/dev/null 2>&1; then (npm install -g pnpm@9 --ignore-scripts || npm install -g pnpm --ignore-scripts); else ${_aptPrefix}apt install -y curl && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt install -y nodejs) && npm install -g pnpm@9 --ignore-scripts; fi && (ln -sf /usr/local/lib/nodejs/bin/pnpm /usr/local/bin/pnpm 2>/dev/null || true)',
     icon: LucideIcons.package,
     category: 'Web',
   ),
@@ -618,7 +622,7 @@ final defaultPackages = [
     name: 'Linux Desktop (PC) Build Tools',
     description: 'Essential C++ libraries and tools (clang, cmake, ninja, pkg-config, GTK 3, libsecret, epoxy) required to compile Flutter Desktop/PC apps and plugins.',
     command: '${_aptPrefix}apt update && apt install -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev liblzma-dev libepoxy-dev libjsoncpp-dev && (flutter config --enable-linux-desktop 2>/dev/null || true) && echo "Linux Desktop build tools installed and desktop enabled in Flutter"',
-    icon: LucideIcons.laptop,
+    icon: LucideIcons.monitor,
     category: 'Build Tools',
   ),
   OptionalPackage(

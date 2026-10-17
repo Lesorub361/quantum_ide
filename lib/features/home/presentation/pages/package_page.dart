@@ -11,6 +11,7 @@ import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_ta
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/home/presentation/widgets/package_install_dialog.dart';
+import 'package:quantum_ide/features/home/presentation/widgets/package_details_dialog.dart';
 import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
@@ -978,7 +979,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => PackageInstallDialog.show(context, pkg, isUpdate: pkg.isInstalled),
+            onTap: () => PackageDetailsDialog.show(context, pkg),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(

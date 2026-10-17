@@ -4,6 +4,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/features/home/presentation/widgets/package_install_dialog.dart';
+import 'package:quantum_ide/features/home/presentation/widgets/package_details_dialog.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class PackagesManagerView extends ConsumerStatefulWidget {
@@ -197,6 +198,8 @@ class _PackagesManagerViewState extends ConsumerState<PackagesManagerView> {
                       child: ListTile(
                         dense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        onTap: () => PackageDetailsDialog.show(context, pkg),
                         leading: Container(
                           width: 34,
                           height: 34,

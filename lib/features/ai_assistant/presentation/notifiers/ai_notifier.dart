@@ -365,6 +365,8 @@ class AINotifier extends StateNotifier<AIState> {
       thinkingContent: 'Запуск ${agentKind.title}...',
     );
 
+    final priorHistory = List<ChatMessage>.from(state.messages);
+
     state = state.copyWith(
       messages: [...state.messages, userMsg, assistantMsg],
       isLoading: true,
@@ -410,6 +412,7 @@ class AINotifier extends StateNotifier<AIState> {
       agentKind: agentKind,
       model: effectiveModel,
       apiKey: apiKey,
+      conversationHistory: priorHistory,
       onActivity: (activity) {
         addLiveActivity(activity);
       },
