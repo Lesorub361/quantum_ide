@@ -349,6 +349,14 @@ class AIService {
             continue;
           }
 
+          // Handle 401 (unauthorized) - throw with clear message
+          if (resp.statusCode == 401) {
+            throw Exception(
+              'API key is missing or invalid (HTTP 401). '
+              'Please check your API key in AI Settings.',
+            );
+          }
+
           // Handle 403 (forbidden) - throw with clear message
           if (resp.statusCode == 403) {
             throw Exception(
@@ -1198,25 +1206,85 @@ class AIService {
             }),
           );
 
-          // Handle error status codes before streaming
-          if (response.statusCode == 403) {
-            return ChatResponse(
-              '❌ **API key error (403 Forbidden)**\n\n'
-              'Your API key for ${AiProviders.byId(pid).displayName} is invalid or expired.\n'
-              'Please go to **AI Settings** and update your API key.',
-            );
-          }
-          if (response.statusCode == 429 && attempt < _maxRetries) {
-            final retryAfter = response.headers.value('retry-after');
-            final delayMs = retryAfter != null
-                ? (int.tryParse(retryAfter) ?? 1) * 1000
-                : (1 << attempt) * 1000;
-            await Future.delayed(Duration(milliseconds: delayMs));
-            continue;
-          }
-          if (response.statusCode != null && response.statusCode! >= 500 && attempt < _maxRetries) {
-            await Future.delayed(Duration(milliseconds: (1 << attempt) * 1000));
-            continue;
+          // Handle non-2xx error status codes before or during streaming
+          if (response.statusCode != null && (response.statusCode! < 200 || response.statusCode! >= 300)) {
+            final sc = response.statusCode!;
+            if (sc == 429 && attempt < _maxRetries) {
+              final retryAfter = response.headers.value('retry-after');
+              final delayMs = retryAfter != null
+                  ? (int.tryParse(retryAfter) ?? 1) * 1000
+                  : (1 << attempt) * 1000;
+              await Future.delayed(Duration(milliseconds: delayMs));
+              continue;
+            }
+            if (sc >= 500 && attempt < _maxRetries) {
+              await Future.delayed(Duration(milliseconds: (1 << attempt) * 1000));
+              continue;
+            }
+
+            // Read the error body from stream
+            String errorBody = '';
+            try {
+              final chunks = <int>[];
+              await for (final chunk in response.data.stream) {
+                chunks.addAll(chunk);
+              }
+              errorBody = utf8.decode(chunks);
+            } catch (_) {}
+
+            String errorMsg = '';
+            try {
+              final dynamic data = jsonDecode(errorBody);
+              if (data is Map) {
+                if (data['error'] is Map) {
+                  errorMsg = data['error']['message']?.toString() ??
+                             data['error']['code']?.toString() ??
+                             errorBody;
+                } else if (data['error'] is String) {
+                  errorMsg = data['error'] as String;
+                } else if (data['message'] is String) {
+                  errorMsg = data['message'] as String;
+                }
+              }
+            } catch (_) {
+              errorMsg = errorBody;
+            }
+
+            final providerName = AiProviders.byId(pid).displayName;
+            if (sc == 401) {
+              return ChatResponse(
+                '❌ **Ошибка API-ключа (401 Unauthorized)**\n\n'
+                '${errorMsg.isNotEmpty ? "$errorMsg\n\n" : ""}'
+                'API-ключ для **$providerName** не указан или недействителен.\n'
+                'Пожалуйста, откройте **Настройки ИИ** и укажите правильный ключ.',
+              );
+            } else if (sc == 403) {
+              return ChatResponse(
+                '❌ **Доступ запрещен (403 Forbidden)**\n\n'
+                '${errorMsg.isNotEmpty ? "$errorMsg\n\n" : ""}'
+                'API-ключ для **$providerName** не имеет доступа или срок действия истек.\n'
+                'Пожалуйста, проверьте баланс аккаунта или обновите ключ в **Настройках ИИ**.',
+              );
+            } else if (sc == 404) {
+              return ChatResponse(
+                '❌ **Модель не найдена (404 Not Found)**\n\n'
+                '${errorMsg.isNotEmpty ? "$errorMsg\n\n" : ""}'
+                'Модель "${_settings.selectedModel}" не найдена на **$providerName**.\n'
+                'Пожалуйста, выберите другую модель в **Настройках ИИ**.',
+              );
+            } else if (sc == 429) {
+              return ChatResponse(
+                '⏳ **Превышен лимит запросов (429 Too Many Requests)**\n\n'
+                '${errorMsg.isNotEmpty ? "$errorMsg\n\n" : ""}'
+                'Превышен лимит запросов или квота для **$providerName**.\n'
+                'Пожалуйста, подождите немного или пополните баланс.',
+              );
+            } else {
+              return ChatResponse(
+                '❌ **Ошибка сервера ($sc)**\n\n'
+                '${errorMsg.isNotEmpty ? errorMsg : "Сервер ИИ ($providerName) вернул статус $sc."}',
+              );
+            }
           }
 
           final buffer = StringBuffer();
@@ -1265,8 +1333,19 @@ class AIService {
             }
           }
 
+          final resultText = buffer.toString();
+          if (resultText.trim().isEmpty) {
+            final providerName = AiProviders.byId(pid).displayName;
+            return ChatResponse(
+              '⚠️ **Пустой ответ от модели**\n\n'
+              'Модель "${_settings.selectedModel}" ($providerName) не вернула текстового ответа. '
+              'Возможно, модель перегружена, недоступна или не поддерживает стриминг с текущими параметрами.\n\n'
+              'Попробуйте повторить запрос или выбрать другую модель в **Настройках ИИ**.',
+            );
+          }
+
           return ChatResponse(
-            buffer.toString(),
+            resultText,
             tokenUsage: TokenUsage(
               promptTokens: promptTokens,
               completionTokens: completionTokens,
@@ -1399,8 +1478,16 @@ class AIService {
         }
       }
 
+      final resultText = buffer.toString();
+      if (resultText.trim().isEmpty) {
+        return const ChatResponse(
+          '⚠️ **Пустой ответ от Gemini**\n\n'
+          'Модель вернула пустой ответ. Возможно, запрос был заблокирован фильтрами безопасности или произошел сбой сети.',
+        );
+      }
+
       return ChatResponse(
-        buffer.toString(),
+        resultText,
         tokenUsage: TokenUsage(
           promptTokens: promptTokens,
           completionTokens: completionTokens,
@@ -1467,6 +1554,13 @@ class AIService {
       );
     } on Exception catch (e) {
       final errorStr = e.toString();
+      if (errorStr.contains('401')) {
+        return ChatResponse(
+          '❌ **Ошибка API-ключа (401 Unauthorized)**\n\n'
+          'API-ключ для ${AiProviders.byId(pid).displayName} не указан или недействителен.\n'
+          'Пожалуйста, откройте **Настройки ИИ** и укажите правильный ключ.',
+        );
+      }
       if (errorStr.contains('403')) {
         return ChatResponse(
           '❌ **API key error (403 Forbidden)**\n\n'

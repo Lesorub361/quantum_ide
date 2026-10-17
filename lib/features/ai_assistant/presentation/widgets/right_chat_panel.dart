@@ -228,6 +228,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           else
             _buildStatusRow(context, ref, aiState),
 
+          // 3b. Error Banner (if error present and not loading)
+          if (aiState.error != null && !aiState.isLoading)
+            _buildErrorBanner(context, ref, aiState),
+
           // 4. Main Chat Messages or Welcome Hero
           Expanded(
             child: aiState.messages.isEmpty
@@ -953,6 +957,80 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     );
   }
 
+  Widget _buildErrorBanner(BuildContext context, WidgetRef ref, AIState aiState) {
+    final error = aiState.error!;
+    final isKeyError = error.contains('401') ||
+        error.contains('403') ||
+        error.toLowerCase().contains('api key') ||
+        error.toLowerCase().contains('api-ключ');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.redAccent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(LucideIcons.circle_alert, color: Colors.redAccent, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  error,
+                  style: GoogleFonts.inter(fontSize: 11, color: Colors.white, height: 1.3),
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (isKeyError) ...[
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () {
+                      if (aiState.activeAgentKind != AgentKind.native) {
+                        CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
+                      } else {
+                        showDialog(
+                          context: context,
+                          builder: (context) => const AISettingsDialog(),
+                        );
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5), width: 0.8),
+                      ),
+                      child: Text(
+                        '⚙️ Открыть Настройки ИИ',
+                        style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: () => ref.read(aiProvider.notifier).clearError(),
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(2),
+              child: Icon(LucideIcons.x, color: Colors.white54, size: 14),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyAgentHero(BuildContext context, WidgetRef ref, AIState aiState) {
     final kind = aiState.activeAgentKind;
     final isCli = kind != AgentKind.native;
@@ -1268,11 +1346,16 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   }
 
   Widget _buildPromptChip(String label, WidgetRef ref) {
+    final aiState = ref.watch(aiProvider);
+    final isBusy = aiState.isLoading;
+
     return InkWell(
-      onTap: () {
-        _aiChatController.text = label.substring(label.indexOf(' ') + 1);
-        _sendMessage(context, ref);
-      },
+      onTap: isBusy
+          ? null
+          : () {
+              _aiChatController.text = label.substring(label.indexOf(' ') + 1);
+              _sendMessage(context, ref);
+            },
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -2128,7 +2211,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                           icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
-                          onPressed: () => _sendMessage(context, ref),
+                          onPressed: isBusy ? null : () => _sendMessage(context, ref),
                         ),
                       ),
                   ],
@@ -2218,10 +2301,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     padding: const EdgeInsets.only(right: 6),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(6),
-                      onTap: () {
-                        _aiChatController.text = cmd;
-                        _sendMessage(context, ref);
-                      },
+                      onTap: isBusy
+                          ? null
+                          : () {
+                              _aiChatController.text = cmd;
+                              _sendMessage(context, ref);
+                            },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
@@ -2255,7 +2340,8 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     String? overrideText,
     bool skipModeSuggestion = false,
   }) async {
-    if (_isSendingMessage) return;
+    final aiState = ref.read(aiProvider);
+    if (_isSendingMessage || aiState.isLoading) return;
     final rawValue = (overrideText ?? _aiChatController.text).trim();
     if (rawValue.isEmpty && _selectedImageBase64 == null) return;
 
@@ -2443,23 +2529,25 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
       final activeKind = ref.read(aiProvider).activeAgentKind;
       if (activeKind != AgentKind.native) {
-        ref.read(aiProvider.notifier).executeCliTask(
+        await ref.read(aiProvider.notifier).executeCliTask(
           fullPrompt,
           imageBase64: _selectedImageBase64,
           contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
         );
       } else {
-        ref.read(aiProvider.notifier).askAI(
+        await ref.read(aiProvider.notifier).askAI(
           fullPrompt,
           imageBase64: _selectedImageBase64,
           contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
         );
       }
-      setState(() {
-        _attachActiveFile = false;
-        _selectedImagePath = null;
-        _selectedImageBase64 = null;
-      });
+      if (mounted) {
+        setState(() {
+          _attachActiveFile = false;
+          _selectedImagePath = null;
+          _selectedImageBase64 = null;
+        });
+      }
     } finally {
       _isSendingMessage = false;
     }

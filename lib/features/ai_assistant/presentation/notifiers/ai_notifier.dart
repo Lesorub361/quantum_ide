@@ -139,6 +139,7 @@ class AIState {
     bool? isLoading,
     List<ChatMessage>? messages,
     String? error,
+    bool clearError = false,
     int? totalTokens,
     List<AIAction>? proposedActions,
     AiApprovalMode? approvalMode,
@@ -161,7 +162,7 @@ class AIState {
     return AIState(
       isLoading: isLoading ?? this.isLoading,
       messages: messages ?? this.messages,
-      error: error ?? this.error,
+      error: clearError ? null : (error ?? this.error),
       totalTokens: totalTokens ?? this.totalTokens,
       proposedActions: proposedActions ?? this.proposedActions,
       approvalMode: approvalMode ?? 
@@ -227,6 +228,10 @@ class AINotifier extends StateNotifier<AIState> {
         ? AiApprovalMode.manual
         : (savedMode == 'semiAutonomous' ? AiApprovalMode.semiAutonomous : AiApprovalMode.fullAutonomous);
     state = state.copyWith(approvalMode: initialApproval);
+  }
+
+  void clearError() {
+    state = state.copyWith(clearError: true);
   }
 
   void setAgentKind(AgentKind kind) {
@@ -363,6 +368,7 @@ class AINotifier extends StateNotifier<AIState> {
     state = state.copyWith(
       messages: [...state.messages, userMsg, assistantMsg],
       isLoading: true,
+      clearError: true,
       taskStartedAt: DateTime.now(),
       currentStatusMessage: '${agentKind.title} выполняет задачу...',
       liveActivityItems: [],
@@ -967,7 +973,7 @@ class AINotifier extends StateNotifier<AIState> {
 
     state = state.copyWith(
       isLoading: true,
-      error: null,
+      clearError: true,
       taskStartedAt: taskStart,
       totalTokens: state.totalTokens + userTokens,
       canRollback: _lastCheckpointRef != null,
@@ -1327,10 +1333,18 @@ class AINotifier extends StateNotifier<AIState> {
             .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*(?:\]|$)'), '')
             .trim();
 
+        final effectiveContent = cleanContent.isNotEmpty
+            ? cleanContent
+            : (actions.isNotEmpty
+                ? ''
+                : (responseText.trim().isNotEmpty
+                    ? responseText.trim()
+                    : '⚠️ Модель вернула пустой ответ. Проверьте настройки модели или повторите запрос.'));
+
         final duration = DateTime.now().difference(taskStart).inMilliseconds;
         final assistantMessage = ChatMessage(
           role: MessageRole.assistant,
-          content: cleanContent,
+          content: effectiveContent,
           timestamp: DateTime.now(),
           actions: actions.isNotEmpty ? actions : null,
           workItems: List<ActivityItem>.from(state.liveActivityItems),
@@ -1796,9 +1810,18 @@ class AINotifier extends StateNotifier<AIState> {
         }
         _lastCheckpointRef = null;
       }
+      final cleanError = e.toString().replaceAll('Exception: ', '');
+      _updateMessagesAndSync([
+        ...state.messages,
+        ChatMessage(
+          role: MessageRole.assistant,
+          content: '❌ **Ошибка ИИ-ассистента:**\n\n$cleanError',
+          timestamp: DateTime.now(),
+        ),
+      ]);
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: cleanError,
         activeAgentRole: null,
         currentStatusMessage: null,
         canRollback: false,
