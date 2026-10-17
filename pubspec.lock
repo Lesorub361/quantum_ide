@@ -369,6 +369,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.3.3"
+  fast_immutable_collections:
+    dependency: "direct main"
+    description:
+      name: fast_immutable_collections
+      sha256: "293012edcb75c742f39a5cfe184baab8d6382cd478dabca8f2cf264f668494da"
+      url: "https://pub.dev"
+    source: hosted
+    version: "12.0.0"
   ffi:
     dependency: "direct main"
     description:
@@ -780,6 +788,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.0"
+  fuzzy:
+    dependency: "direct main"
+    description:
+      name: fuzzy
+      sha256: "5ab35514199b09662dd73fdec5f3f446dcae88c51fdab1aa24bb29adc30f0847"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.2"
   genkit:
     dependency: "direct main"
     description:
@@ -1704,6 +1720,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.1"
+  stringr:
+    dependency: transitive
+    description:
+      name: stringr
+      sha256: "31bc22634dc3a1399e66c668787939726965ecbc9c390ee876b99e2e11a9c4d3"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.2"
+  super_sliver_list:
+    dependency: "direct main"
+    description:
+      name: super_sliver_list
+      sha256: b1e1e64d08ce40e459b9bb5d9f8e361617c26b8c9f3bb967760b0f436b6e3f56
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.4.1"
   synchronized:
     dependency: transitive
     description:
@@ -1872,6 +1904,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "15.3.0"
+  wakelock_plus:
+    dependency: "direct main"
+    description:
+      name: wakelock_plus
+      sha256: "61713aa82b7f85c21c9f4cd0a148abd75f38a74ec645fcb1e446f882c82fd09b"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.3.3"
+  wakelock_plus_platform_interface:
+    dependency: transitive
+    description:
+      name: wakelock_plus_platform_interface
+      sha256: "764c25504562abc8ac3406f5d175f126b276e6ba916c7c2675690b73368ca384"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.7.0"
   watcher:
     dependency: "direct main"
     description:
