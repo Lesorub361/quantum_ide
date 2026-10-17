@@ -1,7 +1,7 @@
 name: quantum_ide
 description: "QuantumIDE - A next-generation AI-powered mobile IDE for web development built with Flutter."
 publish_to: 'none'
-version: 1.2.28+46
+version: 1.2.29+47
 
 environment:
   sdk: ^3.11.4
@@ -78,6 +78,8 @@ dependencies:
   genkit_google_genai: ^1.0.0
   genkit_openai: ^1.0.0
   genkit_anthropic: ^1.0.0
+  flutter_linkify: ^6.0.0
+  linkify: ^5.0.0
 
 dev_dependencies:
   flutter_test:

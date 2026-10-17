@@ -304,6 +304,11 @@ class SettingsPage extends ConsumerWidget {
       case 'dracula': return 'Dracula';
       case 'monokai': return 'Monokai';
       case 'dark': return AppLocalizations.of(context)!.pureDark;
+      case 'catppuccin': return 'Catppuccin Mocha';
+      case 'nord': return 'Nord';
+      case 'oneDark': return 'One Dark';
+      case 'tokyoNight': return 'Tokyo Night';
+      case 'matrix': return 'Matrix Green';
       default: return theme;
     }
   }
@@ -506,6 +511,11 @@ class SettingsPage extends ConsumerWidget {
       ['dracula', 'Dracula', const Color(0xFF282A36)],
       ['monokai', 'Monokai', const Color(0xFF272822)],
       ['dark', 'Pure Dark', const Color(0xFF0D0F14)],
+      ['catppuccin', 'Catppuccin Mocha', const Color(0xFF1E1E2E)],
+      ['nord', 'Nord', const Color(0xFF2E3440)],
+      ['oneDark', 'One Dark', const Color(0xFF282C34)],
+      ['tokyoNight', 'Tokyo Night', const Color(0xFF1A1B26)],
+      ['matrix', 'Matrix Green', const Color(0xFF0D1117)],
     ];
     showDialog(
       context: context,

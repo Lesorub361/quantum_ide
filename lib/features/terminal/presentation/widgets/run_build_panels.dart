@@ -173,6 +173,26 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         bg = const Color(0xFF0D0F14);
         fg = const Color(0xFFE0E0E0);
         break;
+      case 'catppuccin':
+        bg = const Color(0xFF1E1E2E);
+        fg = const Color(0xFFCDD6F4);
+        break;
+      case 'nord':
+        bg = const Color(0xFF2E3440);
+        fg = const Color(0xFFECEFF4);
+        break;
+      case 'oneDark':
+        bg = const Color(0xFF282C34);
+        fg = const Color(0xFFABB2BF);
+        break;
+      case 'tokyoNight':
+        bg = const Color(0xFF1A1B26);
+        fg = const Color(0xFFA9B1D6);
+        break;
+      case 'matrix':
+        bg = const Color(0xFF0D1117);
+        fg = const Color(0xFF00FF66);
+        break;
       case 'ubuntu':
       default:
         bg = const Color(0xFF300A24);
@@ -182,7 +202,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
 
     return xt.TerminalTheme(
       cursor: fg,
-      selection: fg.withValues(alpha: 0.25),
+      selection: const Color(0xFF264F78).withValues(alpha: 0.6),
       foreground: fg,
       background: bg,
       black: Colors.black,
@@ -578,6 +598,26 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         bg = const Color(0xFF0D0F14);
         fg = const Color(0xFFE0E0E0);
         break;
+      case 'catppuccin':
+        bg = const Color(0xFF1E1E2E);
+        fg = const Color(0xFFCDD6F4);
+        break;
+      case 'nord':
+        bg = const Color(0xFF2E3440);
+        fg = const Color(0xFFECEFF4);
+        break;
+      case 'oneDark':
+        bg = const Color(0xFF282C34);
+        fg = const Color(0xFFABB2BF);
+        break;
+      case 'tokyoNight':
+        bg = const Color(0xFF1A1B26);
+        fg = const Color(0xFFA9B1D6);
+        break;
+      case 'matrix':
+        bg = const Color(0xFF0D1117);
+        fg = const Color(0xFF00FF66);
+        break;
       case 'ubuntu':
       default:
         bg = const Color(0xFF300A24);
@@ -587,7 +627,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
     return xt.TerminalTheme(
       cursor: fg,
-      selection: fg.withValues(alpha: 0.25),
+      selection: const Color(0xFF264F78).withValues(alpha: 0.6),
       foreground: fg,
       background: bg,
       black: Colors.black,

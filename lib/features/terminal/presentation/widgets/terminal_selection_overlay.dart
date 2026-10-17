@@ -1,0 +1,390 @@
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:xterm/xterm.dart' as xt;
+import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+
+/// Overlay widget for interactive touch selection in terminal views.
+/// Displays draggable teardrop selection handles and an adaptive floating toolbar.
+class TerminalSelectionOverlay extends StatefulWidget {
+  final TerminalSession session;
+  final xt.TerminalViewState Function() getViewState;
+  final Function(String selectedText)? onAskAI;
+  final VoidCallback? onSelectAll;
+  final VoidCallback? onPaste;
+
+  const TerminalSelectionOverlay({
+    super.key,
+    required this.session,
+    required this.getViewState,
+    this.onAskAI,
+    this.onSelectAll,
+    this.onPaste,
+  });
+
+  @override
+  State<TerminalSelectionOverlay> createState() => _TerminalSelectionOverlayState();
+}
+
+class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
+  xt.CellOffset? _lastDragStartCell;
+  xt.CellOffset? _lastDragEndCell;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: widget.session.xtermViewController,
+      builder: (context, _) {
+        final selection = widget.session.xtermViewController.selection;
+        if (selection == null) return const SizedBox.shrink();
+
+        xt.TerminalViewState? viewState;
+        try {
+          viewState = widget.getViewState();
+        } catch (_) {
+          return const SizedBox.shrink();
+        }
+
+        final renderTerminal = viewState.renderTerminal;
+        final range = selection.normalized;
+        final cellSize = renderTerminal.cellSize;
+        final startOffset = renderTerminal.getOffset(range.begin);
+        final endOffset = renderTerminal.getOffset(range.end);
+
+        final selectedText = widget.session.xtermTerminal.buffer.getText(selection);
+        final viewportSize = renderTerminal.size;
+
+        final isStartVisible = startOffset.dy >= -cellSize.height * 2 &&
+            startOffset.dy <= viewportSize.height + cellSize.height;
+        final isEndVisible = endOffset.dy >= -cellSize.height * 2 &&
+            endOffset.dy <= viewportSize.height + cellSize.height;
+
+        final isUrl = _checkIsUrl(selectedText.trim());
+
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // Start selection handle
+            if (isStartVisible)
+              Positioned(
+                left: (startOffset.dx - 18).clamp(-18.0, viewportSize.width),
+                top: startOffset.dy + cellSize.height,
+                child: _buildHandle(
+                  isStart: true,
+                  renderTerminal: renderTerminal,
+                  range: range,
+                  cellSize: cellSize,
+                ),
+              ),
+
+            // End selection handle
+            if (isEndVisible)
+              Positioned(
+                left: (endOffset.dx + cellSize.width - 18).clamp(-18.0, viewportSize.width),
+                top: endOffset.dy + cellSize.height,
+                child: _buildHandle(
+                  isStart: false,
+                  renderTerminal: renderTerminal,
+                  range: range,
+                  cellSize: cellSize,
+                ),
+              ),
+
+            // Floating selection toolbar
+            _buildFloatingToolbar(
+              context: context,
+              startOffset: startOffset,
+              endOffset: endOffset,
+              cellSize: cellSize,
+              viewportSize: viewportSize,
+              selectedText: selectedText,
+              isUrl: isUrl,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  bool _checkIsUrl(String text) {
+    final clean = text.trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('ftp://')) {
+      return true;
+    }
+    return false;
+  }
+
+  Widget _buildHandle({
+    required bool isStart,
+    required dynamic renderTerminal,
+    required xt.BufferRange range,
+    required Size cellSize,
+  }) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: (_) {
+        HapticFeedback.selectionClick();
+        if (isStart) {
+          _lastDragStartCell = range.begin;
+        } else {
+          _lastDragEndCell = range.end;
+        }
+      },
+      onPanUpdate: (details) {
+        final localPos = renderTerminal.globalToLocal(details.globalPosition);
+        // Offset finger slightly above touch center to see cursor
+        final targetOffset = Offset(
+          localPos.dx,
+          localPos.dy - cellSize.height * 0.8,
+        );
+        final targetCell = renderTerminal.getCellOffset(targetOffset);
+
+        if (isStart) {
+          if (targetCell != _lastDragStartCell) {
+            _lastDragStartCell = targetCell;
+            HapticFeedback.selectionClick();
+            widget.session.xtermViewController.setSelection(
+              widget.session.xtermTerminal.buffer.createAnchorFromOffset(targetCell),
+              widget.session.xtermTerminal.buffer.createAnchorFromOffset(range.end),
+            );
+          }
+        } else {
+          if (targetCell != _lastDragEndCell) {
+            _lastDragEndCell = targetCell;
+            HapticFeedback.selectionClick();
+            widget.session.xtermViewController.setSelection(
+              widget.session.xtermTerminal.buffer.createAnchorFromOffset(range.begin),
+              widget.session.xtermTerminal.buffer.createAnchorFromOffset(targetCell),
+            );
+          }
+        }
+      },
+      child: SizedBox(
+        width: 36,
+        height: 38,
+        child: CustomPaint(
+          painter: _TeardropHandlePainter(
+            isStart: isStart,
+            color: Colors.cyanAccent,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingToolbar({
+    required BuildContext context,
+    required Offset startOffset,
+    required Offset endOffset,
+    required Size cellSize,
+    required Size viewportSize,
+    required String selectedText,
+    required bool isUrl,
+  }) {
+    final minY = math.min(startOffset.dy, endOffset.dy);
+    final maxY = math.max(startOffset.dy, endOffset.dy) + cellSize.height;
+
+    double top = minY - 44;
+    if (top < 10) {
+      top = (maxY + 18).clamp(10.0, viewportSize.height - 48);
+    }
+
+    final minX = math.min(startOffset.dx, endOffset.dx);
+    final toolbarLeft = minX.clamp(10.0, math.max(10.0, viewportSize.width - 340)).toDouble();
+
+    return Positioned(
+      top: top,
+      left: toolbarLeft,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF131722).withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4), width: 1.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.6),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildToolbarBtn(
+                icon: LucideIcons.copy,
+                label: 'Копировать',
+                color: Colors.cyanAccent,
+                onTap: () async {
+                  HapticFeedback.lightImpact();
+                  await Clipboard.setData(ClipboardData(text: selectedText));
+                  widget.session.xtermViewController.clearSelection();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Скопировано в буфер обмена'),
+                        duration: Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  }
+                },
+              ),
+              if (isUrl) ...[
+                _divider(),
+                _buildToolbarBtn(
+                  icon: LucideIcons.external_link,
+                  label: 'Открыть',
+                  color: Colors.greenAccent,
+                  onTap: () async {
+                    final uri = Uri.tryParse(selectedText.trim());
+                    if (uri != null) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                ),
+              ],
+              _divider(),
+              _buildToolbarBtn(
+                icon: LucideIcons.sparkles,
+                label: 'AI ✨',
+                color: Colors.purpleAccent,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.onAskAI?.call(selectedText);
+                  widget.session.xtermViewController.clearSelection();
+                },
+              ),
+              if (widget.onSelectAll != null) ...[
+                _divider(),
+                _buildToolbarBtn(
+                  label: 'Всё',
+                  color: Colors.white70,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    widget.onSelectAll?.call();
+                  },
+                ),
+              ],
+              _divider(),
+              _buildToolbarBtn(
+                icon: LucideIcons.share_2,
+                label: '',
+                color: Colors.white70,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Share.share(selectedText);
+                  widget.session.xtermViewController.clearSelection();
+                },
+              ),
+              _divider(),
+              _buildToolbarBtn(
+                icon: LucideIcons.x,
+                label: '',
+                color: Colors.white54,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  widget.session.xtermViewController.clearSelection();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _divider() {
+    return Container(
+      width: 1,
+      height: 16,
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      color: Colors.white12,
+    );
+  }
+
+  Widget _buildToolbarBtn({
+    IconData? icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 13, color: color),
+              if (label.isNotEmpty) const SizedBox(width: 4),
+            ],
+            if (label.isNotEmpty)
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: color == Colors.white70 ? Colors.white : color,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom painter for touch-friendly selection teardrop handles
+class _TeardropHandlePainter extends CustomPainter {
+  final bool isStart;
+  final Color color;
+
+  _TeardropHandlePainter({required this.isStart, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centerX = size.width / 2;
+    const topY = 0.0;
+    const radius = 6.5;
+    final circleCenter = Offset(centerX, radius + 7);
+
+    final linePaint = Paint()
+      ..color = color
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    // Line from top to circle center
+    canvas.drawLine(Offset(centerX, topY), circleCenter, linePaint);
+
+    final circlePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    // Glowing circle handle
+    final glowPaint = Paint()
+      ..color = color.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
+
+    canvas.drawCircle(circleCenter, radius + 2, glowPaint);
+    canvas.drawCircle(circleCenter, radius, circlePaint);
+
+    // Inner bright dot
+    final dotPaint = Paint()..color = Colors.black87;
+    canvas.drawCircle(circleCenter, 2.0, dotPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TeardropHandlePainter oldDelegate) {
+    return oldDelegate.isStart != isStart || oldDelegate.color != color;
+  }
+}

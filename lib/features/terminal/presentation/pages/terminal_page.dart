@@ -40,6 +40,21 @@ class TerminalPage extends ConsumerWidget {
       case 'dark':
         bg = const Color(0xFF0D0F14);
         break;
+      case 'catppuccin':
+        bg = const Color(0xFF1E1E2E);
+        break;
+      case 'nord':
+        bg = const Color(0xFF2E3440);
+        break;
+      case 'oneDark':
+        bg = const Color(0xFF282C34);
+        break;
+      case 'tokyoNight':
+        bg = const Color(0xFF1A1B26);
+        break;
+      case 'matrix':
+        bg = const Color(0xFF0D1117);
+        break;
       case 'ubuntu':
       default:
         bg = const Color(0xFF300A24);

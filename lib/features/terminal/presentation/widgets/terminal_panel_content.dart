@@ -31,6 +31,8 @@ import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_text_selection_modal.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_selection_overlay.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 
@@ -79,6 +81,90 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   int _problemsSeverityFilter = 0; // 0: Все, 1: Ошибки, 2: Предупреждения, 3: Инфо
   int _buildSubTab = 0;
   double _pinchBaseFontSize = 13.0;
+  final Map<int, Offset> _pinchPointers = {};
+  double? _initialPinchDistance;
+
+  Widget _buildTerminalPinchWrapper({required Widget child}) {
+    return Listener(
+      onPointerDown: (event) {
+        _pinchPointers[event.pointer] = event.position;
+        if (_pinchPointers.length == 2) {
+          final points = _pinchPointers.values.toList();
+          _initialPinchDistance = (points[0] - points[1]).distance;
+          _pinchBaseFontSize = ref.read(settingsProvider).terminalFontSize;
+        }
+      },
+      onPointerMove: (event) {
+        _pinchPointers[event.pointer] = event.position;
+        if (_pinchPointers.length >= 2 && _initialPinchDistance != null && _initialPinchDistance! > 0) {
+          final points = _pinchPointers.values.toList();
+          final currentDistance = (points[0] - points[1]).distance;
+          final scale = currentDistance / _initialPinchDistance!;
+          final newSize = (_pinchBaseFontSize * scale).clamp(8.0, 32.0);
+          if ((newSize - ref.read(settingsProvider).terminalFontSize).abs() >= 0.5) {
+            ref.read(settingsProvider.notifier).setTerminalFontSize(newSize);
+          }
+        }
+      },
+      onPointerUp: (event) {
+        _pinchPointers.remove(event.pointer);
+        if (_pinchPointers.length < 2) {
+          _initialPinchDistance = null;
+        }
+      },
+      onPointerCancel: (event) {
+        _pinchPointers.remove(event.pointer);
+        if (_pinchPointers.length < 2) {
+          _initialPinchDistance = null;
+        }
+      },
+      child: child,
+    );
+  }
+
+  void _showUrlDetected(String url) {
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(LucideIcons.external_link, size: 16, color: Colors.cyanAccent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                url,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.inter(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+        action: SnackBarAction(
+          label: 'Открыть',
+          textColor: Colors.cyanAccent,
+          onPressed: () async {
+            final uri = Uri.tryParse(url);
+            if (uri != null) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          },
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  String? _findUrlAt(String line, int col) {
+    final regExp = RegExp(r'https?://[^\s<>"]+|ftp://[^\s<>"]+');
+    for (final match in regExp.allMatches(line)) {
+      if (col >= match.start && col <= match.end) {
+        return match.group(0);
+      }
+    }
+    return null;
+  }
 
   final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
@@ -1752,63 +1838,66 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const SelectAllTextIntent(),
                         LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const SelectAllTextIntent(),
                       },
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onScaleStart: (details) {
-                          if (details.pointerCount >= 2) {
-                            _pinchBaseFontSize = ref.read(settingsProvider).terminalFontSize;
-                          }
-                        },
-                        onScaleUpdate: (details) {
-                          if (details.pointerCount >= 2) {
-                            final newSize = (_pinchBaseFontSize * details.scale).clamp(8.0, 32.0);
-                            if ((newSize - ref.read(settingsProvider).terminalFontSize).abs() >= 0.5) {
-                              ref.read(settingsProvider.notifier).setTerminalFontSize(newSize);
-                            }
-                          }
-                        },
-                        onSecondaryTapDown: (details) {
-                          if (session.xtermViewController.selection != null) {
-                            _copySelection(session);
-                          } else {
-                            _pasteToTerminal(session);
-                          }
-                        },
-                        child: xt.TerminalView(
-                          key: _getTerminalKey(keyId),
-                          session.xtermTerminal,
-                          controller: session.xtermViewController,
-                          focusNode: _getFocusNode(keyId),
-                          autofocus: !isMobile,
-                          hardwareKeyboardOnly: false,
-                          onTapUp: (details, offset) {
-                            // Only open soft keyboard if user did not just finish selecting text
-                            if (session.xtermViewController.selection == null) {
-                              _openTerminalKeyboard(session, isSecondary: isSecondary);
+                      child: _buildTerminalPinchWrapper(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onSecondaryTapDown: (details) {
+                            if (session.xtermViewController.selection != null) {
+                              _copySelection(session);
+                            } else {
+                              _pasteToTerminal(session);
                             }
                           },
-                          padding: const EdgeInsets.all(10),
-                          theme: theme,
-                          backgroundOpacity: 0,
-                          textStyle: xt.TerminalStyle(
-                            fontSize: terminalFontSize,
-                            fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                            fontFamilyFallback: const [
-                              'Symbols Nerd Font',
-                              'Nerd Font',
-                              'JetBrains Mono',
-                              'Fira Code',
-                              'cascadia',
-                              'dejaVuSansMono',
-                              'jetBrainsMono',
-                              'firaCode',
-                              'Noto Sans Mono',
-                              'DejaVu Sans Mono',
-                              'monospace',
-                            ],
+                          child: xt.TerminalView(
+                            key: _getTerminalKey(keyId),
+                            session.xtermTerminal,
+                            controller: session.xtermViewController,
+                            focusNode: _getFocusNode(keyId),
+                            autofocus: !isMobile,
+                            hardwareKeyboardOnly: false,
+                            onTapUp: (details, offset) {
+                              if (session.xtermViewController.selection != null) {
+                                session.xtermViewController.clearSelection();
+                                return;
+                              }
+
+                              final lineIndex = offset.y;
+                              final colIndex = offset.x;
+                              final buffer = session.xtermTerminal.buffer;
+                              if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
+                                final lineText = buffer.lines[lineIndex].toString();
+                                final url = _findUrlAt(lineText, colIndex);
+                                if (url != null) {
+                                  _showUrlDetected(url);
+                                  return;
+                                }
+                              }
+
+                              _openTerminalKeyboard(session, isSecondary: isSecondary);
+                            },
+                            padding: const EdgeInsets.all(10),
+                            theme: theme,
+                            backgroundOpacity: 0,
+                            textStyle: xt.TerminalStyle(
+                              fontSize: terminalFontSize,
+                              fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                              fontFamilyFallback: const [
+                                'Symbols Nerd Font',
+                                'Nerd Font',
+                                'JetBrains Mono',
+                                'Fira Code',
+                                'cascadia',
+                                'dejaVuSansMono',
+                                'jetBrainsMono',
+                                'firaCode',
+                                'Noto Sans Mono',
+                                'DejaVu Sans Mono',
+                                'monospace',
+                              ],
+                            ),
+                            keyboardType: TextInputType.visiblePassword,
+                            deleteDetection: true,
                           ),
-                          keyboardType: TextInputType.visiblePassword,
-                          deleteDetection: true,
                         ),
                       ),
                     ),
@@ -1819,150 +1908,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           ],
         ),
         _buildSuggestionBox(session),
-        _buildFloatingSelectionToolbar(session),
+        TerminalSelectionOverlay(
+          session: session,
+          getViewState: () => _getTerminalKey(keyId).currentState!,
+          onAskAI: (selectedText) {
+            ref.read(rightChatPanelOpenProvider.notifier).state = true;
+            ref.read(aiProvider.notifier).askAI(
+              'Помоги разобраться с этой ошибкой/выводом из терминала:\n```\n$selectedText\n```',
+            );
+          },
+          onSelectAll: () => _selectAllInTerminal(session),
+          onPaste: () => _pasteToTerminal(session),
+        ),
       ],
-    );
-  }
-
-  Widget _buildFloatingSelectionToolbar(TerminalSession session) {
-    return AnimatedBuilder(
-      animation: session.xtermViewController,
-      builder: (context, _) {
-        final selection = session.xtermViewController.selection;
-        if (selection == null) return const SizedBox.shrink();
-        final selectedText = session.xtermTerminal.buffer.getText(selection);
-        if (selectedText.trim().isEmpty) return const SizedBox.shrink();
-
-        final l10n = AppLocalizations.of(context)!;
-        return Positioned(
-          top: 12,
-          right: 14,
-          left: 14,
-          child: Align(
-            alignment: Alignment.topRight,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1E2D).withValues(alpha: 0.97),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.5), width: 0.9),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 2,
-                  children: [
-                    InkWell(
-                      onTap: () async {
-                        await Clipboard.setData(ClipboardData(text: selectedText));
-                        session.xtermViewController.clearSelection();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(l10n.copiedToClipboard),
-                              duration: const Duration(seconds: 1),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(LucideIcons.copy, size: 13, color: Colors.cyanAccent),
-                            const SizedBox(width: 5),
-                            Text(
-                              l10n.copy,
-                              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Container(width: 1, height: 15, color: Colors.white12),
-                    InkWell(
-                      onTap: () => _selectAllInTerminal(session),
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                        child: Text(
-                          'Всё',
-                          style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70),
-                        ),
-                      ),
-                    ),
-                    Container(width: 1, height: 15, color: Colors.white12),
-                    InkWell(
-                      onTap: () async {
-                        await _pasteToTerminal(session);
-                        session.xtermViewController.clearSelection();
-                      },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(LucideIcons.clipboard_paste, size: 12, color: Colors.white70),
-                            const SizedBox(width: 4),
-                            Text(
-                              l10n.paste,
-                              style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Container(width: 1, height: 15, color: Colors.white12),
-                    InkWell(
-                      onTap: () {
-                        ref.read(rightChatPanelOpenProvider.notifier).state = true;
-                        ref.read(aiProvider.notifier).askAI(
-                          'Помоги разобраться с этой ошибкой/выводом из терминала:\n```\n$selectedText\n```',
-                        );
-                        session.xtermViewController.clearSelection();
-                      },
-                      borderRadius: BorderRadius.circular(6),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(LucideIcons.sparkles, size: 12, color: Colors.purpleAccent),
-                            const SizedBox(width: 4),
-                            Text(
-                              'AI ✨',
-                              style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(LucideIcons.x, size: 13, color: Colors.white38),
-                      onPressed: () => session.xtermViewController.clearSelection(),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                      splashRadius: 12,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -2001,6 +1959,26 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         bg = const Color(0xFF0D0F14);
         fg = const Color(0xFFE0E0E0);
         break;
+      case 'catppuccin':
+        bg = const Color(0xFF1E1E2E);
+        fg = const Color(0xFFCDD6F4);
+        break;
+      case 'nord':
+        bg = const Color(0xFF2E3440);
+        fg = const Color(0xFFECEFF4);
+        break;
+      case 'oneDark':
+        bg = const Color(0xFF282C34);
+        fg = const Color(0xFFABB2BF);
+        break;
+      case 'tokyoNight':
+        bg = const Color(0xFF1A1B26);
+        fg = const Color(0xFFA9B1D6);
+        break;
+      case 'matrix':
+        bg = const Color(0xFF0D1117);
+        fg = const Color(0xFF00FF66);
+        break;
       case 'ubuntu':
       default:
         bg = const Color(0xFF300A24);
@@ -2010,7 +1988,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     return xt.TerminalTheme(
       cursor: fg,
-      selection: fg.withValues(alpha: 0.25),
+      selection: const Color(0xFF264F78).withValues(alpha: 0.6),
       foreground: fg,
       background: bg,
       black: Colors.black,
