@@ -1,7 +1,7 @@
 name: quantum_ide
 description: "QuantumIDE - A next-generation AI-powered mobile IDE for web development built with Flutter."
 publish_to: 'none'
-version: 1.2.29+47
+version: 1.2.30+48
 
 environment:
   sdk: ^3.11.4
@@ -123,3 +123,9 @@ flutter:
     - family: sourceCodePro
       fonts:
         - asset: assets/fonts/SourceCodePro-Medium.ttf
+    - family: SymbolsNerdFont
+      fonts:
+        - asset: assets/fonts/SymbolsNerdFontMono-Regular.ttf
+    - family: "Symbols Nerd Font"
+      fonts:
+        - asset: assets/fonts/SymbolsNerdFontMono-Regular.ttf

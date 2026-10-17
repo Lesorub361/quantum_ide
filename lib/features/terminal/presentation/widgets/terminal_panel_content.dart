@@ -1882,14 +1882,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               fontSize: terminalFontSize,
                               fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
                               fontFamilyFallback: const [
+                                'SymbolsNerdFont',
                                 'Symbols Nerd Font',
-                                'Nerd Font',
-                                'JetBrains Mono',
-                                'Fira Code',
-                                'cascadia',
-                                'dejaVuSansMono',
                                 'jetBrainsMono',
                                 'firaCode',
+                                'cascadia',
+                                'dejaVuSansMono',
+                                'inconsolata',
+                                'sourceCodePro',
                                 'Noto Sans Mono',
                                 'DejaVu Sans Mono',
                                 'monospace',
@@ -2827,6 +2827,10 @@ Also explain what exactly went wrong and how you fixed it.
       case 'cascadiacode':
       case 'cascadia':
         return 'cascadia';
+      case 'symbolsnerdfont':
+      case 'nerdfont':
+      case 'symbolsnerd':
+        return 'SymbolsNerdFont';
       case 'monospace':
         return 'monospace';
       default:

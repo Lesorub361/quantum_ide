@@ -366,6 +366,7 @@ class SettingsPage extends ConsumerWidget {
       'Source Code Pro',
       'Inconsolata',
       'Anonymous Pro',
+      'Symbols Nerd Font',
       'Monospace',
     ];
     showDialog(

@@ -409,6 +409,8 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                           fontSize: terminalFontSize * 0.9,
                           fontFamily: 'jetBrainsMono',
                           fontFamilyFallback: const [
+                            'SymbolsNerdFont',
+                            'Symbols Nerd Font',
                             'cascadia',
                             'dejaVuSansMono',
                             'firaCode',
@@ -898,6 +900,8 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                       fontSize: terminalFontSize * 0.9,
                                       fontFamily: 'jetBrainsMono',
                                       fontFamilyFallback: const [
+                                        'SymbolsNerdFont',
+                                        'Symbols Nerd Font',
                                         'cascadia',
                                         'dejaVuSansMono',
                                         'firaCode',
