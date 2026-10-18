@@ -326,20 +326,26 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   padding: const EdgeInsets.all(5),
                   constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 ),
-              // Settings Button (AISettingsDialog / CliAgentSettingsDialog)
+              // Settings Button (Unified AI Hub / CliAgentSettingsDialog)
               IconButton(
                 icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.white70),
                 onPressed: () {
                   if (aiState.activeAgentKind != AgentKind.native) {
                     CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
                   } else {
-                    showDialog(
-                      context: context,
-                      builder: (context) => const AISettingsDialog(),
+                    final activeProviderId = ref.read(activeAiProviderIdProvider);
+                    final effectiveModel = ref.read(activeAiModelProvider);
+                    final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
+                    showModelPickerModal(
+                      context,
+                      providerId: activeProviderId,
+                      currentModel: effectiveModel,
+                      apiKey: apiKey,
+                      initialMainTab: 1,
                     );
                   }
                 },
-                tooltip: aiState.activeAgentKind != AgentKind.native ? 'Настройки CLI-агентов' : l10n.settings,
+                tooltip: aiState.activeAgentKind != AgentKind.native ? 'Настройки CLI-агентов' : 'Настройки моделей и параметров',
                 padding: const EdgeInsets.all(5),
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               ),
@@ -926,21 +932,99 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           ),
 
           const SizedBox(width: 6),
-          // Status indicator dot
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: aiState.isLoading ? Colors.amberAccent : Colors.greenAccent,
-              boxShadow: [
-                BoxShadow(
-                  color: (aiState.isLoading ? Colors.amberAccent : Colors.greenAccent).withValues(alpha: 0.6),
-                  blurRadius: 4,
-                  spreadRadius: 1,
+          // Dynamic live status indicator chip
+          Builder(
+            builder: (context) {
+              final localState = ref.watch(localAiServiceProvider);
+              final isLocal = activeProviderId == 'local_edge' || activeProviderId == 'ollama';
+
+              if (isLocal) {
+                if (localState.isStarting) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: 8, height: 8, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.amberAccent)),
+                        const SizedBox(width: 4),
+                        Text('Загрузка...', style: GoogleFonts.inter(fontSize: 9, color: Colors.amberAccent, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  );
+                } else if (localState.isRunning) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.greenAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(width: 5, height: 5, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
+                        const SizedBox(width: 4),
+                        Text('Готова', style: GoogleFonts.inter(fontSize: 9, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  );
+                } else if (localState.error != null) {
+                  return InkWell(
+                    onTap: () => ref.read(localAiServiceProvider.notifier).startServer(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
+                      ),
+                      child: Text('Ошибка', style: GoogleFonts.inter(fontSize: 9, color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                    ),
+                  );
+                } else {
+                  return InkWell(
+                    onTap: () => ref.read(localAiServiceProvider.notifier).startServer(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.cyanAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.play, size: 8, color: Colors.cyanAccent),
+                          const SizedBox(width: 3),
+                          Text('Запуск', style: GoogleFonts.inter(fontSize: 9, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+              }
+
+              return Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: aiState.isLoading ? Colors.amberAccent : Colors.greenAccent,
+                  boxShadow: [
+                    BoxShadow(
+                      color: (aiState.isLoading ? Colors.amberAccent : Colors.greenAccent).withValues(alpha: 0.6),
+                      blurRadius: 4,
+                      spreadRadius: 1,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -2175,6 +2259,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               ),
             ),
 
+          // Live Local AI Model Running Banner
+          _buildLocalModelStatusBanner(context, ref),
+
           // Input Box
           Container(
             decoration: BoxDecoration(
@@ -2475,6 +2562,21 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         return;
       }
 
+      if (lowerVal == '/settings') {
+        _aiChatController.clear();
+        final activeProviderId = ref.read(activeAiProviderIdProvider);
+        final activeModel = ref.read(activeAiModelProvider);
+        final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
+        await showModelPickerModal(
+          context,
+          providerId: activeProviderId,
+          currentModel: activeModel,
+          apiKey: apiKey,
+          initialMainTab: 1,
+        );
+        return;
+      }
+
       if (lowerVal == '/update' || lowerVal == '/upgrade') {
         _aiChatController.clear();
         final currentKind = ref.read(aiProvider).activeAgentKind;
@@ -2649,6 +2751,18 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           contextFiles: contextFiles.isNotEmpty ? contextFiles : null,
         );
       } else {
+        final activeProviderId = ref.read(activeAiProviderIdProvider);
+        if (activeProviderId == 'local_edge' || activeProviderId == 'ollama') {
+          final localState = ref.read(localAiServiceProvider);
+          if (!localState.isRunning && !localState.isStarting) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Запуск локальной модели в оперативную память (RAM)...')),
+              );
+            }
+            await ref.read(localAiServiceProvider.notifier).startServer();
+          }
+        }
         await ref.read(aiProvider.notifier).askAI(
           fullPrompt,
           imageBase64: _selectedImageBase64,
@@ -2883,6 +2997,126 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               foregroundColor: modeColor,
             ),
             child: Text('Переключить в $modeLabel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocalModelStatusBanner(BuildContext context, WidgetRef ref) {
+    final activeProviderId = ref.watch(activeAiProviderIdProvider);
+    final isLocal = activeProviderId == 'local_edge' || activeProviderId == 'ollama';
+    if (!isLocal) return const SizedBox.shrink();
+
+    final localState = ref.watch(localAiServiceProvider);
+    if (localState.isStarting) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amberAccent)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Локальная модель загружается в оперативную память (RAM)... Пожалуйста, подождите.',
+                style: GoogleFonts.inter(fontSize: 10.5, color: Colors.amberAccent, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (localState.isRunning) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.greenAccent.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '🟢 Модель запущена и готова к работе! Вы можете писать любые запросы.',
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (localState.error != null) {
+      return Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.redAccent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.triangle_alert, size: 12, color: Colors.redAccent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Ошибка запуска: ${localState.error}',
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.redAccent),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            InkWell(
+              onTap: () => ref.read(localAiServiceProvider.notifier).startServer(),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Text('Повторить', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.power, size: 12, color: Colors.cyanAccent),
+          const SizedBox(width: 6),
+          const Expanded(
+            child: Text(
+              'Локальная модель не загружена в память',
+              style: TextStyle(fontSize: 10.5, color: Colors.white70),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => ref.read(localAiServiceProvider.notifier).startServer(),
+            icon: const Icon(LucideIcons.play, size: 11),
+            label: const Text('Запустить'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.cyanAccent,
+              foregroundColor: Colors.black,
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
           ),
         ],
       ),

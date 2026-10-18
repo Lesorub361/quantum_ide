@@ -27,7 +27,6 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/packages_pane
 import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_panels.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/live_share_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/extensions_panel.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/models_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/app_logs_panel.dart';
 
 
@@ -193,7 +192,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                   _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9, isMobile: isMobile),
                   _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10, isMobile: isMobile),
                   _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11, isMobile: isMobile),
-                  _buildActivityIcon(ref, 12, LucideIcons.cpu, 'AI Models', selectedTab == 12, isMobile: isMobile),
                   _buildActivityIcon(ref, 13, LucideIcons.terminal, 'App Logs', selectedTab == 13, isMobile: isMobile),
                 ],
               ),
@@ -255,9 +253,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         break;
       case 11:
         activePanel = const ExtensionsPanel();
-        break;
-      case 12:
-        activePanel = const ModelsPanel();
         break;
       case 13:
         activePanel = const AppLogsPanel();

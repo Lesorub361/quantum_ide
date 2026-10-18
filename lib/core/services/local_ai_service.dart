@@ -980,12 +980,15 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         _appendLogs(data);
       });
 
-      int retries = 5;
+      int retries = 20;
       bool isHealthy = false;
+      int attempt = 0;
       while (retries > 0) {
+        attempt++;
         await Future.delayed(const Duration(seconds: 2));
         isHealthy = await _pingServer();
         if (isHealthy) break;
+        _appendLogs('[Local AI] Загрузка модели в память RAM... (попытка $attempt/20)\n');
         retries--;
       }
 
@@ -1036,6 +1039,21 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
     state = state.copyWith(isRunning: false, isStarting: false);
     _appendLogs('[Local AI] Server stopped.\n');
+  }
+
+  void clearLogs() {
+    state = state.copyWith(logs: '');
+  }
+
+  Future<void> restartServer() async {
+    await stopServer();
+    await Future.delayed(const Duration(milliseconds: 800));
+    await startServer();
+  }
+
+  Future<void> selectAndStartModel(String modelIdOrFilename) async {
+    await selectModel(modelIdOrFilename);
+    await restartServer();
   }
 
   @override

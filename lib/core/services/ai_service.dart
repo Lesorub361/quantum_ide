@@ -22,6 +22,12 @@ class AISettings {
   final bool autoApprove;
   final String approvalMode;
 
+  // Model parameters (for all models)
+  final double temperature;
+  final int maxTokens;
+  final double topP;
+  final String systemPrompt;
+
   const AISettings({
     this.selectedProviderId = 'google',
     this.selectedModel = 'gemini-2.5-flash',
@@ -30,6 +36,10 @@ class AISettings {
     this.selectedLocalEngine = LocalAiEngine.llamaServer,
     this.autoApprove = true,
     this.approvalMode = 'fullAutonomous',
+    this.temperature = 0.7,
+    this.maxTokens = 4096,
+    this.topP = 0.95,
+    this.systemPrompt = '',
   });
 
   String get currentApiKey => apiKeys[selectedProviderId] ?? '';
@@ -43,6 +53,10 @@ class AISettings {
     LocalAiEngine? selectedLocalEngine,
     bool? autoApprove,
     String? approvalMode,
+    double? temperature,
+    int? maxTokens,
+    double? topP,
+    String? systemPrompt,
   }) {
     return AISettings(
       selectedProviderId: selectedProviderId ?? this.selectedProviderId,
@@ -52,6 +66,10 @@ class AISettings {
       selectedLocalEngine: selectedLocalEngine ?? this.selectedLocalEngine,
       autoApprove: autoApprove ?? this.autoApprove,
       approvalMode: approvalMode ?? this.approvalMode,
+      temperature: temperature ?? this.temperature,
+      maxTokens: maxTokens ?? this.maxTokens,
+      topP: topP ?? this.topP,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
     );
   }
 }
@@ -154,6 +172,10 @@ class AIService {
 
     final autoApprove = prefs.getBool('ai_auto_approve') ?? true;
     final approvalMode = prefs.getString('ai_approval_mode') ?? (autoApprove ? 'fullAutonomous' : 'manual');
+    final temperature = prefs.getDouble('ai_temperature') ?? 0.7;
+    final maxTokens = prefs.getInt('ai_max_tokens') ?? 4096;
+    final topP = prefs.getDouble('ai_top_p') ?? 0.95;
+    final systemPrompt = prefs.getString('ai_system_prompt') ?? '';
 
     _settings = AISettings(
       selectedProviderId: providerId,
@@ -163,6 +185,10 @@ class AIService {
       selectedLocalEngine: localEngine,
       autoApprove: autoApprove,
       approvalMode: approvalMode,
+      temperature: temperature,
+      maxTokens: maxTokens,
+      topP: topP,
+      systemPrompt: systemPrompt,
     );
 
     _rebuildGemini();
@@ -188,6 +214,39 @@ class AIService {
   }
 
   // ─── Сохранение настроек ─────────────────────────────────────────────────
+
+  double get temperature => _settings.temperature;
+  int get maxTokens => _settings.maxTokens;
+  double get topP => _settings.topP;
+  String get systemPrompt => _settings.systemPrompt;
+
+  Future<void> setTemperature(double temp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('ai_temperature', temp);
+    _settings = _settings.copyWith(temperature: temp);
+    _rebuildGemini();
+  }
+
+  Future<void> setMaxTokens(int tokens) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('ai_max_tokens', tokens);
+    _settings = _settings.copyWith(maxTokens: tokens);
+    _rebuildGemini();
+  }
+
+  Future<void> setTopP(double p) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('ai_top_p', p);
+    _settings = _settings.copyWith(topP: p);
+    _rebuildGemini();
+  }
+
+  Future<void> setSystemPrompt(String prompt) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ai_system_prompt', prompt);
+    _settings = _settings.copyWith(systemPrompt: prompt);
+    _rebuildGemini();
+  }
 
   LocalAiEngine get selectedLocalEngine => _settings.selectedLocalEngine;
   bool get autoApprove => _settings.autoApprove;
@@ -1540,9 +1599,13 @@ class AIService {
         userContent = message;
       }
 
+      final effectiveSystemPrompt = _settings.systemPrompt.isNotEmpty
+          ? _settings.systemPrompt
+          : systemInstruction;
+
       final messages = [
-        if (systemInstruction != null)
-          {'role': 'system', 'content': systemInstruction},
+        if (effectiveSystemPrompt != null && effectiveSystemPrompt.isNotEmpty)
+          {'role': 'system', 'content': effectiveSystemPrompt},
         ...history.map((m) => {'role': m['role'], 'content': m['content']}),
         {'role': 'user', 'content': userContent},
       ];
@@ -1552,7 +1615,9 @@ class AIService {
         data: jsonEncode({
           'model': _settings.selectedModel,
           'messages': messages,
-          'max_tokens': 4096,
+          'max_tokens': _settings.maxTokens,
+          'temperature': _settings.temperature,
+          'top_p': _settings.topP,
         }),
       );
       final text = resp.data?['choices']?[0]?['message']?['content']?.toString() ?? 'Error: Unexpected API response format';
