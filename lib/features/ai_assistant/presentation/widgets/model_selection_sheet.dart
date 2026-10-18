@@ -1,4 +1,6 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -85,6 +87,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   late int _localThreads;
   late int _localGpuLayers;
   late bool _localUseFlashAttn;
+  late int _localContextSize;
 
   bool get _isLocalProvider =>
       widget.providerId == 'local_edge' || widget.providerId == 'ollama';
@@ -114,6 +117,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     _localThreads = localState.threads;
     _localGpuLayers = localState.gpuLayers;
     _localUseFlashAttn = localState.useFlashAttn;
+    _localContextSize = localState.contextSize;
   }
 
   @override
@@ -622,13 +626,24 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
       separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final model = catalogModels[index];
-        final isDownloaded = catalogState.downloadedModels[model.filename] == true ||
-            localAiState.downloadedModels[model.filename] == true;
+        final isDownloaded = model.isOllama
+            ? (localAiState.downloadedModels[model.id] == true || localAiState.downloadedModels[model.filename] == true)
+            : (catalogState.downloadedModels[model.filename] == true || localAiState.downloadedModels[model.filename] == true);
         final isSelected = activeFilename == model.filename;
         final downloadInfo = catalogState.downloads[model.filename];
-        final isDownloading = downloadInfo != null && downloadInfo.status == DownloadStatus.downloading;
+        final isOllamaDownloading = localAiState.downloadingModelId == model.id;
+        final isDownloading = (downloadInfo != null && downloadInfo.status == DownloadStatus.downloading) || isOllamaDownloading;
 
-        return _buildCatalogCard(context, model, isDownloaded, isSelected, isDownloading, downloadInfo);
+        return _buildCatalogCard(
+          context,
+          model,
+          isDownloaded,
+          isSelected,
+          isDownloading,
+          downloadInfo,
+          isOllamaDownloading: isOllamaDownloading,
+          ollamaProgress: localAiState.downloadProgress,
+        );
       },
     );
   }
@@ -639,8 +654,10 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     bool isDownloaded,
     bool isSelected,
     bool isDownloading,
-    ModelDownloadInfo? downloadInfo,
-  ) {
+    ModelDownloadInfo? downloadInfo, {
+    bool isOllamaDownloading = false,
+    double ollamaProgress = 0.0,
+  }) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -704,10 +721,12 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             ],
           ),
 
-          if (isDownloading && downloadInfo != null) ...[
+          if (isDownloading) ...[
             const SizedBox(height: 8),
             LinearProgressIndicator(
-              value: downloadInfo.progress > 0 ? downloadInfo.progress : null,
+              value: isOllamaDownloading
+                  ? (ollamaProgress > 0 ? ollamaProgress : null)
+                  : (downloadInfo?.progress != null && downloadInfo!.progress > 0 ? downloadInfo.progress : null),
               backgroundColor: Colors.white10,
               color: Colors.cyanAccent,
             ),
@@ -716,13 +735,18 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${(downloadInfo.progress * 100).toStringAsFixed(1)}% (${ModelCatalogNotifier.formatBytes(downloadInfo.downloadedBytes)} / ${ModelCatalogNotifier.formatBytes(downloadInfo.totalBytes)})',
+                  isOllamaDownloading
+                      ? '${(ollamaProgress * 100).toStringAsFixed(1)}% (Загрузка через Ollama...)'
+                      : (downloadInfo != null
+                          ? '${(downloadInfo.progress * 100).toStringAsFixed(1)}% (${ModelCatalogNotifier.formatBytes(downloadInfo.downloadedBytes)} / ${ModelCatalogNotifier.formatBytes(downloadInfo.totalBytes)})'
+                          : 'Загрузка...'),
                   style: const TextStyle(fontSize: 10, color: Colors.white60),
                 ),
-                Text(
-                  ModelCatalogNotifier.formatSpeed(downloadInfo.speed),
-                  style: const TextStyle(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
-                ),
+                if (!isOllamaDownloading && downloadInfo != null)
+                  Text(
+                    ModelCatalogNotifier.formatSpeed(downloadInfo.speed),
+                    style: const TextStyle(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                  ),
               ],
             ),
           ],
@@ -750,7 +774,11 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ] else if (isDownloading) ...[
                 OutlinedButton.icon(
                   onPressed: () {
-                    ref.read(modelCatalogProvider.notifier).cancelDownload(model.filename);
+                    if (model.isOllama) {
+                      ref.read(localAiServiceProvider.notifier).cancelDownload();
+                    } else {
+                      ref.read(modelCatalogProvider.notifier).cancelDownload(model.filename);
+                    }
                   },
                   icon: const Icon(LucideIcons.x, size: 12, color: Colors.redAccent),
                   label: const Text('Отмена', style: TextStyle(color: Colors.redAccent, fontSize: 11)),
@@ -762,17 +790,24 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ] else ...[
                 ElevatedButton.icon(
                   onPressed: () {
-                    final catModel = AiCatalogModel(
-                      id: model.id,
-                      name: model.name,
-                      filename: model.filename,
-                      url: model.url,
-                      size: model.sizeFormatted,
-                      description: model.capabilities,
-                      category: ModelCategory.text,
-                      runtime: ModelRuntime.llama,
-                    );
-                    ref.read(modelCatalogProvider.notifier).downloadModel(catModel);
+                    if (model.isOllama) {
+                      ref.read(localAiServiceProvider.notifier).downloadModel(model.id);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Загрузка ${model.name} из Ollama начата...')),
+                      );
+                    } else {
+                      final catModel = AiCatalogModel(
+                        id: model.id,
+                        name: model.name,
+                        filename: model.filename,
+                        url: model.url,
+                        size: model.sizeFormatted,
+                        description: model.capabilities,
+                        category: model.isVision ? ModelCategory.vision : ModelCategory.text,
+                        runtime: ModelRuntime.llama,
+                      );
+                      ref.read(modelCatalogProvider.notifier).downloadModel(catModel);
+                    }
                   },
                   icon: const Icon(LucideIcons.download, size: 12),
                   label: Text('Скачать (${model.sizeFormatted})'),
@@ -809,6 +844,37 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
       ),
     );
   }
+
+  bool _isHfVision(HfModelItem item) {
+    final lowerName = item.name.toLowerCase();
+    final lowerId = item.id.toLowerCase();
+    final pipe = item.pipelineTag?.toLowerCase() ?? '';
+    if (pipe.contains('image') || pipe.contains('visual') || pipe.contains('vision')) return true;
+    if (lowerName.contains('vl') || lowerName.contains('vision') || lowerName.contains('minicpm-v') || lowerName.contains('llava')) return true;
+    if (lowerId.contains('vl') || lowerId.contains('vision') || lowerId.contains('minicpm-v') || lowerId.contains('llava')) return true;
+    return item.tags.any((t) => t.contains('vision') || t.contains('image-text-to-text') || t.contains('multimodal'));
+  }
+
+  String _extractContextWindow(HfModelItem item) {
+    final full = '${item.name} ${item.id} ${item.tags.join(' ')}'.toLowerCase();
+    final match = RegExp(r'(\d+)\s*k(?:-context)?').firstMatch(full);
+    if (match != null) {
+      return '${match.group(1)}K';
+    }
+    if (full.contains('128k')) return '128K';
+    if (full.contains('64k')) return '64K';
+    if (full.contains('32k')) return '32K';
+    if (full.contains('16k')) return '16K';
+    if (full.contains('8k')) return '8K';
+    if (full.contains('4k')) return '4K';
+    if (full.contains('qwen2.5') || full.contains('qwen-2.5')) return '128K';
+    if (full.contains('llama-3.2') || full.contains('llama-3.1')) return '128K';
+    if (full.contains('gemma-2')) return '8K';
+    if (full.contains('deepseek-r1') || full.contains('deepseek')) return '64K';
+    if (full.contains('phi-4') || full.contains('phi-3.5')) return '128K';
+    return '32K (Авто)';
+  }
+
 
   // ─── 3. Downloaded Models View ───────────────────────────────────────────
   Widget _buildDownloadedView(BuildContext context, String query) {
@@ -1077,6 +1143,22 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                                   onPressed: () => _loadHfRepoFiles(item.id),
                                 ),
                               ),
+                              Padding(
+                                padding: const EdgeInsets.only(left: 14, right: 14, bottom: 8),
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    if (_isHfVision(item))
+                                      _infoBadge(LucideIcons.eye, 'Зрение (Vision)', Colors.purpleAccent),
+                                    _infoBadge(LucideIcons.file_text, 'Контекст: ${_extractContextWindow(item)}', Colors.cyanAccent),
+                                    if (item.tags.any((t) => t.contains('code') || t.contains('programming')) || item.name.toLowerCase().contains('coder'))
+                                      _infoBadge(LucideIcons.code, 'Код / Programming', Colors.greenAccent),
+                                    if (item.tags.any((t) => t.contains('reasoning') || t.contains('r1')) || item.name.toLowerCase().contains('r1'))
+                                      _infoBadge(LucideIcons.brain, 'Рассуждения (R1)', Colors.amberAccent),
+                                  ],
+                                ),
+                              ),
                               if (isExpanded) ...[
                                 const Divider(color: Colors.white10, height: 1),
                                 if (_isLoadingHfFiles && files == null)
@@ -1137,6 +1219,120 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
   // ─── 5. Ollama Library Pull View ──────────────────────────────────────────
   Widget _buildOllamaLibraryView(BuildContext context) {
+    final localAiState = ref.watch(localAiServiceProvider);
+    final availableRam = localAiState.availableRamMb > 0 ? (localAiState.availableRamMb / 1024) : 2.5;
+
+    final popularOllama = [
+      {
+        'tag': 'qwen2.5:0.5b',
+        'name': 'Qwen 2.5 0.5B',
+        'desc': 'Ультра-быстрая компактная модель для любых смартфонов',
+        'size': '398 MB',
+        'ramGb': 0.8,
+        'context': '128K',
+        'speed': '~35 т/с',
+        'isCode': false,
+        'isVision': false,
+        'isReasoning': false,
+      },
+      {
+        'tag': 'qwen2.5-coder:1.5b',
+        'name': 'Qwen 2.5 Coder 1.5B',
+        'desc': 'Лучшая модель для анализа кода, скриптов и Pair Programming',
+        'size': '986 MB',
+        'ramGb': 1.4,
+        'context': '128K',
+        'speed': '~24 т/с',
+        'isCode': true,
+        'isVision': false,
+        'isReasoning': false,
+      },
+      {
+        'tag': 'llama3.2:1b',
+        'name': 'Meta Llama 3.2 1B',
+        'desc': 'Современный легкий многоязычный ассистент от Meta',
+        'size': '1.3 GB',
+        'ramGb': 1.5,
+        'context': '128K',
+        'speed': '~25 т/с',
+        'isCode': false,
+        'isVision': false,
+        'isReasoning': false,
+      },
+      {
+        'tag': 'deepseek-r1:1.5b',
+        'name': 'DeepSeek R1 1.5B',
+        'desc': 'Мобильная модель пошагового логического рассуждения (CoT)',
+        'size': '1.1 GB',
+        'ramGb': 1.6,
+        'context': '64K',
+        'speed': '~20 т/с',
+        'isCode': false,
+        'isVision': false,
+        'isReasoning': true,
+      },
+      {
+        'tag': 'llama3.2:3b',
+        'name': 'Meta Llama 3.2 3B',
+        'desc': 'Мощный сбалансированный ИИ ассистент с глубоким пониманием',
+        'size': '2.0 GB',
+        'ramGb': 2.5,
+        'context': '128K',
+        'speed': '~14 т/с',
+        'isCode': false,
+        'isVision': false,
+        'isReasoning': false,
+      },
+      {
+        'tag': 'minicpm-v:8b',
+        'name': 'MiniCPM-V 2.6 8B',
+        'desc': 'Мультимодальная модель: зрение, распознавание фото и диаграмм',
+        'size': '5.5 GB',
+        'ramGb': 8.5,
+        'context': '32K',
+        'speed': '~6 т/с',
+        'isCode': false,
+        'isVision': true,
+        'isReasoning': false,
+      },
+      {
+        'tag': 'deepseek-r1:7b',
+        'name': 'DeepSeek R1 7B',
+        'desc': 'SOTA открытая логическая модель (для мощных устройств/ПК)',
+        'size': '4.7 GB',
+        'ramGb': 6.8,
+        'context': '64K',
+        'speed': '~7 т/с',
+        'isCode': false,
+        'isVision': false,
+        'isReasoning': true,
+      },
+      {
+        'tag': 'phi4:14b',
+        'name': 'Microsoft Phi-4 14B',
+        'desc': 'Флагманский уровень рассуждений и кодинга 2025/2026',
+        'size': '9.1 GB',
+        'ramGb': 12.0,
+        'context': '128K',
+        'speed': '~4 т/с',
+        'isCode': true,
+        'isVision': false,
+        'isReasoning': true,
+      },
+      {
+        'tag': 'mistral-nemo:12b',
+        'name': 'Mistral NeMo 12B',
+        'desc': '128K контекстное окно от Mistral AI для огромных проектов',
+        'size': '7.1 GB',
+        'ramGb': 10.0,
+        'context': '128K',
+        'speed': '~5 т/с',
+        'isCode': false,
+        'isVision': false,
+        'isReasoning': false,
+      },
+    ];
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: ListView(
@@ -1145,12 +1341,12 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             'Загрузка любой модели из Ollama Library:',
             style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           const Text(
-            'Введите официальный тег модели с ollama.com (например: phi4:14b, deepseek-r1:14b, qwen2.5-coder:7b)',
+            'Введите любой тег с ollama.com или выберите готовую модель из каталога ниже:',
             style: TextStyle(fontSize: 11, color: Colors.white60),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -1158,7 +1354,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                   controller: _ollamaPullController,
                   style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: 'phi4:14b',
+                    hintText: 'phi4:14b или qwen2.5:0.5b',
                     hintStyle: GoogleFonts.jetBrainsMono(color: Colors.white30, fontSize: 13),
                     filled: true,
                     fillColor: Colors.white.withValues(alpha: 0.05),
@@ -1173,17 +1369,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                 onPressed: () async {
                   final tag = _ollamaPullController.text.trim();
                   if (tag.isEmpty) return;
-                  final info = LocalModelInfo(
-                    id: 'ollama_$tag',
-                    name: tag,
-                    description: 'Ollama model from library',
-                    filename: tag,
-                    sizeGb: 2.0,
-                    ramRequiredGb: 4.0,
-                    url: tag,
-                    engine: LocalAiEngine.ollama,
-                  );
-                  await ref.read(localAiServiceProvider.notifier).downloadModel(info.id);
+                  await ref.read(localAiServiceProvider.notifier).downloadModel('ollama_$tag');
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Загрузка модели $tag через Ollama запущена!')),
@@ -1196,29 +1382,152 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             ],
           ),
           const SizedBox(height: 16),
-          const Text('Популярные новые модели в Ollama:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Каталог моделей Ollama 2026:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+              Text('Доступно RAM: ${availableRam.toStringAsFixed(1)} ГБ', style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.cyanAccent)),
+            ],
+          ),
           const SizedBox(height: 8),
-          ...[
-            {'tag': 'phi4:14b', 'desc': 'Microsoft Phi-4 14B (SOTA Reasoning 2025/2026)', 'size': '9.1 GB'},
-            {'tag': 'deepseek-r1:14b', 'desc': 'DeepSeek R1 14B (Глубокие рассуждения и логика)', 'size': '9.0 GB'},
-            {'tag': 'qwen2.5-coder:14b', 'desc': 'Qwen 2.5 Coder 14B (Топ кодинг модель)', 'size': '9.0 GB'},
-            {'tag': 'llama3.3:70b', 'desc': 'Meta Llama 3.3 70B (Флагманский уровень)', 'size': '43 GB'},
-            {'tag': 'mistral-nemo:12b', 'desc': 'Mistral NeMo 12B (128K контекст)', 'size': '7.1 GB'},
-            {'tag': 'smollm2:1.7b', 'desc': 'SmolLM2 1.7B (Мобильный компакт)', 'size': '1.0 GB'},
-            {'tag': 'minicpm-v:8b', 'desc': 'MiniCPM-V 2.6 (Зрение и анализ фото)', 'size': '5.5 GB'},
-          ].map((item) {
-            return Card(
-              color: const Color(0xFF181B26),
-              margin: const EdgeInsets.only(bottom: 6),
-              child: ListTile(
-                dense: true,
-                title: Text(item['tag']!, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, color: Colors.cyanAccent, fontSize: 12)),
-                subtitle: Text('${item['desc']!} · ${item['size']!}', style: const TextStyle(fontSize: 11, color: Colors.white60)),
-                trailing: IconButton(
-                  icon: const Icon(LucideIcons.download, size: 16, color: Colors.cyanAccent),
-                  onPressed: () {
-                    _ollamaPullController.text = item['tag']!;
-                  },
+          ...popularOllama.map((item) {
+            final tag = item['tag'] as String;
+            final isDownloadingThis = localAiState.downloadingModelId == 'ollama_$tag' ||
+                                      localAiState.downloadingModelId == tag;
+            final isDownloaded = (localAiState.downloadedModels[tag] == true) ||
+                                 (localAiState.downloadedModels['ollama_$tag'] == true) ||
+                                 (localAiState.downloadedModels['$tag:latest'] == true);
+            final ramGb = item['ramGb'] as double;
+            final isHighRam = ramGb > availableRam;
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF161822),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDownloadingThis
+                      ? Colors.cyanAccent.withValues(alpha: 0.6)
+                      : isDownloaded
+                          ? Colors.greenAccent.withValues(alpha: 0.4)
+                          : Colors.white10,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      item['name'] as String,
+                                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '(${item['tag']})',
+                                    style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white38),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                item['desc'] as String,
+                                style: const TextStyle(fontSize: 11, color: Colors.white60, height: 1.25),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (isDownloadingThis)
+                          IconButton(
+                            icon: const Icon(LucideIcons.x, size: 16, color: Colors.redAccent),
+                            tooltip: 'Отменить загрузку',
+                            onPressed: () => ref.read(localAiServiceProvider.notifier).cancelDownload(),
+                          )
+                        else if (isDownloaded)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.4)),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(LucideIcons.check, size: 12, color: Colors.greenAccent),
+                                SizedBox(width: 4),
+                                Text('Установлена', style: TextStyle(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          )
+                        else
+                          ElevatedButton.icon(
+                            onPressed: () async {
+                              _ollamaPullController.text = tag;
+                              await ref.read(localAiServiceProvider.notifier).downloadModel('ollama_$tag');
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Загрузка модели $tag через Ollama запущена!')),
+                              );
+                            },
+                            icon: const Icon(LucideIcons.download, size: 12),
+                            label: const Text('Скачать', style: TextStyle(fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.cyanAccent,
+                              foregroundColor: Colors.black,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            ),
+                          ),
+                      ],
+                    ),
+
+                    if (isDownloadingThis) ...[
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: localAiState.downloadProgress > 0 ? localAiState.downloadProgress : null,
+                        color: Colors.cyanAccent,
+                        backgroundColor: Colors.white12,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Загрузка через Ollama API: ${(localAiState.downloadProgress * 100).toInt()}%',
+                        style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.cyanAccent),
+                      ),
+                    ],
+
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        if (item['isVision'] == true)
+                          _infoBadge(LucideIcons.eye, 'Зрение (Vision)', Colors.purpleAccent),
+                        if (item['isReasoning'] == true)
+                          _infoBadge(LucideIcons.brain, 'Рассуждения (R1)', Colors.amberAccent),
+                        if (item['isCode'] == true)
+                          _infoBadge(LucideIcons.code, 'Код / Code', Colors.greenAccent),
+                        _infoBadge(LucideIcons.file_text, 'Контекст: ${item['context']}', Colors.cyanAccent),
+                        _infoBadge(LucideIcons.zap, item['speed'] as String, Colors.orangeAccent),
+                        _infoBadge(LucideIcons.hard_drive, '~${item['ramGb']} ГБ RAM', isHighRam ? Colors.redAccent : Colors.lightGreenAccent),
+                        _infoBadge(LucideIcons.database, item['size'] as String, Colors.white60),
+                        if (isHighRam)
+                          _infoBadge(LucideIcons.triangle_alert, 'Мало RAM', Colors.redAccent),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             );
@@ -1417,8 +1726,12 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                         selectedColor: Colors.purpleAccent,
                         backgroundColor: Colors.white.withValues(alpha: 0.05),
                         onSelected: (_) {
-                          setState(() => _maxTokens = tokens);
+                          setState(() {
+                            _maxTokens = tokens;
+                            _localContextSize = tokens;
+                          });
                           aiSvc.setMaxTokens(tokens);
+                          ref.read(localAiServiceProvider.notifier).updateSettings(contextSize: tokens);
                         },
                       ),
                     );
@@ -1521,7 +1834,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       ),
                       child: Text(
                         'Свободно: ${(localAiState.availableRamMb / 1024).toStringAsFixed(1)} ГБ'
-                        '${localAiState.totalRamMb > 0 ? " из ${(localAiState.totalRamMb / 1024).toStringAsFixed(1)} ГБ" : ""}',
+                        '${localAiState.totalRamMb > 0 ? " (всего ${(localAiState.totalRamMb / 1024).toStringAsFixed(1)} ГБ)" : ""}',
                         style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
                       ),
                     ),
@@ -1529,8 +1842,13 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
               const SizedBox(height: 8),
               Text(
+                '💡 Доступная память для ИИ: из ${localAiState.totalRamMb > 0 ? (localAiState.totalRamMb / 1024).toStringAsFixed(1) : "4.0"} ГБ физической RAM система Android занимает около 1.4 ГБ для ядра и экрана. Чистый остаток для запуска нейросети без вылетов — ${(localAiState.availableRamMb / 1024).toStringAsFixed(1)} ГБ.',
+                style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.3),
+              ),
+              const SizedBox(height: 6),
+              Text(
                 'Защита от вылетов: запуск тяжелых моделей на смартфонах без запаса памяти вызывает принудительное закрытие приложения операционной системой (Android OOM Killer). Безопасный режим отключает GPU и балансирует потоки.',
-                style: GoogleFonts.inter(fontSize: 11, color: Colors.white60, height: 1.3),
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.white54, height: 1.25),
               ),
               const SizedBox(height: 10),
               SizedBox(
@@ -1612,24 +1930,75 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
               const Divider(color: Colors.white10, height: 16),
 
-              // CPU Threads
+              // Model Context Size (-c)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Потоки процессора (CPU Threads):', style: TextStyle(fontSize: 12, color: Colors.white70)),
-                  Text('$_localThreads ядер', style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+                  const Text('Контекст модели (-c Context Size):', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                  Text(
+                    '$_localContextSize токенов (${_localContextSize >= 1000 ? "${_localContextSize ~/ 1000}K" : "$_localContextSize"})',
+                    style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
+                  ),
                 ],
               ),
-              Slider(
-                value: _localThreads.toDouble(),
-                min: 1,
-                max: 16,
-                divisions: 15,
-                activeColor: Colors.cyanAccent,
-                inactiveColor: Colors.white10,
-                onChanged: (val) {
-                  setState(() => _localThreads = val.toInt());
-                  ref.read(localAiServiceProvider.notifier).updateSettings(threads: val.toInt());
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [512, 1024, 2048, 4096, 8192, 16384, 32768].map((ctx) {
+                    final isSel = _localContextSize == ctx;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: Text(ctx >= 1000 ? '${ctx ~/ 1000}K' : '$ctx', style: TextStyle(fontSize: 11, color: isSel ? Colors.black : Colors.white70)),
+                        selected: isSel,
+                        selectedColor: Colors.purpleAccent,
+                        backgroundColor: Colors.white.withValues(alpha: 0.05),
+                        onSelected: (_) {
+                          setState(() {
+                            _localContextSize = ctx;
+                            _maxTokens = ctx;
+                          });
+                          ref.read(localAiServiceProvider.notifier).updateSettings(contextSize: ctx);
+                          ref.read(aiServiceProvider).setMaxTokens(ctx);
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // CPU Threads
+              Builder(
+                builder: (context) {
+                  final maxCpuCores = Platform.numberOfProcessors > 0 ? Platform.numberOfProcessors : 8;
+                  return Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Потоки процессора (CPU Threads):', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                          Text(
+                            '$_localThreads из $maxCpuCores ядер',
+                            style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: _localThreads.clamp(1, maxCpuCores).toDouble(),
+                        min: 1,
+                        max: maxCpuCores.toDouble(),
+                        divisions: (maxCpuCores - 1) > 0 ? (maxCpuCores - 1) : 1,
+                        activeColor: Colors.cyanAccent,
+                        inactiveColor: Colors.white10,
+                        onChanged: (val) {
+                          setState(() => _localThreads = val.toInt());
+                          ref.read(localAiServiceProvider.notifier).updateSettings(threads: val.toInt());
+                        },
+                      ),
+                    ],
+                  );
                 },
               ),
 
@@ -1638,14 +2007,17 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Слои ускорения GPU / NPU:', style: TextStyle(fontSize: 12, color: Colors.white70)),
-                  Text('$_localGpuLayers слоев', style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.lightGreenAccent)),
+                  Text(
+                    '$_localGpuLayers ${_localGpuLayers == 0 ? "(Чистый CPU)" : "слоев"}',
+                    style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.lightGreenAccent),
+                  ),
                 ],
               ),
               Slider(
-                value: _localGpuLayers.toDouble(),
+                value: _localGpuLayers.clamp(0, 33).toDouble(),
                 min: 0,
-                max: 99,
-                divisions: 99,
+                max: 33,
+                divisions: 33,
                 activeColor: Colors.lightGreenAccent,
                 inactiveColor: Colors.white10,
                 onChanged: (val) {
@@ -1653,6 +2025,26 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                   ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: val.toInt());
                 },
               ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [0, 8, 16, 24, 33].map((l) {
+                    final isSel = _localGpuLayers == l;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ActionChip(
+                        label: Text(l == 0 ? '0 (CPU - Без сбоев)' : '$l слоев', style: TextStyle(fontSize: 10, color: isSel ? Colors.black : Colors.white70)),
+                        backgroundColor: isSel ? Colors.lightGreenAccent : Colors.white.withValues(alpha: 0.05),
+                        onPressed: () {
+                          setState(() => _localGpuLayers = l);
+                          ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: l);
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 8),
 
               // Flash Attention
               SwitchListTile(
@@ -1815,6 +2207,29 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
               Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.copy, size: 14, color: Colors.cyanAccent),
+                    tooltip: 'Копировать все логи',
+                    onPressed: () {
+                      if (localAiState.logs.trim().isNotEmpty) {
+                        Clipboard.setData(ClipboardData(text: localAiState.logs));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('📋 Логи скопированы в буфер обмена! Отправьте их для анализа ошибки.'),
+                            backgroundColor: Colors.green,
+                            duration: Duration(seconds: 3),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Логи сервера пока пусты'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    },
+                  ),
                   IconButton(
                     icon: const Icon(LucideIcons.refresh_cw, size: 14, color: Colors.cyanAccent),
                     tooltip: 'Проверить статус',

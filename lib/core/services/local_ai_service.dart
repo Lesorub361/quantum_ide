@@ -667,7 +667,22 @@ class LocalAiService extends StateNotifier<LocalAiState> {
   Future<void> downloadModel(String modelId) async {
     if (state.downloadingModelId != null) return;
     
-    final model = availableLocalModels.firstWhere((m) => m.id == modelId);
+    LocalModelInfo model;
+    try {
+      model = availableLocalModels.firstWhere((m) => m.id == modelId);
+    } catch (_) {
+      final tag = modelId.startsWith('ollama_') ? modelId.substring(7) : modelId;
+      model = LocalModelInfo(
+        id: modelId,
+        name: tag,
+        description: 'Ollama model $tag',
+        filename: tag,
+        sizeGb: 2.0,
+        ramRequiredGb: 4.0,
+        url: tag,
+        engine: LocalAiEngine.ollama,
+      );
+    }
     
     if (model.engine == LocalAiEngine.ollama) {
       await _downloadOllamaModel(model);
@@ -824,7 +839,22 @@ class LocalAiService extends StateNotifier<LocalAiState> {
   }
 
   Future<void> deleteModel(String modelId) async {
-    final model = availableLocalModels.firstWhere((m) => m.id == modelId);
+    LocalModelInfo model;
+    try {
+      model = availableLocalModels.firstWhere((m) => m.id == modelId);
+    } catch (_) {
+      final tag = modelId.startsWith('ollama_') ? modelId.substring(7) : modelId;
+      model = LocalModelInfo(
+        id: modelId,
+        name: tag,
+        description: 'Ollama model $tag',
+        filename: tag,
+        sizeGb: 2.0,
+        ramRequiredGb: 4.0,
+        url: tag,
+        engine: LocalAiEngine.ollama,
+      );
+    }
     
     if (model.engine == LocalAiEngine.ollama) {
       await _deleteOllamaModel(model);
