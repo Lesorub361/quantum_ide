@@ -3058,9 +3058,10 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     }
 
     if (localState.error != null) {
+      final isRamError = localState.error!.contains('Недостаточно') || localState.error!.contains('OOM');
       return Container(
         margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.redAccent.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
@@ -3068,20 +3069,37 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         ),
         child: Row(
           children: [
-            const Icon(LucideIcons.triangle_alert, size: 12, color: Colors.redAccent),
-            const SizedBox(width: 6),
+            Icon(isRamError ? LucideIcons.hard_drive : LucideIcons.triangle_alert, size: 14, color: Colors.redAccent),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Ошибка запуска: ${localState.error}',
-                style: GoogleFonts.inter(fontSize: 10, color: Colors.redAccent),
+                isRamError
+                    ? '⚠️ Мало оперативной памяти (RAM)! Выберите легкую модель (0.5B/1.5B) или уменьшите контекст.'
+                    : 'Ошибка: ${localState.error}',
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.redAccent, fontWeight: FontWeight.w500),
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
             InkWell(
-              onTap: () => ref.read(localAiServiceProvider.notifier).startServer(),
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text('Повторить', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+              onTap: () {
+                final currentModel = ref.read(activeAiModelProvider);
+                final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
+                showModelPickerModal(
+                  context,
+                  providerId: activeProviderId,
+                  currentModel: currentModel,
+                  apiKey: apiKey,
+                  initialMainTab: 1,
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text('Настройки', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
             ),
           ],

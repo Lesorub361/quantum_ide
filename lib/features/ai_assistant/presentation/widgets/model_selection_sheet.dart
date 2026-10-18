@@ -698,6 +698,9 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               _infoBadge(LucideIcons.hard_drive, model.ramRequiredFormatted, Colors.lightGreenAccent),
               _infoBadge(LucideIcons.layers, model.quantization, Colors.cyanAccent),
               _infoBadge(LucideIcons.database, model.sizeFormatted, Colors.white60),
+              if (ref.watch(localAiServiceProvider).availableRamMb > 0 &&
+                  model.ramRequiredGb * 1024 > ref.watch(localAiServiceProvider).availableRamMb)
+                _infoBadge(LucideIcons.triangle_alert, 'Мало RAM', Colors.redAccent),
             ],
           ),
 
@@ -1476,6 +1479,94 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
         // Section B: Local Hardware Settings
         _settingsSectionHeader('Аппаратные настройки локальных моделей (ARM / GPU)', LucideIcons.cpu),
         const SizedBox(height: 10),
+
+        // RAM & Mobile Anti-Crash Safety Card
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: (localAiState.availableRamMb > 0 && localAiState.availableRamMb < 1800)
+                ? Colors.amber.withValues(alpha: 0.12)
+                : const Color(0xFF141A28),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: (localAiState.availableRamMb > 0 && localAiState.availableRamMb < 1800)
+                  ? Colors.amber.withValues(alpha: 0.4)
+                  : Colors.cyanAccent.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    LucideIcons.hard_drive,
+                    size: 16,
+                    color: (localAiState.availableRamMb > 0 && localAiState.availableRamMb < 1800)
+                        ? Colors.amberAccent
+                        : Colors.cyanAccent,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Оперативная память (RAM)',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                  ),
+                  const Spacer(),
+                  if (localAiState.availableRamMb > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Свободно: ${(localAiState.availableRamMb / 1024).toStringAsFixed(1)} ГБ'
+                        '${localAiState.totalRamMb > 0 ? " из ${(localAiState.totalRamMb / 1024).toStringAsFixed(1)} ГБ" : ""}',
+                        style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Защита от вылетов: запуск тяжелых моделей на смартфонах без запаса памяти вызывает принудительное закрытие приложения операционной системой (Android OOM Killer). Безопасный режим отключает GPU и балансирует потоки.',
+                style: GoogleFonts.inter(fontSize: 11, color: Colors.white60, height: 1.3),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    await ref.read(localAiServiceProvider.notifier).applyMobileSafeMode();
+                    setState(() {
+                      _localThreads = 3;
+                      _localGpuLayers = 0;
+                      _localUseFlashAttn = true;
+                    });
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🛡️ Безопасный режим включен! Потоки=3, GPU=0 (CPU), Контекст=2048'),
+                          backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(LucideIcons.shield_check, size: 14, color: Colors.lightGreenAccent),
+                  label: const Text('Применить безопасный режим (Анти-краш)'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.lightGreenAccent,
+                    side: const BorderSide(color: Colors.lightGreenAccent),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
 
         Container(
           padding: const EdgeInsets.all(12),

@@ -35,6 +35,14 @@ class LocalModelMetadata {
 
   bool get isOllama => engine == LocalAiEngine.ollama;
 
+  double get ramRequiredGb {
+    final match = RegExp(r'([\d\.]+)').firstMatch(ramRequiredFormatted);
+    if (match != null) {
+      return double.tryParse(match.group(1)!) ?? 2.0;
+    }
+    return 2.0;
+  }
+
   static const List<LocalModelMetadata> catalog = [
     // ── Qwen 2.5 Coder 1.5B ──────────────────────────────
     LocalModelMetadata(

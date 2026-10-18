@@ -270,6 +270,10 @@ class LocalAiState {
   final bool useFlashAttn;
   final int contextSize;
 
+  // Memory diagnostics & safety
+  final int availableRamMb;
+  final int totalRamMb;
+
   LocalAiState({
     this.isModelDownloaded = false,
     this.isBinaryInstalled = false,
@@ -282,10 +286,12 @@ class LocalAiState {
     this.downloadedModels = const {},
     this.selectedModelFilename = 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
     this.isBinaryInstalling = false,
-    this.threads = 6,
-    this.gpuLayers = 20,
-    this.useFlashAttn = false,
-    this.contextSize = 4096,
+    this.threads = 3,
+    this.gpuLayers = 0,
+    this.useFlashAttn = true,
+    this.contextSize = 2048,
+    this.availableRamMb = -1,
+    this.totalRamMb = -1,
   });
 
   LocalAiState copyWith({
@@ -305,6 +311,8 @@ class LocalAiState {
     int? gpuLayers,
     bool? useFlashAttn,
     int? contextSize,
+    int? availableRamMb,
+    int? totalRamMb,
   }) {
     return LocalAiState(
       isModelDownloaded: isModelDownloaded ?? this.isModelDownloaded,
@@ -322,6 +330,8 @@ class LocalAiState {
       gpuLayers: gpuLayers ?? this.gpuLayers,
       useFlashAttn: useFlashAttn ?? this.useFlashAttn,
       contextSize: contextSize ?? this.contextSize,
+      availableRamMb: availableRamMb ?? this.availableRamMb,
+      totalRamMb: totalRamMb ?? this.totalRamMb,
     );
   }
 }
@@ -392,8 +402,100 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     return null;
   }
 
+  /// Returns available RAM in Megabytes, or -1 if unable to determine.
+  static Future<int> getAvailableRamMb() async {
+    try {
+      final f = File('/proc/meminfo');
+      if (await f.exists()) {
+        final lines = await f.readAsLines();
+        for (final line in lines) {
+          if (line.startsWith('MemAvailable:')) {
+            final parts = line.split(RegExp(r'\s+'));
+            if (parts.length >= 2) {
+              final kb = int.tryParse(parts[1]);
+              if (kb != null) return kb ~/ 1024;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return -1;
+  }
+
+  /// Returns total RAM in Megabytes, or -1 if unable to determine.
+  static Future<int> getTotalRamMb() async {
+    try {
+      final f = File('/proc/meminfo');
+      if (await f.exists()) {
+        final lines = await f.readAsLines();
+        for (final line in lines) {
+          if (line.startsWith('MemTotal:')) {
+            final parts = line.split(RegExp(r'\s+'));
+            if (parts.length >= 2) {
+              final kb = int.tryParse(parts[1]);
+              if (kb != null) return kb ~/ 1024;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return -1;
+  }
+
+  /// Estimates total required RAM in Megabytes for a given model and context size.
+  Future<int> estimateRequiredRamMb({String? filename, int? contextSize}) async {
+    final modelFile = filename ?? state.selectedModelFilename;
+    final ctx = contextSize ?? state.contextSize;
+
+    LocalModelInfo? model;
+    for (final m in availableLocalModels) {
+      if (m.filename == modelFile) {
+        model = m;
+        break;
+      }
+    }
+
+    int modelMb = 1500;
+    if (model != null) {
+      modelMb = (model.ramRequiredGb * 1024).round();
+    } else {
+      try {
+        final f = await findModelFile(modelFile);
+        if (f != null && await f.exists()) {
+          final sizeMb = (await f.length()) ~/ (1024 * 1024);
+          modelMb = (sizeMb * 1.25).round();
+        }
+      } catch (_) {}
+    }
+
+    final kvCacheMb = (ctx / 2048 * 300).round();
+    return modelMb + kvCacheMb;
+  }
+
+  Future<void> applyMobileSafeMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('ai_local_threads', 3);
+    await prefs.setInt('ai_local_gpu_layers', 0);
+    await prefs.setBool('ai_local_flash_attn', true);
+    await prefs.setInt('ai_local_context_size', 2048);
+    state = state.copyWith(
+      threads: 3,
+      gpuLayers: 0,
+      useFlashAttn: true,
+      contextSize: 2048,
+    );
+    _appendLogs('[Local AI] 🛡️ Безопасный режим применен: Потоки=3, GPU=0 (CPU), Контекст=2048, FlashAttn=ВКЛ.\n');
+  }
+
   Future<void> checkStatus() async {
     if (!_runtime.isInitialized) return;
+
+    final availableRam = await getAvailableRamMb();
+    final totalRam = await getTotalRamMb();
+    final isMobile = Platform.isAndroid || Platform.isIOS;
+    final defaultThreads = isMobile ? 3 : (Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2));
+    const defaultGpuLayers = 0; // Pure CPU on mobile to avoid Vulkan/OpenCL driver crashes
+    final defaultContextSize = isMobile ? 2048 : 4096;
 
     final engine = _ref.read(aiServiceProvider).settings.selectedLocalEngine;
 
@@ -435,12 +537,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         running = await _pingServer();
       }
 
-      final defaultThreads = Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2);
-      final defaultGpuLayers = Platform.isAndroid ? 20 : 0;
       final threads = prefs.getInt('ai_local_threads') ?? defaultThreads;
       final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
-      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
-      final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
+      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? isMobile;
+      final contextSize = prefs.getInt('ai_local_context_size') ?? defaultContextSize;
 
       state = state.copyWith(
         isModelDownloaded: anyModelDownloaded,
@@ -452,6 +552,8 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         gpuLayers: gpuLayers,
         useFlashAttn: useFlashAttn,
         contextSize: contextSize,
+        availableRamMb: availableRam,
+        totalRamMb: totalRam,
       );
     } else if (engine == LocalAiEngine.ollama) {
       final baseUrl = _getOllamaBaseUrl();
@@ -497,12 +599,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         await prefs.setString('ai_selected_local_model_filename', activeFilename);
       }
 
-      final defaultThreads = Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2);
-      final defaultGpuLayers = Platform.isAndroid ? 20 : 0;
       final threads = prefs.getInt('ai_local_threads') ?? defaultThreads;
       final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
-      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
-      final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
+      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? isMobile;
+      final contextSize = prefs.getInt('ai_local_context_size') ?? defaultContextSize;
 
       state = state.copyWith(
         isModelDownloaded: anyModelDownloaded,
@@ -514,15 +614,15 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         gpuLayers: gpuLayers,
         useFlashAttn: useFlashAttn,
         contextSize: contextSize,
+        availableRamMb: availableRam,
+        totalRamMb: totalRam,
       );
     } else {
       final prefs = await SharedPreferences.getInstance();
-      final defaultThreads = Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2);
-      final defaultGpuLayers = Platform.isAndroid ? 20 : 0;
       final threads = prefs.getInt('ai_local_threads') ?? defaultThreads;
       final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
-      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? false;
-      final contextSize = prefs.getInt('ai_local_context_size') ?? 4096;
+      final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? isMobile;
+      final contextSize = prefs.getInt('ai_local_context_size') ?? defaultContextSize;
 
       state = state.copyWith(
         isModelDownloaded: false,
@@ -534,6 +634,8 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         gpuLayers: gpuLayers,
         useFlashAttn: useFlashAttn,
         contextSize: contextSize,
+        availableRamMb: availableRam,
+        totalRamMb: totalRam,
       );
     }
   }
@@ -900,13 +1002,45 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final proot = _runtime.prootCommand;
       final filesDir = _runtime.filesDir;
       final activeModelFile = state.selectedModelFilename;
-      final threads = state.threads;
-      final gpuLayers = state.gpuLayers;
+      final isMobile = Platform.isAndroid || Platform.isIOS;
+
+      // ── Pre-flight RAM & Safety Checks ──────────────────────────────────
+      final availableRam = await getAvailableRamMb();
+      final totalRam = await getTotalRamMb();
+      final requiredRam = await estimateRequiredRamMb(filename: activeModelFile, contextSize: state.contextSize);
+
+      _appendLogs('[Local AI] Диагностика RAM: свободно ${availableRam > 0 ? "$availableRam МБ" : "неизвестно"} / ${totalRam > 0 ? "$totalRam МБ" : "неизвестно"}. Для модели требуется ~$requiredRam МБ.\n');
+
+      if (availableRam > 0 && availableRam < (requiredRam * 0.70)) {
+        final warningMsg = 'Недостаточно свободной оперативной памяти (RAM)!\n'
+            'Доступно: ${(availableRam / 1024).toStringAsFixed(1)} ГБ, а для модели "$activeModelFile" требуется минимум ${(requiredRam / 1024).toStringAsFixed(1)} ГБ.\n'
+            '⛔ Запуск заблокирован для защиты от вылета приложения (Android OOM Killer).\n'
+            '💡 Рекомендация: выберите компактную модель (0.5B или 1.5B) либо уменьшите Context Size до 1024/2048 в настройках.';
+        _appendLogs('\n[Local AI] ❌ $warningMsg\n');
+        state = state.copyWith(isStarting: false, isRunning: false, error: warningMsg);
+        return;
+      }
+
+      // Auto-tune context if borderline RAM to avoid crash
+      int effectiveContextSize = state.contextSize;
+      if (availableRam > 0 && availableRam < requiredRam && effectiveContextSize > 2048) {
+        effectiveContextSize = 2048;
+        _appendLogs('[Local AI] ⚡ Авто-оптимизация: Контекст уменьшен до 2048 для экономии оперативной памяти.\n');
+      }
+
+      // On Android/iOS, GPU offloading causes driver crashes unless custom-compiled; force 0
+      int effectiveGpuLayers = state.gpuLayers;
+      if (isMobile && effectiveGpuLayers > 0) {
+        _appendLogs('[Local AI] ℹ️ Отключение GPU-слоев на мобильном для предотвращения сбоя Vulkan драйвера.\n');
+        effectiveGpuLayers = 0;
+      }
+
+      // Safe thread limit on mobile
+      final effectiveThreads = isMobile ? (state.threads > 4 ? 3 : state.threads) : state.threads;
       final useFlashAttn = state.useFlashAttn;
-      final contextSize = state.contextSize;
 
       final found = await findModelFile(activeModelFile);
-      if (found != null && (Platform.isAndroid || Platform.isIOS)) {
+      if (found != null && isMobile) {
         final rootfsTarget = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models', activeModelFile));
         if (!await rootfsTarget.exists() || (await rootfsTarget.length()) == 0) {
           await Directory(rootfsTarget.parent.path).create(recursive: true);
@@ -920,10 +1054,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         }
       }
 
-      final modelsDir = (Platform.isAndroid || Platform.isIOS)
+      final modelsDir = isMobile
           ? p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models')
           : p.join(_runtime.filesDir, 'models');
-      final modelFilePath = (Platform.isAndroid || Platform.isIOS)
+      final modelFilePath = isMobile
           ? '/root/models/$activeModelFile'
           : p.join(modelsDir, activeModelFile);
 
@@ -932,16 +1066,16 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         '-m',
         modelFilePath,
         '-c',
-        '$contextSize',
+        '$effectiveContextSize',
         '--port',
         '8080',
         '--host',
         '127.0.0.1',
         '-t',
-        '$threads',
+        '$effectiveThreads',
       ];
-      if (gpuLayers > 0) {
-        serverArgs.addAll(['-ngl', '$gpuLayers']);
+      if (effectiveGpuLayers > 0) {
+        serverArgs.addAll(['-ngl', '$effectiveGpuLayers']);
       }
       if (useFlashAttn) {
         serverArgs.add('-fa');
@@ -951,7 +1085,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       _appendLogs('[Local AI] Command: $logArgs\n');
 
       final Process process;
-      if (Platform.isAndroid || Platform.isIOS) {
+      if (isMobile) {
         process = await Process.start(
           'sh',
           [
@@ -972,12 +1106,30 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
       _process = process;
 
-      process.stdout.transform(utf8.decoder).listen((data) {
+      // Safe UTF-8 decoding to prevent isolate crashes on invalid binary output
+      const decoder = Utf8Decoder(allowMalformed: true);
+      process.stdout.transform(decoder).listen((data) {
         _appendLogs(data);
       });
 
-      process.stderr.transform(utf8.decoder).listen((data) {
+      process.stderr.transform(decoder).listen((data) {
         _appendLogs(data);
+      });
+
+      // Watch exit code to gracefully catch OOM (SIGKILL 9) and Segfaults (SIGSEGV 11)
+      process.exitCode.then((code) {
+        if (code != 0 && (state.isRunning || state.isStarting)) {
+          if (code == 137 || code == -9) {
+            _appendLogs('\n[Local AI] ❌ Сервер принудительно остановлен системой (сигнал 9 / SIGKILL - Android OOM Killer: не хватило оперативной памяти).\n');
+            state = state.copyWith(isRunning: false, isStarting: false, error: 'OOM: Не хватило оперативной памяти');
+          } else if (code == 139 || code == -11) {
+            _appendLogs('\n[Local AI] ❌ Сбой сегментации (SIGSEGV / Segfault). Установите GPU Layers = 0 в настройках.\n');
+            state = state.copyWith(isRunning: false, isStarting: false, error: 'Сбой драйвера (Segfault)');
+          } else {
+            _appendLogs('\n[Local AI] Процесс сервера завершился с кодом $code.\n');
+            state = state.copyWith(isRunning: false, isStarting: false, error: 'Сервер остановлен (код $code)');
+          }
+        }
       });
 
       int retries = 20;
