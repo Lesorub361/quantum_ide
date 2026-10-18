@@ -16,6 +16,7 @@ import '../../shared/widgets/main_layout.dart';
 import '../../features/git/presentation/pages/git_graph_page.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import '../services/talker_service.dart';
+import '../services/network_inspector_service.dart';
 
 class UnfocusRouteObserver extends NavigatorObserver {
   @override
@@ -104,6 +105,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/git-graph',
           builder: (context, state) => const GitGraphPage(),
+        ),
+        GoRoute(
+          path: '/network-inspector',
+          builder: (context, state) => const NetworkInspectorScreen(),
         ),
       ],
     ),

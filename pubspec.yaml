@@ -84,7 +84,6 @@ dependencies:
   flutter_colorpicker: ^1.1.0
   talker_flutter: ^4.8.4
   device_frame: ^1.4.0
-  chucker_flutter: ^1.8.3
   audioplayers: ^6.8.1
 
 dev_dependencies:
