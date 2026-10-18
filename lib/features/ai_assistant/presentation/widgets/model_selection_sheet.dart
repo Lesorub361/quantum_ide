@@ -88,6 +88,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   late int _localGpuLayers;
   late bool _localUseFlashAttn;
   late int _localContextSize;
+  late bool _localSafeMode;
 
   bool get _isLocalProvider =>
       widget.providerId == 'local_edge' || widget.providerId == 'ollama';
@@ -118,6 +119,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     _localGpuLayers = localState.gpuLayers;
     _localUseFlashAttn = localState.useFlashAttn;
     _localContextSize = localState.contextSize;
+    _localSafeMode = localState.safeMode;
   }
 
   @override
@@ -1834,15 +1836,40 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       ),
                       child: Text(
                         'Свободно: ${(localAiState.availableRamMb / 1024).toStringAsFixed(1)} ГБ'
-                        '${localAiState.totalRamMb > 0 ? " (всего ${(localAiState.totalRamMb / 1024).toStringAsFixed(1)} ГБ)" : ""}',
+                        '${localAiState.totalRamMb > 0 ? " (RAM: ${(localAiState.totalRamMb / 1024).toStringAsFixed(1)} ГБ)" : ""}',
                         style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
                       ),
                     ),
                 ],
               ),
+              if (localAiState.swapTotalMb > 0) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.hard_drive_download, size: 12, color: Colors.purpleAccent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Подкачка Android (RAM Plus): +${(localAiState.swapTotalMb / 1024).toStringAsFixed(1)} ГБ (свободно ${(localAiState.swapFreeMb / 1024).toStringAsFixed(1)} ГБ) · Всего пула: ${((localAiState.totalRamMb + localAiState.swapTotalMb) / 1024).toStringAsFixed(1)} ГБ',
+                          style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.purpleAccent, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Text(
-                '💡 Доступная память для ИИ: из ${localAiState.totalRamMb > 0 ? (localAiState.totalRamMb / 1024).toStringAsFixed(1) : "4.0"} ГБ физической RAM система Android занимает около 1.4 ГБ для ядра и экрана. Чистый остаток для запуска нейросети без вылетов — ${(localAiState.availableRamMb / 1024).toStringAsFixed(1)} ГБ.',
+                '💡 Доступная память для ИИ: из ${localAiState.totalRamMb > 0 ? (localAiState.totalRamMb / 1024).toStringAsFixed(1) : "8.0"} ГБ физической RAM система Android резервирует часть под экран и модем (поэтому отображается ${(localAiState.totalRamMb / 1024).toStringAsFixed(1)} ГБ).'
+                '${localAiState.swapTotalMb > 0 ? " Дополнительно активен файл подкачки на ${(localAiState.swapTotalMb / 1024).toStringAsFixed(1)} ГБ (итого: ${((localAiState.totalRamMb + localAiState.swapTotalMb) / 1024).toStringAsFixed(1)} ГБ)." : ""}'
+                ' Чистый свободный остаток физической RAM — ${(localAiState.availableRamMb / 1024).toStringAsFixed(1)} ГБ.',
                 style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.3),
               ),
               const SizedBox(height: 6),
@@ -1850,7 +1877,66 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                 'Защита от вылетов: запуск тяжелых моделей на смартфонах без запаса памяти вызывает принудительное закрытие приложения операционной системой (Android OOM Killer). Безопасный режим отключает GPU и балансирует потоки.',
                 style: GoogleFonts.inter(fontSize: 10, color: Colors.white54, height: 1.25),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+
+              // Safe Mode Toggle Switch
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _localSafeMode ? Colors.lightGreenAccent.withValues(alpha: 0.3) : Colors.orangeAccent.withValues(alpha: 0.3),
+                  ),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: SwitchListTile(
+                  value: _localSafeMode,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  activeThumbColor: Colors.lightGreenAccent,
+                  inactiveThumbColor: Colors.orangeAccent,
+                  title: Row(
+                    children: [
+                      Icon(
+                        _localSafeMode ? LucideIcons.shield_check : LucideIcons.shield_alert,
+                        size: 15,
+                        color: _localSafeMode ? Colors.lightGreenAccent : Colors.orangeAccent,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Безопасный режим (Safe Mode)',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  subtitle: Text(
+                    _localSafeMode
+                        ? 'ВКЛЮЧЕН: блокирует запуск при нехватке RAM для защиты от вылетов.'
+                        : 'ОТКЛЮЧЕН: ограничения сняты. Запуск любых моделей на ваш страх и риск.',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: _localSafeMode ? Colors.white60 : Colors.orangeAccent,
+                    ),
+                  ),
+                  onChanged: (val) async {
+                    setState(() => _localSafeMode = val);
+                    await ref.read(localAiServiceProvider.notifier).setSafeMode(val);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(val
+                              ? '🛡️ Безопасный режим ВКЛЮЧЕН: защита от вылетов активна'
+                              : '⚠️ Безопасный режим ОТКЛЮЧЕН: все ограничения сняты'),
+                          backgroundColor: val ? Colors.green : Colors.deepOrange,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -1860,19 +1946,21 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       _localThreads = 3;
                       _localGpuLayers = 0;
                       _localUseFlashAttn = true;
+                      _localContextSize = 2048;
+                      _localSafeMode = true;
                     });
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('🛡️ Безопасный режим включен! Потоки=3, GPU=0 (CPU), Контекст=2048'),
+                          content: Text('🛡️ Настройки сброшены к безопасным: Потоки=3, GPU=0 (CPU), Контекст=2048'),
                           backgroundColor: Colors.green,
                           duration: Duration(seconds: 2),
                         ),
                       );
                     }
                   },
-                  icon: const Icon(LucideIcons.shield_check, size: 14, color: Colors.lightGreenAccent),
-                  label: const Text('Применить безопасный режим (Анти-краш)'),
+                  icon: const Icon(LucideIcons.rotate_ccw, size: 13, color: Colors.lightGreenAccent),
+                  label: const Text('Сбросить к безопасным настройкам'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.lightGreenAccent,
                     side: const BorderSide(color: Colors.lightGreenAccent),
@@ -2003,46 +2091,56 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
 
               // GPU Layers
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Слои ускорения GPU / NPU:', style: TextStyle(fontSize: 12, color: Colors.white70)),
-                  Text(
-                    '$_localGpuLayers ${_localGpuLayers == 0 ? "(Чистый CPU)" : "слоев"}',
-                    style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.lightGreenAccent),
-                  ),
-                ],
-              ),
-              Slider(
-                value: _localGpuLayers.clamp(0, 33).toDouble(),
-                min: 0,
-                max: 33,
-                divisions: 33,
-                activeColor: Colors.lightGreenAccent,
-                inactiveColor: Colors.white10,
-                onChanged: (val) {
-                  setState(() => _localGpuLayers = val.toInt());
-                  ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: val.toInt());
-                },
-              ),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [0, 8, 16, 24, 33].map((l) {
-                    final isSel = _localGpuLayers == l;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: ActionChip(
-                        label: Text(l == 0 ? '0 (CPU - Без сбоев)' : '$l слоев', style: TextStyle(fontSize: 10, color: isSel ? Colors.black : Colors.white70)),
-                        backgroundColor: isSel ? Colors.lightGreenAccent : Colors.white.withValues(alpha: 0.05),
-                        onPressed: () {
-                          setState(() => _localGpuLayers = l);
-                          ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: l);
+              Builder(
+                builder: (context) {
+                  final maxGpuLayers = _localSafeMode ? 33 : 99;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Слои ускорения GPU / NPU${!_localSafeMode ? " (до 99)" : ""}:', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                          Text(
+                            '$_localGpuLayers ${_localGpuLayers == 0 ? "(Чистый CPU)" : "слоев"}',
+                            style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.lightGreenAccent),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: _localGpuLayers.clamp(0, maxGpuLayers).toDouble(),
+                        min: 0,
+                        max: maxGpuLayers.toDouble(),
+                        divisions: maxGpuLayers,
+                        activeColor: Colors.lightGreenAccent,
+                        inactiveColor: Colors.white10,
+                        onChanged: (val) {
+                          setState(() => _localGpuLayers = val.toInt());
+                          ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: val.toInt());
                         },
                       ),
-                    );
-                  }).toList(),
-                ),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: (_localSafeMode ? [0, 8, 16, 24, 33] : [0, 8, 16, 33, 48, 64, 99]).map((l) {
+                            final isSel = _localGpuLayers == l;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ActionChip(
+                                label: Text(l == 0 ? '0 (CPU)' : '$l слоев', style: TextStyle(fontSize: 10, color: isSel ? Colors.black : Colors.white70)),
+                                backgroundColor: isSel ? Colors.lightGreenAccent : Colors.white.withValues(alpha: 0.05),
+                                onPressed: () {
+                                  setState(() => _localGpuLayers = l);
+                                  ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: l);
+                                },
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 8),
 

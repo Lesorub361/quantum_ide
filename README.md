@@ -61,7 +61,14 @@ Below is the directory structure of the application source code (`lib/`):
 - **Embedded Sandbox Terminal**: Native terminal PTY integration running an Ubuntu 24.04 PRoot environment. Automounts android storages, supports auto-recovery, customized `.bashrc`, dynamic tools configuration.
 - **Language Server Protocol (LSP)**: Complete support for HTML, CSS, JavaScript, and TypeScript within the PRoot sandbox. Offers smart autocomplete, documentation hovers, usages lookup, rename refactoring, and code formatting.
 - **Live Share (Real-time Collaboration)**: Host or join shared coding sessions over local networks. Synchronizes document text changes instantly using diff-match-patch alongside remote cursor caret lines, selections, and floating developer name flags. Includes a built-in session developer chat.
-- **Multi-backend AI Assistant**: Built-in chat panel supporting Google Gemini (Flash & Pro), Groq, DeepSeek, OpenRouter, and local models (Ollama/LM Studio). Smart debounced (700ms) code autocompletion.
+- **Multi-backend AI Assistant**: Built-in chat panel supporting Google Gemini (Flash & Pro), Groq, DeepSeek, OpenRouter, and on-device offline AI models (llama.cpp server & Ollama). Smart debounced code autocompletion.
+- **On-Device Local AI & Ollama Hub (Offline Edge AI)**:
+  - Run state-of-the-art open-source LLMs offline directly on mobile ARM64 hardware without cloud dependencies (Qwen 2.5 Coder, Meta Llama 3.2, DeepSeek R1, Phi-4, MiniCPM-V).
+  - **Hugging Face Hub Explorer**: Search and download GGUF models directly within the IDE, with capability badges (Vision, Context size, Reasoning, Code).
+  - **Ollama Library Hub**: 1-click model installation and direct API pull streaming with live progress.
+  - **Memory Guard & Safe Mode Toggle (Анти-краш)**: Real-time Android RAM diagnostics (`MemAvailable` vs `MemTotal`), pre-flight safety checks, and an interactive **Safe Mode switch** allowing users to choose between crash protection or unrestricted hardware limits (up to 99 GPU layers and custom context lengths).
+  - **Synchronized Context Length**: Choose from 512 up to 32K context tokens, strictly propagated to the inference server flags.
+  - **Diagnostics & Live Log Export**: Real-time log monitor with a 1-click copy button for instant debugging.
 - **Built-in Git Client**: Diff tool, status tracker, visual conflict solver, and commit flow integration.
 - **Mobile Build Tools & Diagnostics**: Automated ARM64 Linux toolchain setup (NDK, SDK symlinking, AAPT2 patcher), Java JDK 17 setup, background `dart analyze` processing, project-wide problems panel, APK building and signing.
 - **Web Preview**: Built-in chromium-based WebView previewing, console log forwarder, local server listener.
@@ -77,12 +84,13 @@ Here are the features currently in development or planned:
 - [x] **LSP Integration**: Add language server support for HTML, CSS, JavaScript, and TypeScript inside the sandbox for full auto-complete, go-to-definition, and complex linting. (Completed)
 - [x] **Live Collaboration (Live Share)**: Add real-time multiplayer editing using CRDT/diff-match-patch synchronization with cursor sharing and voice/chat options. (Completed)
 - [x] **WASM Plugin System**: Add support for running WebAssembly-based custom plugins compiled from Rust, Go, or C++ to extend the editor's capabilities. (Completed)
+- [x] **Local AI Hub (llama.cpp & Ollama)**: Run GGUF & Ollama models on device with Hugging Face hub integration, Safe Mode toggle, and memory diagnostics. (Completed)
 - [ ] **KVM MicroVM Integration**: Support hardware-accelerated Linux kernels inside lightweight micro-VMs on Android 15+ to bypass PRoot constraints.
 - [ ] **Foldable Layout Support**: Auto-splitting panels (terminal/editor/preview) across physical screen folds on foldable smartphones and tablets.
-- [ ] **Local AI completions (MLC LLM)**: Integrate Qwen-Coder or Llama-3-Coder running directly on the device's NPU.
 - [ ] **Docker & Container Support**: Enable lightweight containers inside the development sandbox.
 - [ ] **Remote SSH Development**: Connect to and edit files on remote servers directly from the IDE.
 - [ ] **Themes & Plugins Marketplace**: Discover and install community-developed themes and extension plugins.
+
 
 ---
 

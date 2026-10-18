@@ -273,6 +273,9 @@ class LocalAiState {
   // Memory diagnostics & safety
   final int availableRamMb;
   final int totalRamMb;
+  final int swapTotalMb;
+  final int swapFreeMb;
+  final bool safeMode;
 
   LocalAiState({
     this.isModelDownloaded = false,
@@ -292,6 +295,9 @@ class LocalAiState {
     this.contextSize = 2048,
     this.availableRamMb = -1,
     this.totalRamMb = -1,
+    this.swapTotalMb = 0,
+    this.swapFreeMb = 0,
+    this.safeMode = true,
   });
 
   LocalAiState copyWith({
@@ -313,6 +319,9 @@ class LocalAiState {
     int? contextSize,
     int? availableRamMb,
     int? totalRamMb,
+    int? swapTotalMb,
+    int? swapFreeMb,
+    bool? safeMode,
   }) {
     return LocalAiState(
       isModelDownloaded: isModelDownloaded ?? this.isModelDownloaded,
@@ -332,6 +341,9 @@ class LocalAiState {
       contextSize: contextSize ?? this.contextSize,
       availableRamMb: availableRamMb ?? this.availableRamMb,
       totalRamMb: totalRamMb ?? this.totalRamMb,
+      swapTotalMb: swapTotalMb ?? this.swapTotalMb,
+      swapFreeMb: swapFreeMb ?? this.swapFreeMb,
+      safeMode: safeMode ?? this.safeMode,
     );
   }
 }
@@ -442,6 +454,46 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     return -1;
   }
 
+  /// Returns total Swap (zRAM / Android RAM Plus) in Megabytes, or 0 if none.
+  static Future<int> getSwapTotalMb() async {
+    try {
+      final f = File('/proc/meminfo');
+      if (await f.exists()) {
+        final lines = await f.readAsLines();
+        for (final line in lines) {
+          if (line.startsWith('SwapTotal:')) {
+            final parts = line.split(RegExp(r'\s+'));
+            if (parts.length >= 2) {
+              final kb = int.tryParse(parts[1]);
+              if (kb != null) return kb ~/ 1024;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return 0;
+  }
+
+  /// Returns free Swap (zRAM / Android RAM Plus) in Megabytes, or 0 if none.
+  static Future<int> getSwapFreeMb() async {
+    try {
+      final f = File('/proc/meminfo');
+      if (await f.exists()) {
+        final lines = await f.readAsLines();
+        for (final line in lines) {
+          if (line.startsWith('SwapFree:')) {
+            final parts = line.split(RegExp(r'\s+'));
+            if (parts.length >= 2) {
+              final kb = int.tryParse(parts[1]);
+              if (kb != null) return kb ~/ 1024;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+    return 0;
+  }
+
   /// Estimates total required RAM in Megabytes for a given model and context size.
   Future<int> estimateRequiredRamMb({String? filename, int? contextSize}) async {
     final modelFile = filename ?? state.selectedModelFilename;
@@ -472,17 +524,26 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     return modelMb + kvCacheMb;
   }
 
+  Future<void> setSafeMode(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('ai_local_safe_mode', enabled);
+    state = state.copyWith(safeMode: enabled);
+    _appendLogs('[Local AI] 🛡️ Безопасный режим ${enabled ? "ВКЛЮЧЕН (защита от вылетов и сбоев GPU)" : "ОТКЛЮЧЕН (ограничения памяти сняты)"}.\n');
+  }
+
   Future<void> applyMobileSafeMode() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt('ai_local_threads', 3);
     await prefs.setInt('ai_local_gpu_layers', 0);
     await prefs.setBool('ai_local_flash_attn', true);
     await prefs.setInt('ai_local_context_size', 2048);
+    await prefs.setBool('ai_local_safe_mode', true);
     state = state.copyWith(
       threads: 3,
       gpuLayers: 0,
       useFlashAttn: true,
       contextSize: 2048,
+      safeMode: true,
     );
     _appendLogs('[Local AI] 🛡️ Безопасный режим применен: Потоки=3, GPU=0 (CPU), Контекст=2048, FlashAttn=ВКЛ.\n');
   }
@@ -492,6 +553,8 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
     final availableRam = await getAvailableRamMb();
     final totalRam = await getTotalRamMb();
+    final swapTotal = await getSwapTotalMb();
+    final swapFree = await getSwapFreeMb();
     final isMobile = Platform.isAndroid || Platform.isIOS;
     final defaultThreads = isMobile ? 3 : (Platform.numberOfProcessors >= 8 ? 6 : (Platform.numberOfProcessors >= 4 ? 4 : 2));
     const defaultGpuLayers = 0; // Pure CPU on mobile to avoid Vulkan/OpenCL driver crashes
@@ -541,6 +604,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
       final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? isMobile;
       final contextSize = prefs.getInt('ai_local_context_size') ?? defaultContextSize;
+      final safeMode = prefs.getBool('ai_local_safe_mode') ?? true;
 
       state = state.copyWith(
         isModelDownloaded: anyModelDownloaded,
@@ -554,6 +618,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         contextSize: contextSize,
         availableRamMb: availableRam,
         totalRamMb: totalRam,
+        swapTotalMb: swapTotal,
+        swapFreeMb: swapFree,
+        safeMode: safeMode,
       );
     } else if (engine == LocalAiEngine.ollama) {
       final baseUrl = _getOllamaBaseUrl();
@@ -603,6 +670,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
       final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? isMobile;
       final contextSize = prefs.getInt('ai_local_context_size') ?? defaultContextSize;
+      final safeMode = prefs.getBool('ai_local_safe_mode') ?? true;
 
       state = state.copyWith(
         isModelDownloaded: anyModelDownloaded,
@@ -616,6 +684,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         contextSize: contextSize,
         availableRamMb: availableRam,
         totalRamMb: totalRam,
+        swapTotalMb: swapTotal,
+        swapFreeMb: swapFree,
+        safeMode: safeMode,
       );
     } else {
       final prefs = await SharedPreferences.getInstance();
@@ -623,6 +694,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
       final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? isMobile;
       final contextSize = prefs.getInt('ai_local_context_size') ?? defaultContextSize;
+      final safeMode = prefs.getBool('ai_local_safe_mode') ?? true;
 
       state = state.copyWith(
         isModelDownloaded: false,
@@ -636,6 +708,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         contextSize: contextSize,
         availableRamMb: availableRam,
         totalRamMb: totalRam,
+        swapTotalMb: swapTotal,
+        swapFreeMb: swapFree,
+        safeMode: safeMode,
       );
     }
   }
@@ -944,7 +1019,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     _appendLogs('[Local AI] Selected active model: $name\n');
   }
 
-  Future<void> updateSettings({int? threads, int? gpuLayers, bool? useFlashAttn, int? contextSize}) async {
+  Future<void> updateSettings({int? threads, int? gpuLayers, bool? useFlashAttn, int? contextSize, bool? safeMode}) async {
     final prefs = await SharedPreferences.getInstance();
     if (threads != null) {
       await prefs.setInt('ai_local_threads', threads);
@@ -958,13 +1033,17 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     if (contextSize != null) {
       await prefs.setInt('ai_local_context_size', contextSize);
     }
+    if (safeMode != null) {
+      await prefs.setBool('ai_local_safe_mode', safeMode);
+    }
     state = state.copyWith(
       threads: threads ?? state.threads,
       gpuLayers: gpuLayers ?? state.gpuLayers,
       useFlashAttn: useFlashAttn ?? state.useFlashAttn,
       contextSize: contextSize ?? state.contextSize,
+      safeMode: safeMode ?? state.safeMode,
     );
-    _appendLogs('[Local AI] Settings updated: threads=${threads ?? state.threads}, gpuLayers=${gpuLayers ?? state.gpuLayers}, useFlashAttn=${useFlashAttn ?? state.useFlashAttn}, contextSize=${contextSize ?? state.contextSize}\n');
+    _appendLogs('[Local AI] Settings updated: threads=${threads ?? state.threads}, gpuLayers=${gpuLayers ?? state.gpuLayers}, useFlashAttn=${useFlashAttn ?? state.useFlashAttn}, contextSize=${contextSize ?? state.contextSize}, safeMode=${safeMode ?? state.safeMode}\n');
   }
 
   Future<void> installBinary() async {
@@ -1037,36 +1116,45 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       // ── Pre-flight RAM & Safety Checks ──────────────────────────────────
       final availableRam = await getAvailableRamMb();
       final totalRam = await getTotalRamMb();
+      final swapTotal = await getSwapTotalMb();
+      final swapFree = await getSwapFreeMb();
       final requiredRam = await estimateRequiredRamMb(filename: activeModelFile, contextSize: state.contextSize);
 
-      _appendLogs('[Local AI] Диагностика RAM: свободно ${availableRam > 0 ? "$availableRam МБ" : "неизвестно"} / ${totalRam > 0 ? "$totalRam МБ" : "неизвестно"}. Для модели требуется ~$requiredRam МБ.\n');
+      final effectiveAvailableMem = availableRam + (swapFree > 0 ? swapFree : 0);
+      _appendLogs('[Local AI] Диагностика RAM: свободно ${availableRam > 0 ? "$availableRam МБ" : "неизвестно"} / ${totalRam > 0 ? "$totalRam МБ" : "неизвестно"}${swapTotal > 0 ? " · Подкачка (RAM Plus/Swap): +${(swapTotal / 1024).toStringAsFixed(1)} ГБ (свободно ${(swapFree / 1024).toStringAsFixed(1)} ГБ, всего с подкачкой: ${((totalRam + swapTotal) / 1024).toStringAsFixed(1)} ГБ)" : ""}. Требуется для модели: ~$requiredRam МБ.\n');
 
-      if (availableRam > 0 && availableRam < (requiredRam * 0.70)) {
-        final warningMsg = 'Недостаточно свободной оперативной памяти (RAM)!\n'
-            'Доступно: ${(availableRam / 1024).toStringAsFixed(1)} ГБ, а для модели "$activeModelFile" требуется минимум ${(requiredRam / 1024).toStringAsFixed(1)} ГБ.\n'
-            '⛔ Запуск заблокирован для защиты от вылета приложения (Android OOM Killer).\n'
-            '💡 Рекомендация: выберите компактную модель (0.5B или 1.5B) либо уменьшите Context Size до 1024/2048 в настройках.';
-        _appendLogs('\n[Local AI] ❌ $warningMsg\n');
-        state = state.copyWith(isStarting: false, isRunning: false, error: warningMsg);
-        return;
+      if (availableRam > 0 && effectiveAvailableMem < (requiredRam * 0.70)) {
+        if (state.safeMode) {
+          final warningMsg = 'Недостаточно свободной оперативной памяти (RAM)!\n'
+              'Доступно: ${(availableRam / 1024).toStringAsFixed(1)} ГБ'
+              '${swapTotal > 0 ? " (с подкачкой: ${(effectiveAvailableMem / 1024).toStringAsFixed(1)} ГБ)" : ""}'
+              ', а для модели "$activeModelFile" требуется минимум ${(requiredRam / 1024).toStringAsFixed(1)} ГБ.\n'
+              '⛔ Запуск заблокирован для защиты от вылета приложения (Android OOM Killer).\n'
+              '💡 Рекомендация: выберите компактную модель (0.5B или 1.5B) либо отключите «Безопасный режим» в настройках, если хотите запустить принудительно.';
+          _appendLogs('\n[Local AI] ❌ $warningMsg\n');
+          state = state.copyWith(isStarting: false, isRunning: false, error: warningMsg);
+          return;
+        } else {
+          _appendLogs('\n[Local AI] ⚠️ Внимание: Безопасный режим ОТКЛЮЧЕН пользователем! Доступно ${(effectiveAvailableMem / 1024).toStringAsFixed(1)} ГБ при требуемых ${(requiredRam / 1024).toStringAsFixed(1)} ГБ. Запуск продолжается принудительно на ваш страх и риск...\n');
+        }
       }
 
-      // Auto-tune context if borderline RAM to avoid crash
+      // Auto-tune context if borderline RAM to avoid crash (only if safeMode enabled)
       int effectiveContextSize = state.contextSize;
-      if (availableRam > 0 && availableRam < requiredRam && effectiveContextSize > 2048) {
+      if (state.safeMode && availableRam > 0 && availableRam < requiredRam && effectiveContextSize > 2048) {
         effectiveContextSize = 2048;
         _appendLogs('[Local AI] ⚡ Авто-оптимизация: Контекст уменьшен до 2048 для экономии оперативной памяти.\n');
       }
 
-      // On Android/iOS, GPU offloading causes driver crashes unless custom-compiled; force 0
+      // GPU layers: in safeMode disable GPU on mobile to prevent driver crash; otherwise respect user choice
       int effectiveGpuLayers = state.gpuLayers;
-      if (isMobile && effectiveGpuLayers > 0) {
-        _appendLogs('[Local AI] ℹ️ Отключение GPU-слоев на мобильном для предотвращения сбоя Vulkan драйвера.\n');
+      if (state.safeMode && isMobile && effectiveGpuLayers > 0) {
+        _appendLogs('[Local AI] ℹ️ Отключение GPU-слоев на мобильном (Безопасный режим) для предотвращения сбоя Vulkan драйвера.\n');
         effectiveGpuLayers = 0;
       }
 
-      // Safe thread limit on mobile
-      final effectiveThreads = isMobile ? (state.threads > 4 ? 3 : state.threads) : state.threads;
+      // Safe thread limit on mobile (only if safeMode enabled)
+      final effectiveThreads = (state.safeMode && isMobile) ? (state.threads > 4 ? 3 : state.threads) : state.threads;
       final useFlashAttn = state.useFlashAttn;
 
       final found = await findModelFile(activeModelFile);
