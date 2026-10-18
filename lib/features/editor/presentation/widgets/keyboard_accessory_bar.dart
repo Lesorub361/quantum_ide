@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
@@ -8,6 +7,7 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 
 import 'package:quantum_ide/core/services/ai_autocomplete_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/color_picker_dialog.dart';
+import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 
 class KeyboardAccessoryBar extends ConsumerWidget {
   final CodeLineEditingController controller;
@@ -37,9 +37,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
   }
 
   void _triggerHaptic(WidgetRef ref) {
-    if (ref.read(settingsProvider).hapticFeedback) {
-      HapticFeedback.lightImpact();
-    }
+    KeyboardSoundService.playClick();
   }
 
   @override
@@ -174,6 +172,14 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                   controller.replaceSelection(hexCode);
                 },
               );
+            },
+          ),
+          buildBtn(
+            icon: LucideIcons.volume_2,
+            tooltip: 'Звук клавиатуры (ASMR)',
+            color: Colors.amberAccent,
+            onPressed: () {
+              KeyboardSoundService.showSwitchSelectorDialog(context);
             },
           ),
           Container(

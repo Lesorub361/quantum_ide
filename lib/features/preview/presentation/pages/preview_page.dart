@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
+import 'package:quantum_ide/features/preview/presentation/widgets/device_simulator_dialog.dart';
+
 class PreviewPage extends ConsumerStatefulWidget {
   const PreviewPage({super.key});
 
@@ -37,6 +39,13 @@ class _PreviewPageState extends ConsumerState<PreviewPage> {
       appBar: AppBar(
         title: const Text('Live Preview'),
         actions: [
+          IconButton(
+            tooltip: 'Симулятор устройств (iPhone, Galaxy, iPad)',
+            icon: const Icon(LucideIcons.smartphone, color: Colors.cyanAccent),
+            onPressed: () {
+              DeviceSimulatorDialog.show(context, htmlContent: content);
+            },
+          ),
           IconButton(
             icon: const Icon(LucideIcons.rotate_cw),
             onPressed: () {

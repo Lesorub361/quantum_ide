@@ -13,6 +13,7 @@ import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'mobile_companion_qr_dialog.dart';
+import 'device_simulator_dialog.dart';
 
 class SidebarWebPreviewPanel extends ConsumerStatefulWidget {
   const SidebarWebPreviewPanel({super.key});
@@ -157,7 +158,15 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
               ),
               const SizedBox(width: 8),
               // Mobile Companion (QR Code) Button
-              if (_serverIsRunning)
+              if (_serverIsRunning) ...[
+                IconButton(
+                  icon: const Icon(LucideIcons.smartphone, size: 14, color: Colors.amberAccent),
+                  tooltip: 'Мульти-симулятор экранов (iPhone, Galaxy, iPad)',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => DeviceSimulatorDialog.show(context, url: _urlController.text),
+                ),
+                const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(LucideIcons.qr_code, size: 14, color: Colors.cyanAccent),
                   tooltip: 'Mobile Live Preview (QR)',
@@ -165,7 +174,8 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
                   constraints: const BoxConstraints(),
                   onPressed: () => MobileCompanionQrDialog.show(context, _urlController.text),
                 ),
-              const SizedBox(width: 8),
+                const SizedBox(width: 8),
+              ],
               // Open in External Browser
               IconButton(
                 icon: const Icon(LucideIcons.external_link, size: 14, color: Colors.blueAccent),

@@ -1,529 +1,502 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
-import 'package:quantum_ide/core/services/git_graph_service.dart';
-import 'package:quantum_ide/shared/widgets/glass_container.dart';
+import 'package:quantum_ide/core/services/workspace_service.dart';
+
+class GitCommitItem {
+  final String hash;
+  final List<String> parentHashes;
+  final String refs;
+  final String message;
+  final String author;
+  final String relativeDate;
+  final int laneIndex;
+
+  const GitCommitItem({
+    required this.hash,
+    required this.parentHashes,
+    required this.refs,
+    required this.message,
+    required this.author,
+    required this.relativeDate,
+    required this.laneIndex,
+  });
+}
 
 class GitGraphPage extends ConsumerStatefulWidget {
-  const GitGraphPage({super.key});
+  final String? projectPath;
+
+  const GitGraphPage({super.key, this.projectPath});
 
   @override
   ConsumerState<GitGraphPage> createState() => _GitGraphPageState();
 }
 
 class _GitGraphPageState extends ConsumerState<GitGraphPage> {
-  List<GitGraphEntry> _entries = [];
-  List<String> _branches = [];
-  bool _isLoading = true;
-  String? _error;
-  String? _filterBranch;
-  String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+  List<GitCommitItem> _allCommits = [];
+  List<GitCommitItem> _filteredCommits = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  String _currentBranch = 'main';
+
+  final List<Color> _laneColors = const [
+    Color(0xFF00F2FE), // Cyan
+    Color(0xFF10B981), // Emerald
+    Color(0xFFF59E0B), // Amber
+    Color(0xFF8B5CF6), // Purple
+    Color(0xFFF43F5E), // Rose
+    Color(0xFF38BDF8), // Sky
+    Color(0xFFA855F7), // Violet
+  ];
 
   @override
   void initState() {
     super.initState();
-    _loadGraph();
+    _loadGitLog();
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadGraph() async {
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final service = ref.read(gitGraphServiceProvider);
-      final commits = await service.getCommits(branch: _filterBranch, maxCount: 300);
-      final refs = await service.getBranchRefs();
-      final branches = await service.getBranches();
-      final entries = service.buildGraph(commits, refs);
-
+  void _onSearchChanged() {
+    final query = _searchController.text.toLowerCase().trim();
+    if (query.isEmpty) {
+      setState(() => _filteredCommits = _allCommits);
+    } else {
       setState(() {
-        _entries = entries;
-        _branches = branches;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = e.toString();
+        _filteredCommits = _allCommits.where((c) {
+          return c.message.toLowerCase().contains(query) ||
+              c.author.toLowerCase().contains(query) ||
+              c.hash.toLowerCase().contains(query) ||
+              c.refs.toLowerCase().contains(query);
+        }).toList();
       });
     }
   }
 
-  List<GitGraphEntry> get _filteredEntries {
-    if (_searchQuery.isEmpty) return _entries;
-    final q = _searchQuery.toLowerCase();
-    return _entries.where((e) =>
-      e.commit.message.toLowerCase().contains(q) ||
-      e.commit.author.toLowerCase().contains(q) ||
-      e.commit.shortHash.toLowerCase().contains(q)
-    ).toList();
+  Future<void> _loadGitLog() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final repoPath = widget.projectPath ?? ref.read(workspaceProvider).currentPath ?? '/root/projects/quantum_ide-main';
+
+      // 1. Get current branch
+      final branchResult = await Process.run(
+        'git',
+        ['rev-parse', '--abbrev-ref', 'HEAD'],
+        workingDirectory: repoPath,
+      );
+      if (branchResult.exitCode == 0) {
+        _currentBranch = branchResult.stdout.toString().trim();
+      }
+
+      // 2. Get git log
+      final logResult = await Process.run(
+        'git',
+        [
+          'log',
+          '-n',
+          '80',
+          '--format=format:%h|%p|%d|%s|%an|%cr',
+        ],
+        workingDirectory: repoPath,
+      );
+
+      if (logResult.exitCode != 0) {
+        throw Exception(logResult.stderr.toString());
+      }
+
+      final rawLines = logResult.stdout.toString().split('\n');
+      final List<GitCommitItem> parsed = [];
+      final Map<String, int> activeLanes = {};
+      int nextLane = 0;
+
+      for (final line in rawLines) {
+        if (line.trim().isEmpty) continue;
+        final parts = line.split('|');
+        if (parts.length < 6) continue;
+
+        final hash = parts[0].trim();
+        final parents = parts[1].trim().split(' ').where((s) => s.isNotEmpty).toList();
+        final refs = parts[2].trim();
+        final message = parts[3].trim();
+        final author = parts[4].trim();
+        final date = parts[5].trim();
+
+        int lane = activeLanes[hash] ?? nextLane++;
+        if (lane >= _laneColors.length) {
+          lane = lane % _laneColors.length;
+        }
+
+        // Assign lane for parents
+        for (final p in parents) {
+          activeLanes.putIfAbsent(p, () => lane);
+        }
+
+        parsed.add(GitCommitItem(
+          hash: hash,
+          parentHashes: parents,
+          refs: refs,
+          message: message,
+          author: author,
+          relativeDate: date,
+          laneIndex: lane,
+        ));
+      }
+
+      setState(() {
+        _allCommits = parsed;
+        _filteredCommits = parsed;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Ошибка загрузки истории Git: $e';
+        _isLoading = false;
+      });
+    }
   }
 
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-    if (diff.inDays < 1) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return DateFormat('MMM d, yyyy').format(date);
+  void _showCommitDetails(GitCommitItem commit) async {
+    final repoPath = widget.projectPath ?? ref.read(workspaceProvider).currentPath ?? '/root/projects/quantum_ide-main';
+    String diffStat = 'Загрузка изменений...';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF131722),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            // Load diff stat asynchronously
+            if (diffStat == 'Загрузка изменений...') {
+              Process.run('git', ['show', '--stat', '--oneline', commit.hash], workingDirectory: repoPath).then((res) {
+                if (modalCtx.mounted) {
+                  setModalState(() {
+                    diffStat = res.stdout.toString().trim();
+                    if (diffStat.isEmpty) diffStat = 'Нет изменений в коммите';
+                  });
+                }
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 16,
+                right: 16,
+                top: 16,
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _laneColors[commit.laneIndex].withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              commit.hash,
+                              style: GoogleFonts.jetBrainsMono(
+                                color: _laneColors[commit.laneIndex],
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (commit.refs.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.white10,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                commit.refs,
+                                style: const TextStyle(color: Colors.amberAccent, fontSize: 11),
+                              ),
+                            ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(LucideIcons.copy, size: 16, color: Colors.white70),
+                        tooltip: 'Скопировать SHA',
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: commit.hash));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('SHA коммита скопирован!'), duration: Duration(seconds: 1)),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    commit.message,
+                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Автор: ${commit.author} • ${commit.relativeDate}',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  ),
+                  const Divider(color: Colors.white10, height: 24),
+                  const Text('ИЗМЕНЕНИЯ В ФАЙЛАХ:', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    constraints: const BoxConstraints(maxHeight: 200),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Text(
+                        diffStat,
+                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 11),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final filtered = _filteredEntries;
-
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: const Color(0xFF0F111A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF141724),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.git_graph, color: Color(0xFF00F2FE), size: 20),
+            const SizedBox(width: 10),
+            Text('Git Graph', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00F2FE).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                _currentBranch,
+                style: GoogleFonts.jetBrainsMono(color: const Color(0xFF00F2FE), fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Обновить дерево Git',
+            icon: const Icon(LucideIcons.rotate_cw, size: 18),
+            onPressed: _loadGitLog,
+          ),
+        ],
+      ),
       body: Column(
         children: [
+          // Search Bar
           Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GlassContainer(
-                    borderRadius: BorderRadius.circular(10),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: TextField(
-                      controller: _searchController,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 13),
-                      decoration: InputDecoration(
-                        hintText: 'Search commits...',
-                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
-                        border: InputBorder.none,
-                        prefixIcon: Icon(LucideIcons.search, size: 16, color: Colors.white.withValues(alpha: 0.5)),
-                        suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: Icon(LucideIcons.x, size: 14, color: Colors.white.withValues(alpha: 0.5)),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                            )
-                          : null,
-                      ),
-                      onChanged: (v) => setState(() => _searchQuery = v),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GlassContainer(
-                  borderRadius: BorderRadius.circular(10),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String?>(
-                      value: _filterBranch,
-                      isDense: true,
-                      dropdownColor: theme.colorScheme.surface.withValues(alpha: 0.95),
-                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white),
-                      hint: Text('All', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('All branches'),
-                        ),
-                        ..._branches.map((b) => DropdownMenuItem(
-                          value: b,
-                          child: Text(b),
-                        )),
-                      ],
-                      onChanged: (v) {
-                        setState(() => _filterBranch = v);
-                        _loadGraph();
-                      },
-                    ),
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Поиск по сообщениям, автору, SHA или веткам...',
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                prefixIcon: const Icon(LucideIcons.search, color: Colors.white38, size: 16),
+                filled: true,
+                fillColor: const Color(0xFF171B2B),
+                contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              ),
             ),
           ),
           Expanded(
             child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-                ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(LucideIcons.git_branch, size: 48, color: Colors.white.withValues(alpha: 0.3)),
-                        const SizedBox(height: 12),
-                        Text(_error!, style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
-                        const SizedBox(height: 16),
-                        TextButton(onPressed: _loadGraph, child: const Text('Retry')),
-                      ],
-                    ),
-                  )
-                : filtered.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(LucideIcons.git_commit_horizontal, size: 48, color: Colors.white.withValues(alpha: 0.3)),
-                          const SizedBox(height: 12),
-                          Text('No commits found', style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      itemCount: filtered.length,
-                      padding: const EdgeInsets.only(bottom: 24),
-                      itemBuilder: (context, index) => _buildCommitRow(filtered[index]),
-                    ),
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F2FE)))
+                : _errorMessage != null
+                    ? Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent))))
+                    : _filteredCommits.isEmpty
+                        ? const Center(child: Text('Коммиты не найдены', style: TextStyle(color: Colors.white54)))
+                        : ListView.builder(
+                            itemCount: _filteredCommits.length,
+                            itemBuilder: (context, index) {
+                              final commit = _filteredCommits[index];
+                              final color = _laneColors[commit.laneIndex % _laneColors.length];
+                              final isHead = commit.refs.contains('HEAD');
+
+                              return InkWell(
+                                onTap: () => _showCommitDetails(commit),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.04))),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Custom Graph Node
+                                      SizedBox(
+                                        width: 24,
+                                        height: 38,
+                                        child: CustomPaint(
+                                          painter: _GitNodePainter(
+                                            color: color,
+                                            isFirst: index == 0,
+                                            isLast: index == _filteredCommits.length - 1,
+                                            isHead: isHead,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Commit details
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    commit.message,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  commit.hash,
+                                                  style: GoogleFonts.jetBrainsMono(
+                                                    color: color,
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 3),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '${commit.author} • ${commit.relativeDate}',
+                                                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                                ),
+                                                if (commit.refs.isNotEmpty)
+                                                  Flexible(
+                                                    child: Text(
+                                                      commit.refs,
+                                                      style: const TextStyle(
+                                                        color: Colors.amberAccent,
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildCommitRow(GitGraphEntry entry) {
-    final commit = entry.commit;
-    final isMerge = commit.parents.length > 1;
-
-    return InkWell(
-      onTap: () => _showCommitDiff(commit),
-      hoverColor: Colors.white.withValues(alpha: 0.05),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildGraphVisual(entry, isMerge),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    commit.message,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 13,
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          commit.shortHash,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        commit.author,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.5),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _formatDate(commit.date),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      if (commit.branches.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        ...commit.branches.map((b) => Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 0.5),
-                            ),
-                            child: Text(
-                              b,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                color: Colors.blue.withValues(alpha: 0.9),
-                              ),
-                            ),
-                          ),
-                        )),
-                      ],
-                      if (commit.tags.isNotEmpty) ...[
-                        const SizedBox(width: 4),
-                        ...commit.tags.map((t) => Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.amber.withValues(alpha: 0.3), width: 0.5),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(LucideIcons.tag, size: 10, color: Colors.amber.withValues(alpha: 0.8)),
-                                const SizedBox(width: 3),
-                                Text(
-                                  t,
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10,
-                                    color: Colors.amber.withValues(alpha: 0.9),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGraphVisual(GitGraphEntry entry, bool isMerge) {
-    const double cellWidth = 20.0;
-    const double rowHeight = 48.0;
-    const double dotRadius = 5.0;
-
-    int maxCol = 0;
-    for (final col in entry.columns) {
-      if (col.index > maxCol) maxCol = col.index;
-    }
-    final graphWidth = (maxCol + 1) * cellWidth + dotRadius * 2 + 4;
-
-    return SizedBox(
-      width: graphWidth,
-      height: rowHeight,
-      child: CustomPaint(
-        painter: _GraphPainter(
-          columns: entry.columns,
-          isMerge: isMerge,
-          cellWidth: cellWidth,
-          dotRadius: dotRadius,
-        ),
-      ),
-    );
-  }
-
-  void _showCommitDiff(GitCommit commit) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        minChildSize: 0.3,
-        maxChildSize: 0.9,
-        builder: (context, scrollController) => GlassContainer(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          blur: 20,
-          opacity: 0.12,
-          child: Column(
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        commit.shortHash,
-                        style: GoogleFonts.jetBrainsMono(fontSize: 13, color: Colors.white.withValues(alpha: 0.8)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        commit.message,
-                        style: GoogleFonts.jetBrainsMono(fontSize: 14, color: Colors.white),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
-                  children: [
-                    Icon(LucideIcons.user, size: 12, color: Colors.white.withValues(alpha: 0.5)),
-                    const SizedBox(width: 4),
-                    Text(
-                      commit.author,
-                      style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.5)),
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(LucideIcons.calendar, size: 12, color: Colors.white.withValues(alpha: 0.5)),
-                    const SizedBox(width: 4),
-                    Text(
-                      DateFormat('MMM d, yyyy HH:mm').format(commit.date),
-                      style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.5)),
-                    ),
-                    const SizedBox(width: 12),
-                    Icon(LucideIcons.users, size: 12, color: Colors.white.withValues(alpha: 0.5)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${commit.parents.length} parent(s)',
-                      style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.5)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: Colors.white12),
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      'Commit: ${commit.hash}',
-                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
-                    ),
-                    if (commit.parents.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Parents: ${commit.parents.join(", ")}',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
-                      ),
-                    ],
-                    if (commit.branches.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Branches: ${commit.branches.join(", ")}',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
-                      ),
-                    ],
-                    if (commit.tags.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tags: ${commit.tags.join(", ")}',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white.withValues(alpha: 0.6)),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
-class _GraphPainter extends CustomPainter {
-  final List<GraphColumn> columns;
-  final bool isMerge;
-  final double cellWidth;
-  final double dotRadius;
+class _GitNodePainter extends CustomPainter {
+  final Color color;
+  final bool isFirst;
+  final bool isLast;
+  final bool isHead;
 
-  _GraphPainter({
-    required this.columns,
-    required this.isMerge,
-    required this.cellWidth,
-    required this.dotRadius,
+  _GitNodePainter({
+    required this.color,
+    required this.isFirst,
+    required this.isLast,
+    required this.isHead,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (columns.isEmpty) return;
+    final centerX = size.width / 2;
+    const centerY = 12.0;
 
-    final centerY = size.height / 2;
+    final linePaint = Paint()
+      ..color = color.withValues(alpha: 0.5)
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
 
-    for (final col in columns) {
-      final paint = Paint()
-        ..color = col.color
-        ..strokeWidth = 2.0
-        ..style = PaintingStyle.stroke;
+    // Connect lines
+    if (!isFirst) {
+      canvas.drawLine(Offset(centerX, 0), Offset(centerX, centerY), linePaint);
+    }
+    if (!isLast) {
+      canvas.drawLine(Offset(centerX, centerY), Offset(centerX, size.height), linePaint);
+    }
 
-      final x = col.index * cellWidth + dotRadius + 2;
-
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        paint,
-      );
-
-      final dotPaint = Paint()
-        ..color = col.color
-        ..style = PaintingStyle.fill;
-
-      canvas.drawCircle(Offset(x, centerY), dotRadius, dotPaint);
-
-      final ringPaint = Paint()
-        ..color = Colors.white.withValues(alpha: 0.3)
+    // Outer glow for HEAD
+    if (isHead) {
+      final glowPaint = Paint()
+        ..color = color.withValues(alpha: 0.3)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0;
-
-      canvas.drawCircle(Offset(x, centerY), dotRadius + 1, ringPaint);
+        ..strokeWidth = 3;
+      canvas.drawCircle(Offset(centerX, centerY), 7.5, glowPaint);
     }
 
-    if (isMerge && columns.length > 1) {
-      final mainCol = columns.first;
-      final mergeCol = columns.last;
-      final x1 = mainCol.index * cellWidth + dotRadius + 2;
-      final x2 = mergeCol.index * cellWidth + dotRadius + 2;
-
-      final mergePaint = Paint()
-        ..color = mainCol.color.withValues(alpha: 0.5)
-        ..strokeWidth = 1.5
-        ..style = PaintingStyle.stroke;
-
-      final path = Path()
-        ..moveTo(x1, centerY)
-        ..cubicTo(x1, centerY - 10, x2, centerY + 10, x2, centerY);
-
-      canvas.drawPath(path, mergePaint);
-    }
+    // Main commit dot
+    final dotPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(centerX, centerY), 4.5, dotPaint);
   }
 
   @override
-  bool shouldRepaint(covariant _GraphPainter oldDelegate) {
-    return oldDelegate.columns != columns || oldDelegate.isMerge != isMerge;
-  }
+  bool shouldRepaint(covariant _GitNodePainter old) =>
+      old.color != color || old.isFirst != isFirst || old.isLast != isLast || old.isHead != isHead;
 }

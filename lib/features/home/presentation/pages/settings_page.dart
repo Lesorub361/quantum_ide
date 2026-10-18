@@ -7,6 +7,9 @@ import 'package:quantum_ide/core/providers/locale_provider.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/home/presentation/pages/ai_settings_page.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
+import 'package:quantum_ide/core/services/network_inspector_service.dart';
+import 'package:quantum_ide/features/preview/presentation/widgets/device_simulator_dialog.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -148,6 +151,14 @@ class SettingsPage extends ConsumerWidget {
                       onTap: () => context.push('/servers')),
                     _tile(context, icon: LucideIcons.activity, title: 'DevTools & Логи', subtitle: 'Инспектор логов, ошибок и сетевых запросов Talker',
                       onTap: () => context.push('/logs')),
+                    _tile(context, icon: LucideIcons.network, title: 'Network Inspector (Chucker)', subtitle: 'Перехват и детальный просмотр HTTP/REST запросов',
+                      onTap: () => NetworkInspectorService.showInspector()),
+                    _tile(context, icon: LucideIcons.git_graph, title: 'Визуальный Git Graph', subtitle: 'Интерактивное дерево коммитов и веток репозитория',
+                      onTap: () => context.push('/git-graph')),
+                    _tile(context, icon: LucideIcons.smartphone, title: 'Мульти-симулятор экранов', subtitle: 'Симуляция iPhone, Galaxy, iPad и компактных экранов',
+                      onTap: () => DeviceSimulatorDialog.show(context)),
+                    _tile(context, icon: LucideIcons.keyboard, title: 'Звук клавиатуры (ASMR Switches)', subtitle: 'Выбор свитчей (Cherry Blue, Holy Panda) и тактильность',
+                      onTap: () => KeyboardSoundService.showSwitchSelectorDialog(context)),
                   ]),
 
                   const SizedBox(height: 24),

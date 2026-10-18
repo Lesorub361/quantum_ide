@@ -10,6 +10,8 @@ import 'package:quantum_ide/core/services/log_service.dart';
 import 'package:quantum_ide/core/services/ghost_qa_service.dart';
 import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/quick_actions_service.dart';
+import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
+import 'package:quantum_ide/core/services/network_inspector_service.dart';
 import 'app.dart';
 
 void main() async {
@@ -33,6 +35,20 @@ void main() async {
       QuickActionsService.instance.init();
     } catch (e) {
       debugPrint('QuickActions init error: $e');
+    }
+
+    // Initialize ASMR Mechanical Keyboard & Haptic Engine
+    try {
+      await KeyboardSoundService.init();
+    } catch (e) {
+      debugPrint('KeyboardSoundService init error: $e');
+    }
+
+    // Initialize In-App Network Inspector (Chucker)
+    try {
+      NetworkInspectorService.init();
+    } catch (e) {
+      debugPrint('NetworkInspectorService init error: $e');
     }
 
     // Initialize Ghost QA engine (only activates if owner is authorized)
