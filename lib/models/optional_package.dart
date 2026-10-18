@@ -54,6 +54,84 @@ const String _sdkPrefix = '$_ensureCmdlineTools && '
     '(yes 2>/dev/null | /root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk --licenses >/dev/null 2>&1 || true) && '
     '/root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk';
 
+String _cmakeArm64Command(String version, String sdkDirName) {
+  return '${_aptPrefix}apt install -y cmake ninja-build ca-certificates && '
+      'mkdir -p /root/android-sdk/cmake/$sdkDirName/bin && '
+      'ln -sf /usr/bin/cmake /root/android-sdk/cmake/$sdkDirName/bin/cmake && '
+      'ln -sf /usr/bin/ninja /root/android-sdk/cmake/$sdkDirName/bin/ninja && '
+      'printf "Pkg.Desc = CMake $version\\nPkg.Revision = $version\\n" > /root/android-sdk/cmake/$sdkDirName/source.properties && '
+      'echo "CMake $version (ARM64 native) successfully configured"';
+}
+
+String _ndkArm64Command({
+  required String versionDir,
+  required String primaryUrl,
+  required String fallbackUrl,
+  required String aliasName,
+}) {
+  return '${_aptPrefix}apt install -y --no-install-recommends curl wget tar xz-utils ca-certificates && '
+      'mkdir -p /root/android-sdk/ndk/$versionDir && '
+      'echo "Downloading Android NDK ($versionDir ARM64 native)..." && '
+      '(curl -k -fL --retry 3 -o /tmp/ndk.tar.xz "$primaryUrl" || '
+      'wget --no-check-certificate -qO /tmp/ndk.tar.xz "$primaryUrl" || '
+      'curl -k -fL --retry 3 -o /tmp/ndk.tar.xz "$fallbackUrl" || '
+      'wget --no-check-certificate -qO /tmp/ndk.tar.xz "$fallbackUrl") && '
+      'echo "Extracting NDK to /root/android-sdk/ndk/$versionDir..." && '
+      'tar -xf /tmp/ndk.tar.xz --strip-components=1 -C /root/android-sdk/ndk/$versionDir/ && '
+      'rm -f /tmp/ndk.tar.xz && '
+      '(if [ -d "/root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/linux-arm64" ]; then '
+      'ln -sfn linux-arm64 /root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/linux-x86_64 2>/dev/null || true; '
+      'ln -sfn linux-arm64 /root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/linux-aarch64 2>/dev/null || true; '
+      'elif [ -d "/root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/linux-aarch64" ]; then '
+      'ln -sfn linux-aarch64 /root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/linux-x86_64 2>/dev/null || true; '
+      'ln -sfn linux-aarch64 /root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/linux-arm64 2>/dev/null || true; '
+      'fi) && '
+      'chmod +x /root/android-sdk/ndk/$versionDir/ndk-build /root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/*/bin/* 2>/dev/null || true && '
+      'ln -sfn "$versionDir" "/root/android-sdk/ndk/$aliasName" 2>/dev/null || true && '
+      '(if [ ! -f "/root/android-sdk/ndk/$versionDir/source.properties" ]; then '
+      'printf "Pkg.Desc = Android NDK\\nPkg.Revision = $versionDir\\n" > "/root/android-sdk/ndk/$versionDir/source.properties"; '
+      'fi) && '
+      'echo "Android NDK ($versionDir ARM64) successfully installed!"';
+}
+
+String _sdkToolsArm64Command() {
+  return '${_aptPrefix}apt install -y --no-install-recommends curl wget unzip ca-certificates && '
+      'mkdir -p /root/android-sdk/build-tools/35.0.0 /root/android-sdk/build-tools/34.0.0 /tmp/sdk_tools && '
+      'echo "Downloading Android SDK Build-Tools (ARM64 static)..." && '
+      '(curl -k -fL --retry 3 -o /tmp/sdk-tools.zip "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-sdk-tools-static-aarch64.zip" || '
+      'wget --no-check-certificate -qO /tmp/sdk-tools.zip "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-sdk-tools-static-aarch64.zip" || '
+      'curl -k -fL --retry 3 -o /tmp/sdk-tools.zip "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" || '
+      'wget --no-check-certificate -qO /tmp/sdk-tools.zip "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip") && '
+      'unzip -qo /tmp/sdk-tools.zip -d /tmp/sdk_tools && '
+      'cp -rf /tmp/sdk_tools/build-tools/* /root/android-sdk/build-tools/35.0.0/ 2>/dev/null || true && '
+      'cp -rf /tmp/sdk_tools/build-tools/* /root/android-sdk/build-tools/34.0.0/ 2>/dev/null || true && '
+      '(cp -f /tmp/sdk_tools/build-tools/aapt2 /usr/bin/aapt2 2>/dev/null || true) && '
+      '(cp -f /tmp/sdk_tools/build-tools/aapt /usr/bin/aapt 2>/dev/null || true) && '
+      '(cp -f /tmp/sdk_tools/build-tools/zipalign /usr/bin/zipalign 2>/dev/null || true) && '
+      '(cp -f /tmp/sdk_tools/build-tools/aidl /usr/bin/aidl 2>/dev/null || true) && '
+      '(cp -f /tmp/sdk_tools/platform-tools/adb /usr/bin/adb 2>/dev/null || true) && '
+      '(cp -f /tmp/sdk_tools/platform-tools/fastboot /usr/bin/fastboot 2>/dev/null || true) && '
+      'chmod +x /usr/bin/aapt2 /usr/bin/aapt /usr/bin/zipalign /usr/bin/aidl /usr/bin/adb /usr/bin/fastboot /root/android-sdk/build-tools/*/* 2>/dev/null || true && '
+      'rm -rf /tmp/sdk-tools.zip /tmp/sdk_tools && '
+      'echo "Android SDK Build-Tools & Platform-Tools (ARM64 static) successfully installed!"';
+}
+
+String _rustArm64Command() {
+  return '${_aptPrefix}apt install -y curl build-essential ca-certificates && '
+      '(which rustc >/dev/null 2>&1 || (curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-host aarch64-unknown-linux-gnu)) && '
+      'export PATH="\$HOME/.cargo/bin:\$PATH" && '
+      'rustup target add aarch64-linux-android armv7-linux-androideabi 2>/dev/null || true && '
+      'cargo --version && rustc --version && '
+      'echo "Rust & Cargo ARM64 with Android targets successfully configured!"';
+}
+
+String _moldLinkerCommand() {
+  return '${_aptPrefix}apt install -y mold clang lld ca-certificates && '
+      '(ln -sf /usr/bin/mold /usr/local/bin/ld 2>/dev/null || true) && '
+      'mold --version && '
+      'echo "High-speed Mold linker (ARM64) successfully enabled!"';
+}
+
 final defaultPackages = [
   OptionalPackage(
     id: 'python',
@@ -231,21 +309,39 @@ final defaultPackages = [
   // ==========================================
   OptionalPackage(
     id: 'cmake-3.22',
-    name: 'CMake 3.22.1',
+    name: 'CMake 3.22.1 (ARM64 Native)',
     version: '3.22.1 LTS',
-    description: 'Build tool for C++ (Recommended LTS for Android NDK)',
-    command: '$_sdkPrefix "cmake;3.22.1"',
+    description: 'Native ARM64 build tool with Ninja for C++ and Android NDK',
+    command: _cmakeArm64Command('3.22.1', '3.22.1'),
     icon: LucideIcons.package_open,
     category: 'Build Tools',
   ),
   OptionalPackage(
     id: 'cmake-3.31',
-    name: 'CMake 3.31.0',
+    name: 'CMake 3.31.0 (ARM64 Native)',
     version: '3.31.0',
-    description: 'Build tool for C++ (Latest Modern Release)',
-    command: '$_sdkPrefix "cmake;3.31.0"',
+    description: 'Native ARM64 build tool for modern C++ and Android NDK',
+    command: _cmakeArm64Command('3.31.0', '3.31.0'),
     icon: LucideIcons.package_open,
     category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'mold-linker',
+    name: 'Mold High-Speed Linker',
+    version: '2.x ARM64',
+    description: 'High-performance linker (up to 4x faster than LLD) for rapid C/C++ compilation on ARM',
+    command: _moldLinkerCommand(),
+    icon: LucideIcons.zap,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'rust-arm64',
+    name: 'Rust & Cargo (Android ARM64)',
+    version: 'Latest Stable',
+    description: 'Rust compiler and Cargo with aarch64-linux-android cross-compilation targets',
+    command: _rustArm64Command(),
+    icon: LucideIcons.shield,
+    category: 'Languages',
   ),
   OptionalPackage(
     id: 'protobuf-compiler',
@@ -267,99 +363,92 @@ final defaultPackages = [
   ),
 
   // ==========================================
-  // NDK VERSIONS
+  // NDK VERSIONS (ARM64 Native)
   // ==========================================
   OptionalPackage(
     id: 'ndk-r25c',
-    name: 'NDK r25c (LTS)',
+    name: 'NDK r25c (ARM64 LTS)',
     version: '25.1.8937393',
-    description: 'Android Native Development Kit (25.1.8937393 - Recommended Classic)',
-    command: '$_sdkPrefix "ndk;25.1.8937393"',
+    description: 'Android Native Development Kit with ARM64 Clang/LLVM and ndk-build (Classic LTS)',
+    command: _ndkArm64Command(
+      versionDir: '25.1.8937393',
+      aliasName: 'r25c',
+      primaryUrl: 'https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-ndk-r25c-aarch64-linux-android.tar.xz',
+      fallbackUrl: 'https://github.com/HomuHomu833/android-ndk-custom/releases/download/r25/android-ndk-r25c-aarch64-linux-android.tar.xz',
+    ),
     icon: LucideIcons.cpu,
     category: 'Build Tools',
   ),
   OptionalPackage(
     id: 'ndk-r27b',
-    name: 'NDK r27b (LTS)',
+    name: 'NDK r27b (ARM64 LTS)',
     version: '27.0.12077973',
-    description: 'Android Native Development Kit (27.0.12077973 - Modern Flutter Default)',
-    command: '$_sdkPrefix "ndk;27.0.12077973"',
+    description: 'Android Native Development Kit with ARM64 Clang/LLVM and ndk-build (Flutter Default)',
+    command: _ndkArm64Command(
+      versionDir: '27.0.12077973',
+      aliasName: 'r27b',
+      primaryUrl: 'https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-ndk-r27-aarch64-linux-android.tar.xz',
+      fallbackUrl: 'https://github.com/HomuHomu833/android-ndk-custom/releases/download/r27/android-ndk-r27-aarch64-linux-android.tar.xz',
+    ),
     icon: LucideIcons.cpu,
     category: 'Build Tools',
   ),
   OptionalPackage(
     id: 'ndk-r28',
-    name: 'NDK r28 (16KB Page Support)',
+    name: 'NDK r28 (ARM64 16KB Pages)',
     version: '28.0.12433547',
-    description: 'Android Native Development Kit r28 with full Android 15/16 16KB page size alignment support',
-    command: '$_sdkPrefix "ndk;28.0.12433547"',
+    description: 'Android Native Development Kit r28 with full Android 15/16 16KB page alignment support',
+    command: _ndkArm64Command(
+      versionDir: '28.0.12433547',
+      aliasName: 'r28',
+      primaryUrl: 'https://github.com/HomuHomu833/android-ndk-custom/releases/download/r28/android-ndk-r28-aarch64-linux-android.tar.xz',
+      fallbackUrl: 'https://github.com/HomuHomu833/android-ndk-custom/releases/download/r28/android-ndk-r28-aarch64-linux-gnu.tar.xz',
+    ),
     icon: LucideIcons.cpu,
     category: 'Build Tools',
   ),
   OptionalPackage(
     id: 'ndk-r29',
-    name: 'NDK r29 (Latest)',
+    name: 'NDK r29 (ARM64 Latest)',
     version: '29.0.14206865',
-    description: 'Android Native Development Kit (29.0.14206865 - Bleeding Edge)',
-    command: '$_sdkPrefix "ndk;29.0.14206865"',
+    description: 'Android Native Development Kit (29.0.14206865 Bleeding Edge for ARM64)',
+    command: _ndkArm64Command(
+      versionDir: '29.0.14206865',
+      aliasName: 'r29',
+      primaryUrl: 'https://github.com/lzhiyong/termux-ndk/releases/download/android-ndk/android-ndk-r29-aarch64.tar.xz',
+      fallbackUrl: 'https://github.com/HomuHomu833/android-ndk-custom/releases/download/r29/android-ndk-r29-aarch64-linux-android.tar.xz',
+    ),
     icon: LucideIcons.cpu,
     category: 'Build Tools',
   ),
 
   // ==========================================
-  // SDK BUILD TOOLS
+  // SDK BUILD TOOLS & PLATFORM TOOLS (ARM64)
   // ==========================================
   OptionalPackage(
-    id: 'build-tools-28.0.3',
-    name: 'Build-Tools 28.0.3',
-    version: '28.0.3',
-    description: 'Android SDK Build-Tools 28.0.3 (Android 9)',
-    command: '$_sdkPrefix "build-tools;28.0.3"',
-    icon: LucideIcons.wrench,
-    category: 'Build Tools',
-  ),
-  OptionalPackage(
-    id: 'build-tools-29.0.3',
-    name: 'Build-Tools 29.0.3',
-    version: '29.0.3',
-    description: 'Android SDK Build-Tools 29.0.3 (Android 10)',
-    command: '$_sdkPrefix "build-tools;29.0.3"',
-    icon: LucideIcons.wrench,
-    category: 'Build Tools',
-  ),
-  OptionalPackage(
-    id: 'build-tools-30.0.3',
-    name: 'Build-Tools 30.0.3',
-    version: '30.0.3',
-    description: 'Android SDK Build-Tools 30.0.3 (Android 11)',
-    command: '$_sdkPrefix "build-tools;30.0.3"',
-    icon: LucideIcons.wrench,
-    category: 'Build Tools',
-  ),
-  OptionalPackage(
-    id: 'build-tools-33.0.2',
-    name: 'Build-Tools 33.0.2',
-    version: '33.0.2',
-    description: 'Android SDK Build-Tools 33.0.2 (Android 13)',
-    command: '$_sdkPrefix "build-tools;33.0.2"',
-    icon: LucideIcons.wrench,
-    category: 'Build Tools',
-  ),
-  OptionalPackage(
-    id: 'build-tools-34.0.0',
-    name: 'Build-Tools 34.0.0',
-    version: '34.0.0',
-    description: 'Android SDK Build-Tools 34.0.0 (Android 14)',
-    command: '$_sdkPrefix "build-tools;34.0.0"',
+    id: 'android-sdk-tools-arm64',
+    name: 'SDK Build-Tools & ADB Suite (ARM64)',
+    version: '35.0.2 Static',
+    description: 'Static ARM64 aapt2, aapt, zipalign, aidl, adb, and fastboot suite for on-device builds and wireless debugging',
+    command: _sdkToolsArm64Command(),
     icon: LucideIcons.wrench,
     category: 'Build Tools',
   ),
   OptionalPackage(
     id: 'build-tools-35.0.0',
-    name: 'Build-Tools 35.0.0',
+    name: 'Build-Tools 35.0.0 (ARM64)',
     version: '35.0.0',
-    description: 'Android SDK Build-Tools 35.0.0 (Android 15)',
-    command: '$_sdkPrefix "build-tools;35.0.0"',
+    description: 'Android SDK Build-Tools 35.0.0 with native ARM64 aapt2, aapt and zipalign',
+    command: _sdkToolsArm64Command(),
+    icon: LucideIcons.wrench,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'build-tools-34.0.0',
+    name: 'Build-Tools 34.0.0 (ARM64)',
+    version: '34.0.0',
+    description: 'Android SDK Build-Tools 34.0.0 with native ARM64 aapt2, aapt and zipalign',
+    command: _sdkToolsArm64Command(),
     icon: LucideIcons.wrench,
     category: 'Build Tools',
   ),

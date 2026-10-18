@@ -259,9 +259,20 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                                       : (version == 'r28'
                                           ? '28.0.12433547'
                                           : (version == 'r29' ? '29.0.14206865' : version))))))));
-          exists = await Directory(p.join(sdkPath, 'ndk', dirName)).exists();
+          exists = await Directory(p.join(sdkPath, 'ndk', dirName)).exists() ||
+              await Directory(p.join(sdkPath, 'ndk', version)).exists() ||
+              await Directory(p.join(sdkPath, 'ndk', 'android-ndk-$version')).exists();
         } else if (!isAndroid) {
           switch (pkg.id) {
+            case 'android-sdk-tools-arm64':
+              exists = await hasCmd('aapt2') && await hasCmd('zipalign');
+              break;
+            case 'mold-linker':
+              exists = await hasCmd('mold');
+              break;
+            case 'rust-arm64':
+              exists = await hasCmd('rustc') || await hasCmd('cargo');
+              break;
             case 'python':
               exists = await hasCmd('python3') || await hasCmd('python');
               break;
@@ -456,6 +467,16 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'apk-signing-tools':
               exists = await hasRootfsBin('apksigner') && await hasRootfsBin('zipalign');
+              break;
+            case 'android-sdk-tools-arm64':
+              exists = await hasRootfsBin('aapt2') && await hasRootfsBin('zipalign');
+              break;
+            case 'mold-linker':
+              exists = await hasRootfsBin('mold');
+              break;
+            case 'rust-arm64':
+              exists = await hasRootfsBin('rustc') ||
+                  await File(p.join(rootfsPath, 'root', '.cargo', 'bin', 'rustc')).exists();
               break;
             case 'protobuf-compiler':
               exists = await hasRootfsBin('protoc');

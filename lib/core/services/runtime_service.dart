@@ -1498,12 +1498,23 @@ if [ -d "$SDK_ROOT" ]; then
     done
 
     # NDK Clang/LLVM fixes
-    # IMPORTANT: We use shell WRAPPER SCRIPTS, not symlinks.
-    # Symlinks to ARM64 ELFs do not work for x86_64 ELF binaries.
-    # The NDK ships x86_64 binaries; on ARM64 Android we must intercept
-    # all calls and redirect them to the system ARM64 clang/llvm tools.
+    # If a native ARM64 NDK is installed, ensure AGP symlinks exist and preserve binaries.
+    # If the official Google x86_64 NDK is installed, intercept calls via system clang.
     for ndk in "$SDK_ROOT/ndk/"*; do
         if [ -d "$ndk" ]; then
+            if [ -d "$ndk/toolchains/llvm/prebuilt/linux-arm64" ]; then
+                [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-x86_64" ] && ln -sfn linux-arm64 "$ndk/toolchains/llvm/prebuilt/linux-x86_64" 2>/dev/null || true
+                [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-aarch64" ] && ln -sfn linux-arm64 "$ndk/toolchains/llvm/prebuilt/linux-aarch64" 2>/dev/null || true
+                chmod +x "$ndk/ndk-build" "$ndk/toolchains/llvm/prebuilt/linux-arm64/bin/"* 2>/dev/null || true
+                continue
+            fi
+            if [ -d "$ndk/toolchains/llvm/prebuilt/linux-aarch64" ]; then
+                [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-x86_64" ] && ln -sfn linux-aarch64 "$ndk/toolchains/llvm/prebuilt/linux-x86_64" 2>/dev/null || true
+                [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-arm64" ] && ln -sfn linux-aarch64 "$ndk/toolchains/llvm/prebuilt/linux-arm64" 2>/dev/null || true
+                chmod +x "$ndk/ndk-build" "$ndk/toolchains/llvm/prebuilt/linux-aarch64/bin/"* 2>/dev/null || true
+                continue
+            fi
+
             NDK_BIN="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
             SYSROOT="$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
             mkdir -p "$NDK_BIN"
