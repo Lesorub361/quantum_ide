@@ -7,6 +7,7 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 import 'package:quantum_ide/core/services/ai_autocomplete_service.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/color_picker_dialog.dart';
 
 class KeyboardAccessoryBar extends ConsumerWidget {
   final CodeLineEditingController controller;
@@ -159,6 +160,20 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             onPressed: () {
               _triggerHaptic(ref);
               try { controller.redo(); } catch (_) {}
+            },
+          ),
+          buildBtn(
+            icon: LucideIcons.palette,
+            tooltip: 'Выбрать цвет (Color Picker)',
+            color: Colors.pinkAccent,
+            onPressed: () {
+              _triggerHaptic(ref);
+              ColorPickerDialog.show(
+                context,
+                onColorSelected: (hexCode, flutterCode) {
+                  controller.replaceSelection(hexCode);
+                },
+              );
             },
           ),
           Container(

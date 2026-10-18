@@ -13,6 +13,8 @@ import '../../features/preview/presentation/widgets/file_preview_widget.dart';
 import '../../features/rest_client/presentation/pages/rest_client_page.dart';
 import '../../features/github/presentation/pages/github_page.dart';
 import '../../shared/widgets/main_layout.dart';
+import 'package:talker_flutter/talker_flutter.dart';
+import '../services/talker_service.dart';
 
 class UnfocusRouteObserver extends NavigatorObserver {
   @override
@@ -93,6 +95,10 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/github',
           builder: (context, state) => const GitHubPage(),
+        ),
+        GoRoute(
+          path: '/logs',
+          builder: (context, state) => TalkerScreen(talker: TalkerService.talker),
         ),
       ],
     ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/talker_service.dart';
 
 class LogService {
   static String? _cacheDir;
@@ -95,6 +96,10 @@ class LogService {
     
     try {
       stdout.writeln(formattedLine);
+    } catch (_) {}
+
+    try {
+      TalkerService.info(message);
     } catch (_) {}
 
     _writeBuffer.add(formattedLine);

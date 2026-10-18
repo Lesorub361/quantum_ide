@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
 import 'package:quantum_ide/core/services/ghost_qa_service.dart';
+import 'package:quantum_ide/core/services/talker_service.dart';
+import 'package:quantum_ide/core/services/quick_actions_service.dart';
 import 'app.dart';
 
 void main() async {
@@ -23,7 +25,15 @@ void main() async {
       FlutterError.presentError(details);
       LogService.log('Flutter Error: ${details.exception}\n${details.stack}');
       GhostQAService.instance.recordFlutterError(details);
+      TalkerService.handle(details.exception, details.stack, 'Flutter Error');
     };
+
+    // Initialize Quick Actions (App Shortcuts)
+    try {
+      QuickActionsService.instance.init();
+    } catch (e) {
+      debugPrint('QuickActions init error: $e');
+    }
 
     // Initialize Ghost QA engine (only activates if owner is authorized)
     try {
@@ -50,6 +60,7 @@ void main() async {
     );
   }, (error, stack) {
     LogService.log('Uncaught Async Error: $error\n$stack');
+    TalkerService.handle(error, stack, 'Uncaught Async Error');
   });
 }
 

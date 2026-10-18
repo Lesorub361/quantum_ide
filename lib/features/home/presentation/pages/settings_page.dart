@@ -146,6 +146,8 @@ class SettingsPage extends ConsumerWidget {
                       onTap: () => context.push('/packages')),
                     _tile(context, icon: LucideIcons.server, title: AppLocalizations.of(context)!.servers, subtitle: AppLocalizations.of(context)!.localRemoteHosts,
                       onTap: () => context.push('/servers')),
+                    _tile(context, icon: LucideIcons.activity, title: 'DevTools & Логи', subtitle: 'Инспектор логов, ошибок и сетевых запросов Talker',
+                      onTap: () => context.push('/logs')),
                   ]),
 
                   const SizedBox(height: 24),
