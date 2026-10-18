@@ -110,13 +110,8 @@ class AIService {
     var localEngineIndex =
         prefs.getInt('ai_local_engine') ?? LocalAiEngine.llamaServer.index;
 
-    // Migrate old local providers to consolidated local_edge provider
-    if (providerId == 'ollama') {
-      providerId = 'local_edge';
-      localEngineIndex = LocalAiEngine.ollama.index;
-      await prefs.setString('ai_provider_id', 'local_edge');
-      await prefs.setInt('ai_local_engine', localEngineIndex);
-    } else if (providerId == 'lmstudio') {
+    // Migrate old lmstudio provider if present
+    if (providerId == 'lmstudio') {
       providerId = 'local_edge';
       localEngineIndex = LocalAiEngine.lmStudio.index;
       await prefs.setString('ai_provider_id', 'local_edge');
@@ -273,6 +268,9 @@ class AIService {
   String getBaseUrl(String providerId) {
     final custom = _settings.baseUrls[providerId];
     if (custom != null && custom.isNotEmpty) return custom;
+    if (providerId == 'ollama') {
+      return 'http://localhost:11434';
+    }
     if (providerId == 'local_edge') {
       return _settings.selectedLocalEngine.defaultBaseUrl;
     }
@@ -516,6 +514,17 @@ class AIService {
       return fallback;
     }
 
+    if (pid == 'ollama') {
+      try {
+        final raw = await _fetchOllamaModels(baseUrl);
+        final list = raw.map((m) => DiscoveredModel(id: m, providerId: 'ollama')).toList();
+        _discoveredModelsCache[pid] = list;
+        return list;
+      } catch (_) {
+        return AiProviders.getRecommendedDiscoveredModels('ollama');
+      }
+    }
+
     if (pid == 'local_edge') {
       try {
         final List<String> raw;
@@ -692,8 +701,10 @@ class AIService {
     throw lastException ?? Exception('Failed to load Google models');
   }
 
-  Future<List<String>> _fetchOllamaModels() async {
-    final base = getBaseUrl('local_edge');
+  Future<List<String>> _fetchOllamaModels([String? customBaseUrl]) async {
+    final base = (customBaseUrl != null && customBaseUrl.isNotEmpty)
+        ? _cleanseBaseUrl(customBaseUrl)
+        : getBaseUrl('ollama');
     try {
       final resp = await _dio.get('$base/api/tags');
       final models =
@@ -899,6 +910,8 @@ class AIService {
       case 'mistral':
       case 'custom':
         return await _openAiCompatCompletion(prompt);
+      case 'ollama':
+        return await _ollamaCompletion(prompt);
       case 'local_edge':
         if (_settings.selectedLocalEngine == LocalAiEngine.ollama) {
           return await _ollamaCompletion(prompt);
@@ -1065,6 +1078,12 @@ class AIService {
           history,
           systemInstruction: systemInstruction,
           imageBase64: imageBase64,
+        );
+      case 'ollama':
+        return await _ollamaChatMessage(
+          message,
+          history,
+          systemInstruction: systemInstruction,
         );
       case 'local_edge':
         if (_settings.selectedLocalEngine == LocalAiEngine.ollama) {

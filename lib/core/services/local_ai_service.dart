@@ -9,6 +9,7 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
+import 'package:path_provider/path_provider.dart';
 
 class LocalModelInfo {
   final String id;
@@ -37,7 +38,7 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'qwen_1.5b',
     name: 'Qwen 2.5 Coder 1.5B',
-    description: 'Optimized model for coding. Very fast, suitable for all devices.',
+    description: 'Оптимизирована для кодинга. Сверхбыстрая (~35 ток/с), контекст 32K.',
     filename: 'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
     sizeGb: 1.16,
     ramRequiredGb: 2.5,
@@ -45,19 +46,29 @@ const List<LocalModelInfo> availableLocalModels = [
     engine: LocalAiEngine.llamaServer,
   ),
   LocalModelInfo(
-    id: 'qwen_7b',
-    name: 'Qwen 2.5 Coder 7B',
-    description: 'Powerful model for complex coding tasks. Requires a high-performance device.',
-    filename: 'qwen2.5-coder-7b-instruct-q4_k_m.gguf',
-    sizeGb: 4.68,
-    ramRequiredGb: 8.0,
-    url: 'https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf',
+    id: 'deepseek_r1_1.5b',
+    name: 'DeepSeek R1 Distill 1.5B',
+    description: 'Глубокие пошаговые рассуждения (<think>), математика и логика.',
+    filename: 'deepseek-r1-distill-qwen-1.5b-q4_k_m.gguf',
+    sizeGb: 1.12,
+    ramRequiredGb: 2.5,
+    url: 'https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf',
+    engine: LocalAiEngine.llamaServer,
+  ),
+  LocalModelInfo(
+    id: 'qwen_3b',
+    name: 'Qwen 2.5 Coder 3B',
+    description: 'Идеальный баланс точности и скорости. Архитектура функций и классов.',
+    filename: 'qwen2.5-3b-instruct-q4_k_m.gguf',
+    sizeGb: 2.10,
+    ramRequiredGb: 4.0,
+    url: 'https://huggingface.co/bartowski/Qwen2.5-3B-Instruct-GGUF/resolve/main/Qwen2.5-3B-Instruct-Q4_K_M.gguf',
     engine: LocalAiEngine.llamaServer,
   ),
   LocalModelInfo(
     id: 'llama_1b',
     name: 'Llama 3.2 1B',
-    description: 'Lightweight language model from Meta. High operational speed.',
+    description: 'Легкая модель от Meta. Огромный контекст 128K, скорость ~40 ток/с.',
     filename: 'llama-3.2-1b-instruct-q4_k_m.gguf',
     sizeGb: 0.81,
     ramRequiredGb: 1.8,
@@ -66,12 +77,52 @@ const List<LocalModelInfo> availableLocalModels = [
   ),
   LocalModelInfo(
     id: 'llama_3b',
-    name: 'Llama 3.2 3B',
-    description: 'Balanced model from Meta. Good context understanding.',
-    filename: 'llama-3.2-3b-instruct-q4_k_m.gguf',
+    name: 'Llama 3.2 3B (Uncensored)',
+    description: 'Без цензуры, отличный контекст 128K, универсальный помощник.',
+    filename: 'llama-3.2-3b-instruct-uncensored-q4_k_m.gguf',
     sizeGb: 2.02,
     ramRequiredGb: 4.0,
-    url: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
+    url: 'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-uncensored-GGUF/resolve/main/Llama-3.2-3B-Instruct-uncensored-Q4_K_M.gguf',
+    engine: LocalAiEngine.llamaServer,
+  ),
+  LocalModelInfo(
+    id: 'qwen_7b',
+    name: 'Qwen 2.5 Coder 7B',
+    description: 'Мощнейшая автономная модель для сложных проектов. Требует 8 GB RAM.',
+    filename: 'qwen2.5-coder-7b-instruct-q4_k_m.gguf',
+    sizeGb: 4.68,
+    ramRequiredGb: 8.0,
+    url: 'https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf',
+    engine: LocalAiEngine.llamaServer,
+  ),
+  LocalModelInfo(
+    id: 'phi_3.5',
+    name: 'Phi-3.5 Mini Instruct',
+    description: 'Компактная логическая модель от Microsoft с контекстом 128K.',
+    filename: 'phi-3.5-mini-instruct-q4_k_m.gguf',
+    sizeGb: 2.20,
+    ramRequiredGb: 4.5,
+    url: 'https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf',
+    engine: LocalAiEngine.llamaServer,
+  ),
+  LocalModelInfo(
+    id: 'gemma_2b',
+    name: 'Gemma 2 2B Instruct',
+    description: 'Компактная качественная языковая модель от Google DeepMind.',
+    filename: 'gemma-2-2b-it-q4_k_m.gguf',
+    sizeGb: 1.71,
+    ramRequiredGb: 3.0,
+    url: 'https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/gemma-2-2b-it-Q4_K_M.gguf',
+    engine: LocalAiEngine.llamaServer,
+  ),
+  LocalModelInfo(
+    id: 'qwen2_vl_2b',
+    name: 'Qwen2-VL 2B (Vision)',
+    description: 'Мультимодальная модель: понимает изображения, макеты и скриншоты.',
+    filename: 'qwen2-vl-2b-instruct-q4_k_m.gguf',
+    sizeGb: 1.50,
+    ramRequiredGb: 3.5,
+    url: 'https://huggingface.co/bartowski/Qwen2-VL-2B-Instruct-GGUF/resolve/main/Qwen2-VL-2B-Instruct-Q4_K_M.gguf',
     engine: LocalAiEngine.llamaServer,
   ),
 
@@ -79,11 +130,41 @@ const List<LocalModelInfo> availableLocalModels = [
   LocalModelInfo(
     id: 'ollama_qwen_1.5b',
     name: 'Qwen 2.5 Coder 1.5B (Ollama)',
-    description: 'Lightweight and fast coding model from Alibaba.',
+    description: 'Специализированная кодинг-модель. Мгновенный отклик на мобильных.',
     filename: 'qwen2.5-coder:1.5b',
-    sizeGb: 0.9,
+    sizeGb: 0.98,
     ramRequiredGb: 2.5,
-    url: '',
+    url: 'qwen2.5-coder:1.5b',
+    engine: LocalAiEngine.ollama,
+  ),
+  LocalModelInfo(
+    id: 'ollama_deepseek_r1_1.5b',
+    name: 'DeepSeek R1 1.5B (Ollama)',
+    description: 'Революционная модель с цепочкой рассуждений (<think>) и математикой.',
+    filename: 'deepseek-r1:1.5b',
+    sizeGb: 1.10,
+    ramRequiredGb: 2.5,
+    url: 'deepseek-r1:1.5b',
+    engine: LocalAiEngine.ollama,
+  ),
+  LocalModelInfo(
+    id: 'ollama_qwen_3b',
+    name: 'Qwen 2.5 Coder 3B (Ollama)',
+    description: 'Высокая точность синтаксиса, сложные функции, документация.',
+    filename: 'qwen2.5-coder:3b',
+    sizeGb: 1.90,
+    ramRequiredGb: 4.0,
+    url: 'qwen2.5-coder:3b',
+    engine: LocalAiEngine.ollama,
+  ),
+  LocalModelInfo(
+    id: 'ollama_deepseek_r1_7b',
+    name: 'DeepSeek R1 7B (Ollama)',
+    description: 'Глубокие рассуждения и доказательства для мощных устройств.',
+    filename: 'deepseek-r1:7b',
+    sizeGb: 4.70,
+    ramRequiredGb: 8.0,
+    url: 'deepseek-r1:7b',
     engine: LocalAiEngine.ollama,
   ),
   LocalModelInfo(
@@ -281,22 +362,49 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     return aiSvc.getBaseUrl('local_edge');
   }
 
+  Future<File?> findModelFile(String filename) async {
+    final clean = filename.trim();
+    if (clean.isEmpty) return null;
+
+    final candidates = <String>[];
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      candidates.add(p.join(docs.path, 'models', clean));
+    } catch (_) {}
+    if (_runtime.isInitialized) {
+      candidates.add(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models', clean));
+      candidates.add(p.join(_runtime.filesDir, 'models', clean));
+    }
+    candidates.add(p.join(Directory.systemTemp.path, 'quantum_models', clean));
+
+    for (final path in candidates) {
+      final f = File(path);
+      if (await f.exists()) {
+        try {
+          if (await f.length() > 1024 * 1024) {
+            return f;
+          }
+        } catch (_) {
+          return f;
+        }
+      }
+    }
+    return null;
+  }
+
   Future<void> checkStatus() async {
     if (!_runtime.isInitialized) return;
 
     final engine = _ref.read(aiServiceProvider).settings.selectedLocalEngine;
 
     if (engine == LocalAiEngine.llamaServer) {
-      final modelsDir = (Platform.isAndroid || Platform.isIOS)
-          ? p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models')
-          : p.join(_runtime.filesDir, 'models');
-      
       final downloadedMap = <String, bool>{};
       bool anyModelDownloaded = false;
       
       final engineModels = availableLocalModels.where((m) => m.engine == LocalAiEngine.llamaServer);
       for (final m in engineModels) {
-        final exists = await File(p.join(modelsDir, m.filename)).exists();
+        final found = await findModelFile(m.filename);
+        final exists = found != null;
         downloadedMap[m.id] = exists;
         if (exists) {
           anyModelDownloaded = true;
@@ -686,15 +794,22 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     }
   }
 
-  Future<void> selectModel(String modelId) async {
-    final model = availableLocalModels.firstWhere((m) => m.id == modelId);
-    if (state.downloadedModels[modelId] != true) return;
+  Future<void> selectModel(String modelIdOrFilename) async {
+    LocalModelInfo? model;
+    for (final m in availableLocalModels) {
+      if (m.id == modelIdOrFilename || m.filename == modelIdOrFilename) {
+        model = m;
+        break;
+      }
+    }
+    final filename = model?.filename ?? modelIdOrFilename;
+    final name = model?.name ?? modelIdOrFilename;
 
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('ai_selected_local_model_filename', model.filename);
-    await _ref.read(aiServiceProvider).setModel(model.filename);
-    state = state.copyWith(selectedModelFilename: model.filename);
-    _appendLogs('[Local AI] Selected active model: ${model.name}\n');
+    await prefs.setString('ai_selected_local_model_filename', filename);
+    await _ref.read(aiServiceProvider).setModel(filename);
+    state = state.copyWith(selectedModelFilename: filename);
+    _appendLogs('[Local AI] Selected active model: $name\n');
   }
 
   Future<void> updateSettings({int? threads, int? gpuLayers, bool? useFlashAttn, int? contextSize}) async {
@@ -789,6 +904,21 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final gpuLayers = state.gpuLayers;
       final useFlashAttn = state.useFlashAttn;
       final contextSize = state.contextSize;
+
+      final found = await findModelFile(activeModelFile);
+      if (found != null && (Platform.isAndroid || Platform.isIOS)) {
+        final rootfsTarget = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models', activeModelFile));
+        if (!await rootfsTarget.exists() || (await rootfsTarget.length()) == 0) {
+          await Directory(rootfsTarget.parent.path).create(recursive: true);
+          try {
+            await Link(rootfsTarget.path).create(found.path);
+          } catch (_) {
+            try {
+              await found.copy(rootfsTarget.path);
+            } catch (_) {}
+          }
+        }
+      }
 
       final modelsDir = (Platform.isAndroid || Platform.isIOS)
           ? p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models')

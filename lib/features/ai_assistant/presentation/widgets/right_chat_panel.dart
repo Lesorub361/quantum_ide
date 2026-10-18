@@ -30,6 +30,7 @@ import 'package:quantum_ide/core/services/cli_installer_service.dart';
 import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/core/services/ai_mode_router.dart';
+import 'package:quantum_ide/core/services/local_ai_service.dart';
 
 final activeAiProviderIdProvider = StateProvider<String>((ref) {
   final aiSvc = ref.read(aiServiceProvider);
@@ -889,6 +890,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   if (selected != null && selected.isNotEmpty) {
                     ref.read(activeAiModelProvider.notifier).state = selected;
                     await ref.read(aiServiceProvider).setModel(selected);
+                    if (activeProviderId == 'local_edge' || activeProviderId == 'ollama') {
+                      await ref.read(localAiServiceProvider.notifier).selectModel(selected);
+                    }
                   }
                 }
               },
@@ -2492,6 +2496,9 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         if (selected != null && selected.isNotEmpty) {
           ref.read(activeAiModelProvider.notifier).state = selected;
           await ref.read(aiServiceProvider).setModel(selected);
+          if (activeProviderId == 'local_edge' || activeProviderId == 'ollama') {
+            await ref.read(localAiServiceProvider.notifier).selectModel(selected);
+          }
         }
         return;
       }

@@ -325,13 +325,46 @@ class AiProviders {
     requiresApiKey: false,
   );
 
+  static const ollama = AiProviderConfig(
+    id: 'ollama',
+    displayName: 'Ollama',
+    logoEmoji: '🦙',
+    apiKeyHint: 'не требуется',
+    baseUrl: 'http://localhost:11434/v1',
+    defaultModels: [
+      'qwen2.5-coder:1.5b',
+      'deepseek-r1:1.5b',
+      'qwen2.5-coder:3b',
+      'llama3.2:1b',
+      'llama3.2:3b',
+      'qwen2.5-coder:7b',
+      'deepseek-r1:7b',
+      'deepseek-coder:1.3b',
+      'gemma2:2b',
+      'mistral:7b',
+    ],
+    supportsLocalModels: true,
+    requiresApiKey: false,
+  );
+
   static const localEdge = AiProviderConfig(
     id: 'local_edge',
-    displayName: 'Local AI',
+    displayName: 'Local AI (GGUF)',
     logoEmoji: '🔮',
-    apiKeyHint: 'not required',
+    apiKeyHint: 'не требуется',
     baseUrl: 'http://localhost:8080/v1',
-    defaultModels: ['qwen2.5-coder-1.5b-instruct'],
+    defaultModels: [
+      'qwen2.5-coder-1.5b-instruct-q4_k_m.gguf',
+      'deepseek-r1-distill-qwen-1.5b-q4_k_m.gguf',
+      'qwen2.5-3b-instruct-q4_k_m.gguf',
+      'llama-3.2-1b-instruct-q4_k_m.gguf',
+      'llama-3.2-3b-instruct-uncensored-q4_k_m.gguf',
+      'qwen2.5-coder-7b-instruct-q4_k_m.gguf',
+      'phi-3.5-mini-instruct-q4_k_m.gguf',
+      'gemma-2-2b-it-q4_k_m.gguf',
+      'qwen2-vl-2b-instruct-q4_k_m.gguf',
+      'dolphin-3.0-qwen2.5-1.5b-q4_k_m.gguf',
+    ],
     supportsLocalModels: true,
     requiresApiKey: false,
   );
@@ -351,9 +384,10 @@ class AiProviders {
     together,
     perplexity,
     fireworks,
+    ollama,
+    localEdge,
     custom,
     claudeSubscription,
-    localEdge,
   ];
 
   static AiProviderConfig byId(String id) {

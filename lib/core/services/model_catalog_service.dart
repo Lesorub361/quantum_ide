@@ -299,19 +299,36 @@ class ModelCatalogNotifier extends StateNotifier<ModelCatalogState> {
   }
 
   Future<void> _loadDownloadedModels() async {
-    final modelsDir = await getModelsDir();
-    if (modelsDir == null) return;
-
-    final dir = Directory(modelsDir);
-    if (!await dir.exists()) return;
-
     final downloaded = <String, bool>{};
-    await for (final entity in dir.list()) {
-      if (entity is File) {
-        final filename = p.basename(entity.path);
-        if (filename.endsWith('.gguf') || filename.endsWith('.litertlm') || filename.endsWith('.safetensors')) {
-          downloaded[filename] = true;
-        }
+    final searchPaths = <String>[];
+
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      searchPaths.add(p.join(docsDir.path, 'models'));
+    } catch (_) {}
+
+    final runtime = _ref.read(runtimeServiceProvider);
+    if (runtime.isInitialized) {
+      searchPaths.add(p.join(runtime.filesDir, 'rootfs', 'ubuntu', 'root', 'models'));
+      searchPaths.add(p.join(runtime.filesDir, 'models'));
+    }
+    searchPaths.add(p.join(Directory.systemTemp.path, 'quantum_models'));
+
+    for (final path in searchPaths) {
+      final dir = Directory(path);
+      if (await dir.exists()) {
+        try {
+          await for (final entity in dir.list()) {
+            if (entity is File) {
+              final filename = p.basename(entity.path);
+              if (filename.endsWith('.gguf') || filename.endsWith('.litertlm') || filename.endsWith('.safetensors')) {
+                if (await entity.length() > 1024 * 1024) {
+                  downloaded[filename] = true;
+                }
+              }
+            }
+          }
+        } catch (_) {}
       }
     }
 
