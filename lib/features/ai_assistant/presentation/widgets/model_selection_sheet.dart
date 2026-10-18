@@ -7,7 +7,10 @@ import 'package:quantum_ide/core/models/local_model_metadata.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/local_ai_service.dart';
 import 'package:quantum_ide/core/services/model_catalog_service.dart';
+import 'package:quantum_ide/core/services/hugging_face_hub_service.dart';
 import 'local_models_dialog.dart';
+
+enum LocalViewMode { catalog, huggingFaceOnline, ollamaLibrary }
 
 Future<String?> showModelPickerModal(
   BuildContext context, {
@@ -49,11 +52,22 @@ class ModelSelectionSheet extends ConsumerStatefulWidget {
 
 class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _hfSearchController = TextEditingController();
+  final TextEditingController _ollamaPullController = TextEditingController();
+
   List<DiscoveredModel> _models = [];
   bool _isDiscovering = false;
   String? _statusMessage;
   bool _statusOk = true;
   String _selectedCategory = 'Все';
+  LocalViewMode _localViewMode = LocalViewMode.catalog;
+
+  // Hugging Face online search state
+  List<HfModelItem> _hfResults = [];
+  bool _isSearchingHf = false;
+  String? _expandedHfRepoId;
+  final Map<String, List<HfGgufFile>> _hfRepoFiles = {};
+  bool _isLoadingHfFiles = false;
 
   bool get _isLocalProvider =>
       widget.providerId == 'local_edge' || widget.providerId == 'ollama';
@@ -71,7 +85,58 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   @override
   void dispose() {
     _searchController.dispose();
+    _hfSearchController.dispose();
+    _ollamaPullController.dispose();
     super.dispose();
+  }
+
+  Future<void> _searchHuggingFace(String query) async {
+    setState(() {
+      _isSearchingHf = true;
+      _statusMessage = null;
+    });
+
+    try {
+      final hfSvc = ref.read(huggingFaceHubServiceProvider);
+      final results = await hfSvc.searchGgufModels(query);
+      setState(() {
+        _hfResults = results;
+        _isSearchingHf = false;
+        if (results.isEmpty) {
+          _statusMessage = 'По запросу "$query" не найдено GGUF моделей на Hugging Face';
+          _statusOk = false;
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isSearchingHf = false;
+        _statusMessage = 'Ошибка поиска на Hugging Face: $e';
+        _statusOk = false;
+      });
+    }
+  }
+
+  Future<void> _loadHfRepoFiles(String repoId) async {
+    if (_hfRepoFiles.containsKey(repoId)) {
+      setState(() => _expandedHfRepoId = _expandedHfRepoId == repoId ? null : repoId);
+      return;
+    }
+
+    setState(() {
+      _expandedHfRepoId = repoId;
+      _isLoadingHfFiles = true;
+    });
+
+    try {
+      final hfSvc = ref.read(huggingFaceHubServiceProvider);
+      final files = await hfSvc.fetchRepoGgufFiles(repoId);
+      setState(() {
+        _hfRepoFiles[repoId] = files;
+        _isLoadingHfFiles = false;
+      });
+    } catch (_) {
+      setState(() => _isLoadingHfFiles = false);
+    }
   }
 
   Future<void> _discover() async {
@@ -111,7 +176,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
     return Container(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.90,
+        maxHeight: MediaQuery.of(context).size.height * 0.92,
       ),
       decoration: const BoxDecoration(
         color: Color(0xFF11141F),
@@ -163,7 +228,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       ),
                       Text(
                         _isLocalProvider
-                            ? 'Автономный запуск на устройстве без интернета'
+                            ? 'Каталог, поиск в Hugging Face и загрузка из Ollama'
                             : '${provider.displayName} · ${_models.length} моделей',
                         style: GoogleFonts.inter(
                           fontSize: 11,
@@ -228,37 +293,59 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             ),
           ),
 
-          // Search Box
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (_) => setState(() {}),
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: _isLocalProvider ? 'Поиск модели, параметров или кодинга...' : 'Поиск модели или ввод ID...',
-                hintStyle: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
-                prefixIcon: const Icon(LucideIcons.search, size: 16, color: Colors.white38),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(LucideIcons.x, size: 14, color: Colors.white38),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.05),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                isDense: true,
+          // Local Mode Selector Tabs (Каталог / Hugging Face Онлайн / Ollama Library)
+          if (_isLocalProvider)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Row(
+                  children: [
+                    _tabButton(LocalViewMode.catalog, '🔥 Топ каталог', LucideIcons.sparkles),
+                    _tabButton(LocalViewMode.huggingFaceOnline, '🌐 Hugging Face Hub', LucideIcons.globe),
+                    _tabButton(LocalViewMode.ollamaLibrary, '🦙 Ollama Library', LucideIcons.terminal),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Category filter pills for Local models
-          if (_isLocalProvider)
+          // Search Box (Dynamic for current mode)
+          if (!_isLocalProvider || _localViewMode == LocalViewMode.catalog)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: _isLocalProvider ? 'Поиск модели, параметров или кодинга...' : 'Поиск модели или ввод ID...',
+                  hintStyle: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
+                  prefixIcon: const Icon(LucideIcons.search, size: 16, color: Colors.white38),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(LucideIcons.x, size: 14, color: Colors.white38),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {});
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.05),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  isDense: true,
+                ),
+              ),
+            ),
+
+          // Category filter pills for Local models (only in catalog mode)
+          if (_isLocalProvider && _localViewMode == LocalViewMode.catalog)
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -331,26 +418,74 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
             ),
 
-          const Divider(color: Colors.white10, height: 12),
+          const Divider(color: Colors.white10, height: 10),
 
-          // Models List
+          // Models List / Sub-views
           Expanded(
-            child: _isLocalProvider
-                ? _buildLocalModelsList(context, query)
-                : _buildCloudModelsList(context, query),
+            child: _buildCurrentView(context, query),
           ),
         ],
       ),
     );
   }
 
-  // ─── Local Models (with parameters, speed, RAM, download actions) ──────────
+  Widget _tabButton(LocalViewMode mode, String label, IconData icon) {
+    final isSelected = _localViewMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _localViewMode = mode);
+          if (mode == LocalViewMode.huggingFaceOnline && _hfResults.isEmpty) {
+            _searchHuggingFace('');
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.cyanAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 12, color: isSelected ? Colors.black : Colors.white70),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? Colors.black : Colors.white70,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCurrentView(BuildContext context, String query) {
+    if (!_isLocalProvider) {
+      return _buildCloudModelsList(context, query);
+    }
+
+    switch (_localViewMode) {
+      case LocalViewMode.catalog:
+        return _buildLocalModelsList(context, query);
+      case LocalViewMode.huggingFaceOnline:
+        return _buildHuggingFaceOnlineView(context);
+      case LocalViewMode.ollamaLibrary:
+        return _buildOllamaLibraryView(context);
+    }
+  }
+
+  // ─── 1. Local Models Catalog (Curated SOTA) ───────────────────────────────
   Widget _buildLocalModelsList(BuildContext context, String query) {
     final localAiState = ref.watch(localAiServiceProvider);
     final catalogState = ref.watch(modelCatalogProvider);
     final isOllama = widget.providerId == 'ollama';
 
-    // Filter by engine, category and query
     final candidates = LocalModelMetadata.catalog.where((m) {
       if (isOllama && !m.isOllama) return false;
       if (!isOllama && m.isOllama) return false;
@@ -400,21 +535,17 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     LocalAiState localAiState,
     ModelCatalogState catalogState,
   ) {
-    // Check if downloaded
     bool isDownloaded = false;
     if (item.isOllama) {
-      // Check Ollama downloaded list
       isDownloaded = localAiState.downloadedModels[item.id] == true ||
           localAiState.downloadedModels[item.filename] == true ||
           _models.any((m) => m.id == item.filename || m.id == '${item.filename}:latest');
     } else {
-      // Check GGUF catalog or local ai state
       isDownloaded = catalogState.downloadedModels[item.filename] == true ||
           localAiState.downloadedModels[item.id] == true ||
           localAiState.selectedModelFilename == item.filename;
     }
 
-    // Check if currently downloading
     final isDownloadingThis = localAiState.downloadingModelId == item.id ||
         localAiState.downloadingModelId == item.filename;
     final downloadProgress = isDownloadingThis ? localAiState.downloadProgress : 0.0;
@@ -460,7 +591,6 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Name + Category badge + Size & RAM
           Row(
             children: [
               Icon(categoryIcon, size: 16, color: categoryColor),
@@ -488,18 +618,12 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
             ],
           ),
-
           const SizedBox(height: 6),
-
-          // Row 2: Capabilities description
           Text(
             item.capabilities,
             style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70),
           ),
-
           const SizedBox(height: 8),
-
-          // Row 3: Parameter badges (Context, Speed, RAM, Quant)
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -511,10 +635,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               _paramBadge(LucideIcons.binary, item.quantization, Colors.grey),
             ],
           ),
-
           const SizedBox(height: 10),
-
-          // Row 4: Download / Progress / Action buttons
           if (isDownloadingThis) ...[
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -572,7 +693,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                   const Spacer(),
                   ElevatedButton.icon(
                     onPressed: () {
-                      final selected = item.isOllama ? item.filename : item.filename;
+                      final selected = item.filename;
                       Navigator.pop(context, selected);
                     },
                     icon: Icon(isSelected ? LucideIcons.check : LucideIcons.play, size: 12),
@@ -589,7 +710,6 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                   ElevatedButton.icon(
                     onPressed: () async {
                       if (item.isOllama) {
-                        // Download through Ollama pull
                         final modelInfo = availableLocalModels.firstWhere(
                           (m) => m.filename == item.filename || m.id == item.id,
                           orElse: () => LocalModelInfo(
@@ -605,7 +725,6 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                         );
                         await ref.read(localAiServiceProvider.notifier).downloadModel(modelInfo.id);
                       } else {
-                        // Download GGUF
                         final modelInfo = availableLocalModels.firstWhere(
                           (m) => m.filename == item.filename,
                           orElse: () => LocalModelInfo(
@@ -643,26 +762,324 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
-  Widget _paramBadge(IconData icon, String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  // ─── 2. Live Hugging Face Hub Online Search ───────────────────────────────
+  Widget _buildHuggingFaceOnlineView(BuildContext context) {
+    final catalogState = ref.watch(modelCatalogProvider);
+
+    return Column(
+      children: [
+        // HF Search bar & quick filters
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _hfSearchController,
+                  onSubmitted: _searchHuggingFace,
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Поиск на Hugging Face (например: phi-4, deepseek, qwen)...',
+                    hintStyle: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
+                    prefixIcon: const Icon(LucideIcons.search, size: 16, color: Colors.cyanAccent),
+                    suffixIcon: IconButton(
+                      icon: const Icon(LucideIcons.arrow_right, size: 16, color: Colors.cyanAccent),
+                      onPressed: () => _searchHuggingFace(_hfSearchController.text),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Quick tags
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          child: Row(
+            children: ['Phi-4', 'DeepSeek-R1', 'Qwen2.5-Coder', 'Llama-3.3', 'Mistral-Nemo', 'SmolLM2', 'Vision'].map((tag) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ActionChip(
+                  label: Text(tag, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  onPressed: () {
+                    _hfSearchController.text = tag;
+                    _searchHuggingFace(tag);
+                  },
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        const Divider(color: Colors.white10, height: 8),
+
+        Expanded(
+          child: _isSearchingHf
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: Colors.cyanAccent),
+                      SizedBox(height: 12),
+                      Text('Поиск новейших GGUF моделей на Hugging Face Hub...', style: TextStyle(color: Colors.white60, fontSize: 12)),
+                    ],
+                  ),
+                )
+              : _hfResults.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.globe, size: 36, color: Colors.white24),
+                          SizedBox(height: 10),
+                          Text('Введите запрос для поиска любых моделей на Hugging Face', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      itemCount: _hfResults.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final item = _hfResults[index];
+                        final isExpanded = _expandedHfRepoId == item.id;
+                        final files = _hfRepoFiles[item.id];
+
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF181B26),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                onTap: () => _loadHfRepoFiles(item.id),
+                                dense: true,
+                                title: Text(
+                                  item.id,
+                                  style: GoogleFonts.jetBrainsMono(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                                ),
+                                subtitle: Row(
+                                  children: [
+                                    Text('⬇️ ${_formatCompact(item.downloads)}', style: const TextStyle(fontSize: 11, color: Colors.white60)),
+                                    const SizedBox(width: 10),
+                                    Text('❤️ ${item.likes}', style: const TextStyle(fontSize: 11, color: Colors.white60)),
+                                    const SizedBox(width: 10),
+                                    if (item.pipelineTag != null)
+                                      Text(item.pipelineTag!, style: const TextStyle(fontSize: 10, color: Colors.purpleAccent)),
+                                  ],
+                                ),
+                                trailing: Icon(
+                                  isExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down,
+                                  size: 16,
+                                  color: Colors.white54,
+                                ),
+                              ),
+                              if (isExpanded) ...[
+                                const Divider(color: Colors.white10, height: 1),
+                                if (_isLoadingHfFiles && files == null)
+                                  const Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Center(child: CircularProgressIndicator(color: Colors.cyanAccent, strokeWidth: 2)),
+                                  )
+                                else if (files == null || files.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: Text('GGUF файлы не найдены в репозитории', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                                  )
+                                else
+                                  Padding(
+                                    padding: const EdgeInsets.all(10),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('Доступные квантования GGUF:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white70)),
+                                        const SizedBox(height: 6),
+                                        ...files.map((file) {
+                                          final isDownloaded = catalogState.downloadedModels[file.filename] == true;
+                                          return Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                            child: Row(
+                                              children: [
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.cyanAccent.withValues(alpha: 0.15),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    file.quantization,
+                                                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    '${file.filename} (${file.sizeFormatted})',
+                                                    style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                if (isDownloaded)
+                                                  ElevatedButton(
+                                                    onPressed: () => Navigator.pop(context, file.filename),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: const Color(0xFF10B981),
+                                                      visualDensity: VisualDensity.compact,
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    ),
+                                                    child: const Text('Выбрать', style: TextStyle(fontSize: 10)),
+                                                  )
+                                                else
+                                                  ElevatedButton.icon(
+                                                    onPressed: () async {
+                                                      final catalogModel = AiCatalogModel(
+                                                        id: file.filename,
+                                                        name: file.filename,
+                                                        filename: file.filename,
+                                                        url: file.downloadUrl,
+                                                        size: file.sizeFormatted,
+                                                        description: 'Загружено с Hugging Face Hub (${item.id})',
+                                                        category: ModelCategory.text,
+                                                        runtime: ModelRuntime.llama,
+                                                      );
+                                                      await ref.read(modelCatalogProvider.notifier).downloadModel(catalogModel);
+                                                      if (!context.mounted) return;
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        SnackBar(content: Text('Загрузка ${file.filename} запущена в фоне!')),
+                                                      );
+                                                    },
+                                                    icon: const Icon(LucideIcons.download, size: 11),
+                                                    label: const Text('Скачать', style: TextStyle(fontSize: 10)),
+                                                    style: ElevatedButton.styleFrom(
+                                                      backgroundColor: Colors.cyanAccent,
+                                                      foregroundColor: Colors.black,
+                                                      visualDensity: VisualDensity.compact,
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          );
+                                        }),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+        ),
+      ],
+    );
+  }
+
+  // ─── 3. Ollama Library Pull View ──────────────────────────────────────────
+  Widget _buildOllamaLibraryView(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: ListView(
         children: [
-          Icon(icon, size: 10, color: color),
-          const SizedBox(width: 4),
-          Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+          Text(
+            'Загрузка любой модели из Ollama Library',
+            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Вы можете ввести имя любого тега с официального сайта ollama.com/library (например, phi4:14b, deepseek-r1:14b, llama3.3:70b)',
+            style: TextStyle(color: Colors.white60, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _ollamaPullController,
+                  style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Имя модели (например: phi4:14b)...',
+                    hintStyle: GoogleFonts.jetBrainsMono(color: Colors.white38, fontSize: 12),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    isDense: true,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  final tag = _ollamaPullController.text.trim();
+                  if (tag.isEmpty) return;
+                  final info = LocalModelInfo(
+                    id: 'ollama_$tag',
+                    name: tag,
+                    description: 'Ollama model from library',
+                    filename: tag,
+                    sizeGb: 2.0,
+                    ramRequiredGb: 4.0,
+                    url: tag,
+                    engine: LocalAiEngine.ollama,
+                  );
+                  await ref.read(localAiServiceProvider.notifier).downloadModel(info.id);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Загрузка модели $tag через Ollama запущена!')),
+                  );
+                },
+                icon: const Icon(LucideIcons.download, size: 14),
+                label: const Text('Pull'),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent, foregroundColor: Colors.black),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text('Популярные новые модели в Ollama:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70)),
+          const SizedBox(height: 8),
+          ...[
+            {'tag': 'phi4:14b', 'desc': 'Microsoft Phi-4 14B (SOTA Reasoning 2025/2026)', 'size': '9.1 GB'},
+            {'tag': 'deepseek-r1:14b', 'desc': 'DeepSeek R1 14B (Глубокие рассуждения и логика)', 'size': '9.0 GB'},
+            {'tag': 'qwen2.5-coder:14b', 'desc': 'Qwen 2.5 Coder 14B (Топ кодинг модель)', 'size': '9.0 GB'},
+            {'tag': 'llama3.3:70b', 'desc': 'Meta Llama 3.3 70B (Флагманский уровень)', 'size': '43 GB'},
+            {'tag': 'mistral-nemo:12b', 'desc': 'Mistral NeMo 12B (128K контекст)', 'size': '7.1 GB'},
+            {'tag': 'smollm2:1.7b', 'desc': 'SmolLM2 1.7B (Мобильный компакт)', 'size': '1.0 GB'},
+            {'tag': 'minicpm-v:8b', 'desc': 'MiniCPM-V 2.6 (Зрение и анализ фото)', 'size': '5.5 GB'},
+          ].map((item) {
+            return Card(
+              color: const Color(0xFF181B26),
+              margin: const EdgeInsets.only(bottom: 6),
+              child: ListTile(
+                dense: true,
+                title: Text(item['tag']!, style: GoogleFonts.jetBrainsMono(fontWeight: FontWeight.bold, color: Colors.cyanAccent, fontSize: 12)),
+                subtitle: Text('${item['desc']!} · ${item['size']!}', style: const TextStyle(fontSize: 11, color: Colors.white60)),
+                trailing: IconButton(
+                  icon: const Icon(LucideIcons.download, size: 16, color: Colors.cyanAccent),
+                  onPressed: () {
+                    _ollamaPullController.text = item['tag']!;
+                  },
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );
   }
 
-  // ─── Cloud Models (OpenRouter, Google, Claude, DeepSeek, etc.) ────────────
+  // ─── 4. Cloud Models ──────────────────────────────────────────────────────
   Widget _buildCloudModelsList(BuildContext context, String query) {
     final filteredModels = query.isEmpty
         ? _models
@@ -680,10 +1097,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             children: [
               const Icon(LucideIcons.bot, size: 36, color: Colors.white24),
               const SizedBox(height: 12),
-              Text(
-                'Модели не найдены по запросу "$query"',
-                style: GoogleFonts.inter(color: Colors.white54, fontSize: 13),
-              ),
+              Text('Модели не найдены по запросу "$query"', style: GoogleFonts.inter(color: Colors.white54, fontSize: 13)),
               if (query.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 ElevatedButton.icon(
@@ -755,10 +1169,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        item.id,
-                        style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white38),
-                      ),
+                      Text(item.id, style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white38)),
                     ],
                   ),
                 ),
@@ -770,5 +1181,30 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
         );
       },
     );
+  }
+
+  Widget _paramBadge(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withValues(alpha: 0.25), width: 0.6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  String _formatCompact(int number) {
+    if (number >= 1000000) return '${(number / 1000000).toStringAsFixed(1)}M';
+    if (number >= 1000) return '${(number / 1000).toStringAsFixed(1)}k';
+    return number.toString();
   }
 }
