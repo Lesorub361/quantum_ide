@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum KeyboardSwitchType {
@@ -25,7 +28,7 @@ class KeyboardSoundService {
   static bool _hapticEnabled = true;
   static bool _initialized = false;
 
-  static final Map<KeyboardSwitchType, Uint8List> _audioCache = {};
+  static final Map<KeyboardSwitchType, String> _filePathCache = {};
   static final AudioPlayer _player = AudioPlayer();
 
   static KeyboardSwitchType get currentSwitch => _currentSwitch;
@@ -44,10 +47,31 @@ class KeyboardSoundService {
       }
       _hapticEnabled = prefs.getBool(_prefKeyHaptic) ?? true;
 
-      // Pre-synthesize switch sounds
-      _audioCache[KeyboardSwitchType.cherryBlue] = _createClickWav(freq: 2600, decay: 190, durationMs: 25);
-      _audioCache[KeyboardSwitchType.holyPanda] = _createClickWav(freq: 750, decay: 90, durationMs: 35);
-      _audioCache[KeyboardSwitchType.linearRed] = _createClickWav(freq: 420, decay: 120, durationMs: 20);
+      // Pre-synthesize and save to cache files (SoundPool on Android requires file sources for LOW_LATENCY)
+      final tempDir = await getTemporaryDirectory();
+      final soundDir = Directory(p.join(tempDir.path, 'quantum_sounds'));
+      if (!await soundDir.exists()) {
+        await soundDir.create(recursive: true);
+      }
+
+      final configs = {
+        KeyboardSwitchType.cherryBlue: (freq: 2600.0, decay: 190.0, durationMs: 25, filename: 'click_cherry.wav'),
+        KeyboardSwitchType.holyPanda: (freq: 750.0, decay: 90.0, durationMs: 35, filename: 'click_panda.wav'),
+        KeyboardSwitchType.linearRed: (freq: 420.0, decay: 120.0, durationMs: 20, filename: 'click_linear.wav'),
+      };
+
+      for (final entry in configs.entries) {
+        final file = File(p.join(soundDir.path, entry.value.filename));
+        if (!await file.exists() || (await file.length()) == 0) {
+          final bytes = _createClickWav(
+            freq: entry.value.freq,
+            decay: entry.value.decay,
+            durationMs: entry.value.durationMs,
+          );
+          await file.writeAsBytes(bytes);
+        }
+        _filePathCache[entry.key] = file.path;
+      }
 
       await _player.setPlayerMode(PlayerMode.lowLatency);
       await _player.setVolume(0.85);
@@ -69,15 +93,17 @@ class KeyboardSoundService {
 
   static void playClick() {
     if (_hapticEnabled) {
-      HapticFeedback.selectionClick();
+      try {
+        HapticFeedback.selectionClick();
+      } catch (_) {}
     }
 
     if (_currentSwitch == KeyboardSwitchType.off) return;
 
-    final data = _audioCache[_currentSwitch];
-    if (data != null) {
+    final filePath = _filePathCache[_currentSwitch];
+    if (filePath != null) {
       try {
-        _player.play(BytesSource(data), volume: 0.85);
+        _player.play(DeviceFileSource(filePath), volume: 0.85).catchError((_) {});
       } catch (_) {}
     }
   }

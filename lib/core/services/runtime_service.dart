@@ -1183,6 +1183,7 @@ if [ \$# -gt 2 ]; then
         JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
         LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive \\
         FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
+        LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib" \\
         "\$@"
 else
     # Auto-setup ARM64 environment in background
@@ -1220,6 +1221,7 @@ else
         JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
         LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive \\
         FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
+        LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib" \\
         /bin/bash --rcfile /root/.bashrc
 fi
 ''';

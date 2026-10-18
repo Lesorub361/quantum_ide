@@ -147,6 +147,8 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     translated = translated.replaceAll('cp bin/llama-cli /usr/bin', 'sudo cp bin/llama-cli /usr/bin');
     translated = translated.replaceAll('cp {} /usr/bin/', 'sudo cp {} /usr/bin/');
     translated = translated.replaceAll('cp {} /usr/lib/', 'sudo cp {} /usr/lib/');
+    translated = translated.replaceAll('cp -a {} /usr/lib/', 'sudo cp -a {} /usr/lib/');
+    translated = translated.replaceAll('cp -a {} /usr/local/lib/', 'sudo cp -a {} /usr/local/lib/');
     translated = translated.replaceAll('mv /usr/share/', 'sudo mv /usr/share/');
     translated = translated.replaceAll('mv /tmp/aapt2_download/aapt2 /usr/bin/', 'sudo mv /tmp/aapt2_download/aapt2 /usr/bin/');
     translated = translated.replaceAll('chmod +x /usr/bin/', 'sudo chmod +x /usr/bin/');

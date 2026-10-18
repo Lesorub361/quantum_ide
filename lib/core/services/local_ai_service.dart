@@ -1052,24 +1052,20 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     state = state.copyWith(isBinaryInstalling: true, error: null);
     _appendLogs('[Local AI] Starting installation of llama-server...\n');
 
-    // Use || true after apt to ignore its non-zero exit codes (CLI warnings)
-    // wget with --tries=3 for robustness; no -q so we capture output in logs
-    const llamaRelease = 'b4200';
-    const llamaArch = 'ubuntu-arm64';
-    const llamaTarUrl =
-        'https://github.com/ggml-org/llama.cpp/releases/download/$llamaRelease/llama-$llamaRelease-bin-$llamaArch.tar.gz';
-
     final installCmd = [
       'apt-get update -qq || true',
       'apt-get install -y -qq curl wget tar || true',
       'rm -rf /tmp/llama_dl && mkdir -p /tmp/llama_dl',
       'cd /tmp/llama_dl',
-      'wget --tries=3 --timeout=60 -O llama.tar.gz "$llamaTarUrl" 2>&1',
+      'ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then LLAMA_ARCH="arm64"; else LLAMA_ARCH="x64"; fi',
+      '(wget --no-check-certificate --tries=3 --timeout=60 -O llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz" 2>&1 || curl -k -fL --retry 3 -o llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz")',
       'tar -xzf llama.tar.gz',
-      'ls -la', // log what we extracted
-      '[ -f build/bin/llama-server ] && cp build/bin/llama-server /usr/bin/llama-server || cp bin/llama-server /usr/bin/llama-server',
-      '[ -f build/bin/llama-cli ] && cp build/bin/llama-cli /usr/bin/llama-cli || cp bin/llama-cli /usr/bin/llama-cli 2>/dev/null || true',
-      'chmod +x /usr/bin/llama-server',
+      'find . -type f -name "llama-server" -exec cp {} /usr/bin/llama-server \\; 2>/dev/null || true',
+      'find . -type f -name "llama-cli" -exec cp {} /usr/bin/llama-cli \\; 2>/dev/null || true',
+      'find . \\( -name "*.so*" \\) -exec cp -a {} /usr/lib/ \\; 2>/dev/null || true',
+      'find . \\( -name "*.so*" \\) -exec cp -a {} /usr/local/lib/ \\; 2>/dev/null || true',
+      'chmod +x /usr/bin/llama-server /usr/bin/llama-cli 2>/dev/null || true',
+      'ldconfig 2>/dev/null || true',
       'rm -rf /tmp/llama_dl',
       'echo "llama-server installed: \$(llama-server --version 2>&1 | head -1)"',
     ].join(' && ');
@@ -1080,7 +1076,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
       await checkStatus();
       if (state.isBinaryInstalled) {
-        _appendLogs('[Local AI] llama-server installed successfully!\n');
+        _appendLogs('[Local AI] llama-server and libraries installed successfully!\n');
       } else {
         throw Exception('Binary file not found after installation. Check the output above.');
       }
@@ -1089,6 +1085,31 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       _appendLogs('[Local AI] Error installing llama-server: $e\n');
     } finally {
       state = state.copyWith(isBinaryInstalling: false);
+    }
+  }
+
+  Future<void> _repairLlamaLibraries() async {
+    _appendLogs('[Local AI] 🔄 Восстановление системных библиотек llama-server (.so)...\n');
+    final repairCmd = [
+      'mkdir -p /tmp/llama_repair && cd /tmp/llama_repair',
+      'ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then LLAMA_ARCH="arm64"; else LLAMA_ARCH="x64"; fi',
+      '(wget --no-check-certificate --tries=3 --timeout=60 -O llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz" 2>&1 || curl -k -fL --retry 3 -o llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz")',
+      'tar -xzf llama.tar.gz',
+      'find . \\( -name "*.so*" \\) -exec cp -a {} /usr/lib/ \\; 2>/dev/null || true',
+      'find . \\( -name "*.so*" \\) -exec cp -a {} /usr/local/lib/ \\; 2>/dev/null || true',
+      'find . -type f -name "llama-server" -exec cp {} /usr/bin/llama-server \\; 2>/dev/null || true',
+      'find . -type f -name "llama-cli" -exec cp {} /usr/bin/llama-cli \\; 2>/dev/null || true',
+      'chmod +x /usr/bin/llama-server /usr/bin/llama-cli 2>/dev/null || true',
+      'ldconfig 2>/dev/null || true',
+      'rm -rf /tmp/llama_repair',
+      'echo "Llama libraries repaired successfully"',
+    ].join(' && ');
+
+    try {
+      final out = await _runtime.runCommand(repairCmd);
+      _appendLogs('[Local AI] Результат восстановления библиотек:\n$out\n');
+    } catch (e) {
+      _appendLogs('[Local AI] ⚠️ Ошибка при автоматическом восстановлении библиотек: $e\n');
     }
   }
 
@@ -1202,6 +1223,16 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       final logArgs = serverArgs.join(' ');
       _appendLogs('[Local AI] Command: $logArgs\n');
 
+      if (isMobile) {
+        final libCommon1 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'usr', 'lib', 'libllama-common.so.0'));
+        final libCommon2 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'lib', 'libllama-common.so.0'));
+        final libCommon3 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'lib', 'libllama-common.so.0'));
+        if (!await libCommon1.exists() && !await libCommon2.exists() && !await libCommon3.exists()) {
+          _appendLogs('[Local AI] ⚠️ Отсутствуют разделяемые библиотеки llama-server (libllama-common.so.0).\n');
+          await _repairLlamaLibraries();
+        }
+      }
+
       final Process process;
       if (isMobile) {
         process = await Process.start(
@@ -1235,7 +1266,11 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       });
 
       // Watch exit code to gracefully catch OOM (SIGKILL 9) and Segfaults (SIGSEGV 11)
+      bool processDied = false;
+      int? diedCode;
       process.exitCode.then((code) {
+        processDied = true;
+        diedCode = code;
         if (code != 0 && (state.isRunning || state.isStarting)) {
           if (code == 137 || code == -9) {
             _appendLogs('\n[Local AI] ❌ Сервер принудительно остановлен системой (сигнал 9 / SIGKILL - Android OOM Killer: не хватило оперативной памяти).\n');
@@ -1243,6 +1278,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
           } else if (code == 139 || code == -11) {
             _appendLogs('\n[Local AI] ❌ Сбой сегментации (SIGSEGV / Segfault). Установите GPU Layers = 0 в настройках.\n');
             state = state.copyWith(isRunning: false, isStarting: false, error: 'Сбой драйвера (Segfault)');
+          } else if (code == 127) {
+            _appendLogs('\n[Local AI] ❌ Ошибка 127: Не найдены разделяемые библиотеки (.so). Выполните установку через панель настроек AI.\n');
+            state = state.copyWith(isRunning: false, isStarting: false, error: 'Ошибка 127: не найдены библиотеки .so');
           } else {
             _appendLogs('\n[Local AI] Процесс сервера завершился с кодом $code.\n');
             state = state.copyWith(isRunning: false, isStarting: false, error: 'Сервер остановлен (код $code)');
@@ -1254,8 +1292,13 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       bool isHealthy = false;
       int attempt = 0;
       while (retries > 0) {
+        if (processDied) {
+          _appendLogs('[Local AI] ⛔ Процесс сервера завершился до готовности (код $diedCode). Опрос остановлен.\n');
+          break;
+        }
         attempt++;
         await Future.delayed(const Duration(seconds: 2));
+        if (processDied) break;
         isHealthy = await _pingServer();
         if (isHealthy) break;
         _appendLogs('[Local AI] Загрузка модели в память RAM... (попытка $attempt/20)\n');
