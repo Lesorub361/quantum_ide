@@ -3,7 +3,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
 
-class InlineDiffWidget extends StatelessWidget {
+class InlineDiffWidget extends StatefulWidget {
   final String oldText;
   final String newText;
   final String? filePath;
@@ -16,50 +16,75 @@ class InlineDiffWidget extends StatelessWidget {
   });
 
   @override
+  State<InlineDiffWidget> createState() => _InlineDiffWidgetState();
+}
+
+class _InlineDiffWidgetState extends State<InlineDiffWidget> {
+  bool _isExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final dmp = DiffMatchPatch();
-    final diffs = dmp.diff(oldText, newText);
+    final diffs = dmp.diff(widget.oldText, widget.newText);
     dmp.diffCleanupSemantic(diffs);
+
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardOpen = bottomInset > 20;
+    final double maxH = _isExpanded
+        ? 520.0
+        : (isKeyboardOpen ? 180.0 : 300.0);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
+        color: Colors.black.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (filePath != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.file_diff, size: 12, color: Colors.cyanAccent),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      filePath!,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        color: Colors.white70,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
               ),
             ),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.file_diff, size: 12, color: Colors.cyanAccent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    widget.filePath ?? 'Изменения кода',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                InkWell(
+                  onTap: () => setState(() => _isExpanded = !_isExpanded),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: Icon(
+                      _isExpanded ? LucideIcons.minimize_2 : LucideIcons.maximize_2,
+                      size: 13,
+                      color: Colors.cyanAccent,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Container(
-            constraints: const BoxConstraints(maxHeight: 200),
+            constraints: BoxConstraints(maxHeight: maxH),
             child: SingleChildScrollView(
               child: Padding(
                 padding: const EdgeInsets.all(8),

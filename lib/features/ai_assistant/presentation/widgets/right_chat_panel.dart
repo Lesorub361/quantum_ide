@@ -2117,7 +2117,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         ),
         content: SizedBox(
           width: double.maxFinite,
-          height: MediaQuery.of(context).size.height * 0.55,
+          height: (MediaQuery.of(context).size.height * 0.75).clamp(320.0, 650.0),
           child: GitDiffPage(
             relativePath: relPath, 
             initiallyStaged: false,

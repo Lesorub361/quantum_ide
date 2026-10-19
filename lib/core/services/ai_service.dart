@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'gemini_rest_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:genkit/genkit.dart' as gk;
@@ -99,7 +99,7 @@ class ChatResponse {
 
 class AIService {
   AISettings _settings = const AISettings();
-  GenerativeModel? _geminiModel;
+  GeminiRestClient? _geminiClient;
   final Dio _dio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 30),
@@ -197,19 +197,16 @@ class AIService {
   void _rebuildGemini() {
     final key = _settings.apiKeys['google'] ?? '';
     if (_settings.selectedProviderId == 'google' && key.isNotEmpty) {
-      try {
-        // For custom proxy URLs: we still use standard GenerativeModel.
-        // Custom base URL routing for Gemini proxies is handled via Dio
-        // in _executeOpenAiCompatRequest (OpenAI-compatible fallback).
-        _geminiModel = GenerativeModel(
-          model: _settings.selectedModel,
-          apiKey: key,
-        );
-      } catch (_) {
-        _geminiModel = null;
-      }
+      // For custom proxy URLs: we still use the official Gemini endpoint.
+      // Custom base URL routing for Gemini proxies is handled via Dio
+      // in _executeOpenAiCompatRequest (OpenAI-compatible fallback).
+      _geminiClient = GeminiRestClient(
+        dio: _dio,
+        model: _settings.selectedModel,
+        apiKey: key,
+      );
     } else {
-      _geminiModel = null;
+      _geminiClient = null;
     }
   }
 
@@ -984,12 +981,13 @@ class AIService {
   }
 
   Future<String> _geminiCompletion(String prompt) async {
-    if (_geminiModel == null) {
+    final gemini = _geminiClient;
+    if (gemini == null) {
       return 'Error: Set Gemini API key in settings.';
     }
     try {
-      final response = await _geminiModel!.generateContent([
-        Content.text(prompt),
+      final response = await gemini.generate([
+        GeminiRestClient.content('user', prompt),
       ]);
       return response.text ?? 'No response from AI';
     } catch (e) {
@@ -1066,13 +1064,6 @@ class AIService {
     } catch (e) {
       return 'Ollama Error (ensure Ollama is running): $e';
     }
-  }
-
-  // ─── Chat session (Gemini) ───────────────────────────────────────────────
-
-  ChatSession? startChat({List<Content>? history}) {
-    if (_geminiModel == null) return null;
-    return _geminiModel!.startChat(history: history);
   }
 
   /// Отправить сообщение в чат (универсальный метод)
@@ -1458,42 +1449,21 @@ class AIService {
     String? systemInstruction,
     String? imageBase64,
   }) async {
-    if (_geminiModel == null) return const ChatResponse('Error: Set Gemini API key.');
+    final gemini = _geminiClient;
+    if (gemini == null) return const ChatResponse('Error: Set Gemini API key.');
     try {
-      var model = _geminiModel!;
-      if (systemInstruction != null) {
-        final key = _settings.apiKeys['google'] ?? '';
-        // Use standard GenerativeModel with systemInstruction.
-        // Custom proxy URLs are handled via OpenAI-compatible Dio endpoint.
-        model = GenerativeModel(
-          model: _settings.selectedModel,
-          apiKey: key,
-          systemInstruction: Content.system(systemInstruction),
-        );
-      }
-      
-      // Build content with optional image
-      final parts = <Part>[TextPart(message)];
-      if (imageBase64 != null) {
-        parts.insert(0, DataPart('image/jpeg', base64Decode(imageBase64)));
-      }
-      
-      final geminiHistory = history
-          .map(
-            (m) => m['role'] == 'user'
-                ? Content('user', [TextPart(m['content'] ?? '')])
-                : Content.model([TextPart(m['content'] ?? '')]),
-          )
-          .toList();
-      final session = model.startChat(history: geminiHistory);
-      final resp = await session.sendMessage(Content('user', parts));
+      // Custom proxy URLs are handled via OpenAI-compatible Dio endpoint.
+      final contents = [
+        ...GeminiRestClient.historyToContents(history),
+        GeminiRestClient.content('user', message, imageBase64: imageBase64),
+      ];
+      final resp = await gemini.generate(
+        contents,
+        systemInstruction: systemInstruction,
+      );
       final text = resp.text ?? 'No response';
-      int promptTokens = 0;
-      int completionTokens = 0;
-      if (resp.usageMetadata != null) {
-        promptTokens = resp.usageMetadata?.promptTokenCount ?? 0;
-        completionTokens = resp.usageMetadata?.candidatesTokenCount ?? 0;
-      }
+      final int promptTokens = resp.promptTokens ?? 0;
+      final int completionTokens = resp.completionTokens ?? 0;
       return ChatResponse(
         text,
         tokenUsage: TokenUsage(
@@ -1514,32 +1484,17 @@ class AIService {
     String? imageBase64,
     void Function(String token)? onToken,
   }) async {
-    if (_geminiModel == null) return const ChatResponse('Error: Set Gemini API key.');
+    final gemini = _geminiClient;
+    if (gemini == null) return const ChatResponse('Error: Set Gemini API key.');
     try {
-      var model = _geminiModel!;
-      if (systemInstruction != null) {
-        final key = _settings.apiKeys['google'] ?? '';
-        model = GenerativeModel(
-          model: _settings.selectedModel,
-          apiKey: key,
-          systemInstruction: Content.system(systemInstruction),
-        );
-      }
-
-      final parts = <Part>[TextPart(message)];
-      if (imageBase64 != null) {
-        parts.insert(0, DataPart('image/jpeg', base64Decode(imageBase64)));
-      }
-
-      final geminiHistory = history
-          .map(
-            (m) => m['role'] == 'user'
-                ? Content('user', [TextPart(m['content'] ?? '')])
-                : Content.model([TextPart(m['content'] ?? '')]),
-          )
-          .toList();
-      final session = model.startChat(history: geminiHistory);
-      final stream = session.sendMessageStream(Content('user', parts));
+      final contents = [
+        ...GeminiRestClient.historyToContents(history),
+        GeminiRestClient.content('user', message, imageBase64: imageBase64),
+      ];
+      final stream = gemini.generateStream(
+        contents,
+        systemInstruction: systemInstruction,
+      );
       final buffer = StringBuffer();
       int promptTokens = 0;
       int completionTokens = 0;
@@ -1550,10 +1505,8 @@ class AIService {
           buffer.write(text);
           onToken?.call(text);
         }
-        if (chunk.usageMetadata != null) {
-          promptTokens = chunk.usageMetadata?.promptTokenCount ?? promptTokens;
-          completionTokens = chunk.usageMetadata?.candidatesTokenCount ?? completionTokens;
-        }
+        promptTokens = chunk.promptTokens ?? promptTokens;
+        completionTokens = chunk.completionTokens ?? completionTokens;
       }
 
       final resultText = buffer.toString();

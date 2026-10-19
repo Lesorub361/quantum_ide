@@ -35,6 +35,8 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_sele
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
+import 'package:fuzzy/fuzzy.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class CopyTextIntent extends Intent {
   const CopyTextIntent();
@@ -80,6 +82,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   String _inlineSelectedText = '';
   int _problemsSeverityFilter = 0; // 0: Все, 1: Ошибки, 2: Предупреждения, 3: Инфо
   int _buildSubTab = 0;
+  bool _isWakelockEnabled = false;
   double _pinchBaseFontSize = 13.0;
   final Map<int, Offset> _pinchPointers = {};
   double? _initialPinchDistance;
@@ -240,6 +243,46 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   void initState() {
     super.initState();
     _loadPathBinaries();
+    WakelockPlus.enabled.then((val) {
+      if (mounted) setState(() => _isWakelockEnabled = val);
+    }).catchError((_) {});
+  }
+
+  Future<void> _toggleWakelock() async {
+    try {
+      final nextState = !_isWakelockEnabled;
+      await WakelockPlus.toggle(enable: nextState);
+      if (mounted) {
+        setState(() => _isWakelockEnabled = nextState);
+        HapticFeedback.lightImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  LucideIcons.coffee,
+                  size: 16,
+                  color: nextState ? Colors.orangeAccent : Colors.white60,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    nextState
+                        ? 'Режим бодрствования активен (экран не погаснет во время сборки/команд)'
+                        : 'Режим бодрствования выключен',
+                    style: GoogleFonts.inter(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Wakelock toggle error: $e');
+    }
   }
 
   @override
@@ -306,6 +349,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     ];
 
     final binaries = <String>{};
+    const defaultCliTools = [
+      'git', 'flutter', 'dart', 'npm', 'npx', 'node', 'yarn', 'pnpm',
+      'python3', 'python', 'pip', 'pip3', 'cargo', 'rustc', 'docker',
+      'curl', 'wget', 'cat', 'grep', 'find', 'ssh', 'scp', 'apt', 'apt-get',
+      'tar', 'zip', 'unzip', 'ps', 'kill', 'htop', 'ls', 'cd', 'mkdir',
+      'rm', 'cp', 'mv', 'chmod', 'chown', 'clear', 'bash', 'sh', 'nano', 'vim',
+      'df', 'free', 'uname', 'which', 'export', 'source', 'env',
+    ];
+    binaries.addAll(defaultCliTools);
+
     for (final dirPath in pathDirs) {
       try {
         final dir = Directory(dirPath);
@@ -362,19 +415,50 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
 
-    final query = _currentInput.toLowerCase();
+    final query = _currentInput.trim();
+    if (query.isEmpty) {
+      _suggestionsNotifier.value = null;
+      return;
+    }
+
     List<String> matches = [];
 
     if (_currentInput.startsWith('./') ||
         _currentInput.startsWith('/') ||
         _currentInput.startsWith('~/') ||
         _currentInput.contains('/')) {
-      matches = await _getPathSuggestions(session, _currentInput);
+      final pathSuggestions = await _getPathSuggestions(session, _currentInput);
+      if (pathSuggestions.isNotEmpty) {
+        if (query.length >= 2) {
+          final fuse = Fuzzy<String>(pathSuggestions, options: FuzzyOptions(threshold: 0.45));
+          final results = fuse.search(query);
+          matches = results.isNotEmpty
+              ? results.map((r) => r.item).take(10).toList()
+              : pathSuggestions.take(10).toList();
+        } else {
+          matches = pathSuggestions.take(10).toList();
+        }
+      }
     } else {
-      matches = _pathBinaries
-          .where((bin) => bin.toLowerCase().startsWith(query))
-          .take(10)
-          .toList();
+      if (_pathBinaries.isNotEmpty) {
+        final queryLower = query.toLowerCase();
+        final prefixMatches = _pathBinaries
+            .where((bin) => bin.toLowerCase().startsWith(queryLower))
+            .take(6)
+            .toList();
+
+        final fuse = Fuzzy<String>(
+          _pathBinaries,
+          options: FuzzyOptions(
+            threshold: 0.35,
+            isCaseSensitive: false,
+          ),
+        );
+        final fuzzyMatches = fuse.search(queryLower).map((r) => r.item).take(8).toList();
+
+        final combined = <String>{...prefixMatches, ...fuzzyMatches};
+        matches = combined.take(10).toList();
+      }
     }
 
     if (matches.isEmpty) {
@@ -445,10 +529,27 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   void _acceptSuggestion(TerminalSession session, String suggestion) {
-    final toSend = suggestion.substring(_currentInput.length);
-    session.pty.write(Uint8List.fromList(utf8.encode(toSend)));
+    if (suggestion.startsWith(_currentInput)) {
+      final toSend = suggestion.substring(_currentInput.length);
+      session.pty.write(Uint8List.fromList(utf8.encode(toSend)));
+    } else {
+      final delSequence = '\x7f' * _currentInput.length;
+      session.pty.write(Uint8List.fromList(utf8.encode('$delSequence$suggestion')));
+    }
     _currentInput = suggestion;
     _suggestionsNotifier.value = null;
+  }
+
+  String _sanitizeTerminalInput(String text) {
+    return text
+        .replaceAll('“', '"')
+        .replaceAll('”', '"')
+        .replaceAll('«', '"')
+        .replaceAll('»', '"')
+        .replaceAll('‘', "'")
+        .replaceAll('’', "'")
+        .replaceAll('—', '--')
+        .replaceAll('–', '-');
   }
 
   void _attachTerminalOutputListener(TerminalSession session) {
@@ -478,9 +579,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
 
       if (sequence.isNotEmpty) {
-        session.pty.write(Uint8List.fromList(utf8.encode(sequence)));
-        if (sequence.length == 1 && data.length == 1) {
-          _handleInputForAutocomplete(session, sequence);
+        final sanitized = _sanitizeTerminalInput(sequence);
+        session.pty.write(Uint8List.fromList(utf8.encode(sanitized)));
+        if (sanitized.length == 1 && data.length == 1) {
+          _handleInputForAutocomplete(session, sanitized);
         }
       }
 
@@ -1053,7 +1155,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final buffer = terminal.buffer;
     final lines = <String>[];
     for (var i = 0; i < buffer.lines.length; i++) {
-      lines.add(buffer.lines[i].toString());
+      lines.add(buffer.lines[i].toString().trimRight());
+    }
+    while (lines.isNotEmpty && lines.last.isEmpty) {
+      lines.removeLast();
     }
     return lines.join('\n');
   }
@@ -1450,6 +1555,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         }
                       });
                     },
+                  ),
+                  const SizedBox(width: 3),
+                  _buildTerminalActionButton(
+                    LucideIcons.coffee,
+                    _isWakelockEnabled ? 'Экран не гаснет (активно)' : 'Не гасить экран (Wakelock)',
+                    _toggleWakelock,
+                    color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
                   ),
                   const SizedBox(width: 3),
                   _buildTerminalActionButton(
@@ -2734,6 +2846,16 @@ Also explain what exactly went wrong and how you fixed it.
                     }
                   },
                 ),
+                _buildMenuTile(
+                  icon: LucideIcons.coffee,
+                  iconColor: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
+                  title: _isWakelockEnabled ? 'Не гасить экран (Активно)' : 'Держать экран включенным (Wakelock)',
+                  subtitle: 'Предотвратить засыпание экрана и завершение сборки/терминала',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _toggleWakelock();
+                  },
+                ),
               ],
             ),
           ),
@@ -2803,6 +2925,7 @@ Also explain what exactly went wrong and how you fixed it.
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = (bottomInset > 20) || _isMobileKeyboardActive;
     return VirtualKeysView(
+      isCompact: isKeyboardOpen,
       activeKeys: {
         ..._activeModifiers,
         if (isKeyboardOpen) 'KEYB',
@@ -2871,11 +2994,11 @@ Also explain what exactly went wrong and how you fixed it.
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text != null && text.isNotEmpty) {
+      final sanitized = _sanitizeTerminalInput(text);
       if (session.xtermTerminal.bracketedPasteMode) {
-        session.xtermTerminal.paste(text);
+        session.xtermTerminal.paste(sanitized);
       } else {
-        final wrapped = '\x1b[200~$text\x1b[201~';
-        session.pty.write(Uint8List.fromList(utf8.encode(wrapped)));
+        session.pty.write(Uint8List.fromList(utf8.encode(sanitized)));
       }
     }
   }
@@ -2926,7 +3049,9 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
   @override
   Widget build(BuildContext context) {
     const itemHeight = 36.0;
-    final maxHeight = (widget.suggestions.length * itemHeight).clamp(0.0, 180.0);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardOpen = bottomInset > 20;
+    final maxHeight = (widget.suggestions.length * itemHeight).clamp(0.0, isKeyboardOpen ? 95.0 : 180.0);
 
     return Positioned(
       left: 16,

@@ -25,11 +25,13 @@ class VirtualKey {
 class VirtualKeysView extends ConsumerStatefulWidget {
   final Function(String) onKeyTap;
   final Set<String> activeKeys;
+  final bool isCompact;
 
   const VirtualKeysView({
     super.key,
     required this.onKeyTap,
     this.activeKeys = const {},
+    this.isCompact = false,
   });
 
   @override
@@ -37,6 +39,19 @@ class VirtualKeysView extends ConsumerStatefulWidget {
 }
 
 class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
+  static const List<VirtualKey> _compactKeys = [
+    VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
+    VirtualKey(label: 'TAB', value: '\t', tooltip: 'Tab / Автодополнение'),
+    VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: 'Зажать Ctrl'),
+    VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: 'Зажать Alt'),
+    VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: 'Прервать процесс (Ctrl+C)'),
+    VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: 'Вставить из буфера'),
+    VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left, tooltip: 'Влево'),
+    VirtualKey(label: '↓', value: '\x1b[B', icon: LucideIcons.arrow_down, tooltip: 'Вниз'),
+    VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up, tooltip: 'Вверх'),
+    VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right, tooltip: 'Вправо'),
+  ];
+
   static const List<VirtualKey> _row1Keys = [
     VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
     VirtualKey(label: 'TAB', value: '\t', tooltip: 'Tab / Автодополнение'),
@@ -163,6 +178,32 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isCompact) {
+      return Container(
+        height: 33,
+        clipBehavior: Clip.hardEdge,
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0F14).withValues(alpha: 0.98),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
+        ),
+        child: _buildKeyRow(
+          _compactKeys,
+          trailingFixed: _VirtualKeyButton(
+            keyData: const VirtualKey(
+              label: 'Ещё',
+              value: 'more_commands',
+              icon: LucideIcons.layout_grid,
+              tooltip: 'Все команды, сочетания клавиш и спецсимволы',
+            ),
+            isActive: false,
+            isHighlightedAction: true,
+            onTap: () => _showMoreCommandsSheet(context),
+          ),
+        ),
+      );
+    }
+
     return Container(
       height: 66,
       clipBehavior: Clip.hardEdge,

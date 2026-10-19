@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class RuntimeService extends ChangeNotifier {
   static const _channel = MethodChannel('com.example.quantum_ide/native');
@@ -462,7 +463,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '13';
+    const bashrcVersion = '14';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -500,7 +501,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=13
+# BASHRC_VERSION=14
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -531,13 +532,13 @@ export HISTSIZE=5000
 export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
 
-# Starship-inspired developer prompt with git status
+# Starship-inspired developer prompt with git status (proper readline SOH/STX 001/002 escaping)
 __git_info() {
     local branch=$(git branch --show-current 2>/dev/null)
     if [ -n "$branch" ]; then
         local status_icon=""
         [ -n "$(git status --porcelain 2>/dev/null)" ] && status_icon="*"
-        printf " \[\e[35m\]git:(\[\e[1;31m\]%s%s\[\e[0m\e[35m\])\[\e[0m\]" "$branch" "$status_icon"
+        printf " \001\033[35m\002git:(\001\033[1;31m\002%s%s\001\033[0m\033[35m\002)\001\033[0m\002" "$branch" "$status_icon"
     fi
 }
 export PS1="\[\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;34m\]\$ \[\e[0m\]"
@@ -1849,6 +1850,11 @@ done
         debugPrint('startForegroundSession error: $e');
       }
     }
+    try {
+      await WakelockPlus.enable();
+    } catch (e) {
+      debugPrint('Wakelock enable error: $e');
+    }
   }
 
   Future<void> stopForegroundSession() async {
@@ -1858,6 +1864,11 @@ done
       } catch (e) {
         debugPrint('stopForegroundSession error: $e');
       }
+    }
+    try {
+      await WakelockPlus.disable();
+    } catch (e) {
+      debugPrint('Wakelock disable error: $e');
     }
   }
 }

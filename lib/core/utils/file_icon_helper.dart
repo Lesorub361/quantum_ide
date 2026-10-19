@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-// ignore: implementation_imports
-import 'package:file_icon/src/data.dart';
+import 'seti/seti_icons.dart';
 
 class FileIconInfo {
   final IconData icon;
@@ -365,7 +364,6 @@ class FileIconHelper {
         // ignore: non_const_argument_for_const_parameter
         meta.codePoint,
         fontFamily: 'Seti',
-        fontPackage: 'file_icon',
       ),
       Color(meta.color),
     );
