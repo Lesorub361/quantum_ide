@@ -40,6 +40,99 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     KeyboardSoundService.playClick();
   }
 
+  void _showSnippetPicker(BuildContext context) {
+    final snippets = [
+      (
+        title: 'HTML5 Boilerplate',
+        desc: 'Базовая разметка HTML5 страницы',
+        code: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>Document</title>\n</head>\n<body>\n  <h1>Hello Quantum</h1>\n</body>\n</html>',
+      ),
+      (
+        title: 'React Component',
+        desc: 'Функциональный компонент React',
+        code: 'import React from "react";\n\nexport const Component = () => {\n  return (\n    <div>\n      <h1>Hello World</h1>\n    </div>\n  );\n};',
+      ),
+      (
+        title: 'Flutter StatelessWidget',
+        desc: 'Виджет без состояния',
+        code: 'import "package:flutter/material.dart";\n\nclass CustomWidget extends StatelessWidget {\n  const CustomWidget({super.key});\n\n  @override\n  Widget build(BuildContext context) {\n    return Container();\n  }\n}',
+      ),
+      (
+        title: 'Python Main Script',
+        desc: 'Точка входа Python скрипта',
+        code: 'def main():\n    print("Hello from QuantumIDE")\n\nif __name__ == "__main__":\n    main()',
+      ),
+      (
+        title: 'Async Fetch JSON',
+        desc: 'Запрос данных по REST API',
+        code: 'async function fetchData(url) {\n  const response = await fetch(url);\n  const data = await response.json();\n  return data;\n}',
+      ),
+      (
+        title: 'CSS Flex Center',
+        desc: 'Выравнивание по центру',
+        code: 'display: flex;\njustify-content: center;\nalign-items: center;',
+      ),
+      (
+        title: 'SQL Create Table',
+        desc: 'Создание таблицы пользователей',
+        code: 'CREATE TABLE IF NOT EXISTS users (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  name TEXT NOT NULL,\n  email TEXT UNIQUE\n);',
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF161927),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(LucideIcons.code_xml, color: Color(0xFF00E5FF), size: 18),
+                const SizedBox(width: 8),
+                const Text(
+                  'Быстрые сниппеты кода',
+                  style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: snippets.length,
+                separatorBuilder: (_, _) => const Divider(color: Colors.white10, height: 1),
+                itemBuilder: (context, index) {
+                  final s = snippets[index];
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    title: Text(s.title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                    subtitle: Text(s.desc, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    trailing: const Icon(LucideIcons.corner_down_left, color: Color(0xFF00E5FF), size: 16),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      controller.replaceSelection(s.code);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
@@ -172,6 +265,15 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                   controller.replaceSelection(hexCode);
                 },
               );
+            },
+          ),
+          buildBtn(
+            icon: LucideIcons.code_xml,
+            tooltip: 'Быстрые сниппеты кода',
+            color: const Color(0xFF00E5FF),
+            onPressed: () {
+              _triggerHaptic(ref);
+              _showSnippetPicker(context);
             },
           ),
           buildBtn(

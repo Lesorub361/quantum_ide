@@ -14,6 +14,9 @@ import '../../features/rest_client/presentation/pages/rest_client_page.dart';
 import '../../features/github/presentation/pages/github_page.dart';
 import '../../shared/widgets/main_layout.dart';
 import '../../features/git/presentation/pages/git_graph_page.dart';
+import '../../features/home/presentation/pages/database_viewer_page.dart';
+import '../../features/home/presentation/pages/devtools_page.dart';
+import '../../features/home/presentation/pages/sftp_explorer_page.dart';
 import 'package:talker_flutter/talker_flutter.dart';
 import '../services/talker_service.dart';
 import '../services/network_inspector_service.dart';
@@ -109,6 +112,18 @@ final appRouter = GoRouter(
         GoRoute(
           path: '/network-inspector',
           builder: (context, state) => const NetworkInspectorScreen(),
+        ),
+        GoRoute(
+          path: '/database-viewer',
+          builder: (context, state) => const DatabaseViewerPage(),
+        ),
+        GoRoute(
+          path: '/devtools',
+          builder: (context, state) => const DevToolsPage(),
+        ),
+        GoRoute(
+          path: '/sftp-explorer',
+          builder: (context, state) => const SftpExplorerPage(),
         ),
       ],
     ),

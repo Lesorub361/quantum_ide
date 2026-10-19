@@ -202,6 +202,24 @@ class _HomePageState extends ConsumerState<HomePage> {
                         onTap: () => context.push('/github'),
                       ),
                       _buildRailItem(
+                        icon: LucideIcons.database,
+                        tooltip: 'База данных (SQLite)',
+                        color: const Color(0xFF10B981),
+                        onTap: () => context.push('/database-viewer'),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.wrench,
+                        tooltip: 'DevTools',
+                        color: const Color(0xFF00E5FF),
+                        onTap: () => context.push('/devtools'),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.globe,
+                        tooltip: 'Remote SFTP',
+                        color: const Color(0xFFFF9100),
+                        onTap: () => context.push('/sftp-explorer'),
+                      ),
+                      _buildRailItem(
                         icon: LucideIcons.settings,
                         tooltip: AppLocalizations.of(context)!.settings,
                         color: theme.colorScheme.onSurfaceVariant,
@@ -550,6 +568,24 @@ class _HomePageState extends ConsumerState<HomePage> {
                         label: AppLocalizations.of(context)!.servers,
                         color: theme.colorScheme.error,
                         onTap: () => context.push('/servers'),
+                      ),
+                      _buildSidebarItem(
+                        icon: LucideIcons.database,
+                        label: 'Базы данных (SQLite)',
+                        color: const Color(0xFF10B981),
+                        onTap: () => context.push('/database-viewer'),
+                      ),
+                      _buildSidebarItem(
+                        icon: LucideIcons.wrench,
+                        label: 'DevTools Утилиты',
+                        color: const Color(0xFF00E5FF),
+                        onTap: () => context.push('/devtools'),
+                      ),
+                      _buildSidebarItem(
+                        icon: LucideIcons.globe,
+                        label: 'Remote SFTP',
+                        color: const Color(0xFFFF9100),
+                        onTap: () => context.push('/sftp-explorer'),
                       ),
                       _buildSidebarItem(
                         icon: LucideIcons.settings,
@@ -1280,6 +1316,24 @@ class _HomePageState extends ConsumerState<HomePage> {
         label: AppLocalizations.of(context)!.servers,
         color: theme.colorScheme.error,
         onTap: () => context.push('/servers'),
+      ),
+      (
+        icon: LucideIcons.database,
+        label: 'Базы данных',
+        color: const Color(0xFF10B981),
+        onTap: () => context.push('/database-viewer'),
+      ),
+      (
+        icon: LucideIcons.wrench,
+        label: 'DevTools',
+        color: const Color(0xFF00E5FF),
+        onTap: () => context.push('/devtools'),
+      ),
+      (
+        icon: LucideIcons.globe,
+        label: 'SFTP Remote',
+        color: const Color(0xFFFF9100),
+        onTap: () => context.push('/sftp-explorer'),
       ),
     ];
 
