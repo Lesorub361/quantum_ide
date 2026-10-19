@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 import 'seti/seti_icons.dart';
 
 class FileIconInfo {
@@ -10,6 +11,14 @@ class FileIconInfo {
 
 class FileIconHelper {
   static FileIconInfo getIconInfo(String name, bool isDirectory, [bool isExpanded = false]) {
+    if (isDirectory) {
+      final customFolder = CustomIconResolver.resolveFolderIcon(name, isExpanded);
+      if (customFolder != null) return customFolder;
+    } else {
+      final customFile = CustomIconResolver.resolveFileIcon(name);
+      if (customFile != null) return customFile;
+    }
+
     final lowerName = name.toLowerCase();
 
     if (isDirectory) {

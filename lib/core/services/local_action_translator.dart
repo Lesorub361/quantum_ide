@@ -9,6 +9,35 @@ class LocalActionTranslator {
     final actions = <AIAction>[];
     final lower = response.toLowerCase();
 
+    // ── 0. SEARCH / REPLACE blocks (Antigravity / Aider format) ───────────────
+    final searchReplaceRegex = RegExp(
+      r'(?:(?:###\s*|File:\s*|Файл:\s*|//\s*|#\s*)?([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]+)\s*\n)?'
+      r'<<<<<<< SEARCH\r?\n([\s\S]*?)\r?\n=======\r?\n([\s\S]*?)\r?\n>>>>>>> REPLACE',
+      caseSensitive: false,
+    );
+
+    final srMatches = searchReplaceRegex.allMatches(response).toList();
+    if (srMatches.isNotEmpty) {
+      final defaultFile = _extractFilename(response);
+      for (final m in srMatches) {
+        final capturedFile = m.group(1)?.trim();
+        final searchBlock = m.group(2) ?? '';
+        final replaceBlock = m.group(3) ?? '';
+        final file = capturedFile ?? defaultFile;
+        if (file != null && searchBlock.isNotEmpty) {
+          actions.add(AIAction(
+            type: 'replace_code_block',
+            path: _resolvePath(file, workspacePath),
+            content: replaceBlock,
+            oldText: searchBlock,
+            newText: replaceBlock,
+            description: 'Точечное исправление в $file',
+          ));
+        }
+      }
+      if (actions.isNotEmpty) return actions;
+    }
+
     // ── File Creation intent ──────────────────────────────────────────────────
     if (_containsAny(lower, [
       'создам файл', 'создать файл', 'создаю файл', 'создаём файл',
@@ -39,12 +68,52 @@ class LocalActionTranslator {
       final filename = _extractFilename(response);
       final content = _extractCodeBlock(response);
       if (filename != null && content != null && content.isNotEmpty) {
-        actions.add(AIAction(
-          type: 'edit',
-          path: _resolvePath(filename, workspacePath),
-          content: content,
-          description: 'Редактирование файла $filename',
-        ));
+        // If the code block contains SEARCH/REPLACE inside it:
+        if (content.contains('<<<<<<< SEARCH') && content.contains('>>>>>>> REPLACE')) {
+          final blockMatches = RegExp(
+            r'<<<<<<< SEARCH\r?\n([\s\S]*?)\r?\n=======\r?\n([\s\S]*?)\r?\n>>>>>>> REPLACE',
+          ).allMatches(content);
+          for (final bm in blockMatches) {
+            final s = bm.group(1) ?? '';
+            final r = bm.group(2) ?? '';
+            if (s.isNotEmpty) {
+              actions.add(AIAction(
+                type: 'replace_code_block',
+                path: _resolvePath(filename, workspacePath),
+                content: r,
+                oldText: s,
+                newText: r,
+                description: 'Точечное исправление в $filename',
+              ));
+            }
+          }
+          if (actions.isNotEmpty) return actions;
+        }
+
+        // If the content contains placeholders like // ... existing code ...,
+        // protect against whole-file overwrite!
+        final isSnippet = content.contains('// ...') ||
+            content.contains('/* ... */') ||
+            content.contains('# ...') ||
+            content.contains('// rest of') ||
+            content.contains('// существующий');
+
+        if (isSnippet) {
+          actions.add(AIAction(
+            type: 'replace_code_block',
+            path: _resolvePath(filename, workspacePath),
+            content: content,
+            newText: content,
+            description: 'Точечное изменение в $filename (фрагмент)',
+          ));
+        } else {
+          actions.add(AIAction(
+            type: 'edit',
+            path: _resolvePath(filename, workspacePath),
+            content: content,
+            description: 'Редактирование файла $filename',
+          ));
+        }
         return actions;
       }
     }

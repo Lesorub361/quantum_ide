@@ -10,6 +10,7 @@ import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dar
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_graph_page.dart';
+import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 
@@ -29,11 +30,132 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
   final TextEditingController _commitController = TextEditingController();
   int _selectedSection = 0; // 0: Изменения, 1: Коммиты, 2: Версии и сборки
   bool _amendCommit = false;
+  bool _isBeginnerMode = true;
+  bool _isGeneratingAiCommit = false;
+  bool _isSyncing = false;
+  bool _isFaqExpanded = false;
 
   @override
   void dispose() {
     _commitController.dispose();
     super.dispose();
+  }
+
+  Future<void> _generateAiCommitMessage(GitStatus status) async {
+    final changedFiles = <String>[
+      ...status.stagedFiles,
+      ...status.modifiedFiles,
+      ...status.untrackedFiles,
+    ];
+    if (changedFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Нет изменённых файлов для анализа')),
+      );
+      return;
+    }
+
+    setState(() => _isGeneratingAiCommit = true);
+    try {
+      final prompt = 'Придумай лаконичное сообщение коммита Git на русском языке (максимум 5-8 слов, без кавычек и точек в конце, в стиле "добавлен экран настроек" или "исправлена ошибка валидации") для следующих измененных файлов:\n${changedFiles.take(15).join('\n')}';
+      final completion = await ref.read(aiServiceProvider).getCompletion(prompt);
+      final cleaned = completion.trim().replaceAll('"', '').replaceAll("'", '').split('\n').first.trim();
+      if (cleaned.isNotEmpty) {
+        _commitController.text = cleaned;
+      } else {
+        _commitController.text = 'Обновление проекта (${changedFiles.length} файлов)';
+      }
+    } catch (_) {
+      _commitController.text = 'Обновление проекта (${changedFiles.length} файлов)';
+    } finally {
+      if (mounted) setState(() => _isGeneratingAiCommit = false);
+    }
+  }
+
+  Future<void> _performBeginnerSync(GitNotifier gitNotifier, GitStatus status) async {
+    if (!status.hasChanges && status.ahead == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Все файлы уже сохранены и отправлены в Git!')),
+      );
+      return;
+    }
+
+    String msg = _commitController.text.trim();
+    if (msg.isEmpty) {
+      final total = status.totalChangesCount;
+      msg = 'Обновление проекта ($total файлов)';
+    }
+
+    setState(() => _isSyncing = true);
+    final scaffold = ScaffoldMessenger.of(context);
+
+    try {
+      if (status.hasChanges) {
+        await gitNotifier.stageAll();
+        await gitNotifier.commit(msg);
+      }
+      if (status.remoteUrl != null && status.remoteUrl!.isNotEmpty) {
+        await gitNotifier.push();
+      }
+      _commitController.clear();
+      scaffold.showSnackBar(
+        const SnackBar(
+          content: Text('🚀 Изменения успешно сохранены и отправлены в Git!'),
+          backgroundColor: Color(0xFF238636),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      scaffold.showSnackBar(
+        SnackBar(
+          content: Text('Ошибка отправки: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  void _confirmRollbackAll(GitNotifier gitNotifier) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141822),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.triangle_alert, color: Colors.amberAccent, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Откатить все изменения?',
+              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ],
+        ),
+        content: Text(
+          'Вы действительно хотите отменить все несохранённые изменения и вернуть код к последнему коммиту?\n\nЭто действие безопасно вернет файлы в предыдущее сохранённое состояние.',
+          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена', style: TextStyle(color: Colors.white60)),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              gitNotifier.discardAll();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Все изменения отменены, код возвращен назад')),
+              );
+            },
+            icon: const Icon(LucideIcons.rotate_ccw, size: 14),
+            label: const Text('Да, откатить'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _performCommit(GitNotifier gitNotifier) {
@@ -722,17 +844,698 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
     );
   }
 
+  Widget _buildModeSwitcher() {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141822),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _isBeginnerMode = true),
+              borderRadius: BorderRadius.circular(7),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _isBeginnerMode ? Colors.cyanAccent.withValues(alpha: 0.2) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(7),
+                  border: _isBeginnerMode ? Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)) : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.smile, size: 13, color: Colors.cyanAccent),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Простой (Новичок)',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: _isBeginnerMode ? FontWeight.bold : FontWeight.normal,
+                        color: _isBeginnerMode ? Colors.white : Colors.white60,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: InkWell(
+              onTap: () => setState(() => _isBeginnerMode = false),
+              borderRadius: BorderRadius.circular(7),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: !_isBeginnerMode ? Colors.amberAccent.withValues(alpha: 0.2) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(7),
+                  border: !_isBeginnerMode ? Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)) : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(LucideIcons.sliders_horizontal, size: 13, color: Colors.amberAccent),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Эксперт (Git Pro)',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: !_isBeginnerMode ? FontWeight.bold : FontWeight.normal,
+                        color: !_isBeginnerMode ? Colors.white : Colors.white60,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBeginnerChangesTab(
+    BuildContext context,
+    GitStatus status,
+    GitNotifier gitNotifier,
+    AppLocalizations l10n,
+  ) {
+    final changedCount = status.totalChangesCount;
+    final hasChanges = status.hasChanges;
+
+    return RefreshIndicator(
+      onRefresh: () => gitNotifier.refreshStatus(force: true),
+      child: ListView(
+        padding: const EdgeInsets.all(10),
+        children: [
+          _buildModeSwitcher(),
+          const SizedBox(height: 10),
+
+          // Status Summary Card
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: hasChanges
+                  ? Colors.amberAccent.withValues(alpha: 0.08)
+                  : Colors.greenAccent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasChanges
+                    ? Colors.amberAccent.withValues(alpha: 0.25)
+                    : Colors.greenAccent.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: hasChanges
+                        ? Colors.amberAccent.withValues(alpha: 0.15)
+                        : Colors.greenAccent.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasChanges ? LucideIcons.file_pen : LucideIcons.circle_check,
+                    size: 20,
+                    color: hasChanges ? Colors.amberAccent : Colors.greenAccent,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hasChanges
+                            ? 'Есть несохранённые изменения: $changedCount файлов'
+                            : 'Все файлы сохранены в Git',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Ветка: ${status.currentBranch}${status.ahead > 0 ? " (к отправке: ↑${status.ahead})" : ""}${status.behind > 0 ? " (на GitHub: ↓${status.behind})" : ""}',
+                        style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white60),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Action Card 1: Сохранить и отправить (Commit & Push)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF0EA5E9).withValues(alpha: 0.12),
+                  const Color(0xFF8B5CF6).withValues(alpha: 0.10),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.cyanAccent.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(LucideIcons.rocket, size: 16, color: Colors.cyanAccent),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '1. Сохранить и отправить в Git',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.cyanAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Главное действие',
+                        style: GoogleFonts.inter(fontSize: 9.5, color: Colors.cyanAccent, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Сохраняет все изменённые файлы и отправляет их на GitHub в один клик, чтобы ваш код был в безопасности.',
+                  style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.35),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _commitController,
+                  style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Что вы изменили? (например: добавил кнопку, исправил баг)',
+                    hintStyle: GoogleFonts.inter(fontSize: 11, color: Colors.white30),
+                    filled: true,
+                    fillColor: Colors.black38,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Colors.white12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _isGeneratingAiCommit ? null : () => _generateAiCommitMessage(status),
+                      icon: _isGeneratingAiCommit
+                          ? const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.cyanAccent),
+                            )
+                          : const Icon(LucideIcons.sparkles, size: 13),
+                      label: Text(
+                        _isGeneratingAiCommit ? 'ИИ...' : '✨ Сообщение через ИИ',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.cyanAccent,
+                        side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.35)),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _isSyncing ? null : () => _performBeginnerSync(gitNotifier, status),
+                        icon: _isSyncing
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(LucideIcons.send, size: 14),
+                        label: Text(
+                          _isSyncing ? 'Отправка...' : 'Отправить в Git',
+                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                        ),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF238636),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 9),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Action Card 2 & 3: Откатить & Обновить
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.02),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(LucideIcons.rotate_ccw, size: 13, color: Colors.redAccent),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              '2. Откатить всё',
+                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Вернуть код к предыдущему сохранению.',
+                        style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: hasChanges ? () => _confirmRollbackAll(gitNotifier) : null,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.4)),
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                          ),
+                          child: const Text('Откатить', style: TextStyle(fontSize: 10.5)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.02),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(LucideIcons.arrow_down, size: 13, color: Colors.blueAccent),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              '3. Обновить (Pull)',
+                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Скачать свежий код с GitHub.',
+                        style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => gitNotifier.pull(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.blueAccent,
+                            side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.4)),
+                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+                          ),
+                          child: Text(status.behind > 0 ? 'Скачать (${status.behind})' : 'Обновить', style: const TextStyle(fontSize: 10.5)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Action Card 4: Собрать APK
+          Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: Colors.amberAccent.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: Colors.amberAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: const Icon(LucideIcons.package_check, color: Colors.amberAccent, size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '4. Собрать релизный APK',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      Text(
+                        'Ключ release-key.jks настроен: установится прямо поверх старого!',
+                        style: GoogleFonts.inter(fontSize: 10, color: Colors.white60),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                FilledButton.icon(
+                  onPressed: () => _showCloudBuildDialog(context),
+                  icon: const Icon(LucideIcons.rocket, size: 12),
+                  label: const Text('Собрать', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.amberAccent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // File List
+          Row(
+            children: [
+              Text(
+                'ИЗМЕНЁННЫЕ ФАЙЛЫ ($changedCount)',
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white38,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const Spacer(),
+              if (hasChanges)
+                InkWell(
+                  onTap: () => _confirmRollbackAll(gitNotifier),
+                  child: Text(
+                    'Откатить все',
+                    style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 10.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          if (!hasChanges)
+            Container(
+              padding: const EdgeInsets.all(14),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.02),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '🎉 Нет изменений. Все файлы сохранены в Git!',
+                style: GoogleFonts.inter(fontSize: 11, color: Colors.white54),
+              ),
+            ),
+
+          if (status.conflictedFiles.isNotEmpty) ...[
+            _buildBeginnerCategoryHeader('⚠️ Конфликты версий', status.conflictedFiles.length, Colors.redAccent),
+            ...status.conflictedFiles.map((f) => _buildBeginnerFileRow(f, status, isConflicted: true)),
+          ],
+          if (status.modifiedFiles.isNotEmpty || status.stagedFiles.isNotEmpty) ...[
+            _buildBeginnerCategoryHeader('🔵 Отредактированные файлы', status.modifiedFiles.length + status.stagedFiles.length, Colors.cyanAccent),
+            ...status.modifiedFiles.map((f) => _buildBeginnerFileRow(f, status)),
+            ...status.stagedFiles.map((f) => _buildBeginnerFileRow(f, status)),
+          ],
+          if (status.untrackedFiles.isNotEmpty) ...[
+            _buildBeginnerCategoryHeader('🟢 Новые файлы', status.untrackedFiles.length, Colors.greenAccent),
+            ...status.untrackedFiles.map((f) => _buildBeginnerFileRow(f, status, isUntracked: true)),
+          ],
+
+          const SizedBox(height: 14),
+          _buildBeginnerFaqCard(),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBeginnerFileRow(String path, GitStatus status, {bool isUntracked = false, bool isConflicted = false}) {
+    final notifier = ref.read(gitProvider.notifier);
+    final cleanPath = path.endsWith('/') ? path.substring(0, path.length - 1) : path;
+    final fileName = cleanPath.split('/').last;
+    final parentDir = cleanPath.contains('/') ? cleanPath.substring(0, cleanPath.lastIndexOf('/')) : '';
+    final diffStat = status.diffStats[cleanPath] ?? status.diffStats[path];
+
+    final Color statusColor = isConflicted
+        ? Colors.redAccent
+        : (isUntracked ? Colors.greenAccent : Colors.cyanAccent);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.025),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        fileName,
+                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (diffStat != null && (diffStat.additions > 0 || diffStat.deletions > 0)) ...[
+                      const SizedBox(width: 5),
+                      if (diffStat.additions > 0)
+                        Text('+${diffStat.additions}', style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                      if (diffStat.deletions > 0) ...[
+                        const SizedBox(width: 3),
+                        Text('-${diffStat.deletions}', style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                      ],
+                    ],
+                  ],
+                ),
+                Text(
+                  parentDir.isNotEmpty ? parentDir : cleanPath,
+                  style: GoogleFonts.jetBrainsMono(fontSize: 9, color: Colors.white38),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => GitDiffPage(relativePath: cleanPath, initiallyStaged: false),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+              decoration: BoxDecoration(
+                color: Colors.cyanAccent.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.file_diff, size: 11, color: Colors.cyanAccent),
+                  const SizedBox(width: 3),
+                  Text('Diff', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.cyanAccent, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(LucideIcons.rotate_ccw, size: 12, color: Colors.redAccent),
+            tooltip: 'Откатить этот файл назад',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            onPressed: () {
+              notifier.discardFile(path);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Файл $fileName возвращён к исходному состоянию')),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBeginnerCategoryHeader(String title, int count, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: color),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '$count',
+              style: GoogleFonts.jetBrainsMono(fontSize: 9, fontWeight: FontWeight.bold, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBeginnerFaqCard() {
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _isFaqExpanded = !_isFaqExpanded),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.circle_question_mark, size: 15, color: Colors.amberAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '💡 Как работает Git? (Понятный справочник)',
+                    style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+                Icon(
+                  _isFaqExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down,
+                  size: 13,
+                  color: Colors.white54,
+                ),
+              ],
+            ),
+          ),
+          if (_isFaqExpanded) ...[
+            const SizedBox(height: 8),
+            const Divider(color: Colors.white10, height: 1),
+            const SizedBox(height: 8),
+            _buildFaqItem('Что такое коммит?', 'Коммит — это сохранение вашей работы (как точка сохранения в видеоигре). Если в будущем что-то сломается, вы всегда сможете вернуться к этому моменту.'),
+            _buildFaqItem('Зачем нужен Push?', 'Push отправляет ваши сохранения из памяти телефона/ПК на сервер GitHub. Даже если телефон потеряется, код останется в безопасности.'),
+            _buildFaqItem('Что делает Откат (Discard)?', 'Откат отменяет все последние изменения и возвращает код в точности к предыдущему коммиту.'),
+            _buildFaqItem('Как обновлять приложение на телефоне?', 'Благодаря единому ключу release-key.jks, который мы настроили в вашем проекте, каждая новая сборка APK может быть установлена прямо поверх старой, без удаления и без потери ваших данных!'),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFaqItem(String q, String a) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(q, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
+          const SizedBox(height: 2),
+          Text(a, style: GoogleFonts.inter(fontSize: 10, color: Colors.white70, height: 1.35)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChangesTab(
     BuildContext context,
     GitStatus status,
     GitNotifier gitNotifier,
     AppLocalizations l10n,
   ) {
+    if (_isBeginnerMode) {
+      return _buildBeginnerChangesTab(context, status, gitNotifier, l10n);
+    }
+
     return RefreshIndicator(
       onRefresh: () => gitNotifier.refreshStatus(force: true),
       child: ListView(
         padding: const EdgeInsets.all(10),
         children: [
+          _buildModeSwitcher(),
+          const SizedBox(height: 10),
           // Commit & Sync Control Box (always visible!)
           Container(
             padding: const EdgeInsets.all(10),

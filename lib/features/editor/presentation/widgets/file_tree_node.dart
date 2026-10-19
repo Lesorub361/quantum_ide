@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:watcher/watcher.dart';
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -188,7 +187,8 @@ class FileTreeNode extends ConsumerStatefulWidget {
 
 class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   List<CompactedEntity>? _children;
-  StreamSubscription? _watcherSubscription;
+  StreamSubscription<FileSystemEvent>? _watcherSubscription;
+  Timer? _reloadDebounceTimer;
 
   bool _isCreatingFile = false;
   bool _isCreatingFolder = false;
@@ -210,17 +210,28 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   }
 
   void _startWatching() {
-    _stopWatching();
+    if (_watcherSubscription != null || !widget.isDirectory) return;
     try {
-      _watcherSubscription = DirectoryWatcher(widget.path).events.listen((event) {
-        _loadChildren();
-      });
-    } catch (e) {
-      // Watcher might not be supported on this filesystem / OS config
+      // Use lightweight non-recursive watcher for this single directory,
+      // avoiding package:watcher's recursive tree crawling and infinite scan cascades
+      _watcherSubscription = Directory(widget.path).watch(recursive: false).listen(
+        (event) {
+          _reloadDebounceTimer?.cancel();
+          _reloadDebounceTimer = Timer(const Duration(milliseconds: 800), () {
+            if (mounted) _loadChildren();
+          });
+        },
+        onError: (_) {},
+        cancelOnError: false,
+      );
+    } catch (_) {
+      // Watcher might not be supported on this filesystem
     }
   }
 
   void _stopWatching() {
+    _reloadDebounceTimer?.cancel();
+    _reloadDebounceTimer = null;
     _watcherSubscription?.cancel();
     _watcherSubscription = null;
   }
@@ -313,7 +324,9 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         setState(() {
           _children = resolvedEntities;
         });
-        _startWatching();
+        if (_watcherSubscription == null) {
+          _startWatching();
+        }
       }
     } catch (e) {
       // Ignore permission errors etc
@@ -326,13 +339,16 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     if (isCurrentlyExpanded) {
       _stopWatching();
     } else {
-      if (_children == null) _loadChildren();
+      if (_children == null) {
+        _loadChildren();
+      } else {
+        _startWatching();
+      }
     }
   }
 
   Color _getGitStatusColor(WidgetRef ref) {
-    final gitState = ref.watch(gitProvider);
-    final status = gitState.status;
+    final status = ref.watch(gitProvider.select((s) => s.status));
     if (status == null) return Colors.white;
 
     final currentWorkspace = ref.read(workspaceProvider).currentPath;
@@ -353,21 +369,22 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   }
 
   bool _hasAIPending(WidgetRef ref) {
-    final aiState = ref.watch(aiProvider);
+    final proposedActions = ref.watch(aiProvider.select((s) => s.proposedActions));
     if (widget.isDirectory) {
-      return aiState.proposedActions.any((a) => a.path.startsWith('${widget.path}/'));
+      return proposedActions.any((a) => a.path.startsWith('${widget.path}/'));
     } else {
-      return aiState.proposedActions.any((a) => a.path == widget.path);
+      return proposedActions.any((a) => a.path == widget.path);
     }
   }
 
   Widget _buildAIBadge(WidgetRef ref) {
-    final aiState = ref.watch(aiProvider);
+    final proposedActions = ref.watch(aiProvider.select((s) => s.proposedActions));
+    final agentReadFiles = ref.watch(aiProvider.select((s) => s.agentReadFiles));
 
     if (widget.isDirectory) {
-      final actions = aiState.proposedActions.where((a) => a.path.startsWith('${widget.path}/')).toList();
+      final actions = proposedActions.where((a) => a.path.startsWith('${widget.path}/')).toList();
       // Check if any files in this dir were read by agent
-      final hasReadFiles = aiState.agentReadFiles.any((f) => f.startsWith('${widget.path}/'));
+      final hasReadFiles = agentReadFiles.any((f) => f.startsWith('${widget.path}/'));
       if (actions.isEmpty && !hasReadFiles) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.only(right: 6.0),
@@ -400,10 +417,10 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     }
 
     // Check if agent READ this file (shows eye icon — AI is aware)
-    final wasReadByAgent = aiState.agentReadFiles.contains(widget.path);
+    final wasReadByAgent = agentReadFiles.contains(widget.path);
 
     // For files: find matching pending action
-    final action = aiState.proposedActions.firstWhere(
+    final action = proposedActions.firstWhere(
       (a) => a.path == widget.path,
       orElse: () => AIAction(type: '', path: '', content: ''),
     );
@@ -483,8 +500,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
 
 
   Widget _buildGitBadge(Color color, WidgetRef ref) {
-    final gitState = ref.watch(gitProvider);
-    final status = gitState.status;
+    final status = ref.watch(gitProvider.select((s) => s.status));
     if (status == null) return const SizedBox.shrink();
 
     final currentWorkspace = ref.read(workspaceProvider).currentPath;

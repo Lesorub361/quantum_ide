@@ -1171,53 +1171,105 @@ class AINotifier extends StateNotifier<AIState> {
         int completionTokens = 0;
         
         final localInferenceState = _ref.read(localInferenceProvider);
-        final isLocalModelLoaded = localInferenceState.status == LocalModelStatus.ready && localInferenceState.loadedModel != null;
+        bool isLocalModelLoaded = localInferenceState.status == LocalModelStatus.ready && localInferenceState.loadedModel != null;
+
+        if (_aiService.selectedProviderId == 'local_edge' && !isLocalModelLoaded) {
+          // Attempt auto-load of last downloaded or selected local model
+          final downloaded = localInferenceState.downloadedFiles;
+          final targetFilename = _ref.read(activeAiModelProvider);
+          LocalModelInfo? modelToLoad;
+          for (final m in localInferenceState.availableModels) {
+            if (m.filename == targetFilename || downloaded.contains(m.filename)) {
+              modelToLoad = m;
+              break;
+            }
+          }
+          if (modelToLoad != null) {
+            state = state.copyWith(currentStatusMessage: 'Загрузка модели ${modelToLoad.name} в оперативную память...');
+            await _ref.read(localInferenceProvider.notifier).loadModel(modelToLoad);
+            final refreshedState = _ref.read(localInferenceProvider);
+            isLocalModelLoaded = refreshedState.status == LocalModelStatus.ready && refreshedState.loadedModel != null;
+          }
+        }
 
         if (_aiService.selectedProviderId == 'local_edge' && isLocalModelLoaded) {
-           // Native inference on Android/iOS via InferenceEngine
-           responseText = await _ref.read(localInferenceProvider.notifier).generate(
-             prompt: nextPrompt,
-             history: history,
-             systemInstruction: systemInstruction,
-           );
-           responseTokens = _estimateTokens(responseText);
-        } else if (_aiService.selectedProviderId == 'local_edge' && !isLocalModelLoaded) {
-           // local_edge selected but no model loaded → check if it's desktop
-           // On desktop: llama-server might or might not be running
-           // Try the HTTP request but catch connection errors gracefully
-           try {
-             final chatResponse = await _aiService.sendChatMessage(
-               nextPrompt,
-               history,
-               systemInstruction: systemInstruction,
-               imageBase64: imageBase64,
-             );
-             responseText = chatResponse.text;
-             promptTokens = chatResponse.tokenUsage?.promptTokens ?? 0;
-             completionTokens = chatResponse.tokenUsage?.completionTokens ?? 0;
-             responseTokens = chatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
-           } catch (e) {
-             final errorStr = e.toString();
-             final isConnectionError = errorStr.contains('connection error') ||
-                 errorStr.contains('В соединении отказано') ||
-                 errorStr.contains('Connection refused') ||
-                 errorStr.contains('SocketException') ||
-                 errorStr.contains('errno = 111');
+          // Add assistant placeholder message to stream tokens into
+          final tempAssistantMsg = ChatMessage(
+            role: MessageRole.assistant,
+            content: '',
+            timestamp: DateTime.now(),
+            isThinking: true,
+          );
+          _updateMessagesAndSync([...state.messages, tempAssistantMsg]);
 
-             if (isConnectionError) {
-               responseText = '⚠️ **Локальный ИИ недоступен**\n\n'
-                   'Не удалось подключиться к локальному серверу.\n\n'
-                   '**На ПК (Linux/Desktop):**\n'
-                   '• Откройте боковую панель **Local Models** → нажмите **Start** чтобы запустить llama-server\n'
-                   '• Или выберите другого провайдера в настройках (Gemini, OpenAI и др.)\n\n'
-                   '**На телефоне (Android):**\n'
-                   '• Скачайте модель в панели Local Models → нажмите **Run** — сервер не нужен, ИИ работает прямо на устройстве\n\n'
-                   '_Технически: llama-server не запущен на localhost_';
-             } else {
-               rethrow;
-             }
-             responseTokens = 0;
-           }
+          String streamAccumulator = '';
+          responseText = await _ref.read(localInferenceProvider.notifier).generate(
+            prompt: nextPrompt,
+            history: history,
+            systemInstruction: systemInstruction,
+            onToken: (token) {
+              streamAccumulator += token;
+              final displayContent = streamAccumulator
+                  .replaceAll(RegExp(r'<thought>[\s\S]*?(?:</thought>|$)', caseSensitive: false), '')
+                  .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
+                  .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+                  .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*$'), '')
+                  .trimLeft();
+
+              if (state.messages.isNotEmpty) {
+                final msgs = List<ChatMessage>.from(state.messages);
+                if (msgs.last.role == MessageRole.assistant) {
+                  msgs[msgs.length - 1] = msgs.last.copyWith(
+                    content: displayContent,
+                    isThinking: false,
+                  );
+                  state = state.copyWith(messages: msgs);
+                }
+              }
+            },
+          );
+          responseTokens = _estimateTokens(responseText);
+
+          // Remove placeholder before adding finalized assistantMessage
+          if (state.messages.isNotEmpty && state.messages.last.role == MessageRole.assistant) {
+            final msgs = List<ChatMessage>.from(state.messages);
+            msgs.removeLast();
+            state = state.copyWith(messages: msgs);
+          }
+        } else if (_aiService.selectedProviderId == 'local_edge' && !isLocalModelLoaded) {
+          // local_edge selected but no model loaded → check if it's desktop
+          // On desktop: llama-server might or might not be running
+          // Try the HTTP request but catch connection errors gracefully
+          try {
+            final chatResponse = await _aiService.sendChatMessage(
+              nextPrompt,
+              history,
+              systemInstruction: systemInstruction,
+              imageBase64: imageBase64,
+            );
+            responseText = chatResponse.text;
+            promptTokens = chatResponse.tokenUsage?.promptTokens ?? 0;
+            completionTokens = chatResponse.tokenUsage?.completionTokens ?? 0;
+            responseTokens = chatResponse.tokenUsage?.totalTokens ?? _estimateTokens(responseText);
+          } catch (e) {
+            final errorStr = e.toString();
+            final isConnectionError = errorStr.contains('connection error') ||
+                errorStr.contains('В соединении отказано') ||
+                errorStr.contains('Connection refused') ||
+                errorStr.contains('SocketException') ||
+                errorStr.contains('errno = 111');
+
+            if (isConnectionError) {
+              responseText = '⚠️ **Локальная модель не загружена в память**\n\n'
+                  '• Откройте меню моделей (вверху чата) → перейдите во вкладку **💾 Скачанные** или **🔥 Каталог**.\n'
+                  '• Если модель уже скачана, нажмите кнопку **Run / Запустить**.\n'
+                  '• На ПК (Desktop): в панели моделей запустите **llama-server**.\n'
+                  '• Либо выберите облачного провайдера (OpenRouter, DeepSeek, Google, OpenAI) в настройках.';
+            } else {
+              rethrow;
+            }
+            responseTokens = 0;
+          }
         } else {
            // Add assistant placeholder message to stream tokens into
            final tempAssistantMsg = ChatMessage(
@@ -1855,6 +1907,43 @@ class AINotifier extends StateNotifier<AIState> {
     // Strip internal thoughts before parsing actions
     final cleanText = text.replaceAll(RegExp(r'<thought>[\s\S]*?</thought>', caseSensitive: false), '');
 
+    // ── 0. Parse Aider / Antigravity SEARCH/REPLACE blocks ─────────────────
+    final searchReplaceRegex = RegExp(
+      r'(?:(?:###\s*|File:\s*|Файл:\s*|//\s*|#\s*)?([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]+)\s*\n)?'
+      r'<<<<<<< SEARCH\r?\n([\s\S]*?)\r?\n=======\r?\n([\s\S]*?)\r?\n>>>>>>> REPLACE',
+      caseSensitive: false,
+    );
+
+    final srMatches = searchReplaceRegex.allMatches(cleanText).toList();
+    if (srMatches.isNotEmpty) {
+      String? defaultFile;
+      final fileMatch = RegExp(r'([a-zA-Z0-9_\-\.\/]+\.[a-zA-Z0-9]+)').firstMatch(cleanText);
+      if (fileMatch != null) defaultFile = fileMatch.group(1);
+
+      for (final m in srMatches) {
+        final capturedFile = m.group(1)?.trim() ?? defaultFile;
+        final searchBlock = m.group(2) ?? '';
+        final replaceBlock = m.group(3) ?? '';
+        if (capturedFile != null && searchBlock.isNotEmpty) {
+          String fullPath = capturedFile;
+          if (workspacePath != null && !p.isAbsolute(fullPath)) {
+            fullPath = p.join(workspacePath, fullPath);
+          }
+          final action = AIAction(
+            type: 'replace_code_block',
+            path: fullPath,
+            content: replaceBlock,
+            oldText: searchBlock,
+            newText: replaceBlock,
+            description: 'Точечное исправление в ${p.basename(fullPath)}',
+          );
+          _computeActionDiffs(action);
+          actions.add(action);
+        }
+      }
+      if (actions.isNotEmpty) return actions;
+    }
+
     final regExp = RegExp(r'<actions>([\s\S]*?)<\/actions>', caseSensitive: false);
     var matches = regExp.allMatches(cleanText);
 
@@ -1904,36 +1993,7 @@ class AINotifier extends StateNotifier<AIState> {
             }
           }
           final action = AIAction.fromJson(actionJson);
-          if (action.type == 'edit' || action.type == 'replace_code_block' || action.type == 'rewrite_whole_file') {
-            try {
-              final file = File(action.path);
-              if (file.existsSync()) {
-                final original = file.readAsStringSync();
-                final targetPreview = (action.oldText != null && action.oldText!.isNotEmpty)
-                    ? original.replaceFirst(action.oldText!, action.newText ?? action.content)
-                    : (action.content.isNotEmpty ? action.content : (action.newText ?? original));
-                final dmp = DiffMatchPatch();
-                final diffs = dmp.diff(original, targetPreview);
-                dmp.diffCleanupSemantic(diffs);
-                int additions = 0;
-                int deletions = 0;
-                for (final d in diffs) {
-                  final lineCount = '\n'.allMatches(d.text).length + (d.text.isNotEmpty ? 1 : 0);
-                  if (d.operation == DIFF_INSERT) {
-                    additions += lineCount;
-                  } else if (d.operation == DIFF_DELETE) {
-                    deletions += lineCount;
-                  }
-                }
-                action.additions = additions;
-                action.deletions = deletions;
-              }
-            } catch (_) {}
-          } else if (action.type == 'create') {
-            final lineCount = '\n'.allMatches(action.content).length + (action.content.isNotEmpty ? 1 : 0);
-            action.additions = lineCount;
-            action.deletions = 0;
-          }
+          _computeActionDiffs(action);
           actions.add(action);
         }
       } catch (e) {
@@ -2027,6 +2087,93 @@ class AINotifier extends StateNotifier<AIState> {
     }
 
     return actions;
+  }
+
+  /// Robust targeted replacement matching exact, trimmed, CRLF-normalized,
+  /// or line-by-line whitespace-tolerant code blocks.
+  static String? performTargetedReplacement(String original, String search, String replace) {
+    if (search.isEmpty) return null;
+
+    // 1. Exact match
+    if (original.contains(search)) {
+      return original.replaceFirst(search, replace);
+    }
+
+    // 2. Trimmed match
+    if (search.trim().isNotEmpty && original.contains(search.trim())) {
+      return original.replaceFirst(search.trim(), replace.trim());
+    }
+
+    // 3. Line-ending normalization (\r\n -> \n)
+    final normOriginal = original.replaceAll('\r\n', '\n');
+    final normSearch = search.replaceAll('\r\n', '\n');
+    final normReplace = replace.replaceAll('\r\n', '\n');
+    if (normOriginal.contains(normSearch)) {
+      final replaced = normOriginal.replaceFirst(normSearch, normReplace);
+      return original.contains('\r\n') ? replaced.replaceAll('\n', '\r\n') : replaced;
+    }
+    if (normSearch.trim().isNotEmpty && normOriginal.contains(normSearch.trim())) {
+      final replaced = normOriginal.replaceFirst(normSearch.trim(), normReplace.trim());
+      return original.contains('\r\n') ? replaced.replaceAll('\n', '\r\n') : replaced;
+    }
+
+    // 4. Line-by-line whitespace & indentation tolerant match
+    final origLines = normOriginal.split('\n');
+    final searchLines = normSearch.split('\n').where((l) => l.trim().isNotEmpty).toList();
+    if (searchLines.isNotEmpty && origLines.length >= searchLines.length) {
+      final cleanSearchLines = searchLines.map((l) => l.trim()).toList();
+      for (int i = 0; i <= origLines.length - cleanSearchLines.length; i++) {
+        bool match = true;
+        for (int j = 0; j < cleanSearchLines.length; j++) {
+          if (origLines[i + j].trim() != cleanSearchLines[j]) {
+            match = false;
+            break;
+          }
+        }
+        if (match) {
+          final before = origLines.sublist(0, i);
+          final after = origLines.sublist(i + cleanSearchLines.length);
+          final replaceLines = normReplace.split('\n');
+          final result = [...before, ...replaceLines, ...after].join('\n');
+          return original.contains('\r\n') ? result.replaceAll('\n', '\r\n') : result;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  void _computeActionDiffs(AIAction action) {
+    if (action.type == 'edit' || action.type == 'replace_code_block' || action.type == 'rewrite_whole_file') {
+      try {
+        final file = File(action.path);
+        if (file.existsSync()) {
+          final original = file.readAsStringSync();
+          final targetPreview = (action.oldText != null && action.oldText!.isNotEmpty)
+              ? (performTargetedReplacement(original, action.oldText!, action.newText ?? action.content) ?? original)
+              : (action.content.isNotEmpty ? action.content : (action.newText ?? original));
+          final dmp = DiffMatchPatch();
+          final diffs = dmp.diff(original, targetPreview);
+          dmp.diffCleanupSemantic(diffs);
+          int additions = 0;
+          int deletions = 0;
+          for (final d in diffs) {
+            final lineCount = '\n'.allMatches(d.text).length + (d.text.isNotEmpty ? 1 : 0);
+            if (d.operation == DIFF_INSERT) {
+              additions += lineCount;
+            } else if (d.operation == DIFF_DELETE) {
+              deletions += lineCount;
+            }
+          }
+          action.additions = additions;
+          action.deletions = deletions;
+        }
+      } catch (_) {}
+    } else if (action.type == 'create') {
+      final lineCount = '\n'.allMatches(action.content).length + (action.content.isNotEmpty ? 1 : 0);
+      action.additions = lineCount;
+      action.deletions = 0;
+    }
   }
 
   int _estimateTokens(String text) {
@@ -2227,16 +2374,32 @@ class AINotifier extends StateNotifier<AIState> {
               (action.type == 'edit' && action.oldText != null && action.oldText!.isNotEmpty)) {
             final searchBlock = action.oldText ?? '';
             final replaceBlock = action.newText ?? action.content;
-            if (searchBlock.isNotEmpty && originalContent.contains(searchBlock)) {
-              updatedContent = originalContent.replaceFirst(searchBlock, replaceBlock);
-            } else if (searchBlock.trim().isNotEmpty && originalContent.contains(searchBlock.trim())) {
-              updatedContent = originalContent.replaceFirst(searchBlock.trim(), replaceBlock.trim());
-            } else if (action.content.isNotEmpty && action.type == 'edit') {
-              updatedContent = action.content;
+            final replaced = performTargetedReplacement(originalContent, searchBlock, replaceBlock);
+            if (replaced != null) {
+              updatedContent = replaced;
             } else {
               removeAction(action);
-              return 'Блок для замены не найден в файле $relPath. Сперва прочитайте актуальное содержимое файла (read_file).';
+              return 'Блок кода для точечной замены не найден в файле $relPath.\n'
+                     'Убедитесь, что блок SEARCH точно совпадает с текущим содержимым файла (используйте read_file для проверки актуального кода).';
             }
+          } else if (action.type == 'edit') {
+            // Guard against accidental whole-file overwrite by snippets
+            if (originalContent.isNotEmpty) {
+              final origLinesCount = originalContent.split('\n').length;
+              final newLinesCount = action.content.split('\n').length;
+              final isSnippet = action.content.contains('// ...') ||
+                  action.content.contains('/* ... */') ||
+                  action.content.contains('# ...') ||
+                  action.content.contains('// rest of') ||
+                  action.content.contains('// существующий') ||
+                  (origLinesCount > 15 && newLinesCount < origLinesCount * 0.45);
+              if (isSnippet) {
+                removeAction(action);
+                return 'Защита от перезаписи: файл $relPath ($origLinesCount строк) не был заменен коротким фрагментом кода ($newLinesCount строк).\n'
+                       'Пожалуйста, используйте точечную замену SEARCH/REPLACE или replace_code_block для изменений конкретных строк.';
+              }
+            }
+            updatedContent = action.content;
           } else if (action.type == 'insert_log') {
             final logStatement = action.content.isNotEmpty ? action.content : (action.newText ?? '');
             if (action.oldText != null && action.oldText!.isNotEmpty && originalContent.contains(action.oldText!)) {

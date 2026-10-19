@@ -31,6 +31,9 @@ import 'package:quantum_ide/core/services/cli_agent_bridge.dart';
 import 'package:quantum_ide/core/services/package_service.dart';
 import 'package:quantum_ide/core/services/ai_mode_router.dart';
 import 'package:quantum_ide/core/services/local_ai_service.dart';
+import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+
+final selectedCustomBotPersonaProvider = StateProvider<CustomAiBotPersona?>((ref) => null);
 
 final activeAiProviderIdProvider = StateProvider<String>((ref) {
   final aiSvc = ref.read(aiServiceProvider);
@@ -198,6 +201,47 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildBotChip({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: isSelected ? color.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? color.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.08),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 11, color: isSelected ? color : Colors.white60),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.white : Colors.white60,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2283,6 +2327,52 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             child: Column(
               children: [
                 if (_showSlashCommands) _buildSlashCommands(),
+                Builder(
+                  builder: (context) {
+                    final customBots = ref.watch(quantumPluginServiceProvider.select(
+                      (s) => s.plugins.where((p) => p.isEnabled).expand((p) => p.customBots).toList(),
+                    ));
+                    if (customBots.isEmpty) return const SizedBox.shrink();
+                    final selectedBot = ref.watch(selectedCustomBotPersonaProvider);
+
+                    return Container(
+                      height: 26,
+                      margin: const EdgeInsets.only(bottom: 6),
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _buildBotChip(
+                            label: 'Quantum AI',
+                            icon: LucideIcons.sparkles,
+                            isSelected: selectedBot == null,
+                            color: Colors.cyanAccent,
+                            onTap: () {
+                              ref.read(selectedCustomBotPersonaProvider.notifier).state = null;
+                              ref.read(aiServiceProvider).setSystemPrompt('');
+                            },
+                          ),
+                          for (final bot in customBots)
+                            _buildBotChip(
+                              label: bot.name,
+                              icon: bot.icon,
+                              isSelected: selectedBot?.id == bot.id,
+                              color: const Color(0xFFC084FC),
+                              onTap: () {
+                                ref.read(selectedCustomBotPersonaProvider.notifier).state = bot;
+                                ref.read(aiServiceProvider).setSystemPrompt(bot.systemPrompt);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Активирован бот: ${bot.name} (${bot.role})'),
+                                    duration: const Duration(seconds: 2),
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -2346,21 +2436,28 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     const SizedBox(width: 4),
                     // Input TextField
                     Expanded(
-                      child: TextField(
-                        controller: _aiChatController,
-                        style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
-                        maxLines: 4,
-                        minLines: 1,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) {
-                          if (!isBusy) _sendMessage(context, ref);
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final selectedBot = ref.watch(selectedCustomBotPersonaProvider);
+                          return TextField(
+                            controller: _aiChatController,
+                            style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+                            maxLines: 4,
+                            minLines: 1,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) {
+                              if (!isBusy) _sendMessage(context, ref);
+                            },
+                            decoration: InputDecoration(
+                              hintText: selectedBot != null
+                                  ? 'Спросить ${selectedBot.name}...'
+                                  : 'Задача для ${agentKind.title}... (#file:путь, @codebase)',
+                              hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 11.5),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                            ),
+                          );
                         },
-                        decoration: InputDecoration(
-                          hintText: 'Задача для ${agentKind.title}... (#file:путь, @codebase)',
-                          hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 11.5),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                        ),
                       ),
                     ),
                     const SizedBox(width: 4),

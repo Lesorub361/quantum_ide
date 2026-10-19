@@ -83,22 +83,31 @@ $workspaceOverview
 3. Отвечай на том же языке, на котором пишет пользователь (обычно русский).
 4. Пиши чистый, завершенный код без заглушек вида `// rest of code`. Adhere to clean feature-driven architectural structure (features/presentation/domain/data).
 
-## ФОРМАТ ИНСТРУМЕНТОВ (actions)
-Если тебе нужно выполнить действие (прочитать, изменить, запустить команду), ты должен поместить специальный JSON-массив в тег <actions>:
-<actions>[{"type":"read_file","path":"lib/main.dart","description":"Читаю файл"}]</actions>
+## ФОРМАТ ИНСТРУМЕНТОВ И ТОЧЕЧНОГО РЕДАКТИРОВАНИЯ
+Для редактирования файлов ВСЕГДА используй ТОЧЕЧНУЮ замену (SEARCH/REPLACE).
+НИКОГДА не переписывай весь файл целиком, если нужно изменить только одну функцию, строку или блок!
 
- Допустимые типы действий:
+### Способ 1: Стандартные блоки SEARCH/REPLACE (Рекомендуется для кода):
+Укажи путь к файлу и точный блок:
+lib/main.dart
+<<<<<<< SEARCH
+точный кусок существующего кода из файла
+=======
+новый исправленный код
+>>>>>>> REPLACE
+
+### Способ 2: JSON тег <actions>:
 - `read_file` (аргумент `path`): Прочитать файл
+- `replace_code_block` (аргументы `path`, `search_block`, `replace_block`): Точечная замена куска кода
+- `create` (аргументы `path`, `content`): Создать НОВЫЙ файл
+- `command` (аргумент `content`): Запустить Shell-команду (например: `flutter analyze`, `flutter pub get`)
 - `list_dir` (аргумент `path`): Список файлов в папке
-- `create` (аргументы `path` и `content`): Создать новый файл
-- `rewrite_whole_file` (аргументы `path` и `content`): Изменить весь файл (полная перезапись). Используй для всех изменений файлов — локальным моделям запрещены точечные замены.
-- `command` (аргумент `content`): Запустить Shell-команду в терминале (например: `flutter analyze`, `flutter pub get`)
-- `grep_search` (аргумент `content`): Найти совпадения по строке в кодовой базе
+- `grep_search` (аргумент `content`): Поиск по проекту
 
-**ВАЖНО**: Используй `rewrite_whole_file` для всех изменений — это надежнее для локальных моделей. Пример:
-<actions>[{"type":"rewrite_whole_file","path":"lib/main.dart","content":"import 'package:flutter/material.dart';\n\nvoid main() {\n  runApp(const MyApp());\n}\n\nclass MyApp extends StatelessWidget {\n  const MyApp({super.key});\n  @override\n  Widget build(BuildContext context) {\n    return const MaterialApp(\n      home: Scaffold(body: Center(child: Text('Hello'))),\n    );\n  }\n}","description":"Полная перезапись файла с исправлением"}]</actions>
+Пример точечной замены через actions:
+<actions>[{"type":"replace_code_block","path":"lib/main.dart","search_block":"void main() {\n  runApp(MyApp());\n}","replace_block":"void main() {\n  WidgetsFlutterBinding.ensureInitialized();\n  runApp(MyApp());\n}","description":"Добавлена инициализация"}]</actions>
 
-Всегда думай о шагах реализации, прежде чем выдавать действия.
+ВАЖНО: Перед изменением незнакомого файла всегда вызови `read_file`, чтобы увидеть точные строки для SEARCH. Полная перезапись разрешена ТОЛЬКО для создания новых файлов!
 ''');
       if (interactionMode == AiInteractionMode.autopilot) {
         buffer.writeln('''

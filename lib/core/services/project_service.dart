@@ -243,7 +243,11 @@ class ProjectService extends StateNotifier<List<Project>> {
           path.contains('/.idea/') ||
           path.contains('/.gradle/') ||
           path.contains('/build/') ||
-          path.contains('/node_modules/')) {
+          path.contains('/node_modules/') ||
+          path.contains('/external/') ||
+          path.contains('/local_plugins/') ||
+          path.contains('/.quantum/') ||
+          path.contains('/.cxx/')) {
         return;
       }
 
@@ -533,6 +537,17 @@ class ProjectService extends StateNotifier<List<Project>> {
     final projectsPath = p.join(runtime.appDirectory, 'projects');
     
     if (!internalPath.startsWith(projectsPath)) return;
+    if (internalPath.contains('/external/') ||
+        internalPath.contains('/local_plugins/') ||
+        internalPath.contains('/.git/') ||
+        internalPath.contains('/.dart_tool/') ||
+        internalPath.contains('/.gradle/') ||
+        internalPath.contains('/build/') ||
+        internalPath.contains('/.cxx/') ||
+        internalPath.contains('/node_modules/') ||
+        internalPath.contains('/.quantum/')) {
+      return;
+    }
     
     try {
       final relative = p.relative(internalPath, from: projectsPath);
@@ -570,6 +585,14 @@ class ProjectService extends StateNotifier<List<Project>> {
     final runtime = _ref.read(runtimeServiceProvider);
     final projectsPath = p.join(runtime.appDirectory, 'projects');
     if (!internalPath.startsWith(projectsPath)) return;
+    if (internalPath.contains('/external/') ||
+        internalPath.contains('/local_plugins/') ||
+        internalPath.contains('/.git/') ||
+        internalPath.contains('/.dart_tool/') ||
+        internalPath.contains('/.gradle/') ||
+        internalPath.contains('/build/')) {
+      return;
+    }
 
     try {
       final relative = p.relative(internalPath, from: projectsPath);

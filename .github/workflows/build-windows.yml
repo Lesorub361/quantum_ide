@@ -30,12 +30,12 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build Windows release
+      - name: Build Windows x64 release
         env:
           CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
         run: flutter build windows --release --no-tree-shake-icons
 
-      - name: Package Windows Bundle
+      - name: Package Windows x64 Bundle
         shell: pwsh
         run: |
           if (Test-Path "build\windows\x64\runner\Release") {
@@ -47,17 +47,36 @@ jobs:
             exit 1
           }
 
-      - name: Upload Windows artifact
+      - name: Build Windows ARM64 release
+        continue-on-error: true
+        env:
+          CL: /D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
+        run: |
+          flutter clean
+          flutter pub get
+          flutter build windows --release --target-platform=windows-arm64 --no-tree-shake-icons
+
+      - name: Package Windows ARM64 Bundle
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          if (Test-Path "build\windows\arm64\runner\Release") {
+            Compress-Archive -Path build\windows\arm64\runner\Release\* -DestinationPath quantum_ide-windows-arm64.zip
+          }
+
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: quantum_ide-windows-x64
-          path: quantum_ide-windows-x64.zip
+          name: quantum_ide-windows
+          path: quantum_ide-windows-*.zip
           retention-days: 14
 
       - name: Attach to GitHub Release
         if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
         uses: softprops/action-gh-release@v2
         with:
-          files: quantum_ide-windows-x64.zip
+          files: |
+            quantum_ide-windows-x64.zip
+            quantum_ide-windows-arm64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

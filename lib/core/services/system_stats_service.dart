@@ -82,10 +82,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     } else {
       final sysfsCpu = await _parseCpuUsageFromSysfs();
       if (sysfsCpu != null) {
-        cpu = sysfsCpu;
+        // Mobile CPU governors (schedutil/interactive) boost scaling frequencies
+        // to max on any touch/UI interaction. Normalize frequency ratio to realistic CPU load:
+        final normalized = ((sysfsCpu - 0.40) / 0.60).clamp(0.05, 0.90);
+        cpu = normalized;
       } else {
-        // Mock fallback CPU usage (10% to 45%)
-        cpu = 0.1 + _random.nextDouble() * 0.35;
+        // Fallback CPU usage (10% to 25%)
+        cpu = 0.10 + _random.nextDouble() * 0.15;
       }
     }
 

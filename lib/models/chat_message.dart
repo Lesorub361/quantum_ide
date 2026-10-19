@@ -31,16 +31,22 @@ class AIAction {
   });
 
   factory AIAction.fromJson(Map<String, dynamic> json) {
+    var type = json['type'] ?? 'edit';
+    if (type == 'replace' || type == 'edit_file' || type == 'patch') {
+      type = 'replace_code_block';
+    }
+    final old = json['old_text'] ?? json['search_block'] ?? json['old_string'] ?? json['search'];
+    final nText = json['new_text'] ?? json['replace_block'] ?? json['new_string'] ?? json['replace'];
     return AIAction(
-      type: json['type'] ?? 'edit',
+      type: type,
       path: json['path'] ?? '',
-      content: json['content'] ?? '',
+      content: json['content'] ?? (nText ?? ''),
       description: json['description'],
       server: json['server'],
       tool: json['tool'],
       arguments: json['arguments'] != null ? Map<String, dynamic>.from(json['arguments']) : null,
-      oldText: json['old_text'] ?? json['search_block'],
-      newText: json['new_text'] ?? json['replace_block'],
+      oldText: old,
+      newText: nText,
       additions: json['additions'],
       deletions: json['deletions'],
     );

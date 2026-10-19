@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,6 +36,38 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
     }
   }
 
+  static String _getRussianErrorExplanation(String msg) {
+    final lower = msg.toLowerCase();
+    if (lower.contains('undefined name') || lower.contains("isn't defined")) {
+      return 'Переменная, метод или класс не найдены. Возможно, не подключен нужный import или допущена опечатка в названии.';
+    }
+    if (lower.contains("expected to find ';'") || (lower.contains('expected to find') && lower.contains(';'))) {
+      return 'Синтаксическая ошибка: пропущена точка с запятой «;» в конце инструкции.';
+    }
+    if (lower.contains('the named parameter') && lower.contains('is required')) {
+      return 'Пропущен обязательный именованный параметр. Конструктор этого виджета требует передачи всех обязательных полей.';
+    }
+    if (lower.contains("can't be assigned to the parameter type") || lower.contains('type mismatch')) {
+      return 'Несоответствие типов: передан аргумент другого типа данных. Проверьте ожидаемый тип в сигнатуре функции/виджета.';
+    }
+    if (lower.contains('dead code')) {
+      return 'Мёртвый код: этот блок кода никогда не выполнится (например, он расположен после оператора return, break или throw).';
+    }
+    if (lower.contains('unused import')) {
+      return 'Лишний импорт: этот файл или библиотека подключены, но нигде не используются в коде.';
+    }
+    if (lower.contains('cannot be null') || lower.contains('null safety') || lower.contains('nullable')) {
+      return 'Ошибка Null Safety: значение может оказаться null, хотя тип ожидает гарантированное значение (используйте ? или проверку if != null).';
+    }
+    if (lower.contains('must be initialized') || lower.contains('not initialized')) {
+      return 'Переменная не инициализирована: добавьте начальное значение или пометьте её как late.';
+    }
+    if (lower.contains('too many positional arguments') || lower.contains('too few positional arguments')) {
+      return 'Неверное количество позиционных аргументов: функции или конструктору передано больше или меньше параметров, чем объявлено.';
+    }
+    return 'Компилятор Dart/Flutter обнаружил несоответствие в коде. Нажмите «Исправить с AI», чтобы автоматически применить корректное точечное исправление.';
+  }
+
   void _sendAllToAi(Map<String, List<CodeDiagnostic>> diagnosticsMap, String workspaceRoot) {
     final editorState = ref.read(editorProvider);
     final activePath = editorState.activeFilePath;
@@ -45,7 +78,7 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
         : '';
 
     final buffer = StringBuffer();
-    buffer.writeln('⚠️ **ОБНАРУЖЕНЫ ОШИБКИ В ПРОЕКТЕ. ПОЖАЛУЙСТА, ИСПРАВЬ ИХ И ОБНОВИ ФАЙЛЫ:**\n');
+    buffer.writeln('⚠️ **ОБНАРУЖЕНЫ ОШИБКИ В ПРОЕКТЕ. ПОЖАЛУЙСТА, ИСПРАВЬ ИХ ТОЧЕЧНО:**\n');
     diagnosticsMap.forEach((filePath, diags) {
       final relPath = filePath.startsWith(workspaceRoot) ? p.relative(filePath, from: workspaceRoot) : filePath;
       buffer.writeln('📄 Файл: `$relPath`');
@@ -57,18 +90,199 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
       final relActive = activePath.startsWith(workspaceRoot) ? p.relative(activePath, from: workspaceRoot) : activePath;
       buffer.writeln('\n### ТЕКУЩИЙ КОД ФАЙЛА (`$relActive`):\n```dart\n$activeContent\n```');
     }
-    buffer.writeln('\n🔧 **ИНСТРУКЦИЯ**: Напиши ПОЛНЫЙ ИСПРАВЛЕННЫЙ КОД для данного файла и предложи изменения, чтобы полностью устранить все ошибки!');
+    buffer.writeln('\n🔧 **ИНСТРУКЦИЯ**: Используй блоки точечной замены SEARCH/REPLACE (<<<<<<< SEARCH ... ======= ... >>>>>>>), чтобы устранить ошибки!');
 
     ref.read(aiProvider.notifier).askAI(buffer.toString());
     ref.read(rightChatPanelOpenProvider.notifier).state = true;
   }
 
-  void _fixOneWithAi(String relPath, CodeDiagnostic d) {
-    ref.read(aiProvider.notifier).askAI(
-          'Исправь ошибку в файле `$relPath` (стр ${d.range.index + 1}, кол ${d.range.start + 1}):\n'
-          '[${d.severity.name.toUpperCase()}] ${d.message}',
-        );
+  void _fixOneWithAi(String filePath, String relPath, CodeDiagnostic d) {
+    String contextLines = '';
+    try {
+      final f = File(filePath);
+      if (f.existsSync()) {
+        final lines = f.readAsLinesSync();
+        final errLine = d.range.index;
+        final startLine = (errLine - 4).clamp(0, lines.length);
+        final endLine = (errLine + 5).clamp(0, lines.length);
+        contextLines = lines.sublist(startLine, endLine).join('\n');
+      }
+    } catch (_) {}
+
+    final buffer = StringBuffer();
+    buffer.writeln('Исправь точечно ошибку в файле `$relPath` (строка ${d.range.index + 1}, колонка ${d.range.start + 1}):');
+    buffer.writeln('Тип ошибки: [${d.severity.name.toUpperCase()}] ${d.message}');
+    if (contextLines.isNotEmpty) {
+      buffer.writeln('\nКонтекст кода вокруг строки ошибки:');
+      buffer.writeln('```dart\n$contextLines\n```');
+    }
+    buffer.writeln('\nОБЯЗАТЕЛЬНО используй точечную замену кода через блок SEARCH/REPLACE:');
+    buffer.writeln('<<<<<<< SEARCH');
+    buffer.writeln('// точный фрагмент текущего кода');
+    buffer.writeln('=======');
+    buffer.writeln('// исправленный фрагмент');
+    buffer.writeln('>>>>>>>');
+
+    ref.read(aiProvider.notifier).askAI(buffer.toString());
     ref.read(rightChatPanelOpenProvider.notifier).state = true;
+  }
+
+  void _showErrorQuickFixDialog(BuildContext context, String filePath, String relPath, CodeDiagnostic d) {
+    final (icon, color) = _severityStyle(d.severity);
+    final explanation = _getRussianErrorExplanation(d.message);
+    final line = d.range.index + 1;
+    final col = d.range.start + 1;
+
+    String errorLineCode = '';
+    try {
+      final f = File(filePath);
+      if (f.existsSync()) {
+        final lines = f.readAsLinesSync();
+        if (d.range.index >= 0 && d.range.index < lines.length) {
+          errorLineCode = lines[d.range.index].trim();
+        }
+      }
+    } catch (_) {}
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141822),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${d.severity.name.toUpperCase()} (Строка $line:$col)',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                  Text(
+                    relPath,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white38),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 440,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Error text box
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.25)),
+                ),
+                child: Text(
+                  d.message,
+                  style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Code snippet if available
+              if (errorLineCode.isNotEmpty) ...[
+                Text(
+                  'КОД НА СТРОКЕ $line:',
+                  style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white38),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Text(
+                    errorLineCode,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.amberAccent),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              // Plain-Russian explanation
+              Row(
+                children: [
+                  const Icon(LucideIcons.book_open, size: 14, color: Colors.cyanAccent),
+                  const SizedBox(width: 6),
+                  Text(
+                    'ОБЪЯСНЕНИЕ ПРОСТЫМИ СЛОВАМИ:',
+                    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.cyanAccent.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2)),
+                ),
+                child: Text(
+                  explanation,
+                  style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: '$relPath:$line:$col  ${d.message}'));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Текст ошибки скопирован')),
+              );
+            },
+            icon: const Icon(LucideIcons.copy, size: 13),
+            label: const Text('Копировать', style: TextStyle(fontSize: 11)),
+          ),
+          OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(editorProvider.notifier).openFile(filePath, line: d.range.index, column: d.range.start);
+            },
+            icon: const Icon(LucideIcons.external_link, size: 13),
+            label: const Text('Перейти', style: TextStyle(fontSize: 11)),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _fixOneWithAi(filePath, relPath, d);
+            },
+            icon: const Icon(LucideIcons.sparkles, size: 14),
+            label: const Text('💡 Исправить с ИИ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -322,13 +536,14 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
             ),
             const SizedBox(width: 4),
             Text('$line:$col', style: GoogleFonts.jetBrainsMono(fontSize: 9, color: Colors.white30)),
+            _miniIcon(LucideIcons.lightbulb, 'Объяснение и Quick-Fix', () => _showErrorQuickFixDialog(context, filePath, relPath, d), color: Colors.amberAccent),
+            _miniIcon(LucideIcons.sparkles, 'Исправить с AI', () => _fixOneWithAi(filePath, relPath, d), color: Colors.purpleAccent),
             _miniIcon(LucideIcons.copy, 'Копировать', () {
               Clipboard.setData(ClipboardData(text: '$relPath:$line:$col  ${d.message}'));
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Скопировано'), duration: Duration(milliseconds: 900)),
               );
             }),
-            _miniIcon(LucideIcons.sparkles, 'Исправить с AI', () => _fixOneWithAi(relPath, d), color: Colors.purpleAccent),
           ],
         ),
       ),

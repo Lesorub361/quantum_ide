@@ -32,26 +32,30 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.43 - Mobile Terminal AI Experience, Clean Dependencies & Seti Icons
+        ## 🚀 QuantumIDE v1.2.44 - Multiplatform Release, Beginner Git Mode, VS Code-like AI Diagnostics & Plugin System
 
-        ### 📱 Улучшения мобильного терминала & AI Agent:
-        - **⚡ Исправление подсказки Git (Prompt Fix)**:
-          - Устранены артефакты `[]git:([]main*[])[] $` и сбой позиционирования курсора Readline (символы больше не перелетают в конец строки при вводе).
-          - Версия `.bashrc` обновлена до 14 с правильным экранированием zero-width последовательностей `\001` и `\002`.
-        - **🔄 Защита от дублирования ответов ИИ (2-4x Repeats Fix)**:
-          - Увеличен debounce таймер изменения размеров PTY при открытии/закрытии виртуальной клавиатуры Android, предотвращая лавину сигналов `SIGWINCH`.
-        - **⌨️ Умная санитизация ввода и вставки**:
-          - Автоматическая замена типографических кавычек Android (`“”«»` -> `"`, `‘’` -> `'`) и тире (`—` -> `--`).
-          - Устранена паразитная вставка управляющих кодов `\x1b[200~` и очищены хвостовые пробелы при копировании текста.
-        - **📐 Адаптивный просмотр кода и Diff при открытой клавиатуре**:
-          - Компактная панель виртуальных клавиш (1 строка вместо 2 при открытой клавиатуре).
-          - Разворачиваемый просмотр изменений (Inline Diff) с кнопкой полноэкранного режима и увеличенной высотой до 520px.
+        ### 📱 Git для новичков (Beginner Git Experience):
+        - **1-Tap Sync & Commit**: Отправка изменений в Git (`git commit & push`) одной кнопкой с автогенерацией понятных описаний через ИИ (`✨ Сообщение через ИИ`).
+        - **Откат проекта и файлов**: Мгновенный возврат к стабильному состоянию или отмена правок в отдельных файлах.
+        - **Интерактивный справочник Git**: Понятные ответы на частые вопросы прямо в панели Git.
+        - **Релизный ключ в репозитории**: Ключ `release-key.jks` синхронизирован для бесшовных обновлений на смартфонах без конфликтов подписи.
 
-        ### 📦 Оптимизация зависимостей и иконок:
-        - **🧹 Удалено 18 неиспользуемых пакетов (минус 60 транзитивных библиотек)**.
-        - **🎨 Локальный шрифт Seti Icons**: все иконки файлов рендерятся без внешних зависимостей.
-        - **⚡ Прямой Gemini REST + SSE Client**: быстрый потоковый стриминг без устаревшего SDK.
-        - **☕ Интеграция Wakelock Plus & Fuzzy Search**: блокировка засыпания экрана при сессиях и ранжированный поиск в терминале.
+        ### 💡 Умное автодополнение & AI Quick-Fix:
+        - **Flutter & Dart Snippets**: `stless`, `stful`, `scaffold`, `column`, `row`, `container`, `lvb`, `btn`, `consumer`, методы жизненного цикла и типы виджетов.
+        - **Понятные объяснения ошибок на русском**: Автоматическая расшифровка предупреждений и ошибок компилятора.
+        - **1-Tap AI Quick-Fix (💡)**: Всплывающее окно с точечным SEARCH/REPLACE исправлением кода через ИИ без переписывания всего файла.
+
+        ### 🧩 Система плагинов и кастомизации (.quantum/plugins/):
+        - **Кастомные иконки**: Свои иконки и цвета для папок и файлов в проводнике.
+        - **Команды терминала**: Панель быстрых кнопок в терминале (`flutter pub get`, `dart format`, `git status`).
+        - **Пользовательские ИИ-боты**: Создание персон в чате со специализированными системными промптами.
+        - **Управление интерфейсом**: Скрытие и отключение ненужных вкладок IDE.
+
+        ### 🌐 Мультиплатформенная сборка:
+        - **Android**: Universal APK, Split ABIs (ARM64, ARMv7, x86_64) и App Bundle (AAB).
+        - **Linux**: x64 и ARM64 (`quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`).
+        - **Windows**: x64 и ARM64 (`quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`).
+        - **macOS**: Universal bundle (`quantum_ide-macos.zip`).
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -91,6 +95,11 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
             printf 'storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=release.keystore\n' \
               "$KEYSTORE_PASSWORD" "$KEY_PASSWORD" "$KEY_ALIAS" > android/key.properties
+          elif [ -f "android/app/release-key.jks" ]; then
+            echo "Using tracked release-key.jks from repository."
+            if [ ! -f "android/key.properties" ]; then
+              printf 'storePassword=quantum123\nkeyPassword=quantum123\nkeyAlias=quantum_ide\nstoreFile=release-key.jks\n' > android/key.properties
+            fi
           else
             echo "WARNING: no KEYSTORE_BASE64 secret — APK will be signed with the debug key."
           fi

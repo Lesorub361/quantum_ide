@@ -10,6 +10,7 @@ import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/local_ai_service.dart';
 import 'package:quantum_ide/core/services/model_catalog_service.dart';
 import 'package:quantum_ide/core/services/hugging_face_hub_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum MainHubTab { models, settings, logs }
 enum LocalViewMode { catalog, huggingFaceOnline, ollamaLibrary, downloaded, cloud }
@@ -89,24 +90,77 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   late bool _localUseFlashAttn;
   late int _localContextSize;
   late bool _localSafeMode;
+  late String _currentProviderId;
 
   bool get _isLocalProvider =>
-      widget.providerId == 'local_edge' || widget.providerId == 'ollama';
+      _currentProviderId == 'local_edge' || _currentProviderId == 'ollama';
+
+  /// Cloud model filter: 'all' | 'free' | 'code' | 'reasoning' | 'claude' | 'gpt' | 'deepseek' | 'qwen'
+  String _cloudFilter = 'all';
+
+  /// API key to use for discovery: explicit (non-empty) key from caller,
+  /// otherwise the key saved in settings. Empty strings are treated as "no key"
+  /// so they never override a saved key.
+  String? get _effectiveApiKey {
+    final explicit = (widget.apiKey ?? '').trim();
+    if (explicit.isNotEmpty && _currentProviderId == widget.providerId) return explicit;
+    final typed = _apiKeyController.text.trim();
+    if (typed.isNotEmpty) return typed;
+    final saved = ref.read(aiServiceProvider).getApiKey(_currentProviderId).trim();
+    return saved.isEmpty ? null : saved;
+  }
+
+  String? get _effectiveBaseUrl {
+    final explicit = (widget.baseUrl ?? '').trim();
+    if (explicit.isNotEmpty && _currentProviderId == widget.providerId) return explicit;
+    return null;
+  }
+
+  void _selectProvider(String pid) {
+    if (_currentProviderId == pid) return;
+    setState(() {
+      _currentProviderId = pid;
+      _settingsProviderId = pid;
+      final aiSvc = ref.read(aiServiceProvider);
+      _apiKeyController.text = aiSvc.getApiKey(pid);
+      _baseUrlController.text = aiSvc.getBaseUrl(pid);
+      _models = aiSvc.getCachedDiscoveredModels(pid);
+      if (_models.isEmpty) {
+        _models = AiProviders.getRecommendedDiscoveredModels(pid);
+      }
+    });
+    ref.read(aiServiceProvider).setProvider(pid);
+    _discover();
+  }
 
   @override
   void initState() {
     super.initState();
+    _currentProviderId = widget.providerId;
     _mainTab = widget.initialMainTab == 1
         ? MainHubTab.settings
         : (widget.initialMainTab == 2 ? MainHubTab.logs : MainHubTab.models);
 
     final aiSvc = ref.read(aiServiceProvider);
-    _models = aiSvc.getCachedDiscoveredModels(widget.providerId);
+    _models = aiSvc.getCachedDiscoveredModels(_currentProviderId);
+    final hasCachedDiscovery = _models.isNotEmpty;
     if (_models.isEmpty) {
-      _models = AiProviders.getRecommendedDiscoveredModels(widget.providerId);
+      _models = AiProviders.getRecommendedDiscoveredModels(_currentProviderId);
     }
 
-    _settingsProviderId = widget.providerId;
+    // Cloud providers (OpenRouter, OpenAI, Groq, ...) must open straight on the
+    // cloud model list — not on the local GGUF catalog — and fetch the real
+    // model list for the configured API key automatically.
+    if (!_isLocalProvider) {
+      _localViewMode = LocalViewMode.cloud;
+      if (!hasCachedDiscovery) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _discover();
+        });
+      }
+    }
+
+    _settingsProviderId = _currentProviderId;
     _temperature = aiSvc.temperature;
     _maxTokens = aiSvc.maxTokens;
     _topP = aiSvc.topP;
@@ -191,18 +245,22 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     try {
       final aiSvc = ref.read(aiServiceProvider);
       final models = await aiSvc.discoverModels(
-        widget.providerId,
-        customApiKey: widget.apiKey,
-        customBaseUrl: widget.baseUrl,
+        _currentProviderId,
+        customApiKey: _effectiveApiKey,
+        customBaseUrl: _effectiveBaseUrl,
       );
 
+      if (!mounted) return;
       setState(() {
         _models = models;
         _isDiscovering = false;
-        _statusMessage = 'Обнаружено ${models.length} моделей';
-        _statusOk = true;
+        _statusMessage = models.isEmpty
+            ? 'Список моделей пуст — проверьте API ключ или введите ID модели вручную в поиске'
+            : 'Обнаружено ${models.length} моделей';
+        _statusOk = models.isNotEmpty;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isDiscovering = false;
         _statusMessage = 'Ошибка обнаружения: $e';
@@ -414,25 +472,40 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
   // ─── 1. Models Tab Body ──────────────────────────────────────────────────
   Widget _buildModelsTabBody(BuildContext context, String query) {
+    final activeProviderConfig = AiProviders.byId(_currentProviderId);
+    final cloudTabLabel = _isLocalProvider ? '☁️ Облачные' : '☁️ ${activeProviderConfig.displayName}';
+
     return Column(
       children: [
-        // Local Mode Selector Tabs
+        // Mode Selector Tabs
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
-              children: [
-                _subTabButton(LocalViewMode.catalog, '🔥 Топ каталог', LucideIcons.sparkles),
-                const SizedBox(width: 6),
-                _subTabButton(LocalViewMode.huggingFaceOnline, '🌐 Hugging Face Hub', LucideIcons.globe),
-                const SizedBox(width: 6),
-                _subTabButton(LocalViewMode.ollamaLibrary, '🦙 Ollama Library', LucideIcons.terminal),
-                const SizedBox(width: 6),
-                _subTabButton(LocalViewMode.downloaded, '💾 Скачанные', LucideIcons.hard_drive),
-                const SizedBox(width: 6),
-                _subTabButton(LocalViewMode.cloud, '☁️ Облачные', LucideIcons.cloud),
-              ],
+              children: _isLocalProvider
+                  ? [
+                      _subTabButton(LocalViewMode.catalog, '🔥 Топ каталог', LucideIcons.sparkles),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.downloaded, '💾 Скачанные', LucideIcons.hard_drive),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.huggingFaceOnline, '🌐 Hugging Face Hub', LucideIcons.globe),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.ollamaLibrary, '🦙 Ollama Library', LucideIcons.terminal),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.cloud, cloudTabLabel, LucideIcons.cloud),
+                    ]
+                  : [
+                      _subTabButton(LocalViewMode.cloud, cloudTabLabel, LucideIcons.cloud),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.catalog, '🔥 Каталог GGUF', LucideIcons.sparkles),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.downloaded, '💾 Скачанные', LucideIcons.hard_drive),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.huggingFaceOnline, '🌐 Hugging Face', LucideIcons.globe),
+                      const SizedBox(width: 6),
+                      _subTabButton(LocalViewMode.ollamaLibrary, '🦙 Ollama', LucideIcons.terminal),
+                    ],
             ),
           ),
         ),
@@ -1539,62 +1612,372 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
+  void _selectAndReturn(String modelId) async {
+    final aiSvc = ref.read(aiServiceProvider);
+    await aiSvc.setProvider(_currentProviderId);
+    await aiSvc.setModel(modelId);
+    if (!mounted) return;
+    Navigator.pop(context, modelId);
+  }
+
   // ─── 6. Cloud Models List ────────────────────────────────────────────────
   Widget _buildCloudModelsList(BuildContext context, String query) {
-    final filteredModels = query.isEmpty
-        ? _models
-        : _models.where((m) {
-            return m.id.toLowerCase().contains(query) ||
-                m.displayName.toLowerCase().contains(query);
-          }).toList();
+    final aiSvc = ref.read(aiServiceProvider);
+    final savedKey = aiSvc.getApiKey(_currentProviderId).trim();
+    final hasKey = savedKey.isNotEmpty;
+
+    // Apply query and category filter
+    final filteredModels = _models.where((m) {
+      final mid = m.id.toLowerCase();
+      final mname = m.displayName.toLowerCase();
+      if (query.isNotEmpty && !mid.contains(query) && !mname.contains(query)) {
+        return false;
+      }
+      switch (_cloudFilter) {
+        case 'free':
+          return m.isFree || mid.endsWith(':free');
+        case 'code':
+          return mid.contains('coder') ||
+              mid.contains('code') ||
+              mname.contains('coder') ||
+              mname.contains('code');
+        case 'reasoning':
+          return mid.contains('r1') ||
+              mid.contains('reasoning') ||
+              mid.contains('think') ||
+              mid.contains('o1') ||
+              mid.contains('o3');
+        case 'claude':
+          return mid.contains('claude') || mname.contains('claude');
+        case 'gpt':
+          return mid.contains('gpt') || mid.contains('openai') || mname.contains('gpt');
+        case 'deepseek':
+          return mid.contains('deepseek') || mname.contains('deepseek');
+        case 'qwen':
+          return mid.contains('qwen') || mname.contains('qwen');
+        default:
+          return true;
+      }
+    }).toList();
+
+    final hasExactMatch = query.isEmpty ||
+        _models.any((m) => m.id.toLowerCase() == query.toLowerCase());
+
+    final cloudProviders = [
+      AiProviders.openrouter,
+      AiProviders.deepseek,
+      AiProviders.google,
+      AiProviders.anthropic,
+      AiProviders.openai,
+      AiProviders.groq,
+      AiProviders.mistral,
+      AiProviders.together,
+    ];
 
     return Column(
       children: [
+        // 1. Provider Switcher Chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Row(
+            children: cloudProviders.map((p) {
+              final isSelected = p.id == _currentProviderId;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text('${p.logoEmoji} ${p.displayName}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? Colors.black : Colors.white70,
+                      )),
+                  selected: isSelected,
+                  selectedColor: Colors.cyanAccent,
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  onSelected: (_) => _selectProvider(p.id),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // 2. API Key Box / Status Bar
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: hasKey
+                  ? Colors.greenAccent.withValues(alpha: 0.06)
+                  : Colors.amberAccent.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: hasKey
+                    ? Colors.greenAccent.withValues(alpha: 0.25)
+                    : Colors.amberAccent.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      hasKey ? LucideIcons.key_round : LucideIcons.shield_alert,
+                      size: 13,
+                      color: hasKey ? Colors.greenAccent : Colors.amberAccent,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        hasKey
+                            ? 'API Ключ ${_currentProviderId.toUpperCase()}: ${savedKey.length > 8 ? "${savedKey.substring(0, 6)}••••${savedKey.substring(savedKey.length - 3)}" : "Задан"}'
+                            : 'API Ключ для ${_currentProviderId.toUpperCase()} не задан',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: hasKey ? Colors.greenAccent : Colors.amberAccent,
+                        ),
+                      ),
+                    ),
+                    if (_currentProviderId == 'openrouter')
+                      TextButton(
+                        onPressed: () async {
+                          final uri = Uri.parse('https://openrouter.ai/keys');
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Получить ключ ↗',
+                            style: TextStyle(fontSize: 10, color: Colors.cyanAccent)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 32,
+                        child: TextField(
+                          controller: _apiKeyController,
+                          obscureText: true,
+                          style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white),
+                          decoration: InputDecoration(
+                            hintText: 'Вставьте API ключ сюда...',
+                            hintStyle: const TextStyle(fontSize: 11, color: Colors.white38),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            filled: true,
+                            fillColor: Colors.black26,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                            ),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final key = _apiKeyController.text.trim();
+                        final messenger = ScaffoldMessenger.of(context);
+                        await ref.read(aiServiceProvider).setApiKey(_currentProviderId, key);
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Ключ для ${_currentProviderId.toUpperCase()} сохранён'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                        _discover();
+                      },
+                      icon: const Icon(LucideIcons.check, size: 12),
+                      label: const Text('Сохранить', style: TextStyle(fontSize: 11)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyanAccent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // 3. Quick Cloud Filter Chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
+          child: Row(
+            children: [
+              {'id': 'all', 'label': 'Все модели'},
+              {'id': 'free', 'label': '🆓 Бесплатные (:free)'},
+              {'id': 'code', 'label': '💻 Для кода'},
+              {'id': 'reasoning', 'label': '🧠 Рассуждения (R1)'},
+              {'id': 'claude', 'label': 'Claude'},
+              {'id': 'gpt', 'label': 'GPT-4o / o3'},
+              {'id': 'deepseek', 'label': 'DeepSeek'},
+              {'id': 'qwen', 'label': 'Qwen 2.5'},
+            ].map((f) {
+              final isSel = _cloudFilter == f['id'];
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(f['label']!,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                        color: isSel ? Colors.black : Colors.white70,
+                      )),
+                  selected: isSel,
+                  selectedColor: Colors.purpleAccent,
+                  backgroundColor: Colors.white.withValues(alpha: 0.05),
+                  onSelected: (_) => setState(() => _cloudFilter = f['id']!),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        // 4. Status Bar & Refresh
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Облачные модели (${filteredModels.length}):',
+                'Доступно моделей: ${filteredModels.length}',
                 style: const TextStyle(fontSize: 11, color: Colors.white54, fontWeight: FontWeight.bold),
               ),
               TextButton.icon(
                 onPressed: _isDiscovering ? null : _discover,
-                icon: const Icon(LucideIcons.refresh_cw, size: 11, color: Colors.cyanAccent),
-                label: const Text('Обновить список', style: TextStyle(fontSize: 10, color: Colors.cyanAccent)),
+                icon: _isDiscovering
+                    ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.cyanAccent))
+                    : const Icon(LucideIcons.refresh_cw, size: 11, color: Colors.cyanAccent),
+                label: Text(_isDiscovering ? 'Загрузка...' : 'Обновить по ключу',
+                    style: const TextStyle(fontSize: 10, color: Colors.cyanAccent)),
               ),
             ],
           ),
         ),
+
+        // 5. Models List
         Expanded(
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            itemCount: filteredModels.length,
+            itemCount: filteredModels.length + (!hasExactMatch && query.isNotEmpty ? 1 : 0),
             separatorBuilder: (_, _) => const SizedBox(height: 6),
             itemBuilder: (context, index) {
-              final model = filteredModels[index];
+              // Custom model tile if user types custom query
+              if (!hasExactMatch && query.isNotEmpty && index == 0) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.cyanAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.cyanAccent, width: 1.5),
+                  ),
+                  child: ListTile(
+                    dense: true,
+                    leading: const Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 20),
+                    title: Text(
+                      'Использовать модель: "$query"',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.cyanAccent),
+                    ),
+                    subtitle: Text(
+                      'Нажмите для подключения любого ID модели из OpenRouter / API',
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
+                    ),
+                    trailing: const Icon(LucideIcons.arrow_right, color: Colors.cyanAccent, size: 16),
+                    onTap: () => _selectAndReturn(query),
+                  ),
+                );
+              }
+
+              final realIndex = !hasExactMatch && query.isNotEmpty ? index - 1 : index;
+              final model = filteredModels[realIndex];
               final isSelected = model.id == widget.currentModel;
+              final isFree = model.isFree || model.id.endsWith(':free');
+              final isCode = model.id.toLowerCase().contains('code') || model.displayName.toLowerCase().contains('code');
+              final isReasoning = model.id.toLowerCase().contains('r1') || model.id.toLowerCase().contains('think') || model.id.toLowerCase().contains('reasoning');
+
               return Container(
                 decoration: BoxDecoration(
                   color: isSelected ? const Color(0xFF1E2838) : const Color(0xFF161822),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: isSelected ? Colors.cyanAccent : Colors.white10),
+                  border: Border.all(
+                    color: isSelected ? Colors.cyanAccent : Colors.white10,
+                    width: isSelected ? 1.5 : 1.0,
+                  ),
                 ),
                 child: ListTile(
                   dense: true,
-                  title: Text(
-                    model.displayName,
-                    style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13, color: isSelected ? Colors.cyanAccent : Colors.white),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          model.displayName,
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: isSelected ? Colors.cyanAccent : Colors.white,
+                          ),
+                        ),
+                      ),
+                      if (isFree)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          margin: const EdgeInsets.only(left: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.4)),
+                          ),
+                          child: const Text('FREE',
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
+                        ),
+                      if (isCode)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          margin: const EdgeInsets.only(left: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('CODE',
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.cyanAccent)),
+                        ),
+                      if (isReasoning)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          margin: const EdgeInsets.only(left: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.purpleAccent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('THINK',
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.purpleAccent)),
+                        ),
+                    ],
                   ),
                   subtitle: Text(
                     model.id,
-                    style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white54),
+                    style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white54),
                   ),
                   trailing: isSelected
                       ? const Icon(LucideIcons.circle_check, size: 18, color: Colors.cyanAccent)
                       : const Icon(LucideIcons.chevron_right, size: 16, color: Colors.white24),
-                  onTap: () => Navigator.pop(context, model.id),
+                  onTap: () => _selectAndReturn(model.id),
                 ),
               );
             },

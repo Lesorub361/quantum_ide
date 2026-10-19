@@ -14,6 +14,7 @@ import 'runtime_service.dart';
 import 'collaboration_service.dart';
 import 'ghost_qa_service.dart';
 export 'genkit_service.dart';
+export 'quantum_plugin_service.dart';
 
 /// Provider for BuildDiagnosticsService
 final buildDiagnosticsServiceProvider = Provider((ref) {

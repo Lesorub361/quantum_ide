@@ -48,11 +48,13 @@ app.*.map.json
 android/gradle-8.0-bin.zip
 android/gradle-wrapper.zip
 
-# Signing secrets — never commit
-android/key.properties
-android/keystore.properties
+# Signing secrets — whitelist project release key for consistent updates
 *.jks
 *.keystore
+!/android/release-key.jks
+!/android/app/release-key.jks
+!/android/key.properties
+!/android/keystore.properties
 
 # Accidental `flutter create` output inside the android/ folder
 /android/android/

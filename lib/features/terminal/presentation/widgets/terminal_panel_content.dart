@@ -20,6 +20,7 @@ import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 
@@ -781,6 +782,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   ? _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'))
                   : _buildBody(panelState, sessions, notifier, editorState),
             ),
+            if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
+                sessions.isNotEmpty &&
+                notifier.currentIndex < sessions.length)
+              _buildPluginCommandsBar(sessions[notifier.currentIndex]),
             if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
                 (Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650))
               _buildVirtualKeys(sessions, notifier),
@@ -2919,8 +2924,64 @@ Also explain what exactly went wrong and how you fixed it.
     );
   }
 
+  Widget _buildPluginCommandsBar(TerminalSession session) {
+    final pluginService = ref.watch(quantumPluginServiceProvider);
+    final cmds = pluginService.activeTerminalCommands;
+    if (cmds.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      height: 38,
+      decoration: const BoxDecoration(
+        color: Color(0xFF141721),
+        border: Border(
+          top: BorderSide(color: Color(0xFF262C3D), width: 1),
+          bottom: BorderSide(color: Color(0xFF1A1F2C), width: 1),
+        ),
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        itemCount: cmds.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 6),
+        itemBuilder: (context, index) {
+          final item = cmds[index];
+          return InkWell(
+            onTap: () {
+              session.pty.write(Uint8List.fromList(utf8.encode('${item.command}\n')));
+            },
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2433),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: const Color(0xFF333B50), width: 0.8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(LucideIcons.terminal, size: 12, color: Color(0xFF4FC3F7)),
+                  const SizedBox(width: 5),
+                  Text(
+                    item.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: 'JetBrainsMono',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildVirtualKeys(List<TerminalSession> sessions, TerminalTabsNotifier notifier) {
-    if (sessions.isEmpty) return const SizedBox();
+    if (sessions.isEmpty || notifier.currentIndex >= sessions.length) return const SizedBox();
     final currentSession = sessions[notifier.currentIndex];
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = (bottomInset > 20) || _isMobileKeyboardActive;

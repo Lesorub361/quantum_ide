@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
+import 'package:quantum_ide/core/services/mcp_catalog.dart';
+
+typedef McpPreset = McpCatalogItem;
 
 class McpServersDialog extends ConsumerStatefulWidget {
   const McpServersDialog({super.key});
@@ -12,29 +16,79 @@ class McpServersDialog extends ConsumerStatefulWidget {
   ConsumerState<McpServersDialog> createState() => _McpServersDialogState();
 }
 
-class McpPreset {
-  final String name;
-  final String id;
-  final String description;
-  final String command;
-  final List<String> args;
-  final List<String> requiredEnvKeys;
-  final List<String> requiredArgLabels;
-
-  McpPreset({
-    required this.name,
-    required this.id,
-    required this.description,
-    required this.command,
-    required this.args,
-    this.requiredEnvKeys = const [],
-    this.requiredArgLabels = const [],
-  });
-}
-
 class _McpServersDialogState extends ConsumerState<McpServersDialog> {
-  String _getPresetDescription(BuildContext context, McpPreset preset) {
-    final l10n = AppLocalizations.of(context)!;
+  final _nameController = TextEditingController();
+  final _commandController = TextEditingController();
+  final _argsController = TextEditingController();
+  final _urlController = TextEditingController();
+  final _searchController = TextEditingController();
+
+  // Custom inputs for preset installation
+  final Map<String, TextEditingController> _presetControllers = {};
+
+  McpServerType _selectedType = McpServerType.stdio;
+  bool _isAddingManual = false;
+  McpCatalogItem? _installingPreset;
+  int _activeTab = 0; // 0 = Servers, 1 = Marketplace
+  String _selectedCategory = 'Все';
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query != _searchQuery) {
+      setState(() => _searchQuery = query);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _commandController.dispose();
+    _argsController.dispose();
+    _urlController.dispose();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    for (final controller in _presetControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _clearForm() {
+    _nameController.clear();
+    _commandController.clear();
+    _argsController.clear();
+    _urlController.clear();
+    for (final controller in _presetControllers.values) {
+      controller.dispose();
+    }
+    _presetControllers.clear();
+    setState(() {
+      _selectedType = McpServerType.stdio;
+      _isAddingManual = false;
+      _installingPreset = null;
+    });
+  }
+
+  void _setupPresetControllers(McpCatalogItem preset) {
+    _presetControllers.clear();
+    for (final key in preset.requiredEnvKeys) {
+      _presetControllers['env_$key'] = TextEditingController();
+    }
+    for (int i = 0; i < preset.requiredArgLabels.length; i++) {
+      _presetControllers['arg_$i'] = TextEditingController();
+    }
+  }
+
+  String _getPresetDescription(BuildContext context, McpCatalogItem preset) {
+    final l10n = AppLocalizations.of(context);
+    if (l10n == null) return preset.description;
     switch (preset.id) {
       case 'github':
         return l10n.mcpGithubDesc;
@@ -73,283 +127,62 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
     }
   }
 
-  String _getArgLabel(BuildContext context, McpPreset preset, String label) {
-    final l10n = AppLocalizations.of(context)!;
-    if (preset.id == 'postgres') {
-      return l10n.mcpPostgresArg;
-    } else if (preset.id == 'sqlite') {
-      return l10n.mcpSqliteArg;
+  String _getArgLabel(BuildContext context, McpCatalogItem preset, String label) {
+    final l10n = AppLocalizations.of(context);
+    if (l10n != null) {
+      if (preset.id == 'postgres') {
+        return l10n.mcpPostgresArg;
+      } else if (preset.id == 'sqlite') {
+        return l10n.mcpSqliteArg;
+      }
     }
     return label;
-  }
-
-  final _nameController = TextEditingController();
-  final _commandController = TextEditingController();
-  final _argsController = TextEditingController();
-  final _urlController = TextEditingController();
-  
-  // Custom inputs for preset installation
-  final Map<String, TextEditingController> _presetControllers = {};
-  
-  McpServerType _selectedType = McpServerType.stdio;
-  bool _isAddingManual = false;
-  McpPreset? _installingPreset;
-  int _activeTab = 0; // 0 = Servers, 1 = Marketplace
-
-  final List<McpPreset> _presets = [
-    McpPreset(
-      name: 'GitHub MCP Server',
-      id: 'github',
-      description: 'Integration with GitHub repositories, issues, and PRs.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-github'],
-      requiredEnvKeys: ['GITHUB_PERSONAL_ACCESS_TOKEN'],
-    ),
-    McpPreset(
-      name: 'Google Search Server',
-      id: 'google-search',
-      description: 'Allows the AI agent to perform live Google searches.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-google-search'],
-      requiredEnvKeys: ['API_KEY', 'CX'],
-    ),
-    McpPreset(
-      name: 'Web Fetch Reader',
-      id: 'fetch',
-      description: 'Downloads web pages and automatically translates them to Markdown.',
-      command: 'npx',
-      args: ['-y', '@anthropic-ai/mcp-server-fetch'],
-    ),
-    McpPreset(
-      name: 'PostgreSQL Database Client',
-      id: 'postgres',
-      description: 'Connection, reading table structures, and running SQL queries for PostgreSQL.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-postgres'],
-      requiredArgLabels: ['Connection string (postgresql://...)'],
-    ),
-    McpPreset(
-      name: 'SQLite Database Client',
-      id: 'sqlite',
-      description: 'Connection and inspection of SQLite databases in your project.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-sqlite', '--db'],
-      requiredArgLabels: ['Path to SQLite DB file (e.g. db.sqlite)'],
-    ),
-    McpPreset(
-      name: 'Long-term Memory Server',
-      id: 'memory',
-      description: 'Semantic long-term memory storage for your AI agent.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-memory'],
-    ),
-    McpPreset(
-      name: 'Brave Search Server',
-      id: 'brave-search',
-      description: 'Allows the AI agent to perform web searches using the Brave API.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-brave-search'],
-      requiredEnvKeys: ['BRAVE_API_KEY'],
-    ),
-    McpPreset(
-      name: 'Puppeteer Browser Automation',
-      id: 'puppeteer',
-      description: 'Browser automation, screenshot generation, element clicks, and web page scraping.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-puppeteer'],
-    ),
-    McpPreset(
-      name: 'Firecrawl Web Scraper',
-      id: 'firecrawl',
-      description: 'Transforms any website into clean Markdown or structured JSON.',
-      command: 'npx',
-      args: ['-y', '@firecrawl/mcp-server'],
-      requiredEnvKeys: ['FIRECRAWL_API_KEY'],
-    ),
-    McpPreset(
-      name: 'Notion Integration Server',
-      id: 'notion',
-      description: 'Allows reading and modifying pages, databases, and comments in Notion.',
-      command: 'npx',
-      args: ['-y', 'notion-mcp-server'],
-      requiredEnvKeys: ['NOTION_TOKEN'],
-    ),
-    McpPreset(
-      name: 'Slack Client Server',
-      id: 'slack',
-      description: 'Provides features to read channels, chat, and send notifications in Slack.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-slack'],
-      requiredEnvKeys: ['SLACK_BOT_TOKEN', 'SLACK_TEAM_ID'],
-    ),
-    McpPreset(
-      name: 'Git Integration Server',
-      id: 'git',
-      description: 'Viewing commits, comparing versions, searching commits, and inspecting Git files locally.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-git'],
-    ),
-    McpPreset(
-      name: 'GitLab MCP Server',
-      id: 'gitlab',
-      description: 'GitLab project management, issues, PRs, and CI/CD pipelines.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-gitlab'],
-      requiredEnvKeys: ['GITLAB_PERSONAL_ACCESS_TOKEN'],
-    ),
-    McpPreset(
-      name: 'Sentry Error Tracker',
-      id: 'sentry',
-      description: 'Fetching error logs and inspecting application crashes on Sentry.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-sentry'],
-      requiredEnvKeys: ['SENTRY_AUTH_TOKEN', 'SENTRY_ORG'],
-    ),
-    McpPreset(
-      name: 'Airtable Database Client',
-      id: 'airtable',
-      description: 'Reading, creating, and updating records in Airtable databases and tables.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-airtable'],
-      requiredEnvKeys: ['AIRTABLE_PERSONAL_ACCESS_TOKEN'],
-    ),
-    McpPreset(
-      name: 'Sequential Thinking Server',
-      id: 'sequential-thinking',
-      description: 'Organizing AI agent reasoning for structured problem solving.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-sequential-thinking'],
-    ),
-    // ─── Extended MCP Servers ──────────────────────────────────
-    McpPreset(
-      name: 'Filesystem Server',
-      id: 'filesystem',
-      description: 'Secure file operations with configurable access controls.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-filesystem'],
-      requiredArgLabels: ['Root directory path'],
-    ),
-    McpPreset(
-      name: 'Time & Timezone Server',
-      id: 'time',
-      description: 'Time and timezone conversion capabilities.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-time'],
-    ),
-    McpPreset(
-      name: 'Kubernetes Manager',
-      id: 'kubernetes',
-      description: 'Interact with Kubernetes clusters via kubectl.',
-      command: 'npx',
-      args: ['-y', 'mcp-server-kubernetes'],
-    ),
-    McpPreset(
-      name: 'Redis Client',
-      id: 'redis',
-      description: 'Interact with Redis key-value stores.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-redis'],
-      requiredArgLabels: ['Redis URL (redis://...)'],
-    ),
-    McpPreset(
-      name: 'Chrome DevTools',
-      id: 'chrome-devtools',
-      description: 'Browser automation, screenshots, element inspection.',
-      command: 'npx',
-      args: ['-y', 'chrome-devtools-mcp'],
-    ),
-    McpPreset(
-      name: 'Context7 Documentation',
-      id: 'context7',
-      description: 'Up-to-date documentation context for AI coding.',
-      command: 'npx',
-      args: ['-y', '@upstash/context7-mcp'],
-    ),
-    McpPreset(
-      name: 'Google Drive',
-      id: 'google-drive',
-      description: 'File access, search, and management in Google Drive.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-gdrive'],
-      requiredEnvKeys: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
-    ),
-    McpPreset(
-      name: 'AWS S3 Storage',
-      id: 'aws-s3',
-      description: 'Read, write, and manage files in AWS S3 buckets.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-s3'],
-      requiredEnvKeys: ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'],
-    ),
-    McpPreset(
-      name: 'Playwright Browser',
-      id: 'playwright',
-      description: 'Modern browser automation with Playwright.',
-      command: 'npx',
-      args: ['-y', '@anthropic-ai/mcp-server-playwright'],
-    ),
-    McpPreset(
-      name: 'Docker Manager',
-      id: 'docker',
-      description: 'Manage Docker containers, images, and volumes.',
-      command: 'npx',
-      args: ['-y', '@modelcontextprotocol/server-docker'],
-    ),
-  ];
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _commandController.dispose();
-    _argsController.dispose();
-    _urlController.dispose();
-    for (final controller in _presetControllers.values) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  void _clearForm() {
-    _nameController.clear();
-    _commandController.clear();
-    _argsController.clear();
-    _urlController.clear();
-    for (final controller in _presetControllers.values) {
-      controller.dispose();
-    }
-    _presetControllers.clear();
-    setState(() {
-      _selectedType = McpServerType.stdio;
-      _isAddingManual = false;
-      _installingPreset = null;
-    });
-  }
-
-  void _setupPresetControllers(McpPreset preset) {
-    _presetControllers.clear();
-    for (final key in preset.requiredEnvKeys) {
-      _presetControllers['env_$key'] = TextEditingController();
-    }
-    for (int i = 0; i < preset.requiredArgLabels.length; i++) {
-      _presetControllers['arg_$i'] = TextEditingController();
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final mcpServers = ref.watch(mcpServiceProvider);
     final mcpService = ref.read(mcpServiceProvider.notifier);
+    final mediaQuery = MediaQuery.of(context);
+    final isMobile = mediaQuery.size.width < 600;
+    final dialogWidth = isMobile ? mediaQuery.size.width * 0.96 : 640.0;
+    final dialogHeight = isMobile ? mediaQuery.size.height * 0.92 : mediaQuery.size.height * 0.85;
 
     final Widget header = Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          AppLocalizations.of(context)!.mcpServersTitle,
-          style: GoogleFonts.inter(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(LucideIcons.blocks, size: 16, color: Color(0xFFFF3C3C)),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  AppLocalizations.of(context)?.mcpServersTitle ?? 'MCP Серверы (Tools)',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'Model Context Protocol • 40+ готовых интеграций',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    color: Colors.white38,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         IconButton(
           icon: const Icon(LucideIcons.x, color: Colors.white54, size: 18),
@@ -362,25 +195,34 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
 
     final Widget tabHeader = Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Row(
         children: [
           Expanded(
-            child: _buildTabButton(0, AppLocalizations.of(context)!.activeServers(mcpServers.length)),
+            child: _buildTabButton(
+              0,
+              '${AppLocalizations.of(context)?.activeServers(mcpServers.length) ?? 'Активные'} (${mcpServers.length})',
+              LucideIcons.server,
+            ),
           ),
+          const SizedBox(width: 4),
           Expanded(
-            child: _buildTabButton(1, AppLocalizations.of(context)!.repository),
+            child: _buildTabButton(
+              1,
+              '${AppLocalizations.of(context)?.repository ?? 'Каталог'} (${McpCatalog.items.length})',
+              LucideIcons.store,
+            ),
           ),
         ],
       ),
     );
 
     Widget content;
-
     if (_installingPreset != null) {
       content = _buildPresetInstallationForm(mcpService);
     } else if (_isAddingManual) {
@@ -392,32 +234,34 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
     }
 
     return Dialog(
-      backgroundColor: const Color(0xFF1E2230),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(18.0),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.8,
-            maxWidth: 500,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              header,
-              const Divider(color: Colors.white10, height: 16),
-              if (_installingPreset == null && !_isAddingManual) tabHeader,
-              const SizedBox(height: 8),
-              Expanded(child: content),
-            ],
-          ),
+      backgroundColor: const Color(0xFF141721),
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isMobile ? 8 : 24,
+        vertical: isMobile ? 12 : 24,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Container(
+        width: dialogWidth,
+        height: dialogHeight,
+        padding: EdgeInsets.all(isMobile ? 12.0 : 18.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            header,
+            const SizedBox(height: 8),
+            if (_installingPreset == null && !_isAddingManual) tabHeader,
+            const SizedBox(height: 4),
+            Expanded(child: content),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildTabButton(int index, String label) {
+  Widget _buildTabButton(int index, String label, IconData icon) {
     final isSelected = _activeTab == index;
     return InkWell(
       onTap: () {
@@ -425,25 +269,36 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
           _activeTab = index;
         });
       },
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFF3C3C).withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
+          color: isSelected ? const Color(0xFFFF3C3C).withValues(alpha: 0.18) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: isSelected ? const Color(0xFFFF3C3C).withValues(alpha: 0.3) : Colors.transparent,
-            width: 0.8,
+            color: isSelected ? const Color(0xFFFF3C3C).withValues(alpha: 0.4) : Colors.transparent,
+            width: 1,
           ),
         ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.inter(
-            color: isSelected ? const Color(0xFFFF3C3C) : Colors.white60,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 11,
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? const Color(0xFFFF3C3C) : Colors.white54,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                color: isSelected ? Colors.white : Colors.white60,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 11.5,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -454,36 +309,56 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(LucideIcons.bot, size: 48, color: Colors.white.withValues(alpha: 0.1)),
-          const SizedBox(height: 12),
-          Text(
-            AppLocalizations.of(context)!.noMcpServers,
-            style: GoogleFonts.inter(color: Colors.white30, fontSize: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.03),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(LucideIcons.bot, size: 44, color: Colors.white.withValues(alpha: 0.2)),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
+          Text(
+            AppLocalizations.of(context)?.noMcpServers ?? 'Нет подключенных MCP серверов',
+            style: GoogleFonts.inter(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Подключите серверы из каталога, чтобы дать AI доступ к файлам, Git, браузеру и базам данных',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(color: Colors.white30, fontSize: 11),
+          ),
+          const SizedBox(height: 18),
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white10),
-                  ),
-                  onPressed: () => setState(() => _activeTab = 1),
-                  child: Text(AppLocalizations.of(context)!.goToRepository, style: const TextStyle(fontSize: 11)),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.18),
+                  foregroundColor: const Color(0xFFFF3C3C),
+                  elevation: 0,
+                  side: const BorderSide(color: Color(0x4FFF3C3C)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                icon: const Icon(LucideIcons.store, size: 14),
+                onPressed: () => setState(() => _activeTab = 1),
+                label: Text(
+                  AppLocalizations.of(context)?.goToRepository ?? 'Открыть каталог MCP (40+)',
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
-                    foregroundColor: const Color(0xFFFF3C3C),
-                    elevation: 0,
-                    side: const BorderSide(color: Color(0x3FFF3C3C)),
-                  ),
-                  onPressed: () => setState(() => _isAddingManual = true),
-                  child: Text(AppLocalizations.of(context)!.addManually, style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+                icon: const Icon(LucideIcons.plus, size: 14),
+                onPressed: () => setState(() => _isAddingManual = true),
+                label: Text(
+                  AppLocalizations.of(context)?.addManually ?? 'Свой сервер',
+                  style: const TextStyle(fontSize: 11.5),
                 ),
               ),
             ],
@@ -501,20 +376,29 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
               final s = servers[index];
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.02),
+                  color: Colors.white.withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                  border: Border.all(
+                    color: s.isEnabled ? Colors.cyanAccent.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.06),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      s.type == McpServerType.stdio ? LucideIcons.terminal : LucideIcons.globe,
-                      size: 16,
-                      color: s.isEnabled ? Colors.cyanAccent : Colors.white30,
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: (s.isEnabled ? Colors.cyanAccent : Colors.white24).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        s.type == McpServerType.stdio ? LucideIcons.terminal : LucideIcons.globe,
+                        size: 16,
+                        color: s.isEnabled ? Colors.cyanAccent : Colors.white30,
+                      ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -524,27 +408,29 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                               Text(
                                 s.name,
                                 style: GoogleFonts.inter(
-                                  color: s.isEnabled ? Colors.white : Colors.white30,
+                                  color: s.isEnabled ? Colors.white : Colors.white38,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 12,
+                                  fontSize: 12.5,
                                 ),
                               ),
                               if (s.env.isNotEmpty) ...[
                                 const SizedBox(width: 6),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                   decoration: BoxDecoration(
                                     color: Colors.cyanAccent.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
                                   ),
                                   child: const Text(
                                     'KEY',
-                                    style: TextStyle(color: Colors.cyanAccent, fontSize: 7, fontWeight: FontWeight.bold),
+                                    style: TextStyle(color: Colors.cyanAccent, fontSize: 8, fontWeight: FontWeight.bold),
                                   ),
                                 ),
                               ],
                             ],
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             s.type == McpServerType.stdio ? '${s.command} ${s.args.join(' ')}' : s.url,
                             style: GoogleFonts.jetBrainsMono(
@@ -573,94 +459,326 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
             },
           ),
         ),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white.withValues(alpha: 0.04),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            minimumSize: const Size.fromHeight(36),
-          ),
-          icon: const Icon(LucideIcons.plus, size: 14),
-          label: Text(AppLocalizations.of(context)!.addServerManually, style: const TextStyle(fontSize: 11)),
-          onPressed: () => setState(() => _isAddingManual = true),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
+                  foregroundColor: const Color(0xFFFF3C3C),
+                  elevation: 0,
+                  side: const BorderSide(color: Color(0x3FFF3C3C)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  minimumSize: const Size.fromHeight(38),
+                ),
+                icon: const Icon(LucideIcons.store, size: 14),
+                label: const Text('Добавить из каталога (40+)', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                onPressed: () => setState(() => _activeTab = 1),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                minimumSize: const Size(120, 38),
+              ),
+              icon: const Icon(LucideIcons.plus, size: 14),
+              label: Text(AppLocalizations.of(context)?.addManually ?? 'Вручную', style: const TextStyle(fontSize: 11.5)),
+              onPressed: () => setState(() => _isAddingManual = true),
+            ),
+          ],
         ),
       ],
     );
   }
 
   Widget _buildMarketplace() {
-    return ListView.builder(
-      itemCount: _presets.length,
-      itemBuilder: (context, index) {
-        final preset = _presets[index];
-        final isInstalled = ref.watch(mcpServiceProvider).any((s) => s.name == preset.name);
+    final installedServers = ref.watch(mcpServiceProvider);
 
-        return Container(
+    final filtered = McpCatalog.items.where((item) {
+      if (_selectedCategory == '🔥 Популярные' && !item.isPopular) return false;
+      if (_selectedCategory != 'Все' && _selectedCategory != '🔥 Популярные' && item.category != _selectedCategory) {
+        return false;
+      }
+      if (_searchQuery.isNotEmpty) {
+        final matchName = item.name.toLowerCase().contains(_searchQuery);
+        final matchDesc = item.description.toLowerCase().contains(_searchQuery);
+        final matchTag = item.tags.any((t) => t.toLowerCase().contains(_searchQuery));
+        final matchArgs = item.args.any((a) => a.toLowerCase().contains(_searchQuery));
+        if (!matchName && !matchDesc && !matchTag && !matchArgs) return false;
+      }
+      return true;
+    }).toList();
+
+    return Column(
+      children: [
+        // Search bar
+        Container(
+          height: 38,
           margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.02),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    preset.name,
-                    style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                  const Spacer(),
-                  if (isInstalled)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.greenAccent.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        AppLocalizations.of(context)!.installed,
-                        style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 8, fontWeight: FontWeight.bold),
-                      ),
+          child: TextField(
+            controller: _searchController,
+            style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+            decoration: InputDecoration(
+              hintText: 'Поиск по 40+ MCP серверам (GitHub, SQLite, Git, Docker, Puppeteer...)',
+              hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 11),
+              prefixIcon: const Icon(LucideIcons.search, size: 15, color: Colors.white38),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(LucideIcons.x, size: 13, color: Colors.white38),
+                      onPressed: () => _searchController.clear(),
                     )
-                  else
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
-                        foregroundColor: const Color(0xFFFF3C3C),
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        side: const BorderSide(color: Color(0x3FFF3C3C)),
-                      ),
-                      onPressed: () {
-                        _setupPresetControllers(preset);
-                        setState(() {
-                          _installingPreset = preset;
-                        });
-                      },
-                      child: Text(AppLocalizations.of(context)!.install, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                  : null,
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.04),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            ),
+          ),
+        ),
+
+        // Categories chip row
+        SizedBox(
+          height: 30,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: McpCatalog.categories.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 6),
+            itemBuilder: (context, index) {
+              final cat = McpCatalog.categories[index];
+              final isSel = _selectedCategory == cat;
+              return InkWell(
+                onTap: () => setState(() => _selectedCategory = cat),
+                borderRadius: BorderRadius.circular(15),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isSel ? const Color(0xFFFF3C3C).withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.03),
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: isSel ? const Color(0xFFFF3C3C).withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.06),
                     ),
-                ],
-              ),
-              const SizedBox(height: 4),
+                  ),
+                  child: Text(
+                    cat,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      color: isSel ? const Color(0xFFFF7A7A) : Colors.white60,
+                      fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // Result count header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            children: [
               Text(
-                _getPresetDescription(context, preset),
-                style: GoogleFonts.inter(color: Colors.white38, fontSize: 10.5),
+                'Доступно: ${filtered.length} серверов',
+                style: GoogleFonts.inter(fontSize: 10, color: Colors.white30),
               ),
-              const SizedBox(height: 6),
-              Text(
-                AppLocalizations.of(context)!.packageDetail(preset.args.last),
-                style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent.withValues(alpha: 0.5), fontSize: 9),
-              ),
+              const Spacer(),
+              if (_selectedCategory != 'Все' || _searchQuery.isNotEmpty)
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _selectedCategory = 'Все';
+                      _searchController.clear();
+                    });
+                  },
+                  child: Text(
+                    'Сбросить фильтры',
+                    style: GoogleFonts.inter(fontSize: 10, color: Colors.cyanAccent),
+                  ),
+                ),
             ],
           ),
-        );
-      },
+        ),
+
+        const SizedBox(height: 4),
+
+        // Server list
+        Expanded(
+          child: ListView.builder(
+            itemCount: filtered.length,
+            itemBuilder: (context, index) {
+              final preset = filtered[index];
+              final isInstalled = installedServers.any((s) => s.name == preset.name);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.025),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isInstalled
+                        ? Colors.greenAccent.withValues(alpha: 0.2)
+                        : Colors.white.withValues(alpha: 0.05),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF3C3C).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(preset.icon, size: 16, color: const Color(0xFFFF5252)),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      preset.name,
+                                      style: GoogleFonts.inter(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12.5,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (preset.isPopular) ...[
+                                    const SizedBox(width: 4),
+                                    const Text('🔥', style: TextStyle(fontSize: 10)),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      preset.category,
+                                      style: GoogleFonts.inter(color: Colors.white54, fontSize: 8.5),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  if (preset.requiredEnvKeys.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '🔑 Нужен ключ',
+                                        style: GoogleFonts.inter(color: Colors.amberAccent, fontSize: 8.5, fontWeight: FontWeight.w600),
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.tealAccent.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        '⚡ Готов к запуску',
+                                        style: GoogleFonts.inter(color: Colors.tealAccent, fontSize: 8.5, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (isInstalled)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(LucideIcons.check, size: 11, color: Colors.greenAccent),
+                                const SizedBox(width: 4),
+                                Text(
+                                  AppLocalizations.of(context)?.installed ?? 'Установлен',
+                                  style: GoogleFonts.inter(
+                                    color: Colors.greenAccent,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
+                              foregroundColor: const Color(0xFFFF3C3C),
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              side: const BorderSide(color: Color(0x3FFF3C3C)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            icon: const Icon(LucideIcons.plus, size: 12),
+                            onPressed: () {
+                              _setupPresetControllers(preset);
+                              setState(() {
+                                _installingPreset = preset;
+                              });
+                            },
+                            label: Text(
+                              AppLocalizations.of(context)?.install ?? 'Установить',
+                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _getPresetDescription(context, preset),
+                      style: GoogleFonts.inter(color: Colors.white54, fontSize: 11, height: 1.3),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      preset.type == McpServerType.stdio
+                          ? (preset.args.isNotEmpty ? preset.args.last : preset.command)
+                          : preset.url,
+                      style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent.withValues(alpha: 0.6), fontSize: 9.5),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -671,18 +789,69 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
     // Render Env Variable Fields
     for (final envKey in preset.requiredEnvKeys) {
       final controller = _presetControllers['env_$envKey']!;
+      final hint = preset.envHints[envKey] ?? 'Вставьте $envKey';
+      final keyUrl = preset.envKeyUrls[envKey];
+
       fields.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(AppLocalizations.of(context)!.authParam(envKey), style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    AppLocalizations.of(context)?.authParam(envKey) ?? envKey,
+                    style: GoogleFonts.jetBrainsMono(
+                      color: Colors.cyanAccent,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (keyUrl != null)
+                    InkWell(
+                      onTap: () async {
+                        final uri = Uri.parse(keyUrl);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Row(
+                          children: [
+                            Text(
+                              'Получить ключ',
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFFFF5252),
+                                fontSize: 10,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(LucideIcons.external_link, size: 10, color: Color(0xFFFF5252)),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                hint,
+                style: GoogleFonts.inter(color: Colors.white38, fontSize: 10),
+              ),
               const SizedBox(height: 6),
               TextField(
                 controller: controller,
+                obscureText: envKey.toLowerCase().contains('key') ||
+                    envKey.toLowerCase().contains('token') ||
+                    envKey.toLowerCase().contains('secret'),
                 style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                decoration: _inputDecoration(AppLocalizations.of(context)!.enterValueFor(envKey)),
+                decoration: _inputDecoration(
+                  AppLocalizations.of(context)?.enterValueFor(envKey) ?? 'Введите значение $envKey',
+                ),
               ),
             ],
           ),
@@ -700,12 +869,18 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_getArgLabel(context, preset, label), style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+              Text(
+                _getArgLabel(context, preset, label),
+                style: GoogleFonts.inter(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
+              ),
               const SizedBox(height: 6),
               TextField(
                 controller: controller,
                 style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
-                decoration: _inputDecoration(AppLocalizations.of(context)!.enterLabel(_getArgLabel(context, preset, label))),
+                decoration: _inputDecoration(
+                  AppLocalizations.of(context)?.enterLabel(_getArgLabel(context, preset, label)) ??
+                      'Укажите ${_getArgLabel(context, preset, label)}',
+                ),
               ),
             ],
           ),
@@ -716,20 +891,71 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          AppLocalizations.of(context)!.installPreset(preset.name),
-          style: GoogleFonts.inter(color: const Color(0xFFFF3C3C), fontWeight: FontWeight.bold, fontSize: 13),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(preset.icon, size: 18, color: const Color(0xFFFF3C3C)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppLocalizations.of(context)?.installPreset(preset.name) ?? 'Установка: ${preset.name}',
+                    style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  Text(
+                    preset.category,
+                    style: GoogleFonts.inter(color: Colors.white38, fontSize: 10.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 10),
         Text(
           _getPresetDescription(context, preset),
-          style: GoogleFonts.inter(color: Colors.white38, fontSize: 10.5),
+          style: GoogleFonts.inter(color: Colors.white60, fontSize: 11, height: 1.3),
         ),
         const SizedBox(height: 14),
+        const Divider(color: Colors.white10, height: 1),
+        const SizedBox(height: 12),
         Expanded(
           child: SingleChildScrollView(
             child: Column(
-              children: fields,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (fields.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.tealAccent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.circle_check, size: 16, color: Colors.tealAccent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Этот сервер не требует API ключей. Нажмите "Установить" для добавления.',
+                            style: GoogleFonts.inter(color: Colors.tealAccent, fontSize: 11.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  ...fields,
+              ],
             ),
           ),
         ),
@@ -738,18 +964,24 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
           children: [
             Expanded(
               child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white12),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
                 onPressed: _clearForm,
-                child: Text(AppLocalizations.of(context)!.back),
+                child: Text(AppLocalizations.of(context)?.back ?? 'Назад'),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.15),
+                  backgroundColor: const Color(0xFFFF3C3C).withValues(alpha: 0.2),
                   foregroundColor: const Color(0xFFFF3C3C),
                   elevation: 0,
-                  side: const BorderSide(color: Color(0x3FFF3C3C)),
+                  side: const BorderSide(color: Color(0x4FFF3C3C)),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
                 ),
                 onPressed: () {
                   final finalArgs = List<String>.from(preset.args);
@@ -758,7 +990,9 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                   // Collect Env parameters
                   for (final envKey in preset.requiredEnvKeys) {
                     final val = _presetControllers['env_$envKey']?.text.trim() ?? '';
-                    finalEnv[envKey] = val;
+                    if (val.isNotEmpty) {
+                      finalEnv[envKey] = val;
+                    }
                   }
 
                   // Collect custom arguments
@@ -771,9 +1005,10 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
 
                   final config = McpServerConfig(
                     name: preset.name,
-                    type: McpServerType.stdio,
+                    type: preset.type,
                     command: preset.command,
                     args: finalArgs,
+                    url: preset.url,
                     env: finalEnv,
                     isEnabled: true,
                   );
@@ -781,7 +1016,10 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                   service.addServer(config);
                   _clearForm();
                 },
-                child: Text(AppLocalizations.of(context)!.install),
+                child: Text(
+                  AppLocalizations.of(context)?.install ?? 'Установить сервер',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ],
@@ -794,9 +1032,22 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          AppLocalizations.of(context)!.addServerManually,
-          style: GoogleFonts.inter(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 13),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.cyanAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(LucideIcons.plus, size: 14, color: Colors.cyanAccent),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              AppLocalizations.of(context)?.addServerManually ?? 'Добавить MCP сервер вручную',
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13.5),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Expanded(
@@ -804,22 +1055,30 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(AppLocalizations.of(context)!.serverName, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                Text(
+                  AppLocalizations.of(context)?.serverName ?? 'Имя сервера',
+                  style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
+                ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _nameController,
                   style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
-                  decoration: _inputDecoration(AppLocalizations.of(context)!.exampleLocalSearch),
+                  decoration: _inputDecoration(
+                    AppLocalizations.of(context)?.exampleLocalSearch ?? 'Например: My Custom Tool',
+                  ),
                 ),
                 const SizedBox(height: 12),
 
-                Text(AppLocalizations.of(context)!.connectionType, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                Text(
+                  AppLocalizations.of(context)?.connectionType ?? 'Тип подключения',
+                  style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
                     Expanded(
                       child: ChoiceChip(
-                        label: Text(AppLocalizations.of(context)!.stdioLocal),
+                        label: Text(AppLocalizations.of(context)?.stdioLocal ?? 'stdio (Локальный процесс)'),
                         selected: _selectedType == McpServerType.stdio,
                         onSelected: (selected) {
                           if (selected) setState(() => _selectedType = McpServerType.stdio);
@@ -829,7 +1088,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: ChoiceChip(
-                        label: Text(AppLocalizations.of(context)!.sseHttp),
+                        label: Text(AppLocalizations.of(context)?.sseHttp ?? 'SSE (HTTP Server)'),
                         selected: _selectedType == McpServerType.sse,
                         onSelected: (selected) {
                           if (selected) setState(() => _selectedType = McpServerType.sse);
@@ -841,24 +1100,32 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                 const SizedBox(height: 12),
 
                 if (_selectedType == McpServerType.stdio) ...[
-                  Text(AppLocalizations.of(context)!.startCommand, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                  Text(
+                    AppLocalizations.of(context)?.startCommand ?? 'Команда запуска',
+                    style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
+                  ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _commandController,
                     style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                    decoration: _inputDecoration(AppLocalizations.of(context)!.exampleStartCommand),
+                    decoration: _inputDecoration(
+                      AppLocalizations.of(context)?.exampleStartCommand ?? 'npx / python / node / docker',
+                    ),
                   ),
                   const SizedBox(height: 12),
 
-                  Text(AppLocalizations.of(context)!.argsSpace, style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                  Text(
+                    AppLocalizations.of(context)?.argsSpace ?? 'Аргументы (через пробел)',
+                    style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
+                  ),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _argsController,
                     style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                    decoration: _inputDecoration('/path/to/server.js arg1 arg2'),
+                    decoration: _inputDecoration('-y @modelcontextprotocol/server-postgres'),
                   ),
                 ] else ...[
-                  Text('SSE URL', style: GoogleFonts.inter(color: Colors.white54, fontSize: 11)),
+                  Text('SSE URL', style: GoogleFonts.inter(color: Colors.white60, fontSize: 11)),
                   const SizedBox(height: 6),
                   TextField(
                     controller: _urlController,
@@ -875,14 +1142,23 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
           children: [
             Expanded(
               child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white12),
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
                 onPressed: _clearForm,
-                child: Text(AppLocalizations.of(context)!.back),
+                child: Text(AppLocalizations.of(context)?.back ?? 'Назад'),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent, foregroundColor: Colors.black),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.cyanAccent,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
                 onPressed: () {
                   final name = _nameController.text.trim();
                   if (name.isEmpty) return;
@@ -891,7 +1167,7 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                     name: name,
                     type: _selectedType,
                     command: _selectedType == McpServerType.stdio ? _commandController.text.trim() : '',
-                    args: _selectedType == McpServerType.stdio 
+                    args: _selectedType == McpServerType.stdio
                         ? _argsController.text.trim().split(' ').where((s) => s.isNotEmpty).toList()
                         : [],
                     url: _selectedType == McpServerType.sse ? _urlController.text.trim() : '',
@@ -900,7 +1176,10 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
                   service.addServer(config);
                   _clearForm();
                 },
-                child: Text(AppLocalizations.of(context)!.add),
+                child: Text(
+                  AppLocalizations.of(context)?.add ?? 'Добавить',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ],
@@ -915,8 +1194,14 @@ class _McpServersDialogState extends ConsumerState<McpServersDialog> {
       hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.04),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.white10)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.cyanAccent)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Colors.white10),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Colors.cyanAccent),
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       isDense: true,
     );

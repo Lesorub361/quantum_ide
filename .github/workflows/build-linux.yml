@@ -12,7 +12,19 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build Linux (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.arch == 'arm64' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: ubuntu-latest
+            artifact: quantum_ide-linux-x64
+          - arch: arm64
+            os: ubuntu-24.04-arm
+            artifact: quantum_ide-linux-arm64
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,25 +51,29 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build Linux release
+      - name: Build Linux release (${{ matrix.arch }})
         run: flutter build linux --release --no-tree-shake-icons
 
       - name: Package Linux Bundle
         run: |
-          cd build/linux/x64/release/bundle
-          tar -czvf /tmp/quantum_ide-linux-x64.tar.gz .
+          if [ -d "build/linux/${{ matrix.arch }}/release/bundle" ]; then
+            cd build/linux/${{ matrix.arch }}/release/bundle
+          else
+            cd build/linux/*/release/bundle
+          fi
+          tar -czvf /tmp/${{ matrix.artifact }}.tar.gz .
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: quantum_ide-linux-x64
-          path: /tmp/quantum_ide-linux-x64.tar.gz
+          name: ${{ matrix.artifact }}
+          path: /tmp/${{ matrix.artifact }}.tar.gz
           retention-days: 14
 
       - name: Attach to GitHub Release
         if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
         uses: softprops/action-gh-release@v2
         with:
-          files: /tmp/quantum_ide-linux-x64.tar.gz
+          files: /tmp/${{ matrix.artifact }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

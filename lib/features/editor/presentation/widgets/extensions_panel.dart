@@ -6,6 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/todo_tree_service.dart';
 import 'package:quantum_ide/core/services/test_runner_service.dart';
 import 'package:quantum_ide/core/services/dependency_checker_service.dart';
+import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/wasm_plugins_panel.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class ExtensionsPanel extends ConsumerStatefulWidget {
@@ -16,18 +19,21 @@ class ExtensionsPanel extends ConsumerStatefulWidget {
 }
 
 class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
+  int _selectedTabSection = 0; // 0: Плагины пользователя, 1: Встроенные, 2: WASM
   int _selectedExtension = -1;
+  bool _isDocExpanded = false;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final pluginCount = ref.watch(quantumPluginServiceProvider.select((s) => s.plugins.length));
 
     return Container(
       color: const Color(0xFF0D0F14).withValues(alpha: 0.7),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
             child: Row(
               children: [
                 ShaderMask(
@@ -38,9 +44,9 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Extensions',
+                  'Плагины & Расширения',
                   style: GoogleFonts.inter(
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
@@ -48,12 +54,535 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
               ],
             ),
           ),
-          const Divider(height: 1, color: Colors.white10),
-          Expanded(
-            child: _selectedExtension == -1
-                ? _buildExtensionsList(l10n)
-                : _buildExtensionView(_selectedExtension, l10n),
+
+          // Segmented Tabs: [Мои плагины] | [Встроенные] | [WASM]
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              children: [
+                _buildSegmentButton(0, 'Мои плагины ($pluginCount)', LucideIcons.blocks),
+                const SizedBox(width: 6),
+                _buildSegmentButton(1, 'Встроенные', LucideIcons.layout_grid),
+                const SizedBox(width: 6),
+                _buildSegmentButton(2, 'WASM', LucideIcons.cpu),
+              ],
+            ),
           ),
+
+          const Divider(height: 1, color: Colors.white10),
+
+          Expanded(
+            child: IndexedStack(
+              index: _selectedTabSection,
+              children: [
+                _buildUserPluginsView(),
+                _selectedExtension == -1
+                    ? _buildExtensionsList(l10n)
+                    : _buildExtensionView(_selectedExtension, l10n),
+                const WasmPluginsPanel(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSegmentButton(int index, String label, IconData icon) {
+    final isSelected = _selectedTabSection == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() {
+          _selectedTabSection = index;
+          _selectedExtension = -1;
+        }),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF8B5CF6).withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF8B5CF6).withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 11, color: isSelected ? const Color(0xFFC084FC) : Colors.white54),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? Colors.white : Colors.white60,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserPluginsView() {
+    final pluginState = ref.watch(quantumPluginServiceProvider);
+    final pluginService = ref.read(quantumPluginServiceProvider.notifier);
+
+    return RefreshIndicator(
+      onRefresh: () => pluginService.loadPlugins(),
+      child: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _showAddPluginDialog(context),
+                  icon: const Icon(LucideIcons.plus, size: 13),
+                  label: const Text('Создать плагин', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: () => pluginService.loadPlugins(),
+                icon: const Icon(LucideIcons.refresh_cw, size: 12),
+                label: const Text('Обновить', style: TextStyle(fontSize: 11)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white70,
+                  side: const BorderSide(color: Colors.white12),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          Text(
+            'ПЛАГИНЫ В .QUANTUM/PLUGINS/ (${pluginState.plugins.length})',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.white38,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          if (pluginState.plugins.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.02),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              ),
+              child: Column(
+                children: [
+                  const Icon(LucideIcons.puzzle, size: 26, color: Color(0xFFC084FC)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Нет установленных плагинов',
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Нажмите «Создать плагин» выше, чтобы настроить иконки, команды терминала или чат-бота под себя!',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white38),
+                  ),
+                ],
+              ),
+            ),
+
+          ...pluginState.plugins.map((plugin) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: plugin.isEnabled
+                    ? Colors.white.withValues(alpha: 0.035)
+                    : Colors.white.withValues(alpha: 0.015),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: plugin.isEnabled
+                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.35)
+                      : Colors.white.withValues(alpha: 0.06),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(LucideIcons.puzzle, size: 15, color: Color(0xFFC084FC)),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    plugin.name,
+                                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'v${plugin.version}',
+                                  style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.white38),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              'Автор: ${plugin.author}',
+                              style: GoogleFonts.inter(fontSize: 10, color: Colors.white54),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: plugin.isEnabled,
+                        activeThumbColor: const Color(0xFF8B5CF6),
+                        onChanged: (val) => pluginService.togglePlugin(plugin.id, val),
+                      ),
+                    ],
+                  ),
+                  if (plugin.description.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      plugin.description,
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.3),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 5,
+                    runSpacing: 4,
+                    children: [
+                      if (plugin.folderIcons.isNotEmpty || plugin.fileIcons.isNotEmpty)
+                        _buildFeaturePill(LucideIcons.palette, '${plugin.folderIcons.length + plugin.fileIcons.length} иконок', Colors.cyanAccent),
+                      if (plugin.terminalCommands.isNotEmpty)
+                        _buildFeaturePill(LucideIcons.terminal, '${plugin.terminalCommands.length} команд', Colors.greenAccent),
+                      if (plugin.customBots.isNotEmpty)
+                        _buildFeaturePill(LucideIcons.bot, '${plugin.customBots.length} ботов', Colors.amberAccent),
+                      if (plugin.customButtons.isNotEmpty)
+                        _buildFeaturePill(LucideIcons.sparkles, '${plugin.customButtons.length} кнопок', Colors.purpleAccent),
+                      if (plugin.disabledTabs.isNotEmpty)
+                        _buildFeaturePill(LucideIcons.eye_off, '${plugin.disabledTabs.length} скрытых вкладок', Colors.orangeAccent),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Divider(color: Colors.white10, height: 1),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (plugin.filePath.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () {
+                            ref.read(editorProvider.notifier).openFile(plugin.filePath);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Файл плагина открыт в редакторе: ${plugin.name}')),
+                            );
+                          },
+                          icon: const Icon(LucideIcons.file_code, size: 13, color: Colors.cyanAccent),
+                          label: const Text('Редактировать код', style: TextStyle(fontSize: 11, color: Colors.cyanAccent)),
+                        ),
+                      IconButton(
+                        icon: const Icon(LucideIcons.trash_2, size: 13, color: Colors.redAccent),
+                        tooltip: 'Удалить плагин',
+                        onPressed: () => _confirmDeletePlugin(plugin.id, plugin.name),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          const SizedBox(height: 12),
+          _buildPluginDocumentationCard(),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeaturePill(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: GoogleFonts.inter(fontSize: 9.5, color: color, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeletePlugin(String pluginId, String pluginName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF141822),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Удалить плагин?', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+        content: Text('Вы действительно хотите удалить плагин "$pluginName"?', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена', style: TextStyle(color: Colors.white60))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(quantumPluginServiceProvider.notifier).deletePlugin(pluginId);
+            },
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddPluginDialog(BuildContext context) {
+    String selectedTemplate = 'icons';
+    final nameController = TextEditingController(text: 'Кастомные иконки');
+
+    final templates = [
+      {'type': 'icons', 'title': '🎨 Кастомные иконки', 'desc': 'Свои иконки и цвета для папок и файлов'},
+      {'type': 'chatbot', 'title': '🤖 Свой ИИ чат-бот', 'desc': 'Кастомный ментор с персональным системным промптом'},
+      {'type': 'terminal', 'title': '💻 Команды терминала', 'desc': 'Кнопки быстрого запуска команд в терминале'},
+      {'type': 'tabs', 'title': '🎛 Настройка вкладок', 'desc': 'Отключение или добавление вкладок боковой панели'},
+      {'type': 'buttons', 'title': '🔘 Кнопки интерфейса', 'desc': 'Свои кнопки быстрых действий на верхней панели IDE'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          backgroundColor: const Color(0xFF141822),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(LucideIcons.puzzle, color: Color(0xFFC084FC), size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Создать плагин для IDE',
+                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Выберите шаблон функционала:',
+                    style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white60),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final t in templates)
+                    InkWell(
+                      onTap: () {
+                        setDlgState(() {
+                          selectedTemplate = t['type']!;
+                          nameController.text = t['title']!;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: selectedTemplate == t['type']
+                              ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                              : Colors.white.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: selectedTemplate == t['type']
+                                ? const Color(0xFF8B5CF6)
+                                : Colors.white10,
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              selectedTemplate == t['type'] ? LucideIcons.circle_check : LucideIcons.circle_dot,
+                              size: 16,
+                              color: selectedTemplate == t['type'] ? const Color(0xFFC084FC) : Colors.white38,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(t['title']!, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  Text(t['desc']!, style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white54)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+                    decoration: InputDecoration(
+                      labelText: 'Название плагина',
+                      labelStyle: const TextStyle(color: Color(0xFFC084FC), fontSize: 11),
+                      filled: true,
+                      fillColor: Colors.black26,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена', style: TextStyle(color: Colors.white60)),
+            ),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6)),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                final service = ref.read(quantumPluginServiceProvider.notifier);
+                final p = await service.createPluginFromTemplate(
+                  selectedTemplate,
+                  customName: nameController.text.trim().isNotEmpty ? nameController.text.trim() : null,
+                );
+                if (p.filePath.isNotEmpty) {
+                  ref.read(editorProvider.notifier).openFile(p.filePath);
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Плагин "${p.name}" создан в .quantum/plugins/ и открыт для редактирования!')),
+                  );
+                }
+              },
+              icon: const Icon(LucideIcons.check, size: 14),
+              label: const Text('Создать'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPluginDocumentationCard() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _isDocExpanded = !_isDocExpanded),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.book_open, size: 15, color: Colors.cyanAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '📖 Как написать свой плагин для Quantum IDE',
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
+                Icon(
+                  _isDocExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down,
+                  size: 13,
+                  color: Colors.white54,
+                ),
+              ],
+            ),
+          ),
+          if (_isDocExpanded) ...[
+            const SizedBox(height: 10),
+            const Divider(color: Colors.white10, height: 1),
+            const SizedBox(height: 10),
+            Text(
+              'Все пользовательские плагины хранятся в формате JSON в папке проекта:\n`.quantum/plugins/имя_плагина.json`\n\nВы можете скопировать или отредактировать этот файл прямо в редакторе.',
+              style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black45,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: SelectableText(
+                '{\n'
+                '  "id": "my_plugin",\n'
+                '  "name": "Мой плагин",\n'
+                '  "folderIcons": {\n'
+                '    "controllers": {"icon": "zap", "color": "#FF9800"}\n'
+                '  },\n'
+                '  "terminalCommands": [\n'
+                '    {"name": "Pub Get", "command": "flutter pub get"}\n'
+                '  ],\n'
+                '  "disabledTabs": ["disk", "live_share"]\n'
+                '}',
+                style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.cyanAccent, height: 1.3),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Поддерживаемые разделы:\n'
+              '• "folderIcons" — кастомные иконки для папок\n'
+              '• "fileIcons" — кастомные иконки для файлов (.dart, .json и др.)\n'
+              '• "terminalCommands" — быстрые кнопки команд для терминала\n'
+              '• "customBots" — свои ИИ ассистенты с заданным системным промптом\n'
+              '• "disabledTabs" — скрытие ненужных вкладок интерфейса\n'
+              '• "customButtons" — свои кнопки на верхней панели IDE',
+              style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white60, height: 1.4),
+            ),
+          ],
         ],
       ),
     );
