@@ -609,6 +609,30 @@ Use this capability when the user asks you to:
 4. If an error is spotted: use `find_symbols` or `grep_search` to find the offending widget file.
 5. Fix the code using `replace_code_block`.
 6. Run `flutter analyze` or re-test with `qa_tap` and verify with `qa_get_errors`!
+
+---
+
+## 8. PHYSICAL DEVICE & SECOND PHONE TESTING (USB OTG & Wi-Fi ADB)
+When the user asks to test, inspect, or find errors on a second connected phone or external device:
+You can use the built-in CLI tool `quantum-device` or standard `adb`:
+- Check connected phones: `quantum-device list` (or `adb devices -l`)
+- Check USB Host OTG: `quantum-device otg-check`
+- Connect via Wi-Fi: `quantum-device connect <IP:PORT>`
+- Install & launch APK on phone: `quantum-device install <apk_path> [package_name]`
+- Take screenshot of phone screen: `quantum-device screenshot` (returns image path)
+- Inspect UI element tree on phone: `quantum-device inspect` (returns UIAutomator XML)
+- Tap button / coordinates on phone: `quantum-device tap <X> <Y>`
+- Enter text on phone: `quantum-device type <text>`
+- Send key event (4 for Back): `quantum-device key 4`
+- Read crash logs and runtime errors: `quantum-device logcat 80` (or `adb logcat -d -t 80 *:E`)
+
+Autonomous Phone Testing Workflow:
+1. Run `quantum-device list` to verify connection to the target device.
+2. Build and install the latest APK: `flutter build apk && quantum-device install build/app/outputs/flutter-apk/app-arm64-v8a-release.apk <package>`
+3. Capture screenshot with `quantum-device screenshot` and dump UI hierarchy with `quantum-device inspect` to see button positions.
+4. Simulate user taps and interactions with `quantum-device tap <X> <Y>`.
+5. Check `quantum-device logcat` for any exceptions or crashes.
+6. If an error is detected: locate the file in `lib/`, fix it surgically, rebuild and verify on the phone!
 ''');
     }
 
@@ -771,6 +795,30 @@ Use this capability when the user asks you to:
 4. If an error is spotted: use `find_symbols` or `grep_search` to find the offending widget file.
 5. Fix the code using `replace_code_block`.
 6. Run `flutter analyze` or re-test with `qa_tap` and verify with `qa_get_errors`!
+
+---
+
+## 8. PHYSICAL DEVICE & SECOND PHONE TESTING (USB OTG & Wi-Fi ADB)
+When the user asks to test, inspect, or find errors on a second connected phone or external device:
+You can use the built-in CLI tool `quantum-device` or standard `adb`:
+- Check connected phones: `quantum-device list` (or `adb devices -l`)
+- Check USB Host OTG: `quantum-device otg-check`
+- Connect via Wi-Fi: `quantum-device connect <IP:PORT>`
+- Install & launch APK on phone: `quantum-device install <apk_path> [package_name]`
+- Take screenshot of phone screen: `quantum-device screenshot` (returns image path)
+- Inspect UI element tree on phone: `quantum-device inspect` (returns UIAutomator XML)
+- Tap button / coordinates on phone: `quantum-device tap <X> <Y>`
+- Enter text on phone: `quantum-device type <text>`
+- Send key event (4 for Back): `quantum-device key 4`
+- Read crash logs and runtime errors: `quantum-device logcat 80` (or `adb logcat -d -t 80 *:E`)
+
+Autonomous Phone Testing Workflow:
+1. Run `quantum-device list` to verify connection to the target device.
+2. Build and install the latest APK: `flutter build apk && quantum-device install build/app/outputs/flutter-apk/app-arm64-v8a-release.apk <package>`
+3. Capture screenshot with `quantum-device screenshot` and dump UI hierarchy with `quantum-device inspect` to see button positions.
+4. Simulate user taps and interactions with `quantum-device tap <X> <Y>`.
+5. Check `quantum-device logcat` for any exceptions or crashes.
+6. If an error is detected: locate the file in `lib/`, fix it surgically, rebuild and verify on the phone!
 ''');
     }
 

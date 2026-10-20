@@ -150,6 +150,38 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "packageName is required", null)
                     }
                 }
+                "isUsbHostSupported" -> {
+                    try {
+                        val hasHost = packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
+                        result.success(hasHost)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
+                "getConnectedUsbDevices" -> {
+                    try {
+                        val usbManager = getSystemService(Context.USB_SERVICE) as? android.hardware.usb.UsbManager
+                        val deviceList = usbManager?.deviceList?.values?.map { dev ->
+                            val manufacturer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                try { dev.manufacturerName ?: "" } catch (_: Exception) { "" }
+                            } else ""
+                            val product = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                try { dev.productName ?: "" } catch (_: Exception) { "" }
+                            } else ""
+                            mapOf(
+                                "deviceName" to dev.deviceName,
+                                "vendorId" to dev.vendorId,
+                                "productId" to dev.productId,
+                                "manufacturer" to manufacturer,
+                                "product" to product,
+                                "deviceClass" to dev.deviceClass
+                            )
+                        } ?: emptyList<Map<String, Any?>>()
+                        result.success(deviceList)
+                    } catch (e: Exception) {
+                        result.success(emptyList<Map<String, Any?>>())
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

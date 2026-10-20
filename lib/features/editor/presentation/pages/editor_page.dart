@@ -44,6 +44,8 @@ import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/project_requirements_service.dart';
 import 'package:quantum_ide/shared/widgets/project_requirements_dialog.dart';
+import 'package:quantum_ide/shared/widgets/device_selector_pill.dart';
+import 'package:quantum_ide/shared/widgets/device_manager_dialog.dart';
 
 
 
@@ -919,6 +921,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
+                            const DeviceSelectorPill(),
+                            const SizedBox(width: 6),
                             ActionIconButton(
                               icon: LucideIcons.play,
                               color: Colors.greenAccent,
@@ -1022,6 +1026,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ),
                               onSelected: (value) async {
                                 switch (value) {
+                                  case 'device_manager':
+                                    DeviceManagerDialog.show(context);
+                                    break;
                                   case 'chat':
                                     ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                                     break;
@@ -1037,6 +1044,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 }
                               },
                               itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'device_manager',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.smartphone, size: 16, color: Colors.greenAccent),
+                                      SizedBox(width: 10),
+                                      Text('Устройства (USB/Wi-Fi)', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
                                 PopupMenuItem(
                                   value: 'chat',
                                   child: Row(

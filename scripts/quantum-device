@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# QuantumIDE Device CLI Helper
+# Provides fast ADB phone-to-phone management & autonomous AI testing commands
+
+set -e
+
+CMD="${1:-help}"
+shift 1 || true
+
+get_target_device() {
+    if [ -n "$DEVICE_ID" ]; then
+        echo "$DEVICE_ID"
+        return
+    fi
+    # Pick first online device from adb devices
+    adb devices | grep -v "List of devices" | grep -v "^$" | grep "device$" | head -n 1 | awk '{print $1}'
+}
+
+case "$CMD" in
+    list|devices)
+        echo "=== 📱 Обнаруженные устройства ADB ==="
+        adb devices -l
+        echo ""
+        echo "=== 🔌 Физические USB порты ==="
+        if command -v lsusb >/dev/null 2>&1; then
+            lsusb || true
+        else
+            echo "lsusb не установлен (проверка через sysfs):"
+            ls -d /sys/bus/usb/devices/* 2>/dev/null || true
+        fi
+        ;;
+
+    otg-check|check-otg)
+        echo "=== 🔍 Проверка поддержки USB Host (OTG) ==="
+        if [ -d "/dev/bus/usb" ]; then
+            echo "✅ USB шина (/dev/bus/usb) доступна в системе."
+        else
+            echo "⚠️ /dev/bus/usb не найдена в текущей файловой системе."
+        fi
+
+        if [ -d "/sys/class/android_usb" ] || [ -d "/sys/bus/usb" ]; then
+            echo "✅ Ядро Linux поддерживает USB контроллер."
+        fi
+
+        echo "Подключенные USB устройства:"
+        ls /sys/bus/usb/devices/ 2>/dev/null || true
+        ;;
+
+    connect)
+        TARGET="$1"
+        if [ -z "$TARGET" ]; then
+            echo "Использование: quantum-device connect <IP:PORT>"
+            exit 1
+        fi
+        adb connect "$TARGET"
+        ;;
+
+    pair)
+        TARGET="$1"
+        CODE="$2"
+        if [ -z "$TARGET" ] || [ -z "$CODE" ]; then
+            echo "Использование: quantum-device pair <IP:PORT> <PAIRING_CODE>"
+            exit 1
+        fi
+        adb pair "$TARGET" "$CODE"
+        ;;
+
+    disconnect)
+        TARGET="$1"
+        if [ -z "$TARGET" ]; then
+            adb disconnect
+        else
+            adb disconnect "$TARGET"
+        fi
+        ;;
+
+    screenshot)
+        DEST="${1:-/root/projects/quantum_ide/scratch/screenshot_$(date +%s).png}"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ]; then
+            echo "❌ Ошибка: нет подключенного телефона (adb devices пуст)"
+            exit 1
+        fi
+        mkdir -p "$(dirname "$DEST")"
+        adb -s "$DEV" shell screencap -p /sdcard/quantum_screen.png
+        adb -s "$DEV" pull /sdcard/quantum_screen.png "$DEST" >/dev/null
+        adb -s "$DEV" shell rm -f /sdcard/quantum_screen.png
+        echo "✅ Скриншот сохранен: $DEST"
+        ;;
+
+    ui-dump|inspect)
+        DEST="${1:-/root/projects/quantum_ide/scratch/window_dump_$(date +%s).xml}"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ]; then
+            echo "❌ Ошибка: нет подключенного телефона (adb devices пуст)"
+            exit 1
+        fi
+        mkdir -p "$(dirname "$DEST")"
+        adb -s "$DEV" shell uiautomator dump /sdcard/quantum_ui.xml
+        adb -s "$DEV" pull /sdcard/quantum_ui.xml "$DEST" >/dev/null
+        adb -s "$DEV" shell rm -f /sdcard/quantum_ui.xml
+        echo "✅ Дамп иерархии UI сохранен: $DEST"
+        ;;
+
+    tap)
+        X="$1"
+        Y="$2"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ] || [ -z "$X" ] || [ -z "$Y" ]; then
+            echo "Использование: quantum-device tap <X> <Y>"
+            exit 1
+        fi
+        adb -s "$DEV" shell input tap "$X" "$Y"
+        echo "✅ Нажатие в ($X, $Y) на устройстве $DEV"
+        ;;
+
+    type|text)
+        TEXT="$*"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ] || [ -z "$TEXT" ]; then
+            echo "Использование: quantum-device type <текст>"
+            exit 1
+        fi
+        ESCAPED=$(echo "$TEXT" | sed 's/ /%s/g' | sed "s/'/\\\'/g")
+        adb -s "$DEV" shell input text "$ESCAPED"
+        echo "✅ Текст введен на устройстве $DEV"
+        ;;
+
+    swipe)
+        X1="$1"
+        Y1="$2"
+        X2="$3"
+        Y2="$4"
+        DUR="${5:-300}"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ]; then
+            echo "❌ Ошибка: нет подключенного телефона"
+            exit 1
+        fi
+        adb -s "$DEV" shell input swipe "$X1" "$Y1" "$X2" "$Y2" "$DUR"
+        echo "✅ Свайп выполнен: ($X1,$Y1) -> ($X2,$Y2)"
+        ;;
+
+    key)
+        KEY_CODE="$1"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ] || [ -z "$KEY_CODE" ]; then
+            echo "Использование: quantum-device key <KEY_CODE> (e.g. 4=Back, 3=Home, 66=Enter)"
+            exit 1
+        fi
+        adb -s "$DEV" shell input keyevent "$KEY_CODE"
+        echo "✅ Кнопка $KEY_CODE отправлена"
+        ;;
+
+    logcat|logs|errors)
+        LINES="${1:-50}"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ]; then
+            echo "❌ Ошибка: нет подключенного телефона"
+            exit 1
+        fi
+        echo "=== 📋 Ошибки приложения (logcat *:E) с $DEV ==="
+        adb -s "$DEV" logcat -d -t "$LINES" *:E
+        ;;
+
+    install)
+        APK="$1"
+        PKG="$2"
+        DEV=$(get_target_device)
+        if [ -z "$DEV" ] || [ -z "$APK" ]; then
+            echo "Использование: quantum-device install <путь_к_apk> [package_name]"
+            exit 1
+        fi
+        echo ">>> Установка $APK на $DEV..."
+        adb -s "$DEV" install -r "$APK"
+        if [ -n "$PKG" ]; then
+            echo ">>> Запуск $PKG..."
+            adb -s "$DEV" shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1
+        fi
+        echo "✅ Готово!"
+        ;;
+
+    restart)
+        echo ">>> Перезапуск ADB сервера..."
+        adb kill-server || true
+        adb start-server
+        echo "✅ ADB сервер перезапущен"
+        ;;
+
+    help|*)
+        echo "QuantumIDE Device Manager & AI Testing CLI"
+        echo ""
+        echo "Команды:"
+        echo "  quantum-device list                 - Список подключенных телефонов и USB"
+        echo "  quantum-device otg-check            - Проверка поддержки USB Host (OTG)"
+        echo "  quantum-device connect <IP:PORT>    - Подключение по Wi-Fi ADB"
+        echo "  quantum-device pair <IP:PORT> <CODE>- Сопряжение по Wi-Fi (Android 11+)"
+        echo "  quantum-device disconnect           - Отключение Wi-Fi устройств"
+        echo "  quantum-device install <APK> [PKG]  - Установка и запуск APK на телефоне"
+        echo "  quantum-device screenshot [FILE]    - Скриншот экрана телефона"
+        echo "  quantum-device inspect [FILE]       - Дамп элементов интерфейса (UI XML)"
+        echo "  quantum-device tap <X> <Y>          - Клик пальцем по координатам"
+        echo "  quantum-device type <текст>         - Ввод текста"
+        echo "  quantum-device swipe <X1 Y1 X2 Y2>  - Свайп по экрану"
+        echo "  quantum-device key <CODE>           - Нажатие аппаратной кнопки (4=Назад)"
+        echo "  quantum-device logcat [СТРОКИ]      - Логи крашей и ошибок"
+        echo "  quantum-device restart              - Перезапуск ADB сервера"
+        ;;
+esac

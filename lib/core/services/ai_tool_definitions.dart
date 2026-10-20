@@ -384,4 +384,101 @@ final List<AIToolDefinition> defaultAITools = [
     },
     risk: AIToolRisk.low,
   ),
+  const AIToolDefinition(
+    name: 'device_list',
+    description: 'List connected physical Android phones/devices (connected via USB-C OTG cable or Wi-Fi ADB) and check USB Host capability.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {},
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'device_screenshot',
+    description: 'Take a screenshot of the connected external Android phone via ADB for visual AI inspection. Returns saved screenshot path.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'device_id': {'type': 'string', 'description': 'Optional specific device ID from device_list'},
+      },
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'device_inspect_ui',
+    description: 'Inspect and dump UI hierarchy XML of the currently active app on the connected external phone via UIAutomator.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'device_id': {'type': 'string', 'description': 'Optional specific device ID'},
+      },
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'device_tap',
+    description: 'Tap on screen coordinates (x, y) on the connected external phone.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'x': {'type': 'number', 'description': 'X screen coordinate'},
+        'y': {'type': 'number', 'description': 'Y screen coordinate'},
+        'device_id': {'type': 'string', 'description': 'Optional device ID'},
+      },
+      'required': ['x', 'y'],
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'device_type',
+    description: 'Type text into the focused input field on the connected external phone.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'text': {'type': 'string', 'description': 'Text to input'},
+        'device_id': {'type': 'string', 'description': 'Optional device ID'},
+      },
+      'required': ['text'],
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'device_key',
+    description: 'Send key event to the connected external phone (4 = Back, 3 = Home, 66 = Enter, 24 = Vol Up, 25 = Vol Down).',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'key_code': {'type': 'number', 'description': 'Android KeyEvent code (e.g. 4 for Back)'},
+        'device_id': {'type': 'string', 'description': 'Optional device ID'},
+      },
+      'required': ['key_code'],
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'device_get_logs',
+    description: 'Retrieve recent crash and error logs (logcat *:E) from the connected external phone to diagnose app crashes.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'lines': {'type': 'number', 'description': 'Number of log lines (default 80)'},
+        'device_id': {'type': 'string', 'description': 'Optional device ID'},
+      },
+    },
+    risk: AIToolRisk.low,
+  ),
+  const AIToolDefinition(
+    name: 'device_install_app',
+    description: 'Install an APK file onto the connected external phone and optionally launch its main activity.',
+    inputSchema: {
+      'type': 'object',
+      'properties': {
+        'apk_path': {'type': 'string', 'description': 'Local file path to the APK'},
+        'package_name': {'type': 'string', 'description': 'Optional Android package name to launch after install'},
+        'device_id': {'type': 'string', 'description': 'Optional device ID'},
+      },
+      'required': ['apk_path'],
+    },
+    risk: AIToolRisk.medium,
+  ),
 ];

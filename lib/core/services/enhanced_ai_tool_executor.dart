@@ -9,6 +9,7 @@ import 'package:quantum_ide/core/services/agent_markers.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
 import 'package:quantum_ide/core/services/ghost_qa_service.dart';
+import 'package:quantum_ide/core/services/adb_device_service.dart';
 import 'package:dio/dio.dart';
 
 class PendingEdit {
@@ -475,6 +476,14 @@ class EnhancedAIToolExecutor {
         case 'qa_get_runtime_errors': return await _qaGetRuntimeErrors(toolCall);
         case 'qa_clear_errors': return await _qaClearErrors(toolCall);
         case 'qa_take_screenshot': return await _qaTakeScreenshot(toolCall);
+        case 'device_list': return await _deviceList(toolCall);
+        case 'device_screenshot': return await _deviceScreenshot(toolCall);
+        case 'device_inspect_ui': return await _deviceInspectUi(toolCall);
+        case 'device_tap': return await _deviceTap(toolCall);
+        case 'device_type': return await _deviceType(toolCall);
+        case 'device_key': return await _deviceKey(toolCall);
+        case 'device_get_logs': return await _deviceGetLogs(toolCall);
+        case 'device_install_app': return await _deviceInstallApp(toolCall);
         default:
           return AIToolResult(toolCallId: toolCall.id, content: 'Unknown tool: ${toolCall.name}', isError: true);
       }
@@ -1115,6 +1124,134 @@ class EnhancedAIToolExecutor {
       toolCallId: toolCall.id,
       content: 'Screenshot saved to: $path',
     );
+  }
+
+  Future<AIToolResult> _deviceList(AIToolCall toolCall) async {
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    await adbService.refreshDevices();
+    final state = ref.read(adbDeviceServiceProvider);
+
+    final result = {
+      'isUsbHostSupported': state.isUsbHostSupported,
+      'physicalUsbDevices': state.rawUsbDevices,
+      'adbDevices': state.devices.map((d) => d.toJson()).toList(),
+      'selectedDevice': state.selectedDevice?.toJson(),
+      'summary': state.devices.isEmpty
+          ? 'No ADB devices found. Ensure USB debugging is enabled on target phone and OTG cable is connected, or use Wi-Fi ADB.'
+          : 'Found ${state.devices.length} device(s). Active target: ${state.selectedDevice?.displayName ?? "none"}',
+    };
+
+    return AIToolResult(toolCallId: toolCall.id, content: jsonEncode(result));
+  }
+
+  Future<AIToolResult> _deviceScreenshot(AIToolCall toolCall) async {
+    final deviceId = toolCall.arguments['device_id'] as String?;
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    try {
+      final savedPath = await adbService.takeScreenshot(deviceId: deviceId);
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Screenshot successfully captured from external phone and saved to: $savedPath\n[IMAGE:$savedPath]',
+      );
+    } catch (e) {
+      return AIToolResult(toolCallId: toolCall.id, content: 'Failed to take screenshot: $e', isError: true);
+    }
+  }
+
+  Future<AIToolResult> _deviceInspectUi(AIToolCall toolCall) async {
+    final deviceId = toolCall.arguments['device_id'] as String?;
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    try {
+      final xml = await adbService.dumpUiHierarchy(deviceId: deviceId);
+      final truncated = xml.length > 12000 ? '${xml.substring(0, 12000)}\n... (truncated)' : xml;
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Target Phone UI Hierarchy XML:\n$truncated',
+      );
+    } catch (e) {
+      return AIToolResult(toolCallId: toolCall.id, content: 'Failed to dump UI: $e', isError: true);
+    }
+  }
+
+  Future<AIToolResult> _deviceTap(AIToolCall toolCall) async {
+    final x = (toolCall.arguments['x'] as num).toInt();
+    final y = (toolCall.arguments['y'] as num).toInt();
+    final deviceId = toolCall.arguments['device_id'] as String?;
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    try {
+      await adbService.sendTap(x, y, deviceId: deviceId);
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Successfully tapped at ($x, $y) on external device.',
+      );
+    } catch (e) {
+      return AIToolResult(toolCallId: toolCall.id, content: 'Failed to tap: $e', isError: true);
+    }
+  }
+
+  Future<AIToolResult> _deviceType(AIToolCall toolCall) async {
+    final text = toolCall.arguments['text'] as String;
+    final deviceId = toolCall.arguments['device_id'] as String?;
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    try {
+      await adbService.sendText(text, deviceId: deviceId);
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Successfully entered text on external device: "$text"',
+      );
+    } catch (e) {
+      return AIToolResult(toolCallId: toolCall.id, content: 'Failed to input text: $e', isError: true);
+    }
+  }
+
+  Future<AIToolResult> _deviceKey(AIToolCall toolCall) async {
+    final keyCode = (toolCall.arguments['key_code'] as num).toInt();
+    final deviceId = toolCall.arguments['device_id'] as String?;
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    try {
+      await adbService.sendKeyEvent(keyCode, deviceId: deviceId);
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Sent keycode $keyCode to external device.',
+      );
+    } catch (e) {
+      return AIToolResult(toolCallId: toolCall.id, content: 'Failed to send key: $e', isError: true);
+    }
+  }
+
+  Future<AIToolResult> _deviceGetLogs(AIToolCall toolCall) async {
+    final lines = (toolCall.arguments['lines'] as num?)?.toInt() ?? 80;
+    final deviceId = toolCall.arguments['device_id'] as String?;
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    try {
+      final logs = await adbService.getLogcatErrors(lines: lines, deviceId: deviceId);
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: logs.isEmpty ? 'No recent error logs found on device.' : 'Recent Logcat Errors:\n$logs',
+      );
+    } catch (e) {
+      return AIToolResult(toolCallId: toolCall.id, content: 'Failed to get logs: $e', isError: true);
+    }
+  }
+
+  Future<AIToolResult> _deviceInstallApp(AIToolCall toolCall) async {
+    final apkPath = _resolvePath(toolCall.arguments['apk_path'] as String);
+    final packageName = toolCall.arguments['package_name'] as String?;
+    final deviceId = toolCall.arguments['device_id'] as String?;
+    final adbService = ref.read(adbDeviceServiceProvider.notifier);
+    try {
+      final res = await adbService.installAndRun(
+        apkPath: apkPath,
+        packageName: packageName,
+        deviceId: deviceId,
+      );
+      return AIToolResult(
+        toolCallId: toolCall.id,
+        content: 'Install result:\n$res',
+      );
+    } catch (e) {
+      return AIToolResult(toolCallId: toolCall.id, content: 'Failed to install APK: $e', isError: true);
+    }
   }
 
   RegExp _globToRegex(String glob) {

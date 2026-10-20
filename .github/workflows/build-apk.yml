@@ -32,15 +32,19 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.45 - Auto Project Requirements, 1-Click Environment Setup & ARM64 Native SDK Fixes
+        ## 🚀 QuantumIDE v1.2.46 - Device Manager, USB OTG Phone-to-Phone, Wi-Fi ADB & Autonomous AI Mobile Testing
 
-        ### 🧩 Автопроверка зависимостей проекта (Project Requirements):
-        - **Умный анализ окружения**: При открытии любого проекта (Flutter, Android Java/Kotlin, Node.js, Python, Rust, C++) QuantumIDE автоматически определяет необходимые инструменты (Android SDK, Build-Tools, CMake, платформы).
-        - **1-Click Установка**: Интерактивное модальное окно покажет список недостающих пакетов и запустит пакетную установку всех компонентов прямо в терминале в один клик.
+        ### 📱 Phone-to-Phone USB OTG & Device Manager:
+        - **Android Studio-like Device Manager**: Плашка выбора активного устройства в верхней панели инструментов и нижнем статус-баре (`DeviceSelectorPill`).
+        - **Детектор аппаратного USB Host (OTG)**: Автоматическая проверка поддержки USB Host режима смартфоном и отображение подключенных устройств.
+        - **1-Click Run & Install**: Установка и запуск скомпилированных APK на внешнем телефоне прямо из IDE.
+        - **Logcat Viewer & Screenshot**: Снятие скриншотов с экрана подключенного телефона с предпросмотром и чтение системных логов крашей (Logcat *:E).
+        - **Wi-Fi ADB (Wireless Debugging)**: Беспроводное подключение по IP:порт и сопряжение по 6-значному коду для Android 11+.
 
-        ### ⚙️ Улучшения ARM64 окружения & SDK:
-        - **Native ARM64 Build-Tools**: Поддержка нативных сборок Android SDK Build-Tools 35.0.1 и 36.0.0 с нативными бинарниками `aapt2`, `aapt` и `zipalign`.
-        - **Стабильность AAPT2**: Устранены падения AAPT2 daemon и несовместимости x86_64 библиотек на мобильных ARM64 устройствах.
+        ### 🤖 Автономное тестирование с ИИ (AI Mobile Testing):
+        - **Глобальная утилита `quantum-device`**: Управление девайсом из терминала (`list`, `connect`, `screenshot`, `inspect`, `tap`, `type`, `swipe`, `key`, `logcat`).
+        - **ИИ-инструменты в агенте**: Набор функций `device_list`, `device_screenshot`, `device_inspect_ui`, `device_tap`, `device_type`, `device_key`, `device_get_logs`, `device_install_app`.
+        - **Полный цикл QA**: ИИ делает скриншоты, изучает XML-дерево виджетов, нажимает кнопки, вводит текст, ловит краши и сам исправляет код в проекте!
 
         ### 🌐 Мультиплатформенная сборка:
         - **Android**: Universal APK, Split ABIs (ARM64, ARMv7, x86_64) и App Bundle (AAB).
