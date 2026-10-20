@@ -42,6 +42,8 @@ import 'package:quantum_ide/models/chat_message.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
+import 'package:quantum_ide/core/services/project_requirements_service.dart';
+import 'package:quantum_ide/shared/widgets/project_requirements_dialog.dart';
 
 
 
@@ -458,11 +460,29 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final currentWs = ref.read(workspaceProvider).currentPath;
+      if (currentWs != null) {
+        _checkProjectRequirements(currentWs);
+      }
+    });
   }
 
   @override
   void dispose() {
     super.dispose();
+  }
+
+  void _checkProjectRequirements(String workspacePath) {
+    Future.microtask(() async {
+      if (!mounted) return;
+      final reqService = ref.read(projectRequirementsServiceProvider);
+      final result = await reqService.checkProjectRequirements(workspacePath);
+      if (result != null && result.hasMissing && mounted) {
+        await ProjectRequirementsDialog.show(context, result);
+      }
+    });
   }
 
   /// Вызывается один раз при смене workspace — не на каждый build()
@@ -483,6 +503,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     
     // Событийный запрос Git статуса при смене рабочего пространства
     ref.read(gitProvider.notifier).refreshStatus();
+
+    // Автопроверка необходимых пакетов для проекта
+    _checkProjectRequirements(workspacePath);
 
     // Показываем уведомление об автонастройке .gitignore
     if (mounted) {
