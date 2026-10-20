@@ -1294,7 +1294,12 @@ class AINotifier extends StateNotifier<AIState> {
                      .replaceAll(RegExp(r'<thought>[\s\S]*?(?:</thought>|$)', caseSensitive: false), '')
                      .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
                      .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+                     .replaceAll(RegExp(r'(?:<\|tool_call_start\|>|<\|tool_call_begin\|>|<tool_call>|<\|action_start\|>)[\s\S]*?(?:<\|tool_call_end\|>|<\|tool_call_finish\|>|</tool_call>|<\|action_end\|>|$)', caseSensitive: false), '')
+                     .replaceAll(RegExp(r'<dots_function_call>[\s\S]*?(?:</dots_function_call>|$)', caseSensitive: false), '')
+                     .replaceAll(RegExp(r'<function_call\b[\s\S]*?(?:</function_call>|$)', caseSensitive: false), '')
+                     .replaceAll(RegExp(r'<invoke\b[\s\S]*?(?:</invoke>|$)', caseSensitive: false), '')
                      .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*$'), '')
+                     .replaceAll(RegExp(r'\[\s*(?:read_file|write_file|edit_file|list_dir|flutter_analyze|dart_analyze|run_command|command)\b[\s\S]*$'), '')
                      .trimLeft();
 
                  if (state.messages.isNotEmpty) {
@@ -1370,9 +1375,9 @@ class AINotifier extends StateNotifier<AIState> {
           responseText = responseText
               .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
               .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+              .replaceAll(RegExp(r'(?:<\|tool_call_start\|>|<\|tool_call_begin\|>|<tool_call>|<\|action_start\|>)[\s\S]*?(?:<\|tool_call_end\|>|<\|tool_call_finish\|>|</tool_call>|<\|action_end\|>|$)', caseSensitive: false), '')
               .replaceAll(RegExp(r'<dots_function_call>[\s\S]*?(?:</dots_function_call>|$)', caseSensitive: false), '')
               .replaceAll(RegExp(r'<function_call\b[\s\S]*?(?:</function_call>|$)', caseSensitive: false), '')
-              .replaceAll(RegExp(r'<tool_call>[\s\S]*?(?:</tool_call>|$)', caseSensitive: false), '')
               .replaceAll(RegExp(r'<invoke\b[\s\S]*?(?:</invoke>|$)', caseSensitive: false), '');
           
           continue;
@@ -1381,11 +1386,12 @@ class AINotifier extends StateNotifier<AIState> {
         final cleanContent = responseText
             .replaceAll(RegExp(r'<actions>[\s\S]*?(?:</actions>|$)', caseSensitive: false), '')
             .replaceAll(RegExp(r'<action>[\s\S]*?(?:</action>|$)', caseSensitive: false), '')
+            .replaceAll(RegExp(r'(?:<\|tool_call_start\|>|<\|tool_call_begin\|>|<tool_call>|<\|action_start\|>)[\s\S]*?(?:<\|tool_call_end\|>|<\|tool_call_finish\|>|</tool_call>|<\|action_end\|>|$)', caseSensitive: false), '')
             .replaceAll(RegExp(r'<dots_function_call>[\s\S]*?(?:</dots_function_call>|$)', caseSensitive: false), '')
             .replaceAll(RegExp(r'<function_call\b[\s\S]*?(?:</function_call>|$)', caseSensitive: false), '')
-            .replaceAll(RegExp(r'<tool_call>[\s\S]*?(?:</tool_call>|$)', caseSensitive: false), '')
             .replaceAll(RegExp(r'<invoke\b[\s\S]*?(?:</invoke>|$)', caseSensitive: false), '')
             .replaceAll(RegExp(r'\[\s*\{\s*"type"[\s\S]*(?:\]|$)'), '')
+            .replaceAll(RegExp(r'\[\s*(?:read_file|write_file|edit_file|list_dir|flutter_analyze|dart_analyze|run_command|command)\s*\([\s\S]*?\)\s*\]', caseSensitive: false), '')
             .trim();
 
         final effectiveContent = cleanContent.isNotEmpty
@@ -2086,7 +2092,187 @@ class AINotifier extends StateNotifier<AIState> {
       }
     }
 
+    // Special token tool calls (<|tool_call_start|>...<|tool_call_end|>, etc.)
+    // or bare function call lists: [read_file(...), ...]
+    if (actions.isEmpty) {
+      final parsed = _parseSpecialToolCalls(cleanText, workspacePath);
+      for (final a in parsed) {
+        _computeActionDiffs(a);
+        actions.add(a);
+      }
+    }
+
     return actions;
+  }
+
+  List<AIAction> _parseSpecialToolCalls(String text, String? workspacePath) {
+    final actions = <AIAction>[];
+
+    final toolBlockRegex = RegExp(
+      r'(?:<\|tool_call_start\|>|<\|tool_call_begin\|>|<tool_call>|<\|action_start\|>)([\s\S]*?)(?:<\|tool_call_end\|>|<\|tool_call_finish\|>|</tool_call>|<\|action_end\|>|$)',
+      caseSensitive: false,
+    );
+
+    final List<String> candidateBlocks = [];
+    for (final match in toolBlockRegex.allMatches(text)) {
+      final block = match.group(1)?.trim();
+      if (block != null && block.isNotEmpty) {
+        candidateBlocks.add(block);
+      }
+    }
+
+    if (candidateBlocks.isEmpty) {
+      final listFuncRegex = RegExp(r'\[\s*[a-zA-Z0-9_\-]+\s*\([\s\S]*?\)\s*\]');
+      final match = listFuncRegex.firstMatch(text);
+      if (match != null) {
+        candidateBlocks.add(match.group(0)!);
+      }
+    }
+
+    for (final block in candidateBlocks) {
+      // 1. Try JSON
+      try {
+        var jsonStr = block;
+        if (jsonStr.contains('```')) {
+          jsonStr = jsonStr
+              .split('\n')
+              .where((l) => !l.trim().startsWith(RegExp(r'```(json)?', caseSensitive: false)))
+              .join('\n')
+              .trim();
+        }
+        final decoded = jsonDecode(jsonStr);
+        final List<dynamic> list = decoded is List ? decoded : [decoded];
+        for (final item in list) {
+          if (item is Map) {
+            final map = Map<String, dynamic>.from(item);
+            final name = (map['name'] ?? map['type'] ?? '').toString();
+            final args = map['arguments'] is Map
+                ? Map<String, dynamic>.from(map['arguments'])
+                : (map['params'] is Map ? Map<String, dynamic>.from(map['params']) : map);
+            final act = _buildActionFromCall(name, args, workspacePath);
+            if (act != null) actions.add(act);
+          }
+        }
+        if (actions.isNotEmpty) continue;
+      } catch (_) {}
+
+      // 2. Python-style function call syntax: name(k=v, ...)
+      final funcRegex = RegExp(r'([a-zA-Z0-9_\-]+)\s*\(([\s\S]*?)\)(?=\s*(?:,|$|\]|\n))');
+      for (final fm in funcRegex.allMatches(block)) {
+        final name = fm.group(1)?.trim() ?? '';
+        final argsStr = fm.group(2)?.trim() ?? '';
+        final args = <String, String>{};
+
+        final argRegex = RegExp(
+          r'''([a-zA-Z0-9_]+)\s*=\s*(?:"""([\s\S]*?)"""|''' r"'''([\s\S]*?)'''" r'''|"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'|([^,)]*))''',
+        );
+        for (final am in argRegex.allMatches(argsStr)) {
+          final key = am.group(1)!.trim();
+          var val = am.group(2) ?? am.group(3) ?? am.group(4) ?? am.group(5) ?? am.group(6) ?? '';
+          val = val.replaceAll(r'\"', '"').replaceAll(r"\'", "'").replaceAll(r'\n', '\n');
+          args[key] = val.trim();
+        }
+
+        if (args.isEmpty && argsStr.isNotEmpty) {
+          final posMatch = RegExp(r'''^['"]([\s\S]*?)['"]$''').firstMatch(argsStr);
+          if (posMatch != null) {
+            args['path'] = posMatch.group(1)!;
+          }
+        }
+
+        final act = _buildActionFromCall(name, args, workspacePath);
+        if (act != null) actions.add(act);
+      }
+    }
+
+    // Deduplicate identical actions in this batch
+    final uniqueActions = <AIAction>[];
+    final seen = <String>{};
+    for (final a in actions) {
+      final key = '${a.type}:${a.path}:${a.content}';
+      if (seen.add(key)) {
+        uniqueActions.add(a);
+      }
+    }
+    return uniqueActions;
+  }
+
+  AIAction? _buildActionFromCall(String rawName, Map<dynamic, dynamic> args, String? workspacePath) {
+    if (rawName.isEmpty) return null;
+    String type = rawName.toLowerCase();
+    String path = (args['path'] ?? args['file'] ?? args['target'] ?? '').toString().trim();
+    String content = (args['content'] ?? args['code'] ?? args['command'] ?? args['cmd'] ?? args['query'] ?? '').toString().trim();
+    final String? oldText = args['old_string']?.toString() ?? args['search_block']?.toString() ?? args['search']?.toString() ?? args['old_text']?.toString();
+    final String? newText = args['new_string']?.toString() ?? args['replace_block']?.toString() ?? args['replace']?.toString() ?? args['new_text']?.toString();
+    String desc = args['description']?.toString() ?? '';
+
+    if (type == 'read_file' || type == 'cat' || type == 'view_file') {
+      type = 'read_file';
+      desc = desc.isNotEmpty ? desc : 'Чтение файла ${p.basename(path)}';
+    } else if (type == 'write_file' || type == 'create_file' || type == 'save_file' || type == 'create') {
+      type = 'create';
+      desc = desc.isNotEmpty ? desc : 'Создание файла ${p.basename(path)}';
+    } else if (type == 'edit_file' || type == 'replace_code_block' || type == 'replace' || type == 'edit') {
+      type = 'replace_code_block';
+      desc = desc.isNotEmpty ? desc : 'Точечное исправление в ${p.basename(path)}';
+    } else if (type == 'rewrite_whole_file') {
+      type = 'rewrite_whole_file';
+      desc = desc.isNotEmpty ? desc : 'Перезапись файла ${p.basename(path)}';
+    } else if (type == 'delete_file' || type == 'delete' || type == 'rm') {
+      type = 'delete';
+      desc = desc.isNotEmpty ? desc : 'Удаление файла ${p.basename(path)}';
+    } else if (type == 'flutter_analyze' || type == 'dart_analyze' || type == 'analyze') {
+      type = 'command';
+      content = (type == 'dart_analyze') ? 'dart analyze' : 'flutter analyze';
+      path = '';
+      desc = 'Статический анализ проекта';
+    } else if (type == 'flutter_test' || type == 'dart_test' || type == 'test') {
+      type = 'command';
+      content = (type == 'dart_test') ? 'dart test' : 'flutter test';
+      path = '';
+      desc = 'Запуск тестов';
+    } else if (type == 'run_command' || type == 'bash' || type == 'terminal' || type == 'sh' || type == 'exec' || type == 'command') {
+      type = 'command';
+      content = content.isNotEmpty ? content : path;
+      path = '';
+      desc = desc.isNotEmpty ? desc : 'Команда: $content';
+    } else if (type == 'list_dir' || type == 'list_directory' || type == 'ls' || type == 'dir') {
+      type = 'list_dir';
+      desc = desc.isNotEmpty ? desc : 'Просмотр каталога ${p.basename(path)}';
+    } else if (type == 'grep_search' || type == 'search_code' || type == 'find_in_files' || type == 'grep') {
+      type = 'grep_search';
+      content = content.isNotEmpty ? content : path;
+      path = '';
+      desc = desc.isNotEmpty ? desc : 'Поиск: $content';
+    } else if (type == 'find_symbols' || type == 'search_symbols') {
+      type = 'find_symbols';
+      content = content.isNotEmpty ? content : path;
+      path = '';
+      desc = desc.isNotEmpty ? desc : 'Поиск символов: $content';
+    } else if (type == 'web_search') {
+      type = 'web_search';
+      content = content.isNotEmpty ? content : path;
+      path = '';
+      desc = desc.isNotEmpty ? desc : 'Поиск в сети: $content';
+    } else if (type == 'web_fetch') {
+      type = 'web_fetch';
+      path = path.isNotEmpty ? path : content;
+      content = '';
+      desc = desc.isNotEmpty ? desc : 'Загрузка URL: $path';
+    }
+
+    if (path.isNotEmpty && workspacePath != null && !p.isAbsolute(path)) {
+      path = p.join(workspacePath, path);
+    }
+
+    return AIAction(
+      type: type,
+      path: path,
+      content: content,
+      description: desc,
+      oldText: oldText,
+      newText: newText,
+    );
   }
 
   /// Robust targeted replacement matching exact, trimmed, CRLF-normalized,

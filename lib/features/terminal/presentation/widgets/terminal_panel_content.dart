@@ -784,7 +784,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             ),
             if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
                 sessions.isNotEmpty &&
-                notifier.currentIndex < sessions.length)
+                notifier.currentIndex < sessions.length &&
+                ((MediaQuery.of(context).viewInsets.bottom <= 20) && !_isMobileKeyboardActive))
               _buildPluginCommandsBar(sessions[notifier.currentIndex]),
             if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
                 (Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650))
@@ -1536,39 +1537,28 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       ),
                     ),
                   ],
-                  _buildTerminalActionButton(
-                    _inlineSelectionMode ? LucideIcons.square_check : LucideIcons.mouse_pointer_click,
-                    _inlineSelectionMode ? 'Выйти из режима выделения' : 'Выделить текст прямо в терминале',
-                    () => _toggleInlineSelectionMode(currentSession),
-                    color: _inlineSelectionMode ? Colors.amberAccent : Colors.cyanAccent,
-                  ),
-                  const SizedBox(width: 3),
-                  _buildTerminalActionButton(
-                    LucideIcons.copy,
-                    AppLocalizations.of(context)!.copyAll,
-                    () => _copyTerminalOutputDirect(currentSession),
-                  ),
-                  const SizedBox(width: 3),
-                  _buildTerminalActionButton(
-                    _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
-                    _isTerminalSplit ? 'Объединить' : 'Разделить экран',
-                    () {
-                      setState(() {
-                        _isTerminalSplit = !_isTerminalSplit;
-                        if (_isTerminalSplit && sessions.length < 2) {
-                          notifier.createNewSession();
-                        }
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 3),
-                  _buildTerminalActionButton(
-                    LucideIcons.coffee,
-                    _isWakelockEnabled ? 'Экран не гаснет (активно)' : 'Не гасить экран (Wakelock)',
-                    _toggleWakelock,
-                    color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
-                  ),
-                  const SizedBox(width: 3),
+                  if (!isCompact) ...[
+                    _buildTerminalActionButton(
+                      _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
+                      _isTerminalSplit ? 'Объединить' : 'Разделить экран',
+                      () {
+                        setState(() {
+                          _isTerminalSplit = !_isTerminalSplit;
+                          if (_isTerminalSplit && sessions.length < 2) {
+                            notifier.createNewSession();
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 3),
+                    _buildTerminalActionButton(
+                      LucideIcons.coffee,
+                      _isWakelockEnabled ? 'Экран не гаснет (активно)' : 'Не гасить экран (Wakelock)',
+                      _toggleWakelock,
+                      color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
+                    ),
+                    const SizedBox(width: 3),
+                  ],
                   _buildTerminalActionButton(
                     LucideIcons.plus,
                     'Новая сессия',
@@ -2662,6 +2652,28 @@ Also explain what exactly went wrong and how you fixed it.
             ],
           ),
         ),
+        PopupMenuItem(
+          value: 'split',
+          height: 38,
+          child: Row(
+            children: [
+              Icon(_isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2, size: 15, color: Colors.cyanAccent),
+              const SizedBox(width: 10),
+              Text(_isTerminalSplit ? 'Объединить экран' : 'Разделить экран', style: const TextStyle(color: Colors.white, fontSize: 13)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'wakelock',
+          height: 38,
+          child: Row(
+            children: [
+              Icon(LucideIcons.coffee, size: 15, color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white70),
+              const SizedBox(width: 10),
+              Text(_isWakelockEnabled ? 'Не гасить экран (Вкл)' : 'Не гасить экран (Wakelock)', style: TextStyle(color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white, fontSize: 13)),
+            ],
+          ),
+        ),
         const PopupMenuDivider(height: 1),
         const PopupMenuItem(
           value: 'ctrl_c',
@@ -2722,6 +2734,16 @@ Also explain what exactly went wrong and how you fixed it.
     } else if (result == 'clear') {
       session.xtermTerminal.eraseDisplay();
       session.xtermTerminal.eraseScrollbackOnly();
+    } else if (result == 'split') {
+      setState(() {
+        _isTerminalSplit = !_isTerminalSplit;
+        final sessions = ref.read(terminalTabsProvider);
+        if (_isTerminalSplit && sessions.length < 2) {
+          ref.read(terminalTabsProvider.notifier).createNewSession();
+        }
+      });
+    } else if (result == 'wakelock') {
+      _toggleWakelock();
     }
   }
 
@@ -2852,6 +2874,22 @@ Also explain what exactly went wrong and how you fixed it.
                   },
                 ),
                 _buildMenuTile(
+                  icon: _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
+                  iconColor: Colors.cyanAccent,
+                  title: _isTerminalSplit ? 'Объединить экран' : 'Разделить экран (Split)',
+                  subtitle: 'Разделить терминал на два параллельных окна',
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _isTerminalSplit = !_isTerminalSplit;
+                      final sessions = ref.read(terminalTabsProvider);
+                      if (_isTerminalSplit && sessions.length < 2) {
+                        ref.read(terminalTabsProvider.notifier).createNewSession();
+                      }
+                    });
+                  },
+                ),
+                _buildMenuTile(
                   icon: LucideIcons.coffee,
                   iconColor: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
                   title: _isWakelockEnabled ? 'Не гасить экран (Активно)' : 'Держать экран включенным (Wakelock)',
@@ -2930,17 +2968,17 @@ Also explain what exactly went wrong and how you fixed it.
     if (cmds.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 38,
+      height: 32,
       decoration: const BoxDecoration(
         color: Color(0xFF141721),
         border: Border(
-          top: BorderSide(color: Color(0xFF262C3D), width: 1),
-          bottom: BorderSide(color: Color(0xFF1A1F2C), width: 1),
+          top: BorderSide(color: Color(0xFF262C3D), width: 0.8),
+          bottom: BorderSide(color: Color(0xFF1A1F2C), width: 0.8),
         ),
       ),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         itemCount: cmds.length,
         separatorBuilder: (context, index) => const SizedBox(width: 6),
         itemBuilder: (context, index) {
@@ -2949,24 +2987,24 @@ Also explain what exactly went wrong and how you fixed it.
             onTap: () {
               session.pty.write(Uint8List.fromList(utf8.encode('${item.command}\n')));
             },
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(5),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: const Color(0xFF1E2433),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(5),
                 border: Border.all(color: const Color(0xFF333B50), width: 0.8),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(LucideIcons.terminal, size: 12, color: Color(0xFF4FC3F7)),
-                  const SizedBox(width: 5),
+                  const Icon(LucideIcons.terminal, size: 11, color: Color(0xFF4FC3F7)),
+                  const SizedBox(width: 4),
                   Text(
                     item.name,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 11,
+                      fontSize: 10.5,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'JetBrainsMono',
                     ),

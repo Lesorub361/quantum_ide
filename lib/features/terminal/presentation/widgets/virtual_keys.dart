@@ -66,15 +66,18 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
   ];
 
   static const List<VirtualKey> _row2Keys = [
-    VirtualKey(label: 'SEL', value: 'inline_selection_mode', icon: LucideIcons.mouse_pointer_click, isToggle: true, tooltip: 'Режим выделения текста прямо в терминале'),
-    VirtualKey(label: 'COPY', value: 'copy', icon: LucideIcons.copy, tooltip: 'Копировать выделенное'),
     VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: 'Вставить из буфера'),
     VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: 'Прервать процесс (Ctrl+C)'),
+    VirtualKey(label: '~', value: '~'),
     VirtualKey(label: '/', value: '/'),
     VirtualKey(label: '-', value: '-'),
     VirtualKey(label: '_', value: '_'),
-    VirtualKey(label: '.', value: '.'),
     VirtualKey(label: '|', value: '|'),
+    VirtualKey(label: '\\', value: '\\'),
+    VirtualKey(label: '"', value: '"'),
+    VirtualKey(label: '\'', value: '\''),
+    VirtualKey(label: ':', value: ':'),
+    VirtualKey(label: '.', value: '.'),
   ];
 
   void _showMoreCommandsSheet(BuildContext context) {

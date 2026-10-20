@@ -32,25 +32,22 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.46 - Device Manager, USB OTG Phone-to-Phone, Wi-Fi ADB & Autonomous AI Mobile Testing
+        ## 🚀 QuantumIDE v1.2.47 - AI Agent Tool Calling Fix & Sleek Terminal UI/Selection Overhaul
 
-        ### 📱 Phone-to-Phone USB OTG & Device Manager:
-        - **Android Studio-like Device Manager**: Плашка выбора активного устройства в верхней панели инструментов и нижнем статус-баре (`DeviceSelectorPill`).
-        - **Детектор аппаратного USB Host (OTG)**: Автоматическая проверка поддержки USB Host режима смартфоном и отображение подключенных устройств.
-        - **1-Click Run & Install**: Установка и запуск скомпилированных APK на внешнем телефоне прямо из IDE.
-        - **Logcat Viewer & Screenshot**: Снятие скриншотов с экрана подключенного телефона с предпросмотром и чтение системных логов крашей (Logcat *:E).
-        - **Wi-Fi ADB (Wireless Debugging)**: Беспроводное подключение по IP:порт и сопряжение по 6-значному коду для Android 11+.
+        ### 🤖 Исправление вызовов инструментов ИИ-агента (Special Tool Call Tokens & Liquid LFM Fix):
+        - **Парсинг токенов `<|tool_call_start|>` и списков вызовов**: Полная поддержка специальных форматов вызова инструментов (`<|tool_call_start|>...<|tool_call_end|>`, `<tool_call>`, `<|action_start|>`, списки `[read_file(path='...'), ...]`).
+        - **Автоматическое исполнение**: Устранена проблема, когда агент возвращал сырой текст `<|tool_call_start|>[read_file(...)]<|tool_call_end|>` вместо исполнения действий.
+        - **Статический анализ**: Поддержка и маппинг вызовов `flutter_analyze` / `dart_analyze` в исполняемые команды проекта.
+        - **Дедупликация действий**: Предотвращение повторного чтения одного и того же файла в одном шаге агента.
 
-        ### 🤖 Автономное тестирование с ИИ (AI Mobile Testing):
-        - **Глобальная утилита `quantum-device`**: Управление девайсом из терминала (`list`, `connect`, `screenshot`, `inspect`, `tap`, `type`, `swipe`, `key`, `logcat`).
-        - **ИИ-инструменты в агенте**: Набор функций `device_list`, `device_screenshot`, `device_inspect_ui`, `device_tap`, `device_type`, `device_key`, `device_get_logs`, `device_install_app`.
-        - **Полный цикл QA**: ИИ делает скриншоты, изучает XML-дерево виджетов, нажимает кнопки, вводит текст, ловит краши и сам исправляет код в проекте!
-
-        ### 🌐 Мультиплатформенная сборка:
-        - **Android**: Universal APK, Split ABIs (ARM64, ARMv7, x86_64) и App Bundle (AAB).
-        - **Linux**: x64 и ARM64 (`quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`).
-        - **Windows**: x64 и ARM64 (`quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`).
-        - **macOS**: Universal bundle (`quantum_ide-macos.zip`).
+        ### 📱 Редизайн и оптимизация интерфейса терминала (Terminal UI & Touch Selection):
+        - **Пиксельно точное выделение текста**: Устранен визуальный сдвиг оверлея относительно терминала за счет нормализации координат RenderBox.
+        - **Нативные каплевидные ручки (Teardrop Pins)**: Заменены артефактные палочки-леденцы на аккуратные гладкие пины выделения без перекрытия текста строками. Добавлена защита от инверсии/скрещивания ручек при перетаскивании.
+        - **Компактный плавающий тулбар**: `[Копировать] [AI ✨] [Поделиться] [✕]` с умным позиционированием выше/ниже выделения.
+        - **Очистка от визуального шума и лишних кнопок**:
+          - Из шапки терминала убраны 5 избыточных кнопок на мобильных экранах — `copyAll`, `split`, `wakelock` и `inline selection` аккуратно перенесены в меню `⋮`.
+          - Из виртуальной клавиатуры удалены дублирующие кнопки `SEL` и `COPY`, второй ряд отдан под востребованные спецсимволы: `~`, `/`, `-`, `_`, `|`, `\`, `"`, `'`, `:`.
+          - Панель плагинов (`Pub Get`, `Format Code`) автоматически скрывается при открытой клавиатуре и оптимизирована по высоте.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

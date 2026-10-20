@@ -49,14 +49,31 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
           return const SizedBox.shrink();
         }
 
+        RenderBox? terminalBox;
+        try {
+          terminalBox = viewState.context.findRenderObject() as RenderBox?;
+        } catch (_) {}
+
+        RenderBox? overlayBox;
+        try {
+          overlayBox = context.findRenderObject() as RenderBox?;
+        } catch (_) {}
+
+        Offset shift = Offset.zero;
+        if (terminalBox != null && overlayBox != null && terminalBox.attached && overlayBox.attached) {
+          shift = overlayBox.globalToLocal(terminalBox.localToGlobal(Offset.zero));
+        }
+
         final renderTerminal = viewState.renderTerminal;
         final range = selection.normalized;
         final cellSize = renderTerminal.cellSize;
-        final startOffset = renderTerminal.getOffset(range.begin);
-        final endOffset = renderTerminal.getOffset(range.end);
+        final rawStartOffset = renderTerminal.getOffset(range.begin);
+        final rawEndOffset = renderTerminal.getOffset(range.end);
+        final startOffset = rawStartOffset + shift;
+        final endOffset = rawEndOffset + shift;
 
         final selectedText = widget.session.xtermTerminal.buffer.getText(selection);
-        final viewportSize = renderTerminal.size;
+        final viewportSize = overlayBox?.size ?? renderTerminal.size;
 
         final isStartVisible = startOffset.dy >= -cellSize.height * 2 &&
             startOffset.dy <= viewportSize.height + cellSize.height;
@@ -71,7 +88,7 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
             // Start selection handle
             if (isStartVisible)
               Positioned(
-                left: (startOffset.dx - 18).clamp(-18.0, viewportSize.width),
+                left: (startOffset.dx - 16).clamp(-16.0, viewportSize.width),
                 top: startOffset.dy + cellSize.height,
                 child: _buildHandle(
                   isStart: true,
@@ -84,7 +101,7 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
             // End selection handle
             if (isEndVisible)
               Positioned(
-                left: (endOffset.dx + cellSize.width - 18).clamp(-18.0, viewportSize.width),
+                left: (endOffset.dx + cellSize.width - 16).clamp(-16.0, viewportSize.width),
                 top: endOffset.dy + cellSize.height,
                 child: _buildHandle(
                   isStart: false,
@@ -136,36 +153,40 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
       },
       onPanUpdate: (details) {
         final localPos = renderTerminal.globalToLocal(details.globalPosition);
-        // Offset finger slightly above touch center to see cursor
+        // Finger touches below the line, so map to cell slightly above touch
         final targetOffset = Offset(
           localPos.dx,
-          localPos.dy - cellSize.height * 0.8,
+          localPos.dy - cellSize.height * 0.5,
         );
         final targetCell = renderTerminal.getCellOffset(targetOffset);
 
         if (isStart) {
-          if (targetCell != _lastDragStartCell) {
-            _lastDragStartCell = targetCell;
-            HapticFeedback.selectionClick();
-            widget.session.xtermViewController.setSelection(
-              widget.session.xtermTerminal.buffer.createAnchorFromOffset(targetCell),
-              widget.session.xtermTerminal.buffer.createAnchorFromOffset(range.end),
-            );
+          if (targetCell.y < range.end.y || (targetCell.y == range.end.y && targetCell.x <= range.end.x)) {
+            if (targetCell != _lastDragStartCell) {
+              _lastDragStartCell = targetCell;
+              HapticFeedback.selectionClick();
+              widget.session.xtermViewController.setSelection(
+                widget.session.xtermTerminal.buffer.createAnchorFromOffset(targetCell),
+                widget.session.xtermTerminal.buffer.createAnchorFromOffset(range.end),
+              );
+            }
           }
         } else {
-          if (targetCell != _lastDragEndCell) {
-            _lastDragEndCell = targetCell;
-            HapticFeedback.selectionClick();
-            widget.session.xtermViewController.setSelection(
-              widget.session.xtermTerminal.buffer.createAnchorFromOffset(range.begin),
-              widget.session.xtermTerminal.buffer.createAnchorFromOffset(targetCell),
-            );
+          if (targetCell.y > range.begin.y || (targetCell.y == range.begin.y && targetCell.x >= range.begin.x)) {
+            if (targetCell != _lastDragEndCell) {
+              _lastDragEndCell = targetCell;
+              HapticFeedback.selectionClick();
+              widget.session.xtermViewController.setSelection(
+                widget.session.xtermTerminal.buffer.createAnchorFromOffset(range.begin),
+                widget.session.xtermTerminal.buffer.createAnchorFromOffset(targetCell),
+              );
+            }
           }
         }
       },
       child: SizedBox(
-        width: 36,
-        height: 38,
+        width: 32,
+        height: 32,
         child: CustomPaint(
           painter: _TeardropHandlePainter(
             isStart: isStart,
@@ -190,11 +211,11 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
 
     double top = minY - 44;
     if (top < 10) {
-      top = (maxY + 18).clamp(10.0, viewportSize.height - 48);
+      top = math.min(viewportSize.height - 46, maxY + 34);
     }
 
-    final minX = math.min(startOffset.dx, endOffset.dx);
-    final toolbarLeft = minX.clamp(10.0, math.max(10.0, viewportSize.width - 340)).toDouble();
+    final avgX = (startOffset.dx + endOffset.dx) / 2;
+    final toolbarLeft = (avgX - 100).clamp(10.0, math.max(10.0, viewportSize.width - 240)).toDouble();
 
     return Positioned(
       top: top,
@@ -203,13 +224,13 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
         color: Colors.transparent,
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF131722).withValues(alpha: 0.96),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4), width: 1.0),
+            color: const Color(0xFF141722).withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.35), width: 0.8),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.6),
-                blurRadius: 14,
+                blurRadius: 16,
                 offset: const Offset(0, 4),
               ),
             ],
@@ -262,17 +283,6 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
                   widget.session.xtermViewController.clearSelection();
                 },
               ),
-              if (widget.onSelectAll != null) ...[
-                _divider(),
-                _buildToolbarBtn(
-                  label: 'Всё',
-                  color: Colors.white70,
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    widget.onSelectAll?.call();
-                  },
-                ),
-              ],
               _divider(),
               _buildToolbarBtn(
                 icon: LucideIcons.share_2,
@@ -355,32 +365,36 @@ class _TeardropHandlePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final centerX = size.width / 2;
     const topY = 0.0;
-    const radius = 6.5;
-    final circleCenter = Offset(centerX, radius + 7);
+    const bulbCenterY = 13.0;
+    const radius = 7.5;
 
-    final linePaint = Paint()
-      ..color = color
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
+    final path = Path();
+    // Tip touching the character baseline
+    path.moveTo(centerX, topY);
+    // Draw smooth teardrop body hanging downward
+    path.lineTo(centerX + radius, bulbCenterY - 2);
+    path.arcToPoint(
+      Offset(centerX - radius, bulbCenterY - 2),
+      radius: const Radius.circular(radius),
+      clockwise: true,
+    );
+    path.close();
 
-    // Line from top to circle center
-    canvas.drawLine(Offset(centerX, topY), circleCenter, linePaint);
+    // Subtle ambient glow
+    final glowPaint = Paint()
+      ..color = color.withValues(alpha: 0.35)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+    canvas.drawPath(path, glowPaint);
 
-    final circlePaint = Paint()
+    // Solid fill
+    final fillPaint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
+    canvas.drawPath(path, fillPaint);
 
-    // Glowing circle handle
-    final glowPaint = Paint()
-      ..color = color.withValues(alpha: 0.3)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-
-    canvas.drawCircle(circleCenter, radius + 2, glowPaint);
-    canvas.drawCircle(circleCenter, radius, circlePaint);
-
-    // Inner bright dot
-    final dotPaint = Paint()..color = Colors.black87;
-    canvas.drawCircle(circleCenter, 2.0, dotPaint);
+    // Sleek inner center dot
+    final dotPaint = Paint()..color = const Color(0xFF0F1117);
+    canvas.drawCircle(Offset(centerX, bulbCenterY), 2.2, dotPaint);
   }
 
   @override
