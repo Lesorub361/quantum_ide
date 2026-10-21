@@ -101,6 +101,21 @@ jobs:
           flutter --version
           java -version 2>&1 | head -1
 
+      - name: Ensure Android NDK and CMake
+        run: |
+          yes | sdkmanager --licenses || true
+          if [ ! -d "$ANDROID_HOME/ndk/28.2.13676358" ]; then
+            echo "Pre-installing NDK 28.2.13676358 with retry..."
+            for attempt in 1 2 3; do
+              echo "Attempt $attempt..."
+              echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358" "cmake;3.22.1" && break || {
+                echo "Attempt $attempt failed, cleaning temp and retrying..."
+                rm -rf "$ANDROID_HOME/.temp"
+                sleep 5
+              }
+            done
+          fi
+
       - name: Ensure native llama dependencies
         run: |
           if [ ! -d "local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp" ] || [ -z "$(ls -A local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp 2>/dev/null)" ]; then
