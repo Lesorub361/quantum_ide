@@ -366,6 +366,118 @@ class LanguageService {
         ),
       ],
     ),
+    'rust': LanguageConfig(
+      name: 'Rust',
+      extensions: ['rs'],
+      highlightMode: builtinAllLanguages['rust'],
+      keywords: [
+        'as', 'async', 'await', 'break', 'const', 'continue', 'crate', 'dyn',
+        'else', 'enum', 'extern', 'false', 'fn', 'for', 'if', 'impl', 'in',
+        'let', 'loop', 'match', 'mod', 'move', 'mut', 'pub', 'ref', 'return',
+        'self', 'Self', 'static', 'struct', 'super', 'trait', 'true', 'type',
+        'unsafe', 'use', 'where', 'while',
+        // Types & macros
+        'i8', 'i16', 'i32', 'i64', 'i128', 'isize', 'u8', 'u16', 'u32', 'u64', 'u128', 'usize',
+        'f32', 'f64', 'bool', 'char', 'str', 'String', 'Option', 'Some', 'None',
+        'Result', 'Ok', 'Err', 'Vec', 'Box', 'Rc', 'Arc', 'Mutex', 'HashMap', 'HashSet',
+        'println!', 'print!', 'format!', 'vec!', 'panic!', 'todo!', 'unimplemented!',
+      ],
+      snippets: [
+        const CodeSnippet(
+          label: 'fn',
+          snippet: 'fn name() {\n    \n}',
+          description: 'Rust Function',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+        const CodeSnippet(
+          label: 'main',
+          snippet: 'fn main() {\n    println!("Hello QuantumIDE!");\n}',
+          description: 'Main Function',
+          selection: TextSelection.collapsed(offset: 16),
+        ),
+        const CodeSnippet(
+          label: 'struct',
+          snippet: '#[derive(Debug, Clone)]\npub struct MyStruct {\n    pub id: u64,\n}',
+          description: 'Rust Struct with Derive',
+          selection: TextSelection.collapsed(offset: 35),
+        ),
+        const CodeSnippet(
+          label: 'impl',
+          snippet: 'impl MyStruct {\n    pub fn new() -> Self {\n        Self {}\n    }\n}',
+          description: 'Implement Block',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+        const CodeSnippet(
+          label: 'test',
+          snippet: '#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_basic() {\n        assert_eq!(2 + 2, 4);\n    }\n}',
+          description: 'Rust Unit Test Module',
+          selection: TextSelection.collapsed(offset: 61),
+        ),
+      ],
+    ),
+    'cpp': LanguageConfig(
+      name: 'C / C++',
+      extensions: ['c', 'cpp', 'cc', 'cxx', 'h', 'hpp'],
+      highlightMode: builtinAllLanguages['cpp'],
+      keywords: [
+        'auto', 'break', 'case', 'catch', 'char', 'class', 'const', 'continue',
+        'default', 'delete', 'do', 'double', 'else', 'enum', 'explicit', 'export',
+        'extern', 'false', 'float', 'for', 'friend', 'goto', 'if', 'inline', 'int',
+        'long', 'mutable', 'namespace', 'new', 'noexcept', 'nullptr', 'operator',
+        'private', 'protected', 'public', 'register', 'return', 'short', 'signed',
+        'sizeof', 'static', 'struct', 'switch', 'template', 'this', 'throw', 'true',
+        'try', 'typedef', 'typename', 'union', 'unsigned', 'using', 'virtual', 'void',
+        'volatile', 'while', 'std', 'cout', 'cin', 'endl', 'string', 'vector', 'map',
+      ],
+      snippets: [
+        const CodeSnippet(
+          label: 'main',
+          snippet: '#include <iostream>\n\nint main() {\n    std::cout << "Hello QuantumIDE" << std::endl;\n    return 0;\n}',
+          description: 'C++ Main Function',
+          selection: TextSelection.collapsed(offset: 33),
+        ),
+      ],
+    ),
+    'sql': LanguageConfig(
+      name: 'SQL',
+      extensions: ['sql'],
+      highlightMode: builtinAllLanguages['sql'],
+      keywords: [
+        'SELECT', 'FROM', 'WHERE', 'INSERT', 'INTO', 'UPDATE', 'DELETE', 'CREATE',
+        'TABLE', 'ALTER', 'DROP', 'INDEX', 'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER',
+        'ON', 'GROUP', 'BY', 'ORDER', 'ASC', 'DESC', 'HAVING', 'LIMIT', 'OFFSET',
+        'UNION', 'ALL', 'DISTINCT', 'AS', 'AND', 'OR', 'NOT', 'NULL', 'IS', 'IN',
+        'LIKE', 'BETWEEN', 'EXISTS', 'PRIMARY', 'KEY', 'FOREIGN', 'REFERENCES',
+      ],
+      snippets: [
+        const CodeSnippet(
+          label: 'create',
+          snippet: 'CREATE TABLE IF NOT EXISTS users (\n    id INTEGER PRIMARY KEY AUTOINCREMENT,\n    name TEXT NOT NULL,\n    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);',
+          description: 'Create Table',
+          selection: TextSelection.collapsed(offset: 27),
+        ),
+      ],
+    ),
+    'json': LanguageConfig(
+      name: 'JSON',
+      extensions: ['json'],
+      highlightMode: builtinAllLanguages['json'],
+      keywords: ['true', 'false', 'null'],
+      snippets: [
+        const CodeSnippet(
+          label: 'obj',
+          snippet: '{\n  "": ""\n}',
+          description: 'JSON Object',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      ],
+    ),
+    'yaml': LanguageConfig(
+      name: 'YAML',
+      extensions: ['yaml', 'yml'],
+      highlightMode: builtinAllLanguages['yaml'],
+      keywords: ['true', 'false', 'yes', 'no', 'null', 'version', 'name', 'dependencies'],
+    ),
     'vue': LanguageConfig(
       name: 'Vue',
       extensions: ['vue'],

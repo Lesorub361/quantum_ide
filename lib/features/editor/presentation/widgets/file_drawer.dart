@@ -237,9 +237,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                   if (!disabledTabs.contains('liveShare'))
                     _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10, isMobile: isMobile),
                   if (!disabledTabs.contains('plugins'))
-                    _buildActivityIcon(ref, 11, LucideIcons.puzzle, AppLocalizations.of(context)!.plugins, selectedTab == 11, isMobile: isMobile),
+                    _buildActivityIcon(ref, 11, LucideIcons.puzzle, 'Плагины', selectedTab == 11, isMobile: isMobile),
                   if (!disabledTabs.contains('appLogs'))
-                    _buildActivityIcon(ref, 13, LucideIcons.terminal, 'App Logs', selectedTab == 13, isMobile: isMobile),
+                    _buildActivityIcon(ref, 13, LucideIcons.terminal, 'Логи IDE', selectedTab == 13, isMobile: isMobile),
                 ],
               ),
             ),

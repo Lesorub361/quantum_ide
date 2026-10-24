@@ -8,7 +8,6 @@ import 'package:quantum_ide/core/services/test_runner_service.dart';
 import 'package:quantum_ide/core/services/dependency_checker_service.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/wasm_plugins_panel.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class ExtensionsPanel extends ConsumerStatefulWidget {
@@ -19,7 +18,7 @@ class ExtensionsPanel extends ConsumerStatefulWidget {
 }
 
 class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
-  int _selectedTabSection = 0; // 0: Плагины пользователя, 1: Встроенные, 2: WASM
+  int _selectedTabSection = 0; // 0: Мои плагины, 1: Инструменты IDE
   int _selectedExtension = -1;
   bool _isDocExpanded = false;
 
@@ -55,16 +54,14 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
             ),
           ),
 
-          // Segmented Tabs: [Мои плагины] | [Встроенные] | [WASM]
+          // Segmented Tabs: [Мои плагины] | [Инструменты IDE]
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             child: Row(
               children: [
                 _buildSegmentButton(0, 'Мои плагины ($pluginCount)', LucideIcons.blocks),
                 const SizedBox(width: 6),
-                _buildSegmentButton(1, 'Встроенные', LucideIcons.layout_grid),
-                const SizedBox(width: 6),
-                _buildSegmentButton(2, 'WASM', LucideIcons.cpu),
+                _buildSegmentButton(1, 'Инструменты IDE', LucideIcons.wrench),
               ],
             ),
           ),
@@ -79,7 +76,6 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                 _selectedExtension == -1
                     ? _buildExtensionsList(l10n)
                     : _buildExtensionView(_selectedExtension, l10n),
-                const WasmPluginsPanel(),
               ],
             ),
           ),

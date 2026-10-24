@@ -9,7 +9,8 @@ import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/services/ai_autocomplete_service.dart';
-import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart';
+import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart' hide CodeKeywordPrompt;
+import 'package:quantum_ide/features/editor/presentation/handlers/snippet_prompt.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/diff_gutter_indicator.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/diagnostic_indicator.dart';
@@ -31,7 +32,6 @@ import 'package:re_highlight/languages/php.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
-import 'package:quantum_ide/core/services/lsp_autocomplete_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_painter.dart';
 import 'package:quantum_ide/core/services/service_providers.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_minimap.dart';
@@ -651,22 +651,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AiAutocompleteState>(aiAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.suggestion != null && current.suggestion!.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
-
-    ref.listen<LspAutocompleteState>(lspAutocompleteServiceProvider, (previous, current) {
-      if (!current.isLoading && current.items.isNotEmpty) {
-        if (current.filePath == widget.file.path) {
-          widget.file.controller.value = widget.file.controller.value;
-        }
-      }
-    });
-
     ref.listen<AIState>(aiProvider, (previous, current) {
       final pending = current.proposedActions
           .where((a) => a.path == widget.file.path && (a.type == 'edit' || a.type == 'create'))
@@ -1475,97 +1459,153 @@ class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWi
   });
 
   @override
-  Size get preferredSize => const Size(300, 250);
+  Size get preferredSize => const Size(310, 240);
+
+  IconData _getPromptIcon(CodePrompt prompt) {
+    if (prompt is AiAutocompletePrompt) return LucideIcons.sparkles;
+    if (prompt is CodeSnippetPrompt) return LucideIcons.boxes;
+    if (prompt is LspCompletionPrompt) return LucideIcons.box;
+    if (prompt is CodeKeywordPrompt) return LucideIcons.key_round;
+    return LucideIcons.code;
+  }
+
+  Color _getPromptColor(CodePrompt prompt) {
+    if (prompt is AiAutocompletePrompt) return Colors.purpleAccent;
+    if (prompt is CodeSnippetPrompt) return Colors.amberAccent;
+    if (prompt is LspCompletionPrompt) return Colors.cyanAccent;
+    if (prompt is CodeKeywordPrompt) return Colors.blueAccent;
+    return Colors.white70;
+  }
+
+  String _getPromptBadge(CodePrompt prompt) {
+    if (prompt is AiAutocompletePrompt) return 'ИИ ✨';
+    if (prompt is CodeSnippetPrompt) return 'сниппет';
+    if (prompt is LspCompletionPrompt) return 'LSP';
+    if (prompt is CodeKeywordPrompt) return 'ключ';
+    return 'слово';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return ValueListenableBuilder<CodeAutocompleteEditingValue>(
       valueListenable: notifier,
       builder: (context, value, child) {
         if (value.prompts.isEmpty) return const SizedBox();
-        return GlassContainer(
-          blur: 40,
-          opacity: 0.2,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.5),
-          child: Container(
-            width: 300,
-            constraints: const BoxConstraints(maxHeight: 250),
-            child: ListView.builder(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: value.prompts.length,
-              itemBuilder: (context, index) {
-                final prompt = value.prompts[index];
-                final isSelected = value.index == index;
-                final isAi = prompt is AiAutocompletePrompt;
-                return InkWell(
-                  onTap: () => onSelected(value.copyWith(index: index).autocomplete),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        return Container(
+          margin: EdgeInsets.only(bottom: bottomInset > 0 ? 8 : 0),
+          child: GlassContainer(
+            blur: 40,
+            opacity: 0.35,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.25), width: 0.8),
+            child: Container(
+              width: 310,
+              constraints: BoxConstraints(
+                maxHeight: bottomInset > 0 ? 190 : 240,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F121C).withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black54, blurRadius: 16, offset: Offset(0, 6)),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isSelected 
-                          ? (isAi 
-                              ? Colors.deepPurpleAccent.withValues(alpha: 0.25)
-                              : Colors.cyanAccent.withValues(alpha: 0.15))
-                          : Colors.transparent,
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
                     ),
                     child: Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: isAi
-                                ? Colors.deepPurpleAccent.withValues(alpha: 0.15)
-                                : Colors.cyanAccent.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Icon(
-                            isAi ? LucideIcons.sparkles : LucideIcons.code, 
-                            size: 14, 
-                            color: isAi ? Colors.deepPurpleAccent : Colors.cyanAccent
-                          ),
+                        const Icon(LucideIcons.sparkles, size: 10, color: Colors.cyanAccent),
+                        const SizedBox(width: 5),
+                        Text(
+                          'VS Code IntelliSense (${value.prompts.length})',
+                          style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            prompt.word,
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : (isAi ? Colors.deepPurpleAccent : Colors.white70),
-                              fontSize: 14,
-                              fontWeight: (isSelected || isAi) ? FontWeight.w600 : FontWeight.w400,
-                              fontStyle: isAi ? FontStyle.italic : FontStyle.normal,
-                            ),
-                          ),
+                        const Spacer(),
+                        Text(
+                          'Tab / Нажмите',
+                          style: GoogleFonts.inter(fontSize: 8.5, color: Colors.white30),
                         ),
-                        if (isAi)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), width: 0.5),
-                              ),
-                              child: const Text(
-                                'AI ✨',
-                                style: TextStyle(
-                                  color: Colors.deepPurpleAccent,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (isSelected)
-                          const Icon(LucideIcons.chevron_right, size: 14, color: Colors.white38),
                       ],
                     ),
                   ),
-                );
-              },
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: value.prompts.length,
+                      itemBuilder: (context, index) {
+                        final prompt = value.prompts[index];
+                        final isSelected = value.index == index;
+                        final icon = _getPromptIcon(prompt);
+                        final color = _getPromptColor(prompt);
+                        final badge = _getPromptBadge(prompt);
+
+                        return InkWell(
+                          onTap: () => onSelected(value.copyWith(index: index).autocomplete),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected 
+                                  ? color.withValues(alpha: 0.18)
+                                  : Colors.transparent,
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(3.5),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Icon(icon, size: 12, color: color),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    prompt.word,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      color: isSelected ? Colors.white : Colors.white70,
+                                      fontSize: 12.5,
+                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    badge,
+                                    style: TextStyle(
+                                      color: color,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );

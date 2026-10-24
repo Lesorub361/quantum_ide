@@ -202,6 +202,17 @@ class QuantumAutocompletePromptsBuilder extends CodeAutocompletePromptsBuilder {
       }
     }
 
+    // Context-aware member completions after dot (e.g., Colors., Icons., EdgeInsets.)
+    if (charBefore == '.') {
+      final expr = _getExpressionBeforeDot(text, offset - 1);
+      final memberSuggestions = _getDotCompletions(expr, config.name);
+      for (final m in memberSuggestions) {
+        if (word.isEmpty || m.toLowerCase().startsWith(word.toLowerCase())) {
+          prompts.add(WordCompletionPrompt(word: m, userWord: word));
+        }
+      }
+    }
+
     // Add Emmet abbreviations
     if (word.isNotEmpty) {
       final emmet = EmmetService();
@@ -248,6 +259,47 @@ class QuantumAutocompletePromptsBuilder extends CodeAutocompletePromptsBuilder {
       start--;
     }
     return text.substring(start + 1, offset);
+  }
+
+  String _getExpressionBeforeDot(String text, int dotOffset) {
+    if (dotOffset <= 0 || dotOffset > text.length) return '';
+    int start = dotOffset - 1;
+    while (start >= 0 && _isWordChar(text[start])) {
+      start--;
+    }
+    return text.substring(start + 1, dotOffset);
+  }
+
+  List<String> _getDotCompletions(String expr, String langName) {
+    switch (expr) {
+      case 'Colors':
+        return ['blue', 'cyan', 'green', 'amber', 'red', 'purple', 'white', 'black', 'transparent', 'grey', 'indigo', 'teal', 'orange'];
+      case 'Icons':
+      case 'LucideIcons':
+        return ['check', 'close', 'search', 'play', 'save', 'refresh', 'settings', 'menu', 'folder', 'file', 'code', 'sparkles', 'git_branch', 'terminal'];
+      case 'EdgeInsets':
+        return ['all()', 'symmetric()', 'only()', 'zero'];
+      case 'BorderRadius':
+        return ['circular()', 'all()', 'only()', 'zero'];
+      case 'MainAxisAlignment':
+      case 'CrossAxisAlignment':
+        return ['start', 'center', 'end', 'spaceBetween', 'spaceAround', 'spaceEvenly', 'stretch'];
+      case 'FontWeight':
+        return ['bold', 'normal', 'w500', 'w600', 'w700', 'w800', 'w900', 'w300', 'w400'];
+      case 'console':
+        return ['log()', 'warn()', 'error()', 'table()', 'info()', 'clear()'];
+      case 'document':
+        return ['querySelector()', 'querySelectorAll()', 'getElementById()', 'createElement()', 'addEventListener()'];
+      case 'window':
+        return ['localStorage', 'sessionStorage', 'location', 'fetch()', 'addEventListener()', 'setTimeout()'];
+      case 'JSON':
+        return ['stringify()', 'parse()'];
+      case 'Math':
+      case 'math':
+        return ['max()', 'min()', 'round()', 'floor()', 'ceil()', 'random()', 'sqrt()', 'abs()'];
+      default:
+        return [];
+    }
   }
 
   bool _isWordChar(String char) {

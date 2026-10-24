@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'build_diagnostics_service.dart';
 import 'editor_performance_service.dart';
 import 'microvm_service.dart';
-import 'wasm_plugin_runner.dart';
 import 'crdt_sync_service.dart';
 import 'ai_agent_orchestrator.dart';
 import 'docker_service.dart';
@@ -35,14 +34,6 @@ final editorPerformanceServiceProvider = Provider((ref) {
 final microvmServiceProvider = ChangeNotifierProvider<MicroVMService>((ref) {
   final runtime = ref.read(runtimeServiceProvider);
   final service = MicroVMService(runtime);
-  ref.onDispose(() => service.dispose());
-  return service;
-});
-
-/// Provider for WasmPluginRunner
-final wasmPluginRunnerProvider = ChangeNotifierProvider<WasmPluginRunner>((ref) {
-  final runtime = ref.read(runtimeServiceProvider);
-  final service = WasmPluginRunner(runtime);
   ref.onDispose(() => service.dispose());
   return service;
 });
