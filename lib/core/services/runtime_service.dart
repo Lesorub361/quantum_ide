@@ -1694,6 +1694,37 @@ CM_EOF
         [ ! -f "$CM_DIR/source.properties" ] && printf "Pkg.Desc = CMake %s\nPkg.Revision = %s\n" "$cmver" "$cmver" > "$CM_DIR/source.properties"
     done
 fi
+
+# Auto-heal pub-cache plugins that reference Android 36 BAKLAVA / Java 21 APIs
+# against SDK 34/35 platform stubs (e.g. sqflite_android >= 2.4.4)
+for pub_dir in "${PUB_CACHE:-/root/.pub-cache}" "$HOME/.pub-cache"; do
+    [ -d "$pub_dir/hosted/pub.dev" ] || continue
+    for utils_java in "$pub_dir/hosted/pub.dev"/sqflite_android-*/android/src/main/java/com/tekartik/sqflite/Utils.java; do
+        [ -f "$utils_java" ] || continue
+        if grep -q "BAKLAVA" "$utils_java" 2>/dev/null; then
+            python3 - "$utils_java" << 'PY_EOF' 2>/dev/null || true
+import re, sys
+p = sys.argv[1]
+with open(p, 'r', encoding='utf-8') as f:
+    s = f.read()
+s = re.sub(
+    r'static\s+Locale\s+localOf\s*\([^)]*\)\s*\{.*?\n    \}',
+    'static Locale localOf(String language, String country, String variant) {\n        @SuppressWarnings("deprecation")\n        Locale locale = new Locale(language, country, variant);\n        return locale;\n    }',
+    s,
+    flags=re.DOTALL,
+)
+s = re.sub(
+    r'public\s+static\s+long\s+getThreadId\s*\([^)]*\)\s*\{.*?\n    \}',
+    'public static long getThreadId(Thread thread) {\n        @SuppressWarnings("deprecation")\n        long id = thread.getId();\n        return id;\n    }',
+    s,
+    flags=re.DOTALL,
+)
+with open(p, 'w', encoding='utf-8') as f:
+    f.write(s)
+PY_EOF
+        fi
+    done
+done
 ''';
   }
 
