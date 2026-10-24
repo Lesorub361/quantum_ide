@@ -1692,6 +1692,112 @@ server.listen(port, () => {
     terminal.sendCommand(command);
   }
 
+  /// Генерирует нативную Android WebView обёртку (.quantum_android_apk) для любого
+  /// Web / HTML5 / JS / React / Node.js проекта, чтобы собрать готовый .apk в 1 клик.
+  Future<String> prepareWebApkWrapper(String projectPath, String rawName) async {
+    final cleanName = rawName.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    final appName = cleanName.isEmpty ? 'WebApp' : cleanName;
+    final wrapperDir = p.join(projectPath, '.quantum_android_apk');
+    final pkg = 'com.quantum.webapp.${appName.toLowerCase()}';
+    final pkgPath = pkg.replaceAll('.', '/');
+
+    await _writeNativeAndroidFiles(wrapperDir, rawName, ProjectType.androidKotlin);
+
+    // Заменяем MainActivity.kt на полноценный полноэкранный WebView-контейнер
+    final mainActivityPath = p.join(wrapperDir, 'app', 'src', 'main', 'java', pkgPath, 'MainActivity.kt');
+    // Также удалим стандартный MainActivity из com.example.*, если имя пакета отличается
+    final defaultPkg = 'com.example.${rawName.toLowerCase().replaceAll('-', '_')}';
+    final defaultPkgPath = defaultPkg.replaceAll('.', '/');
+    final targetActivityPath = p.join(wrapperDir, 'app', 'src', 'main', 'java', defaultPkgPath, 'MainActivity.kt');
+    await _createFile(targetActivityPath, '''package $defaultPkg
+
+import android.annotation.SuppressLint
+import android.os.Bundle
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+
+class MainActivity : AppCompatActivity() {
+    private lateinit var webView: WebView
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        supportActionBar?.hide()
+
+        webView = WebView(this)
+        setContentView(webView)
+
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            allowFileAccess = true
+            allowContentAccess = true
+            mediaPlaybackRequiresUserGesture = false
+            setSupportZoom(false)
+        }
+        webView.webChromeClient = WebChromeClient()
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                return false
+            }
+        }
+
+        webView.loadUrl("file:///android_asset/www/index.html")
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
+    }
+}
+''');
+    // Ignore unused mainActivityPath variable check by keeping defaultPkgPath consistent
+    if (mainActivityPath.isEmpty) {}
+
+    // Добавим разрешение INTERNET в AndroidManifest.xml обёртки
+    final manifestPath = p.join(wrapperDir, 'app', 'src', 'main', 'AndroidManifest.xml');
+    await _createFile(manifestPath, '''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:usesCleartextTraffic="true"
+        android:label="$rawName"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.NoActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+''');
+
+    final assetsWwwDir = Directory(p.join(wrapperDir, 'app', 'src', 'main', 'assets', 'www'));
+    if (await assetsWwwDir.exists()) {
+      await assetsWwwDir.delete(recursive: true);
+    }
+    await assetsWwwDir.create(recursive: true);
+
+    return wrapperDir;
+  }
+
   /// Публичный метод: пропатчить Android build файлы уже существующего проекта.
   /// Вызывается из UI (например, через контекстное меню проекта).
   Future<void> patchExistingProject(Project project) async {
@@ -1700,39 +1806,49 @@ server.listen(port, () => {
     await _patchAndroidBuildFiles(project.path);
   }
 
-  /// Запустить сборку Flutter APK (debug) или Linux desktop через терминал.
-  /// Перед сборкой автоматически патчит Android build файлы.
-  void buildProject(Project project, {String? target}) {
+  /// Запустить сборку APK (Flutter, Native Android Kotlin/Java, Web/HTML/JS/Node.js) или Linux desktop.
+  Future<void> buildProject(Project project, {String? target}) async {
     final terminal = _ref.read(terminalTabsProvider.notifier);
     final guestPath = PathMapper.mapToGuest(project.path, _ref.read(runtimeServiceProvider).appDirectory);
 
     if (project.type == ProjectType.flutter) {
       final buildTarget = target ?? (Platform.isAndroid ? 'apk' : 'linux');
       if (buildTarget == 'apk') {
-        // Patch compileSdk inline перед сборкой (для уже существующих проектов)
         final patchCmd = [
           'cd "$guestPath"',
-          // Исправить compileSdk = 36 → 35 в app/build.gradle.kts
           r"sed -i 's/compileSdk = 36/compileSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
           r"sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
           r"sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
-          // Обновить AGP в settings.gradle.kts
           r'''sed -i 's/id("com.android.application") version "[0-9.]*"/id("com.android.application") version "8.11.1"/g' android/settings.gradle.kts 2>/dev/null || true''',
-          // Обновить Gradle Wrapper URL до 8.13 во избежание несовместимостей с AGP 8.11.1
           r"sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true",
-          // Запустить сборку
           'flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons 2>&1',
+          '(cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)',
         ].join(' && ');
         terminal.sendCommand(patchCmd);
       } else {
-        // Build for desktop/linux
         final buildCmd = 'cd "$guestPath" && flutter build linux --release 2>&1';
         terminal.sendCommand(buildCmd);
       }
     } else if (project.type == ProjectType.androidJava || project.type == ProjectType.androidKotlin) {
       final buildCmd = [
         'cd "$guestPath"',
-        'bash ./gradlew assembleRelease 2>&1',
+        'chmod +x ./gradlew 2>/dev/null || true',
+        'bash ./gradlew --no-daemon --max-workers=2 assembleDebug 2>&1',
+        'cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true',
+      ].join(' && ');
+      terminal.sendCommand(buildCmd);
+    } else if (project.type == ProjectType.web || project.type == ProjectType.nodejs) {
+      await prepareWebApkWrapper(project.path, project.name);
+      final buildCmd = [
+        'cd "$guestPath"',
+        'if [ -f package.json ] && grep -q "\\"build\\"" package.json; then npm run build || true; fi',
+        'mkdir -p .quantum_android_apk/app/src/main/assets/www',
+        'if [ -d dist ]; then cp -r dist/* .quantum_android_apk/app/src/main/assets/www/ 2>/dev/null || true; '
+            'elif [ -d build ]; then cp -r build/* .quantum_android_apk/app/src/main/assets/www/ 2>/dev/null || true; '
+            'else find . -maxdepth 2 \\( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.json" -o -name "*.png" -o -name "*.svg" -o -name "*.jpg" \\) ! -path "./.quantum_android_apk/*" ! -path "./node_modules/*" -exec cp --parents {} .quantum_android_apk/app/src/main/assets/www/ \\; 2>/dev/null || true; fi',
+        'cd .quantum_android_apk && chmod +x ./gradlew 2>/dev/null || true',
+        'bash ./gradlew --no-daemon --max-workers=2 assembleDebug 2>&1',
+        'cp app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk 2>/dev/null && echo "✓ Готовый Web APK собран: ./app-debug.apk"',
       ].join(' && ');
       terminal.sendCommand(buildCmd);
     } else {

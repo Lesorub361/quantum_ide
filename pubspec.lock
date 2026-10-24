@@ -486,13 +486,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
-  flutter_litert_lm:
-    dependency: "direct main"
-    description:
-      path: "local_plugins/flutter_litert_lm"
-      relative: true
-    source: path
-    version: "0.3.0"
   flutter_localizations:
     dependency: "direct main"
     description: flutter
@@ -892,13 +885,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
-  llama_flutter_android:
-    dependency: "direct main"
-    description:
-      path: "local_plugins/llama_flutter_android"
-      relative: true
-    source: path
-    version: "0.2.3"
   logging:
     dependency: transitive
     description:

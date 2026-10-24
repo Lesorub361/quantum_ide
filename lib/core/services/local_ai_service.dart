@@ -666,6 +666,13 @@ class LocalAiService extends StateNotifier<LocalAiState> {
         await prefs.setString('ai_selected_local_model_filename', activeFilename);
       }
 
+      bool ollamaBinExists = reachable;
+      if (!ollamaBinExists) {
+        final f1 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'ollama'));
+        final f2 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'ollama'));
+        ollamaBinExists = await f1.exists() || await f2.exists() || await File('/usr/local/bin/ollama').exists() || await File('/usr/bin/ollama').exists();
+      }
+
       final threads = prefs.getInt('ai_local_threads') ?? defaultThreads;
       final gpuLayers = prefs.getInt('ai_local_gpu_layers') ?? defaultGpuLayers;
       final useFlashAttn = prefs.getBool('ai_local_flash_attn') ?? isMobile;
@@ -674,7 +681,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
       state = state.copyWith(
         isModelDownloaded: anyModelDownloaded,
-        isBinaryInstalled: reachable,
+        isBinaryInstalled: ollamaBinExists,
         isRunning: reachable,
         downloadedModels: downloadedMap,
         selectedModelFilename: activeFilename,
@@ -1049,8 +1056,14 @@ class LocalAiService extends StateNotifier<LocalAiState> {
   Future<void> installBinary() async {
     if (state.isBinaryInstalling) return;
 
+    final engine = _ref.read(aiServiceProvider).settings.selectedLocalEngine;
+    if (engine == LocalAiEngine.ollama) {
+      await _installOllamaBinary();
+      return;
+    }
+
     state = state.copyWith(isBinaryInstalling: true, error: null);
-    _appendLogs('[Local AI] Starting installation of llama-server...\n');
+    _appendLogs('[Local AI] Starting installation of prebuilt llama-server binary (no C++ compilation)...\n');
 
     final installCmd = [
       'apt-get update -qq || true',
@@ -1088,6 +1101,37 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     }
   }
 
+  Future<void> _installOllamaBinary() async {
+    state = state.copyWith(isBinaryInstalling: true, error: null);
+    _appendLogs('[Ollama] Установка готового бинарника Ollama (без скачивания и сборки исходного кода)...\n');
+
+    final installCmd = [
+      'apt-get update -qq || true',
+      'apt-get install -y -qq curl wget ca-certificates zstd || true',
+      'ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then OLLAMA_ARCH="arm64"; else OLLAMA_ARCH="amd64"; fi',
+      '(curl -fsSL https://ollama.com/install.sh | sh) || ('
+          'mkdir -p /tmp/ollama_dl && cd /tmp/ollama_dl && '
+          'curl -fL --retry 3 -o ollama.tgz "https://ollama.com/download/ollama-linux-\${OLLAMA_ARCH}.tgz" && '
+          'tar -xzf ollama.tgz -C /usr/local && '
+          'chmod +x /usr/local/bin/ollama && '
+          'rm -rf /tmp/ollama_dl'
+          ')',
+      'echo "Ollama installed: \$(ollama --version 2>&1 | head -1)"',
+    ].join(' && ');
+
+    try {
+      final output = await _runtime.runCommand(installCmd);
+      _appendLogs('[Ollama] Вывод установки:\n$output\n');
+      await checkStatus();
+      _appendLogs('[Ollama] Готовый бинарник Ollama успешно установлен!\n');
+    } catch (e) {
+      state = state.copyWith(error: 'Ошибка установки Ollama: $e');
+      _appendLogs('[Ollama] Ошибка установки: $e\n');
+    } finally {
+      state = state.copyWith(isBinaryInstalling: false);
+    }
+  }
+
   Future<void> _repairLlamaLibraries() async {
     _appendLogs('[Local AI] 🔄 Восстановление системных библиотек llama-server (.so)...\n');
     final repairCmd = [
@@ -1115,6 +1159,12 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
   Future<void> startServer() async {
     if (state.isRunning || state.isStarting) return;
+
+    final engine = _ref.read(aiServiceProvider).settings.selectedLocalEngine;
+    if (engine == LocalAiEngine.ollama) {
+      await _startOllamaServer();
+      return;
+    }
 
     state = state.copyWith(isStarting: true, error: null);
     _appendLogs('\n[Local AI] Starting llama-server...\n');
@@ -1331,11 +1381,70 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     });
   }
 
+  Future<void> _startOllamaServer() async {
+    state = state.copyWith(isStarting: true, error: null);
+    _appendLogs('\n[Ollama] Запуск фонового сервера ollama serve (127.0.0.1:11434)...\n');
+    try {
+      final isMobile = Platform.isAndroid || Platform.isIOS;
+      final Process process;
+      if (isMobile) {
+        process = await Process.start(
+          'sh',
+          [
+            _runtime.prootCommand,
+            _runtime.filesDir,
+            '/root',
+            'sh',
+            '-c',
+            'OLLAMA_HOST=127.0.0.1:11434 ollama serve',
+          ],
+        );
+      } else {
+        process = await Process.start(
+          'ollama',
+          ['serve'],
+          environment: {'OLLAMA_HOST': '127.0.0.1:11434'},
+          runInShell: Platform.isWindows,
+        );
+      }
+      _process = process;
+      const decoder = Utf8Decoder(allowMalformed: true);
+      process.stdout.transform(decoder).listen(_appendLogs);
+      process.stderr.transform(decoder).listen(_appendLogs);
+
+      final baseUrl = _getOllamaBaseUrl();
+      bool healthy = false;
+      for (int i = 0; i < 12; i++) {
+        await Future.delayed(const Duration(seconds: 1));
+        try {
+          final resp = await _dio.get('$baseUrl/api/tags');
+          if (resp.statusCode == 200) {
+            healthy = true;
+            break;
+          }
+        } catch (_) {}
+      }
+
+      if (healthy) {
+        await checkStatus();
+        state = state.copyWith(isStarting: false, isRunning: true);
+        _appendLogs('[Ollama] Сервер Ollama успешно запущен!\n');
+      } else {
+        throw Exception('Ollama не ответил на порту 11434. Проверьте, установлен ли бинарник ollama.');
+      }
+    } catch (e) {
+      _process?.kill();
+      _process = null;
+      state = state.copyWith(isStarting: false, isRunning: false, error: e.toString());
+      _appendLogs('[Ollama] Ошибка запуска: $e\n');
+    }
+  }
+
   Future<void> stopServer() async {
     _healthCheckTimer?.cancel();
     _healthCheckTimer = null;
 
-    _appendLogs('\n[Local AI] Stopping llama-server...\n');
+    _appendLogs('\n[Local AI] Остановка локального ИИ-сервера...\n');
 
     _process?.kill();
     _process = null;
@@ -1343,10 +1452,13 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     try {
       if (Platform.isWindows) {
         await Process.run('taskkill', ['/F', '/IM', 'llama-server.exe', '/T']);
+        await Process.run('taskkill', ['/F', '/IM', 'ollama.exe', '/T']);
       } else if (Platform.isAndroid || Platform.isIOS) {
-        await _runtime.runCommand('pkill -f llama-server');
+        await _runtime.runCommand('pkill -f llama-server || true');
+        await _runtime.runCommand('pkill -f "ollama serve" || true');
       } else {
         await Process.run('pkill', ['-f', 'llama-server']);
+        await Process.run('pkill', ['-f', 'ollama serve']);
       }
     } catch (_) {}
 

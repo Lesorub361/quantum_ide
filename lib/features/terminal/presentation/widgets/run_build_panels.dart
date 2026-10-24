@@ -584,6 +584,62 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.build, finalCmd, interrupt: true, clear: false);
   }
 
+  Future<void> _installBuiltApk(String? workspacePath) async {
+    if (workspacePath == null) return;
+    final diagnostics = ref.read(androidBuildDiagnosticsServiceProvider);
+    final apkInfo = diagnostics.findDebugApk(workspacePath);
+    if (apkInfo == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('APK еще не собран. Сначала нажмите кнопку сборки APK.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Установка ${apkInfo.fileName} (${apkInfo.formattedSize})...'),
+          backgroundColor: Colors.blueAccent,
+        ),
+      );
+    }
+
+    final installer = ref.read(androidAppInstallerServiceProvider);
+    final res = await installer.installApk(apkInfo.path, launchAfterInstall: true);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res.success
+              ? 'Установка запущена (${res.method ?? "PackageInstaller"})'
+              : 'Ошибка установки: ${res.message}'),
+          backgroundColor: res.success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _buildWebApkInDedicatedTerminal(String? workspacePath, String projectName) async {
+    if (workspacePath == null || workspacePath.isEmpty) return;
+    await ref.read(projectServiceProvider.notifier).prepareWebApkWrapper(workspacePath, projectName);
+    final cmd = [
+      'if [ -f package.json ] && grep -q "\\"build\\"" package.json; then npm run build || true; fi',
+      'mkdir -p .quantum_android_apk/app/src/main/assets/www',
+      'if [ -d dist ]; then cp -r dist/* .quantum_android_apk/app/src/main/assets/www/ 2>/dev/null || true; '
+          'elif [ -d build ]; then cp -r build/* .quantum_android_apk/app/src/main/assets/www/ 2>/dev/null || true; '
+          'else find . -maxdepth 2 \\( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.json" -o -name "*.png" -o -name "*.svg" -o -name "*.jpg" \\) ! -path "./.quantum_android_apk/*" ! -path "./node_modules/*" -exec cp --parents {} .quantum_android_apk/app/src/main/assets/www/ \\; 2>/dev/null || true; fi',
+      'cd .quantum_android_apk && chmod +x ./gradlew 2>/dev/null || true',
+      'bash ./gradlew --no-daemon --max-workers=2 assembleDebug',
+      'cp app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk && echo "✓ Web APK успешно собран: ./app-debug.apk"',
+    ].join(' && ');
+    _runDedicatedCommand(workspacePath, cmd);
+  }
+
   xt.TerminalTheme _getTerminalTheme(String themeName) {
     Color bg;
     Color fg = Colors.white;
@@ -729,13 +785,12 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
           _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
-          _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent,
-              () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && flutter build linux --release')),
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
+          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+              () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter pub get')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
@@ -748,16 +803,27 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug && echo "✓ Debug APK: app/build/outputs/apk/debug/app-debug.apk"')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=2 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk && echo "✓ Debug APK: ./app-debug.apk"')),
           _buildActionButton('Release APK', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleRelease && echo "✓ Release APK: app/build/outputs/apk/release/"')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=2 assembleRelease && echo "✓ Release APK: app/build/outputs/apk/release/"')),
+          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+              () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew clean')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon clean')),
           _buildActionButton('Sync', LucideIcons.refresh_cw, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew dependencies')),
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon dependencies')),
+        ];
+        break;
+
+      case ProjectType.web:
+        buildActions = [
+          _buildActionButton('Собрать APK (Web→APK)', LucideIcons.package, Colors.orange,
+              () => _buildWebApkInDedicatedTerminal(workspaceState.currentPath, currentProject.name)),
+          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+              () => _installBuiltApk(workspaceState.currentPath)),
         ];
         break;
 
@@ -792,6 +858,9 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
           _buildActionButton('Install deps', LucideIcons.download, Colors.purple,
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'pip3 install -r requirements.txt 2>/dev/null || pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt found"')),
+          _buildActionButton('Build APK (Flet)', LucideIcons.package, Colors.orange,
+              () => _runDedicatedCommand(workspaceState.currentPath,
+                  'flet build apk 2>/dev/null || buildozer android debug 2>/dev/null || echo "Установите flet (pip3 install flet) для сборки Python-приложения в APK"')),
           _buildActionButton('Freeze', LucideIcons.file_text, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'pip3 freeze > requirements.txt && echo "requirements.txt updated"')),
@@ -800,9 +869,13 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
       case ProjectType.nodejs:
         buildActions = [
-          _buildActionButton('npm install', LucideIcons.download, Colors.green,
+          _buildActionButton('Собрать APK (Web→APK)', LucideIcons.package, Colors.orange,
+              () => _buildWebApkInDedicatedTerminal(workspaceState.currentPath, currentProject.name)),
+          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+              () => _installBuiltApk(workspaceState.currentPath)),
+          _buildActionButton('npm install', LucideIcons.download, Colors.cyanAccent,
               () => _runDedicatedCommand(workspaceState.currentPath, 'npm install')),
-          _buildActionButton('npm build', LucideIcons.package, Colors.orange,
+          _buildActionButton('npm build', LucideIcons.hammer, Colors.amber,
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'npm run build 2>/dev/null || npx tsc 2>/dev/null || echo "No build script found"')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
@@ -812,17 +885,15 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         break;
 
       default:
-        // Fallback — Flutter build (old behaviour for undetected projects)
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter pub get && flutter build apk --debug --no-tree-shake-icons && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
           _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
-          _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent,
-              () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && flutter build linux --release')),
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
+          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+              () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter pub get')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,

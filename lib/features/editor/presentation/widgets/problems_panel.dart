@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/analysis_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
@@ -340,12 +341,54 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    color: (errors > 0
+                            ? const Color(0xFFFF6B6B)
+                            : (warnings > 0 ? Colors.amberAccent : Colors.white))
+                        .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text('$total', style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.white60)),
+                  child: Text(
+                    errors + warnings > 0 ? '${errors + warnings}' : '$hints инфо',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      color: errors > 0
+                          ? const Color(0xFFFF6B6B)
+                          : (warnings > 0 ? Colors.amberAccent : Colors.white60),
+                    ),
+                  ),
                 ),
               const Spacer(),
+              Tooltip(
+                message: 'Перезапустить анализ кода',
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () {
+                    ref.read(editorProvider.notifier).clearDiagnostics();
+                    ref.read(analysisServiceProvider).triggerAnalysis(immediate: true);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Icon(LucideIcons.refresh_cw, size: 12, color: Colors.white.withValues(alpha: 0.55)),
+                  ),
+                ),
+              ),
+              if (total > 0) ...[
+                const SizedBox(width: 2),
+                Tooltip(
+                  message: 'Очистить список диагностик',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () {
+                      ref.read(editorProvider.notifier).clearDiagnostics();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(LucideIcons.trash_2, size: 12, color: Colors.white.withValues(alpha: 0.55)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
               if (diagnosticsMap.isNotEmpty)
                 Tooltip(
                   message: l10n.sendToAi,

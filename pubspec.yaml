@@ -49,10 +49,6 @@ dependencies:
   
   crypto: ^3.0.6
   sqflite: ^2.4.4+2
-  llama_flutter_android:
-    path: local_plugins/llama_flutter_android
-  flutter_litert_lm:
-    path: local_plugins/flutter_litert_lm
   watcher: ^1.2.1
   contextmenu: ^3.0.0
   sqflite_common_ffi: ^2.4.4
@@ -74,10 +70,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-
-dependency_overrides:
-  llama_flutter_android:
-    path: local_plugins/llama_flutter_android
 
 flutter:
   uses-material-design: true

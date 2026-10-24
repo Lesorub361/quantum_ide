@@ -1,10 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/utils/path_mapper.dart';
+import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 
 class GitCommitItem {
   final String hash;
@@ -82,6 +84,12 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
     }
   }
 
+  Future<String> _resolveGuestRepoPath() async {
+    final hostPath = widget.projectPath ?? ref.read(workspaceProvider).currentPath ?? '/root/projects/quantum_ide';
+    final runtime = ref.read(runtimeServiceProvider);
+    return PathMapper.mapToGuest(hostPath, runtime.appDirectory);
+  }
+
   Future<void> _loadGitLog() async {
     setState(() {
       _isLoading = true;
@@ -89,42 +97,37 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
     });
 
     try {
-      final repoPath = widget.projectPath ?? ref.read(workspaceProvider).currentPath ?? '/root/projects/quantum_ide-main';
+      final guestPath = await _resolveGuestRepoPath();
+      final runtime = ref.read(runtimeServiceProvider);
 
-      // 1. Get current branch
-      final branchResult = await Process.run(
-        'git',
-        ['rev-parse', '--abbrev-ref', 'HEAD'],
-        workingDirectory: repoPath,
-      );
-      if (branchResult.exitCode == 0) {
-        _currentBranch = branchResult.stdout.toString().trim();
-      }
-
-      // 2. Get git log
-      final logResult = await Process.run(
-        'git',
-        [
-          'log',
-          '-n',
-          '80',
-          '--format=format:%h|%p|%d|%s|%an|%cr',
-        ],
-        workingDirectory: repoPath,
+      final rawOut = await runtime.runCommand(
+        'cd "$guestPath" 2>/dev/null && '
+        'echo "__BRANCH__" && '
+        '(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main") && '
+        'echo "__LOG__" && '
+        'git log --all -n 120 --format="format:%h\t%p\t%D\t%s\t%an\t%cr" 2>/dev/null',
       );
 
-      if (logResult.exitCode != 0) {
-        throw Exception(logResult.stderr.toString());
+      if (!rawOut.contains('__LOG__')) {
+        throw Exception('Не удалось прочитать историю Git в $guestPath');
       }
 
-      final rawLines = logResult.stdout.toString().split('\n');
+      final branchIdx = rawOut.indexOf('__BRANCH__');
+      final logIdx = rawOut.indexOf('__LOG__');
+      if (branchIdx != -1 && logIdx != -1) {
+        final br = rawOut.substring(branchIdx + '__BRANCH__'.length, logIdx).trim();
+        if (br.isNotEmpty) _currentBranch = br.split('\n').first.trim();
+      }
+
+      final logSection = rawOut.substring(logIdx + '__LOG__'.length).trim();
+      final rawLines = logSection.split('\n');
       final List<GitCommitItem> parsed = [];
       final Map<String, int> activeLanes = {};
       int nextLane = 0;
 
       for (final line in rawLines) {
         if (line.trim().isEmpty) continue;
-        final parts = line.split('|');
+        final parts = line.split('\t');
         if (parts.length < 6) continue;
 
         final hash = parts[0].trim();
@@ -139,9 +142,13 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
           lane = lane % _laneColors.length;
         }
 
-        // Assign lane for parents
-        for (final p in parents) {
-          activeLanes.putIfAbsent(p, () => lane);
+        for (int i = 0; i < parents.length; i++) {
+          final p = parents[i];
+          if (i == 0) {
+            activeLanes.putIfAbsent(p, () => lane);
+          } else {
+            activeLanes.putIfAbsent(p, () => (lane + i) % _laneColors.length);
+          }
         }
 
         parsed.add(GitCommitItem(
@@ -155,12 +162,14 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
         ));
       }
 
+      if (!mounted) return;
       setState(() {
         _allCommits = parsed;
         _filteredCommits = parsed;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Ошибка загрузки истории Git: $e';
         _isLoading = false;
@@ -169,9 +178,11 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
   }
 
   void _showCommitDetails(GitCommitItem commit) async {
-    final repoPath = widget.projectPath ?? ref.read(workspaceProvider).currentPath ?? '/root/projects/quantum_ide-main';
+    final guestPath = await _resolveGuestRepoPath();
+    final runtime = ref.read(runtimeServiceProvider);
     String diffStat = 'Загрузка изменений...';
 
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF131722),
@@ -182,13 +193,13 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
-            // Load diff stat asynchronously
             if (diffStat == 'Загрузка изменений...') {
-              Process.run('git', ['show', '--stat', '--oneline', commit.hash], workingDirectory: repoPath).then((res) {
+              runtime
+                  .runCommand('cd "$guestPath" && git show --stat --patch --no-color "${commit.hash}" 2>/dev/null')
+                  .then((out) {
                 if (modalCtx.mounted) {
                   setModalState(() {
-                    diffStat = res.stdout.toString().trim();
-                    if (diffStat.isEmpty) diffStat = 'Нет изменений в коммите';
+                    diffStat = out.trim().isNotEmpty ? out.trim() : 'Нет изменений в коммите';
                   });
                 }
               });
@@ -208,37 +219,41 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _laneColors[commit.laneIndex].withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              commit.hash,
-                              style: GoogleFonts.jetBrainsMono(
-                                color: _laneColors[commit.laneIndex],
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (commit.refs.isNotEmpty)
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.white10,
+                                color: _laneColors[commit.laneIndex].withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                commit.refs,
-                                style: const TextStyle(color: Colors.amberAccent, fontSize: 11),
+                                commit.hash,
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: _laneColors[commit.laneIndex],
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
-                        ],
+                            if (commit.refs.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.amberAccent.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  commit.refs,
+                                  style: const TextStyle(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(LucideIcons.copy, size: 16, color: Colors.white70),
@@ -252,32 +267,81 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Text(
                     commit.message,
                     style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     'Автор: ${commit.author} • ${commit.relativeDate}',
                     style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
-                  const Divider(color: Colors.white10, height: 24),
-                  const Text('ИЗМЕНЕНИЯ В ФАЙЛАХ:', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  // Quick Commit Actions
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildActionChip(
+                        icon: LucideIcons.git_pull_request_create,
+                        label: 'Cherry-pick',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: () async {
+                          Navigator.pop(modalCtx);
+                          await ref.read(gitProvider.notifier).cherryPickCommit(commit.hash);
+                          await _loadGitLog();
+                        },
+                      ),
+                      _buildActionChip(
+                        icon: LucideIcons.undo_2,
+                        label: 'Revert',
+                        color: Colors.amberAccent,
+                        onTap: () async {
+                          Navigator.pop(modalCtx);
+                          await ref.read(gitProvider.notifier).revertCommit(commit.hash);
+                          await _loadGitLog();
+                        },
+                      ),
+                      _buildActionChip(
+                        icon: LucideIcons.git_branch_plus,
+                        label: 'Ветка отсюда',
+                        color: const Color(0xFF00F2FE),
+                        onTap: () async {
+                          Navigator.pop(modalCtx);
+                          final branchName = 'branch-${commit.hash}';
+                          await ref.read(gitProvider.notifier).checkoutBranch(branchName, createNew: true, fromRef: commit.hash);
+                          await _loadGitLog();
+                        },
+                      ),
+                      _buildActionChip(
+                        icon: LucideIcons.rotate_ccw,
+                        label: 'Reset --mixed',
+                        color: Colors.redAccent,
+                        onTap: () async {
+                          Navigator.pop(modalCtx);
+                          await ref.read(gitProvider.notifier).resetToCommit(commit.hash, mode: 'mixed');
+                          await _loadGitLog();
+                        },
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Colors.white10, height: 22),
+                  const Text('DIFF И ИЗМЕНЕНИЯ В ФАЙЛАХ:', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
-                    constraints: const BoxConstraints(maxHeight: 200),
+                    constraints: const BoxConstraints(maxHeight: 260),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.black26,
+                      color: Colors.black38,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                     ),
                     child: SingleChildScrollView(
-                      child: Text(
+                      child: SelectableText(
                         diffStat,
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 11),
+                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 11, height: 1.4),
                       ),
                     ),
                   ),
@@ -287,6 +351,34 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildActionChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
+            Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -300,10 +392,10 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
           children: [
             const Icon(LucideIcons.git_graph, color: Color(0xFF00F2FE), size: 20),
             const SizedBox(width: 10),
-            Text('Git Graph', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Git Graph (Все ветки)', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15)),
             const SizedBox(width: 8),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
                 color: const Color(0xFF00F2FE).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
@@ -325,7 +417,6 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
       ),
       body: Column(
         children: [
-          // Search Bar
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
             child: TextField(
@@ -366,7 +457,6 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      // Custom Graph Node
                                       SizedBox(
                                         width: 24,
                                         height: 38,
@@ -380,7 +470,6 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      // Commit details
                                       Expanded(
                                         child: Column(
                                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,15 +509,22 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                                                 ),
                                                 if (commit.refs.isNotEmpty)
                                                   Flexible(
-                                                    child: Text(
-                                                      commit.refs,
-                                                      style: const TextStyle(
-                                                        color: Colors.amberAccent,
-                                                        fontSize: 10,
-                                                        fontWeight: FontWeight.bold,
+                                                    child: Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.amberAccent.withValues(alpha: 0.12),
+                                                        borderRadius: BorderRadius.circular(4),
                                                       ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
+                                                      child: Text(
+                                                        commit.refs,
+                                                        style: const TextStyle(
+                                                          color: Colors.amberAccent,
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
                                                     ),
                                                   ),
                                               ],
@@ -472,7 +568,6 @@ class _GitNodePainter extends CustomPainter {
       ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
 
-    // Connect lines
     if (!isFirst) {
       canvas.drawLine(Offset(centerX, 0), Offset(centerX, centerY), linePaint);
     }
@@ -480,7 +575,6 @@ class _GitNodePainter extends CustomPainter {
       canvas.drawLine(Offset(centerX, centerY), Offset(centerX, size.height), linePaint);
     }
 
-    // Outer glow for HEAD
     if (isHead) {
       final glowPaint = Paint()
         ..color = color.withValues(alpha: 0.3)
@@ -489,7 +583,6 @@ class _GitNodePainter extends CustomPainter {
       canvas.drawCircle(Offset(centerX, centerY), 7.5, glowPaint);
     }
 
-    // Main commit dot
     final dotPaint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;

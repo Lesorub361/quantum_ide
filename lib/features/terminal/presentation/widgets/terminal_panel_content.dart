@@ -805,6 +805,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final sessions = ref.watch(terminalTabsProvider);
     final notifier = ref.read(terminalTabsProvider.notifier);
     final editorState = ref.watch(editorProvider);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
       decoration: const BoxDecoration(
@@ -812,22 +813,25 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       ),
       child: SafeArea(
         bottom: true,
-        child: Column(
-          children: [
-            Expanded(
-              child: widget.onlyTerminal
-                  ? _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'))
-                  : _buildBody(panelState, sessions, notifier, editorState),
-            ),
-            if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
-                sessions.isNotEmpty &&
-                notifier.currentIndex < sessions.length &&
-                ((MediaQuery.of(context).viewInsets.bottom <= 20) && !_isMobileKeyboardActive))
-              _buildPluginCommandsBar(sessions[notifier.currentIndex]),
-            if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
-                (Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650))
-              _buildVirtualKeys(sessions, notifier),
-          ],
+        child: Padding(
+          padding: EdgeInsets.only(bottom: widget.onlyTerminal ? bottomInset : 0),
+          child: Column(
+            children: [
+              Expanded(
+                child: widget.onlyTerminal
+                    ? _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'))
+                    : _buildBody(panelState, sessions, notifier, editorState),
+              ),
+              if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
+                  sessions.isNotEmpty &&
+                  notifier.currentIndex < sessions.length &&
+                  ((bottomInset <= 20) && !_isMobileKeyboardActive))
+                _buildPluginCommandsBar(sessions[notifier.currentIndex]),
+              if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
+                  (Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650))
+                _buildVirtualKeys(sessions, notifier),
+            ],
+          ),
         ),
       ),
     );
@@ -1075,7 +1079,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   children: [
                     _buildActionHeader(l10n.build, [
                       _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build linux --release')),
-                      _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
+                      _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter pub get && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
                       _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get')),
                       _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean')),
                       _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.build)),
@@ -1196,14 +1200,49 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   String _extractTerminalText(xt.Terminal terminal) {
     final buffer = terminal.buffer;
-    final lines = <String>[];
+    final rawLines = <String>[];
     for (var i = 0; i < buffer.lines.length; i++) {
-      lines.add(buffer.lines[i].toString().trimRight());
+      rawLines.add(buffer.lines[i].toString().trimRight());
     }
-    while (lines.isNotEmpty && lines.last.isEmpty) {
-      lines.removeLast();
+    while (rawLines.isNotEmpty && rawLines.last.isEmpty) {
+      rawLines.removeLast();
     }
-    return lines.join('\n');
+    final deduped = _deduplicateTerminalLines(rawLines);
+    return deduped.join('\n');
+  }
+
+  /// Removes consecutive duplicate multi-line blocks caused by TUI redraws
+  /// overflowing into the scrollback buffer.
+  List<String> _deduplicateTerminalLines(List<String> lines) {
+    if (lines.length < 6) return lines;
+    final result = <String>[];
+    int i = 0;
+    while (i < lines.length) {
+      bool skippedBlock = false;
+      final maxWindow = ((lines.length - i) ~/ 2).clamp(0, 80);
+      for (int w = maxWindow; w >= 3; w--) {
+        int nonEmpty = 0;
+        bool matches = true;
+        for (int k = 0; k < w; k++) {
+          if (lines[i + k] != lines[i + w + k]) {
+            matches = false;
+            break;
+          }
+          if (lines[i + k].trim().isNotEmpty) nonEmpty++;
+        }
+        if (matches && nonEmpty >= 2) {
+          // Skip the first copy of the repeated block and advance to the second copy
+          i += w;
+          skippedBlock = true;
+          break;
+        }
+      }
+      if (!skippedBlock) {
+        result.add(lines[i]);
+        i++;
+      }
+    }
+    return result;
   }
 
   Future<void> _copyTerminalOutput(DedicatedTerminalType type) async {
@@ -1997,55 +2036,82 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                             terminal: session.xtermTerminal,
                             focusNode: _getFocusNode(keyId),
                             enabled: Platform.isAndroid || Platform.isIOS,
-                            child: xt.TerminalView(
-                              key: _getTerminalKey(keyId),
-                              session.xtermTerminal,
-                              controller: session.xtermViewController,
-                              focusNode: _getFocusNode(keyId),
-                              autofocus: !isMobile,
-                              hardwareKeyboardOnly: Platform.isAndroid || Platform.isIOS,
-                              onTapUp: (details, offset) {
-                                if (session.xtermViewController.selection != null) {
-                                  session.xtermViewController.clearSelection();
-                                  return;
-                                }
+                            child: LayoutBuilder(
+                              builder: (context, viewConstraints) {
+                                final kbInset = widget.onlyTerminal
+                                    ? MediaQuery.of(context).viewInsets.bottom
+                                    : 0.0;
+                                final fullHeight = viewConstraints.maxHeight + kbInset;
+                                final buf = session.xtermTerminal.buffer;
+                                final alignBottom = kbInset > 20 &&
+                                    (session.xtermTerminal.isUsingAltBuffer ||
+                                        buf.scrollBack > 0 ||
+                                        buf.cursorY > (buf.viewHeight * 0.4));
+                                final termView = xt.TerminalView(
+                                  key: _getTerminalKey(keyId),
+                                  session.xtermTerminal,
+                                  controller: session.xtermViewController,
+                                  focusNode: _getFocusNode(keyId),
+                                  autofocus: !isMobile,
+                                  hardwareKeyboardOnly: Platform.isAndroid || Platform.isIOS,
+                                  onTapUp: (details, offset) {
+                                    if (session.xtermViewController.selection != null) {
+                                      session.xtermViewController.clearSelection();
+                                      return;
+                                    }
 
-                                final lineIndex = offset.y;
-                                final colIndex = offset.x;
-                                final buffer = session.xtermTerminal.buffer;
-                                if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
-                                  final lineText = buffer.lines[lineIndex].toString();
-                                  final url = _findUrlAt(lineText, colIndex);
-                                  if (url != null) {
-                                    _showUrlDetected(url);
-                                    return;
-                                  }
-                                }
+                                    final lineIndex = offset.y;
+                                    final colIndex = offset.x;
+                                    final buffer = session.xtermTerminal.buffer;
+                                    if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
+                                      final lineText = buffer.lines[lineIndex].toString();
+                                      final url = _findUrlAt(lineText, colIndex);
+                                      if (url != null) {
+                                        _showUrlDetected(url);
+                                        return;
+                                      }
+                                    }
 
-                                _openTerminalKeyboard(session, isSecondary: isSecondary);
+                                    _openTerminalKeyboard(session, isSecondary: isSecondary);
+                                  },
+                                  padding: const EdgeInsets.all(10),
+                                  theme: theme,
+                                  backgroundOpacity: 0,
+                                  textStyle: xt.TerminalStyle(
+                                    fontSize: terminalFontSize,
+                                    fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                                    fontFamilyFallback: const [
+                                      'SymbolsNerdFont',
+                                      'Symbols Nerd Font',
+                                      'jetBrainsMono',
+                                      'firaCode',
+                                      'cascadia',
+                                      'dejaVuSansMono',
+                                      'inconsolata',
+                                      'sourceCodePro',
+                                      'Noto Sans Mono',
+                                      'DejaVu Sans Mono',
+                                      'monospace',
+                                    ],
+                                  ),
+                                  keyboardType: TextInputType.visiblePassword,
+                                  deleteDetection: true,
+                                );
+
+                                if (kbInset > 20 && fullHeight > viewConstraints.maxHeight) {
+                                  return ClipRect(
+                                    child: OverflowBox(
+                                      minHeight: fullHeight,
+                                      maxHeight: fullHeight,
+                                      alignment: alignBottom
+                                          ? Alignment.bottomCenter
+                                          : Alignment.topCenter,
+                                      child: termView,
+                                    ),
+                                  );
+                                }
+                                return termView;
                               },
-                              padding: const EdgeInsets.all(10),
-                              theme: theme,
-                              backgroundOpacity: 0,
-                              textStyle: xt.TerminalStyle(
-                                fontSize: terminalFontSize,
-                                fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                                fontFamilyFallback: const [
-                                  'SymbolsNerdFont',
-                                  'Symbols Nerd Font',
-                                  'jetBrainsMono',
-                                  'firaCode',
-                                  'cascadia',
-                                  'dejaVuSansMono',
-                                  'inconsolata',
-                                  'sourceCodePro',
-                                  'Noto Sans Mono',
-                                  'DejaVu Sans Mono',
-                                  'monospace',
-                                ],
-                              ),
-                              keyboardType: TextInputType.visiblePassword,
-                              deleteDetection: true,
                             ),
                           ),
                         ),
@@ -3513,10 +3579,13 @@ class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput
     _resetState();
   }
 
+  DateTime? _lastEnterSentAt;
+
   void _sendText(String delta) {
     for (int i = 0; i < delta.length; i++) {
       final ch = delta[i];
       if (ch == '\n' || ch == '\r') {
+        _lastEnterSentAt = DateTime.now();
         widget.terminal.keyInput(xt.TerminalKey.enter);
       } else if (ch == '\t') {
         widget.terminal.keyInput(xt.TerminalKey.tab);
@@ -3535,6 +3604,11 @@ class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput
         action == TextInputAction.go ||
         action == TextInputAction.send ||
         action == TextInputAction.search) {
+      if (_lastEnterSentAt != null &&
+          DateTime.now().difference(_lastEnterSentAt!).inMilliseconds < 120) {
+        return;
+      }
+      _lastEnterSentAt = DateTime.now();
       widget.terminal.keyInput(xt.TerminalKey.enter);
     }
   }

@@ -1,6 +1,7 @@
-import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/utils/path_mapper.dart';
 
 class GitBlameLine {
   final int lineNumber;
@@ -51,65 +52,65 @@ class GitBlameService extends StateNotifier<GitBlameState> {
     final workspacePath = ref.read(workspaceProvider).currentPath;
     if (workspacePath == null) return;
 
-    state = state.copyWith(isLoading: true, filePath: filePath);
+    state = state.copyWith(isLoading: true, filePath: filePath, lines: []);
 
     try {
+      final runtime = ref.read(runtimeServiceProvider);
+      final guestWorkspace = PathMapper.mapToGuest(workspacePath, runtime.appDirectory);
       final relativePath = filePath.replaceFirst(workspacePath, '').replaceFirst(RegExp(r'^/'), '');
-      
-      final result = await Process.run(
-        'git',
-        ['blame', '--porcelain', relativePath],
-        workingDirectory: workspacePath,
+
+      final output = await runtime.runCommand(
+        'cd "$guestWorkspace" && git blame --line-porcelain -- "$relativePath" 2>/dev/null',
       );
 
-      if (result.exitCode != 0) {
+      if (output.trim().isEmpty || output.contains('fatal:')) {
         state = state.copyWith(isLoading: false, lines: []);
         return;
       }
 
-      final output = result.stdout.toString();
-      final blocks = output.split(RegExp(r'^[0-9a-f]{40} ', multiLine: true));
+      final parsedLines = <GitBlameLine>[];
+      final rawLines = output.split('\n');
 
-      int lineNumber = 1;
-      for (final block in blocks) {
-        if (block.trim().isEmpty) continue;
+      String currentHash = '';
+      int currentLineNo = 1;
+      String author = '';
+      String date = '';
+      String summary = '';
 
-        final lines = block.split('\n');
-        const commitHash = '';
-        String author = '';
-        String date = '';
-        String message = '';
+      final headerRegex = RegExp(r'^([0-9a-f]{40})\s+(\d+)\s+(\d+)');
 
-        for (final line in lines) {
-          if (line.startsWith('author ')) {
-            author = line.substring(7);
-          } else if (line.startsWith('author-time ')) {
-            final timestamp = int.tryParse(line.substring(12)) ?? 0;
+      for (final line in rawLines) {
+        final headerMatch = headerRegex.firstMatch(line);
+        if (headerMatch != null) {
+          currentHash = headerMatch.group(1)!.substring(0, 7);
+          currentLineNo = int.tryParse(headerMatch.group(3)!) ?? currentLineNo;
+          continue;
+        }
+        if (line.startsWith('author ')) {
+          author = line.substring(7).trim();
+        } else if (line.startsWith('author-time ')) {
+          final timestamp = int.tryParse(line.substring(12).trim()) ?? 0;
+          if (timestamp > 0) {
             final dateObj = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
             date = '${dateObj.year}-${dateObj.month.toString().padLeft(2, '0')}-${dateObj.day.toString().padLeft(2, '0')}';
-          } else if (line.startsWith('summary ')) {
-            message = line.substring(8);
           }
+        } else if (line.startsWith('summary ')) {
+          summary = line.substring(8).trim();
+        } else if (line.startsWith('\t')) {
+          if (author.isNotEmpty) {
+            parsedLines.add(GitBlameLine(
+              lineNumber: currentLineNo,
+              commitHash: currentHash,
+              author: author,
+              date: date,
+              message: summary,
+            ));
+          }
+          currentLineNo++;
         }
-
-        if (author.isNotEmpty) {
-          state = state.copyWith(
-            lines: [
-              ...state.lines,
-              GitBlameLine(
-                lineNumber: lineNumber,
-                commitHash: commitHash,
-                author: author,
-                date: date,
-                message: message,
-              ),
-            ],
-          );
-        }
-        lineNumber++;
       }
 
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(isLoading: false, lines: parsedLines);
     } catch (e) {
       state = state.copyWith(isLoading: false, lines: []);
     }

@@ -26,6 +26,25 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _selectedStackFilter = 'all';
+
+  bool _matchesStackFilter(Project p) {
+    switch (_selectedStackFilter) {
+      case 'flutter':
+        return p.type == ProjectType.flutter || p.type == ProjectType.dart;
+      case 'android':
+        return p.type == ProjectType.androidKotlin || p.type == ProjectType.androidJava;
+      case 'web':
+        return p.type == ProjectType.web || p.type == ProjectType.nodejs;
+      case 'python':
+        return p.type == ProjectType.python;
+      case 'other':
+        return p.type == ProjectType.rust || p.type == ProjectType.shell || p.type == ProjectType.other;
+      case 'all':
+      default:
+        return true;
+    }
+  }
 
   @override
   void initState() {
@@ -49,13 +68,17 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     final allProjects = ref.watch(projectServiceProvider);
-    final projects = allProjects.where((p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    final projects = allProjects
+        .where((p) =>
+            p.name.toLowerCase().contains(_searchQuery.toLowerCase()) &&
+            _matchesStackFilter(p))
+        .toList();
     
-    final lastProject = projects.isNotEmpty 
-        ? (List<Project>.from(projects)..sort((a, b) => b.lastOpened.compareTo(a.lastOpened))).first 
+    final lastProject = allProjects.isNotEmpty 
+        ? (List<Project>.from(allProjects)..sort((a, b) => b.lastOpened.compareTo(a.lastOpened))).first 
         : null;
         
-    final otherProjects = lastProject != null && _searchQuery.isEmpty
+    final otherProjects = lastProject != null && _searchQuery.isEmpty && _selectedStackFilter == 'all'
         ? projects.where((p) => p.id != lastProject.id).toList()
         : projects;
         
@@ -169,7 +192,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       _buildRailItem(
                         icon: LucideIcons.folder_open,
                         tooltip: AppLocalizations.of(context)!.open,
-                        color: theme.colorScheme.secondary,
+                        color: Colors.cyanAccent,
                         onTap: () async {
                           final dir = await FilePicker.getDirectoryPath();
                           if (dir != null) {
@@ -178,46 +201,28 @@ class _HomePageState extends ConsumerState<HomePage> {
                         },
                       ),
                       _buildRailItem(
-                        icon: LucideIcons.terminal,
-                        tooltip: AppLocalizations.of(context)!.terminal,
-                        color: theme.colorScheme.tertiary,
-                        onTap: () => context.push('/terminal'),
-                      ),
-                      _buildRailItem(
-                        icon: LucideIcons.layout_dashboard,
-                        tooltip: AppLocalizations.of(context)!.market,
-                        color: Colors.pinkAccent,
-                        onTap: () => context.push('/packages'),
-                      ),
-                      _buildRailItem(
-                        icon: LucideIcons.server,
-                        tooltip: AppLocalizations.of(context)!.servers,
-                        color: theme.colorScheme.error,
-                        onTap: () => context.push('/servers'),
-                      ),
-                      _buildRailItem(
                         icon: LucideIcons.git_branch,
-                        tooltip: 'GitHub',
+                        tooltip: 'Git и GitHub (Клонирование / Репозитории)',
                         color: Colors.purpleAccent,
                         onTap: () => context.push('/github'),
                       ),
                       _buildRailItem(
-                        icon: LucideIcons.database,
-                        tooltip: 'База данных (SQLite)',
+                        icon: LucideIcons.terminal,
+                        tooltip: AppLocalizations.of(context)!.terminal,
                         color: const Color(0xFF10B981),
-                        onTap: () => context.push('/database-viewer'),
+                        onTap: () => context.push('/terminal'),
                       ),
                       _buildRailItem(
-                        icon: LucideIcons.wrench,
-                        tooltip: 'DevTools',
+                        icon: LucideIcons.package,
+                        tooltip: 'Пакеты и SDK',
+                        color: Colors.amberAccent,
+                        onTap: () => context.push('/packages'),
+                      ),
+                      _buildRailItem(
+                        icon: LucideIcons.blocks,
+                        tooltip: 'Инструменты разработчика (SQLite, SFTP, Серверы, DevTools)',
                         color: const Color(0xFF00E5FF),
-                        onTap: () => context.push('/devtools'),
-                      ),
-                      _buildRailItem(
-                        icon: LucideIcons.globe,
-                        tooltip: 'Remote SFTP',
-                        color: const Color(0xFFFF9100),
-                        onTap: () => context.push('/sftp-explorer'),
+                        onTap: () => _showDeveloperToolsSheet(context),
                       ),
                       _buildRailItem(
                         icon: LucideIcons.settings,
@@ -230,7 +235,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
                 // Telemetry summary indicator
                 Tooltip(
-                  message: 'CPU: ${(stats.cpuUsage * 100).toStringAsFixed(0)}% • RAM: ${stats.ramUsedGB.toStringAsFixed(1)} GB',
+                  message: 'CPU: ${(stats.cpuUsage * 100).toStringAsFixed(0)}% • App RAM: ${stats.appRamFormatted}',
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Container(
@@ -293,12 +298,30 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ),
                           const SizedBox(width: 16),
                           SizedBox(
-                            width: 260,
+                            width: 240,
                             child: _buildSearchField(),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildAppActionButton(
+                            icon: LucideIcons.git_branch,
+                            tooltip: 'Git и GitHub',
+                            onTap: () => context.push('/github'),
+                          ),
+                          _buildAppActionButton(
+                            icon: LucideIcons.blocks,
+                            tooltip: 'Инструменты разработчика',
+                            onTap: () => _showDeveloperToolsSheet(context),
+                          ),
+                          _buildAppActionButton(
+                            icon: LucideIcons.settings,
+                            tooltip: AppLocalizations.of(context)!.settings,
+                            onTap: () => context.push('/settings'),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
+                      _buildQuickActionsAdaptive(context),
+                      const SizedBox(height: 18),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,11 +337,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                       ] else ...[
                         _buildSystemMonitor(context),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                       ],
+                      _buildStackFilterChips(context),
+                      const SizedBox(height: 14),
                       if (projects.isNotEmpty) ...[
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -433,7 +458,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                       _buildQuickActionsAdaptive(context),
                       const SizedBox(height: 14),
                       _buildSystemMonitor(context),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
+                      _buildStackFilterChips(context),
+                      const SizedBox(height: 14),
                       if (otherProjects.isNotEmpty) ...[
                         _buildProjectsHeader(otherProjects.length),
                         const SizedBox(height: 10),
@@ -543,7 +570,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       _buildSidebarItem(
                         icon: LucideIcons.folder_open,
                         label: AppLocalizations.of(context)!.open,
-                        color: theme.colorScheme.secondary,
+                        color: Colors.cyanAccent,
                         onTap: () async {
                           final dir = await FilePicker.getDirectoryPath();
                           if (dir != null) {
@@ -552,40 +579,28 @@ class _HomePageState extends ConsumerState<HomePage> {
                         },
                       ),
                       _buildSidebarItem(
+                        icon: LucideIcons.git_branch,
+                        label: 'Git и GitHub',
+                        color: Colors.purpleAccent,
+                        onTap: () => context.push('/github'),
+                      ),
+                      _buildSidebarItem(
                         icon: LucideIcons.terminal,
                         label: AppLocalizations.of(context)!.terminal,
-                        color: theme.colorScheme.tertiary,
+                        color: const Color(0xFF10B981),
                         onTap: () => context.push('/terminal'),
                       ),
                       _buildSidebarItem(
-                        icon: LucideIcons.layout_dashboard,
-                        label: AppLocalizations.of(context)!.market,
-                        color: Colors.pinkAccent,
+                        icon: LucideIcons.package,
+                        label: 'Пакеты и SDK',
+                        color: Colors.amberAccent,
                         onTap: () => context.push('/packages'),
                       ),
                       _buildSidebarItem(
-                        icon: LucideIcons.server,
-                        label: AppLocalizations.of(context)!.servers,
-                        color: theme.colorScheme.error,
-                        onTap: () => context.push('/servers'),
-                      ),
-                      _buildSidebarItem(
-                        icon: LucideIcons.database,
-                        label: 'Базы данных (SQLite)',
-                        color: const Color(0xFF10B981),
-                        onTap: () => context.push('/database-viewer'),
-                      ),
-                      _buildSidebarItem(
-                        icon: LucideIcons.wrench,
-                        label: 'DevTools Утилиты',
+                        icon: LucideIcons.blocks,
+                        label: 'Инструменты разработчика',
                         color: const Color(0xFF00E5FF),
-                        onTap: () => context.push('/devtools'),
-                      ),
-                      _buildSidebarItem(
-                        icon: LucideIcons.globe,
-                        label: 'Remote SFTP',
-                        color: const Color(0xFFFF9100),
-                        onTap: () => context.push('/sftp-explorer'),
+                        onTap: () => _showDeveloperToolsSheet(context),
                       ),
                       _buildSidebarItem(
                         icon: LucideIcons.settings,
@@ -637,8 +652,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('RAM', style: GoogleFonts.inter(color: Colors.white60, fontSize: 10)),
-                            Text('${stats.ramUsedGB.toStringAsFixed(1)} GB', style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                            Text('App RAM', style: GoogleFonts.inter(color: Colors.white60, fontSize: 10)),
+                            Text(stats.appRamFormatted, style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10, fontWeight: FontWeight.bold)),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -683,7 +698,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
+                      _buildQuickActionsAdaptive(context),
+                      const SizedBox(height: 20),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
                         Text(
                           AppLocalizations.of(context)!.lastActiveProject,
@@ -691,8 +708,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ),
                         const SizedBox(height: 12),
                         _buildResumeCard(context, lastProject),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                       ],
+                      _buildStackFilterChips(context),
+                      const SizedBox(height: 16),
                       if (projects.isNotEmpty) ...[
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -943,13 +962,13 @@ class _HomePageState extends ConsumerState<HomePage> {
       actions: [
         _buildAppActionButton(
           icon: LucideIcons.git_branch,
-          tooltip: 'GitHub',
+          tooltip: 'Git и GitHub',
           onTap: () => context.push('/github'),
         ),
         _buildAppActionButton(
-          icon: LucideIcons.package,
-          tooltip: AppLocalizations.of(context)!.packagesTooltip,
-          onTap: () => context.push('/packages'),
+          icon: LucideIcons.blocks,
+          tooltip: 'Инструменты разработчика',
+          onTap: () => _showDeveloperToolsSheet(context),
         ),
         _buildAppActionButton(
           icon: LucideIcons.settings,
@@ -1196,14 +1215,14 @@ class _HomePageState extends ConsumerState<HomePage> {
                             const Icon(LucideIcons.memory_stick, size: 12, color: Colors.purpleAccent),
                             const SizedBox(width: 4),
                             Text(
-                              'RAM',
+                              'App RAM',
                               style: GoogleFonts.inter(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
                         Text(
-                          '${stats.ramUsedGB.toStringAsFixed(1)} GB',
-                          style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                          '${stats.appRamFormatted} (Своб. ${stats.deviceRamAvailableGB.toStringAsFixed(1)}G)',
+                          style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -1259,22 +1278,97 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildQuickActionsAdaptive(BuildContext context) {
+  Widget _buildStackFilterChips(BuildContext context) {
+    final filters = [
+      (id: 'all', label: 'Все проекты', icon: LucideIcons.layers),
+      (id: 'flutter', label: 'Flutter / Dart', icon: LucideIcons.smartphone),
+      (id: 'android', label: 'Android (Kotlin/Java)', icon: LucideIcons.cpu),
+      (id: 'web', label: 'Web / Node.js', icon: LucideIcons.globe),
+      (id: 'python', label: 'Python', icon: LucideIcons.terminal),
+      (id: 'other', label: 'Rust / Скрипты', icon: LucideIcons.code),
+    ];
+
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: filters.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final f = filters[index];
+          final isSelected = _selectedStackFilter == f.id;
+          return InkWell(
+            onTap: () => setState(() => _selectedStackFilter = f.id),
+            borderRadius: BorderRadius.circular(10),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.cyanAccent.withValues(alpha: 0.14)
+                    : Colors.white.withValues(alpha: 0.03),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.cyanAccent.withValues(alpha: 0.5)
+                      : Colors.white.withValues(alpha: 0.07),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    f.icon,
+                    size: 13,
+                    color: isSelected ? Colors.cyanAccent : Colors.white54,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    f.label,
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? Colors.cyanAccent : Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showDeveloperToolsSheet(BuildContext context) {
     final theme = Theme.of(context);
-    final actions = [
+    final tools = [
+      (
+        icon: LucideIcons.package,
+        title: 'Пакеты и SDK (Market)',
+        subtitle: 'Установка компиляторов, библиотек и инструментов Linux',
+        color: Colors.pinkAccent,
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/packages');
+        },
+      ),
       (
         icon: LucideIcons.sparkles,
-        label: 'Quick Chat',
+        title: 'Быстрый ИИ-чат (Песочница)',
+        subtitle: 'Мгновенное создание временного проекта с ИИ-ассистентом',
         color: const Color(0xFFa078ff),
         onTap: () async {
+          Navigator.pop(context);
           final allProjects = ref.read(projectServiceProvider);
           final usedSlugs = allProjects.map((p) => p.name.toLowerCase()).toSet();
           final identity = generateQuickChatIdentity(usedSlugs);
           final project = await ref.read(projectServiceProvider.notifier).createProject(
-            name: identity.slug,
-            path: '',
-            type: ProjectType.web,
-          );
+                name: identity.slug,
+                path: '',
+                type: ProjectType.web,
+              );
           await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
           ref.read(rightChatPanelOpenProvider.notifier).state = true;
           if (context.mounted) {
@@ -1283,15 +1377,170 @@ class _HomePageState extends ConsumerState<HomePage> {
         },
       ),
       (
+        icon: LucideIcons.server,
+        title: 'Локальные серверы',
+        subtitle: 'Управление запущенными веб-серверами и портами',
+        color: theme.colorScheme.error,
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/servers');
+        },
+      ),
+      (
+        icon: LucideIcons.database,
+        title: 'Инспектор баз данных (SQLite)',
+        subtitle: 'Просмотр таблиц и выполнение SQL-запросов',
+        color: const Color(0xFF10B981),
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/database-viewer');
+        },
+      ),
+      (
+        icon: LucideIcons.globe,
+        title: 'Удалённый доступ (SFTP / SSH)',
+        subtitle: 'Подключение к внешним серверам и передача файлов',
+        color: const Color(0xFFFF9100),
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/sftp-explorer');
+        },
+      ),
+      (
+        icon: LucideIcons.wrench,
+        title: 'Инженерные утилиты (DevTools)',
+        subtitle: 'Форматирование JSON, проверка Regex, генератор хэшей и цветов',
+        color: const Color(0xFF00E5FF),
+        onTap: () {
+          Navigator.pop(context);
+          context.push('/devtools');
+        },
+      ),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF12151E),
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Icon(LucideIcons.blocks, size: 18, color: Colors.cyanAccent),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Инструменты разработчика',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Дополнительные утилиты вынесены сюда, чтобы рабочий стол оставался чистым и удобным.',
+                style: GoogleFonts.inter(fontSize: 12, color: Colors.white54),
+              ),
+              const SizedBox(height: 14),
+              ...tools.map(
+                (t) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InkWell(
+                    onTap: t.onTap,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: t.color.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(t.icon, color: t.color, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  t.title,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  t.subtitle,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(LucideIcons.chevron_right, size: 15, color: Colors.white38),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsAdaptive(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryActions = [
+      (
         icon: LucideIcons.plus,
         label: AppLocalizations.of(context)!.createProject,
+        subtitle: 'Flutter, Android, Web, Python',
         color: theme.colorScheme.primary,
         onTap: () => _showProjectDialog(context, ref),
       ),
       (
         icon: LucideIcons.folder_open,
         label: AppLocalizations.of(context)!.open,
-        color: theme.colorScheme.secondary,
+        subtitle: 'Импорт готовой папки',
+        color: Colors.cyanAccent,
         onTap: () async {
           final dir = await FilePicker.getDirectoryPath();
           if (dir != null) {
@@ -1300,101 +1549,126 @@ class _HomePageState extends ConsumerState<HomePage> {
         },
       ),
       (
+        icon: LucideIcons.git_branch,
+        label: 'Git и GitHub',
+        subtitle: 'Клонировать репозиторий',
+        color: Colors.purpleAccent,
+        onTap: () => context.push('/github'),
+      ),
+      (
         icon: LucideIcons.terminal,
         label: AppLocalizations.of(context)!.terminal,
-        color: theme.colorScheme.tertiary,
-        onTap: () => context.push('/terminal'),
-      ),
-      (
-        icon: LucideIcons.layout_dashboard,
-        label: AppLocalizations.of(context)!.market,
-        color: Colors.pinkAccent,
-        onTap: () => context.push('/packages'),
-      ),
-      (
-        icon: LucideIcons.server,
-        label: AppLocalizations.of(context)!.servers,
-        color: theme.colorScheme.error,
-        onTap: () => context.push('/servers'),
-      ),
-      (
-        icon: LucideIcons.database,
-        label: 'Базы данных',
+        subtitle: 'Консоль Linux и сборка',
         color: const Color(0xFF10B981),
-        onTap: () => context.push('/database-viewer'),
-      ),
-      (
-        icon: LucideIcons.wrench,
-        label: 'DevTools',
-        color: const Color(0xFF00E5FF),
-        onTap: () => context.push('/devtools'),
-      ),
-      (
-        icon: LucideIcons.globe,
-        label: 'SFTP Remote',
-        color: const Color(0xFFFF9100),
-        onTap: () => context.push('/sftp-explorer'),
+        onTap: () => context.push('/terminal'),
       ),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth < 360 ? 2 : 3;
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: actions.length,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: crossAxisCount,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            mainAxisExtent: 64,
-          ),
-          itemBuilder: (context, index) {
-            final item = actions[index];
-            return InkWell(
-              onTap: item.onTap,
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.02),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.8),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: item.color.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: item.color.withValues(alpha: 0.25)),
-                      ),
-                      child: Icon(item.icon, color: item.color, size: 18),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        item.label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          height: 1.2,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final crossAxisCount = constraints.maxWidth >= 680 ? 4 : 2;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: primaryActions.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                mainAxisExtent: 68,
               ),
+              itemBuilder: (context, index) {
+                final item = primaryActions[index];
+                return InkWell(
+                  onTap: item.onTap,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.025),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: item.color.withValues(alpha: 0.22), width: 0.9),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: item.color.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Icon(item.icon, color: item.color, size: 19),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  color: theme.colorScheme.onSurface,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item.subtitle,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             );
           },
-        );
-      },
+        ),
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: () => _showDeveloperToolsSheet(context),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.015),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            ),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.blocks, size: 14, color: Colors.cyanAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Дополнительные инструменты: Пакеты и SDK, SQLite, SFTP, Серверы, DevTools, ИИ-песочница',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(fontSize: 11, color: Colors.white60, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                const Icon(LucideIcons.chevron_right, size: 14, color: Colors.white38),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

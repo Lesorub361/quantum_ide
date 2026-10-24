@@ -446,8 +446,24 @@ class RuntimeService extends ChangeNotifier {
           _generateSetupArm64Script().replaceAll('\r', ''),
         );
       }
+      final patchNdkScript = _generateQuantumPatchNdkScript().replaceAll('\r', '');
+      final patchNdkTargets = [
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'quantum-patch-ndk'),
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'quantum-patch-ndk'),
+        '/usr/local/bin/quantum-patch-ndk',
+        '/usr/bin/quantum-patch-ndk',
+      ];
+      for (final targetPath in patchNdkTargets) {
+        try {
+          final f = File(targetPath);
+          if (await f.parent.exists()) {
+            await f.writeAsString(patchNdkScript);
+            await Process.run('chmod', ['755', targetPath]);
+          }
+        } catch (_) {}
+      }
     } catch (e) {
-      debugPrint('Warning: Failed to write setup-arm64.sh: $e');
+      debugPrint('Warning: Failed to write setup-arm64.sh / quantum-patch-ndk: $e');
     }
 
     try {
@@ -463,7 +479,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '15';
+    const bashrcVersion = '16';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -501,7 +517,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=15
+# BASHRC_VERSION=16
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -552,8 +568,8 @@ alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
-alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --android-skip-build-dependency-validation"
+alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -1452,10 +1468,244 @@ fi
     }
   }
 
+  String _generateQuantumPatchNdkScript() {
+    return r'''#!/bin/bash
+# quantum-patch-ndk: Auto-heals Android NDK & CMake on ARM64 Linux / PRoot so
+# official x86_64 Google NDKs and native ARM64 NDKs work seamlessly with CMake/Gradle.
+
+SDK_ROOT="${ANDROID_HOME:-/root/android-sdk}"
+[ ! -d "$SDK_ROOT" ] && exit 0
+
+CLANG_BIN=$(ls /usr/bin/clang-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+CLANGPP_BIN=$(ls /usr/bin/clang++-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+LLD_BIN=$(ls /usr/bin/ld.lld-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+
+if [ -z "$CLANG_BIN" ] && [ -x /usr/bin/clang ]; then CLANG_BIN="/usr/bin/clang"; fi
+if [ -z "$CLANGPP_BIN" ] && [ -x /usr/bin/clang++ ]; then CLANGPP_BIN="/usr/bin/clang++"; fi
+if [ -z "$LLD_BIN" ] && [ -x /usr/bin/ld.lld ]; then LLD_BIN="/usr/bin/ld.lld"; fi
+
+if [ -z "$CLANG_BIN" ] && [ "$1" != "--fast" ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
+    apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 ninja-build >/dev/null 2>&1 || \
+    apt-get install -y --no-install-recommends clang lld llvm ninja-build >/dev/null 2>&1 || true
+    CLANG_BIN=$(ls /usr/bin/clang-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+    CLANGPP_BIN=$(ls /usr/bin/clang++-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+    LLD_BIN=$(ls /usr/bin/ld.lld-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+fi
+
+[ -z "$CLANG_BIN" ] && exit 0
+[ -z "$CLANGPP_BIN" ] && CLANGPP_BIN="$CLANG_BIN"
+
+[ ! -e /usr/bin/clang ] && ln -sf "$CLANG_BIN" /usr/bin/clang 2>/dev/null || true
+[ ! -e /usr/bin/clang++ ] && ln -sf "$CLANGPP_BIN" /usr/bin/clang++ 2>/dev/null || true
+[ -n "$LLD_BIN" ] && [ ! -e /usr/bin/ld.lld ] && ln -sf "$LLD_BIN" /usr/bin/ld.lld 2>/dev/null || true
+
+CLANG_RES_DIR=$("$CLANG_BIN" -print-resource-dir 2>/dev/null)
+
+if [ -d "$SDK_ROOT/ndk" ]; then
+    BASE_NDK=""
+    for ndk in "$SDK_ROOT/ndk/"*; do
+        [ -d "$ndk" ] || continue
+        [ -L "$ndk" ] && continue
+
+        if [ -d "$ndk/toolchains/llvm/prebuilt/linux-arm64" ]; then
+            [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-x86_64" ] && ln -sfn linux-arm64 "$ndk/toolchains/llvm/prebuilt/linux-x86_64" 2>/dev/null || true
+            [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-aarch64" ] && ln -sfn linux-arm64 "$ndk/toolchains/llvm/prebuilt/linux-aarch64" 2>/dev/null || true
+            chmod +x "$ndk/ndk-build" "$ndk/toolchains/llvm/prebuilt/linux-arm64/bin/"* 2>/dev/null || true
+            BASE_NDK="$ndk"
+            continue
+        fi
+        if [ -d "$ndk/toolchains/llvm/prebuilt/linux-aarch64" ]; then
+            [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-x86_64" ] && ln -sfn linux-aarch64 "$ndk/toolchains/llvm/prebuilt/linux-x86_64" 2>/dev/null || true
+            [ ! -e "$ndk/toolchains/llvm/prebuilt/linux-arm64" ] && ln -sfn linux-aarch64 "$ndk/toolchains/llvm/prebuilt/linux-arm64" 2>/dev/null || true
+            chmod +x "$ndk/ndk-build" "$ndk/toolchains/llvm/prebuilt/linux-aarch64/bin/"* 2>/dev/null || true
+            BASE_NDK="$ndk"
+            continue
+        fi
+
+        PREBUILT="$ndk/toolchains/llvm/prebuilt/linux-x86_64"
+        [ -d "$PREBUILT" ] || continue
+        BASE_NDK="$ndk"
+
+        NDK_BIN="$PREBUILT/bin"
+        SYSROOT="$PREBUILT/sysroot"
+        mkdir -p "$NDK_BIN"
+
+        NDK_RES_DIR=$(ls -d "$PREBUILT/lib/clang/"* 2>/dev/null | sort -V | tail -n 1)
+
+        if [ -n "$CLANG_RES_DIR" ] && [ -n "$NDK_RES_DIR" ] && [ -d "$NDK_RES_DIR/lib/linux" ]; then
+            mkdir -p "$CLANG_RES_DIR/lib" 2>/dev/null || true
+            if [ ! -e "$CLANG_RES_DIR/lib/linux" ]; then
+                ln -sfn "$NDK_RES_DIR/lib/linux" "$CLANG_RES_DIR/lib/linux" 2>/dev/null || true
+            fi
+        fi
+
+        if [ -n "$NDK_RES_DIR" ] && [ -d "$NDK_RES_DIR/lib/linux" ]; then
+            for pair in "aarch64:aarch64" "arm:arm" "i386:i686" "x86_64:x86_64"; do
+                u_arch="${pair%:*}"
+                rt_arch="${pair#*:}"
+                if [ -d "$NDK_RES_DIR/lib/linux/$u_arch" ]; then
+                    rm -f "$NDK_RES_DIR/lib/linux/$u_arch/libgcc.a" 2>/dev/null || true
+                    echo "GROUP(../libclang_rt.builtins-${rt_arch}-android.a libunwind.a)" > "$NDK_RES_DIR/lib/linux/$u_arch/libgcc.a" 2>/dev/null || true
+                fi
+            done
+        fi
+
+        if [ -f "$NDK_BIN/.quantum_patched_v4" ]; then
+            continue
+        fi
+
+        for target in clang clang-14 clang-15 clang-16 clang-17 clang-18 clang-19 clang-20 clang-21; do
+            rm -f "$NDK_BIN/$target"
+            cat << WRAP_EOF > "$NDK_BIN/$target"
+#!/bin/bash
+export PATH="$NDK_BIN:/usr/bin:\$PATH"
+exec "$CLANG_BIN" -Qunused-arguments "\$@"
+WRAP_EOF
+            chmod +x "$NDK_BIN/$target"
+        done
+
+        rm -f "$NDK_BIN/clang++"
+        cat << WRAP_EOF > "$NDK_BIN/clang++"
+#!/bin/bash
+export PATH="$NDK_BIN:/usr/bin:\$PATH"
+exec "$CLANGPP_BIN" -Qunused-arguments "\$@"
+WRAP_EOF
+        chmod +x "$NDK_BIN/clang++"
+
+        if [ -n "$LLD_BIN" ] && [ -x "$LLD_BIN" ]; then
+            for ld_tool in ld ld.lld lld; do
+                rm -f "$NDK_BIN/$ld_tool"
+                printf '#!/bin/bash\nexec "%s" "$@"\n' "$LLD_BIN" > "$NDK_BIN/$ld_tool"
+                chmod +x "$NDK_BIN/$ld_tool"
+            done
+        fi
+
+        for tool in llvm-ar llvm-ranlib llvm-strip llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-readobj llvm-symbolizer llvm-strings llvm-cxxfilt llvm-as llvm-dis llvm-link llvm-cov llvm-profdata llvm-size llvm-rc llvm-ml llvm-lib llvm-dlltool; do
+            SYS_TOOL=$(ls /usr/bin/${tool}-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+            [ -z "$SYS_TOOL" ] && SYS_TOOL="/usr/bin/$tool"
+            if [ -x "$SYS_TOOL" ]; then
+                rm -f "$NDK_BIN/$tool"
+                printf '#!/bin/bash\nexec "%s" "$@"\n' "$SYS_TOOL" > "$NDK_BIN/$tool"
+                chmod +x "$NDK_BIN/$tool"
+            fi
+        done
+
+        LLVM_AR=$(ls /usr/bin/llvm-ar-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+        [ -z "$LLVM_AR" ] && LLVM_AR="/usr/bin/llvm-ar"
+        if [ -x "$LLVM_AR" ] && [ -d "$SYSROOT" ]; then
+            for triple in aarch64-linux-android arm-linux-androideabi x86_64-linux-android i686-linux-android; do
+                abi_dir="$SYSROOT/usr/lib/$triple"
+                [ -d "$abi_dir" ] || continue
+                case "$triple" in
+                    aarch64-linux-android) rt_arch="aarch64"; unwind_arch="aarch64" ;;
+                    arm-linux-androideabi) rt_arch="arm";     unwind_arch="arm" ;;
+                    i686-linux-android)    rt_arch="i686";    unwind_arch="i386" ;;
+                    x86_64-linux-android)  rt_arch="x86_64";  unwind_arch="x86_64" ;;
+                esac
+                RT_FILE=""
+                UNWIND_FILE=""
+                ATOMIC_FILE=""
+                if [ -n "$NDK_RES_DIR" ]; then
+                    [ -f "$NDK_RES_DIR/lib/linux/libclang_rt.builtins-${rt_arch}-android.a" ] && RT_FILE="$NDK_RES_DIR/lib/linux/libclang_rt.builtins-${rt_arch}-android.a"
+                    [ -f "$NDK_RES_DIR/lib/linux/$unwind_arch/libunwind.a" ] && UNWIND_FILE="$NDK_RES_DIR/lib/linux/$unwind_arch/libunwind.a"
+                    [ -f "$NDK_RES_DIR/lib/linux/$unwind_arch/libatomic.a" ] && ATOMIC_FILE="$NDK_RES_DIR/lib/linux/$unwind_arch/libatomic.a"
+                fi
+                for dest_dir in "$abi_dir" "$abi_dir"/*/; do
+                    [ -d "$dest_dir" ] || continue
+                    if [ -n "$ATOMIC_FILE" ]; then
+                        cp -f "$ATOMIC_FILE" "${dest_dir%/}/libatomic.a" 2>/dev/null || true
+                    else
+                        [ -f "${dest_dir%/}/libatomic.a" ] || "$LLVM_AR" rcs "${dest_dir%/}/libatomic.a" 2>/dev/null || true
+                    fi
+                    if [ -n "$UNWIND_FILE" ]; then
+                        cp -f "$UNWIND_FILE" "${dest_dir%/}/libunwind.a" 2>/dev/null || true
+                    fi
+                    if [ -n "$RT_FILE" ]; then
+                        cp -f "$RT_FILE" "${dest_dir%/}/libgcc_real.a" 2>/dev/null || true
+                        if [ -f "${dest_dir%/}/libunwind.a" ]; then
+                            echo "GROUP(libgcc_real.a libunwind.a)" > "${dest_dir%/}/libgcc.a"
+                        else
+                            cp -f "$RT_FILE" "${dest_dir%/}/libgcc.a" 2>/dev/null || true
+                        fi
+                    else
+                        [ -f "${dest_dir%/}/libgcc.a" ] || "$LLVM_AR" rcs "${dest_dir%/}/libgcc.a" 2>/dev/null || true
+                    fi
+                done
+            done
+        fi
+
+        if [ ! -f "$ndk/source.properties" ]; then
+            NDK_VER=$(basename "$ndk")
+            printf "Pkg.Desc = Android NDK\nPkg.Revision = %s\n" "$NDK_VER" > "$ndk/source.properties"
+        fi
+
+        touch "$NDK_BIN/.quantum_patched_v4"
+    done
+
+    if [ -n "$BASE_NDK" ] && [ -d "$BASE_NDK" ]; then
+        BASE_VER=$(basename "$BASE_NDK")
+        for ver in 25.1.8937393 26.1.10909125 26.3.11579264 27.0.12077973 28.0.12433547 28.2.13676358 29.0.14206865; do
+            TARGET_NDK="$SDK_ROOT/ndk/$ver"
+            if [ ! -d "$TARGET_NDK" ]; then
+                mkdir -p "$TARGET_NDK"
+                for item in "$BASE_NDK"/*; do
+                    name=$(basename "$item")
+                    if [ "$name" = "source.properties" ] || [ "$name" = "package.xml" ]; then
+                        continue
+                    fi
+                    ln -sfn "$item" "$TARGET_NDK/$name" 2>/dev/null || true
+                done
+                printf "Pkg.BaseRevision = %s\nPkg.Desc = Android NDK\nPkg.Revision = %s\n" "$ver" "$ver" > "$TARGET_NDK/source.properties"
+                if [ -f "$BASE_NDK/package.xml" ]; then
+                    major=$(echo "$ver" | cut -d. -f1)
+                    minor=$(echo "$ver" | cut -d. -f2)
+                    micro=$(echo "$ver" | cut -d. -f3)
+                    sed -e "s/ndk;$BASE_VER/ndk;$ver/g" \
+                        -e "s/<major>[0-9]*<\/major>/<major>$major<\/major>/g" \
+                        -e "s/<minor>[0-9]*<\/minor>/<minor>$minor<\/minor>/g" \
+                        -e "s/<micro>[0-9]*<\/micro>/<micro>$micro<\/micro>/g" \
+                        "$BASE_NDK/package.xml" > "$TARGET_NDK/package.xml" 2>/dev/null || true
+                fi
+            fi
+        done
+    fi
+fi
+
+REAL_CMAKE="/opt/cmake-3.22.1/bin/cmake"
+[ ! -x "$REAL_CMAKE" ] && REAL_CMAKE="/usr/local/bin/cmake"
+[ ! -x "$REAL_CMAKE" ] && REAL_CMAKE="/usr/bin/cmake"
+
+if [ -x "$REAL_CMAKE" ]; then
+    for cmver in 3.18.1 3.22.1 3.31.0; do
+        CM_DIR="$SDK_ROOT/cmake/$cmver"
+        mkdir -p "$CM_DIR/bin"
+        if [ -L "$CM_DIR/bin/cmake" ] || ! grep -q "quantum-patch-ndk" "$CM_DIR/bin/cmake" 2>/dev/null; then
+            rm -f "$CM_DIR/bin/cmake"
+            cat << CM_EOF > "$CM_DIR/bin/cmake"
+#!/bin/bash
+/usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
+exec "$REAL_CMAKE" "\$@"
+CM_EOF
+            chmod +x "$CM_DIR/bin/cmake"
+        fi
+        command -v ninja >/dev/null 2>&1 && ln -sf "$(command -v ninja)" "$CM_DIR/bin/ninja" 2>/dev/null || true
+        [ ! -f "$CM_DIR/source.properties" ] && printf "Pkg.Desc = CMake %s\nPkg.Revision = %s\n" "$cmver" "$cmver" > "$CM_DIR/source.properties"
+    done
+fi
+''';
+  }
+
   String _generateSetupArm64Script() {
     return r'''#!/bin/bash
 # setup-arm64.sh - Automatically configure ARM64 environment inside QuantumIDE
 # This script is called by init-host in the background.
+
+# Always run fast NDK & CMake wrapper heal on every invocation
+if [ -x /usr/local/bin/quantum-patch-ndk ]; then
+    /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
+fi
 
 # Prevent multiple instances of setup-arm64.sh running at once or re-running unnecessarily
 DONE_FLAG="/tmp/setup_arm64_done.flag"
@@ -1472,6 +1722,31 @@ if [ -f "$LOCKFILE" ]; then
 fi
 echo "$$" > "$LOCKFILE"
 touch "$DONE_FLAG"
+
+# Ensure native ARM64 CMake 3.22.1+ and Clang-18 / LLD-18 / LLVM-18 are installed for C++/NDK builds
+if ! command -v clang >/dev/null 2>&1 && ! ls /usr/bin/clang-[0-9]* >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
+    apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 ninja-build >/dev/null 2>&1 || \
+    apt-get install -y --no-install-recommends clang lld llvm ninja-build >/dev/null 2>&1 || true
+fi
+
+if [ ! -x /opt/cmake-3.22.1/bin/cmake ]; then
+    mkdir -p /opt/cmake-3.22.1
+    if (curl -k -fL --retry 2 -o /tmp/cmake-3.22.1.tar.gz "https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-aarch64.tar.gz" 2>/dev/null || \
+        wget --no-check-certificate -qO /tmp/cmake-3.22.1.tar.gz "https://github.com/Kitware/CMake/releases/download/v3.22.1/cmake-3.22.1-linux-aarch64.tar.gz" 2>/dev/null); then
+        tar -xzf /tmp/cmake-3.22.1.tar.gz --strip-components=1 -C /opt/cmake-3.22.1 2>/dev/null || true
+        rm -f /tmp/cmake-3.22.1.tar.gz
+        if [ -x /opt/cmake-3.22.1/bin/cmake ]; then
+            ln -sf /opt/cmake-3.22.1/bin/cmake /usr/local/bin/cmake
+            ln -sf /opt/cmake-3.22.1/bin/cmake /usr/bin/cmake
+        fi
+    fi
+fi
+
+if [ -x /usr/local/bin/quantum-patch-ndk ]; then
+    /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
+fi
 
 # 1. SDK Toolchain Symlinking & Licenses
 SDK_ROOT="/root/android-sdk"

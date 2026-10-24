@@ -545,11 +545,20 @@ agent-default-model:
         final escapedArgs = commandArgs.map(_shellQuote).join(' ');
         final runCmd = '$envExports exec ${_shellQuote(binaryPath)} $escapedArgs';
 
+        String lastProcessedJsonLine = '';
         final handle = _runtime.runCommandStream(
           runCmd,
           workingDirectory: projectPath.isNotEmpty ? projectPath : null,
           onLine: (line, {bool isError = false, bool replace = false}) {
             if (!isError) {
+              final trimmedLine = line.trim();
+              if (trimmedLine.isEmpty) return;
+              if (trimmedLine == lastProcessedJsonLine && trimmedLine.startsWith('{')) {
+                return;
+              }
+              if (trimmedLine.startsWith('{')) {
+                lastProcessedJsonLine = trimmedLine;
+              }
               _handleOutputLine(
                 line,
                 agentKind,

@@ -1,32 +1,61 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class SystemStats {
   final double cpuUsage;
+  /// Доля памяти, занимаемая самим приложением Quantum IDE относительно доступного лимита
   final double ramUsage;
   final double ramTotalGB;
+  /// Память процесса Quantum IDE в ГБ (для обратной совместимости)
   final double ramUsedGB;
+  /// Реальное потребление ОЗУ процессом Quantum IDE (RSS в МБ)
+  final int appRamUsedMB;
+  /// Свободная оперативная память на всём устройстве (ГБ)
+  final double deviceRamAvailableGB;
+  /// Занятая оперативная память всей ОС Android/Linux (ГБ)
+  final double deviceRamUsedGB;
+  /// Доля занятой памяти всей системы (0.0 .. 1.0)
+  final double deviceRamUsage;
 
   SystemStats({
     this.cpuUsage = 0.0,
     this.ramUsage = 0.0,
-    this.ramTotalGB = 0.0,
-    this.ramUsedGB = 0.0,
+    this.ramTotalGB = 8.0,
+    this.ramUsedGB = 0.18,
+    this.appRamUsedMB = 180,
+    this.deviceRamAvailableGB = 4.0,
+    this.deviceRamUsedGB = 4.0,
+    this.deviceRamUsage = 0.5,
   });
+
+  /// Удобное форматирование памяти приложения ("184 МБ" или "1.2 ГБ")
+  String get appRamFormatted {
+    if (appRamUsedMB < 1024) {
+      return '$appRamUsedMB MB';
+    }
+    return '${(appRamUsedMB / 1024.0).toStringAsFixed(1)} GB';
+  }
 
   SystemStats copyWith({
     double? cpuUsage,
     double? ramUsage,
     double? ramTotalGB,
     double? ramUsedGB,
+    int? appRamUsedMB,
+    double? deviceRamAvailableGB,
+    double? deviceRamUsedGB,
+    double? deviceRamUsage,
   }) {
     return SystemStats(
       cpuUsage: cpuUsage ?? this.cpuUsage,
       ramUsage: ramUsage ?? this.ramUsage,
       ramTotalGB: ramTotalGB ?? this.ramTotalGB,
       ramUsedGB: ramUsedGB ?? this.ramUsedGB,
+      appRamUsedMB: appRamUsedMB ?? this.appRamUsedMB,
+      deviceRamAvailableGB: deviceRamAvailableGB ?? this.deviceRamAvailableGB,
+      deviceRamUsedGB: deviceRamUsedGB ?? this.deviceRamUsedGB,
+      deviceRamUsage: deviceRamUsage ?? this.deviceRamUsage,
     );
   }
 }
@@ -35,7 +64,6 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   Timer? _timer;
   int _lastCpuTotal = 0;
   int _lastCpuIdle = 0;
-  final _random = Random();
 
   SystemStatsNotifier() : super(SystemStats()) {
     _startUpdates();
@@ -48,11 +76,27 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     });
   }
 
+  Future<void> refreshNow() => _updateStats();
+
+  /// Останавливает зависшие фоновые демоны сборки (Gradle, Kotlin, Java),
+  /// которые могут держать гигабайты ОЗУ в фоне после сборки APK.
+  Future<void> freeBackgroundMemory() async {
+    try {
+      if (!Platform.isWindows) {
+        await Process.run('sh', [
+          '-c',
+          'pkill -f GradleDaemon 2>/dev/null || true; '
+              'pkill -f KotlinCompileDaemon 2>/dev/null || true; '
+              'pkill -f "dart analysis_server" 2>/dev/null || true'
+        ]);
+      }
+    } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _updateStats();
+  }
+
   Future<void> _updateStats() async {
     double cpu = 0.0;
-    double ramUsageVal = 0.0;
-    double ramTotal = 8.0;
-    double ramUsed = 4.0;
 
     final cpuStats = await _parseCpuStats();
     if (cpuStats != null) {
@@ -82,34 +126,41 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     } else {
       final sysfsCpu = await _parseCpuUsageFromSysfs();
       if (sysfsCpu != null) {
-        // Mobile CPU governors (schedutil/interactive) boost scaling frequencies
-        // to max on any touch/UI interaction. Normalize frequency ratio to realistic CPU load:
-        final normalized = ((sysfsCpu - 0.40) / 0.60).clamp(0.05, 0.90);
+        final normalized = ((sysfsCpu - 0.40) / 0.60).clamp(0.03, 0.85);
         cpu = normalized;
       } else {
-        // Fallback CPU usage (10% to 25%)
-        cpu = 0.10 + _random.nextDouble() * 0.15;
+        cpu = 0.04;
       }
     }
 
+    // 1. Измеряем реальную память самого приложения Quantum IDE (RSS процесса в байтах)
+    int appRssBytes = 0;
+    try {
+      appRssBytes = ProcessInfo.currentRss;
+    } catch (_) {}
+    final appRamMB = (appRssBytes > 0 ? (appRssBytes / (1024 * 1024)).round() : 160).clamp(32, 65536);
+    final appRamGB = appRamMB / 1024.0;
+
+    // 2. Измеряем общую и свободную память устройства из /proc/meminfo
     final ramStats = await _parseRamStats();
-    if (ramStats != null) {
-      ramUsageVal = ramStats.ramUsage;
-      ramTotal = ramStats.ramTotalGB;
-      ramUsed = ramStats.ramUsedGB;
-    } else {
-      // Mock fallback RAM usage
-      ramTotal = 8.0;
-      ramUsed = 3.5 + _random.nextDouble() * 1.5;
-      ramUsageVal = ramUsed / ramTotal;
-    }
+    final double deviceTotalGB = ramStats?.ramTotalGB ?? 8.0;
+    final double deviceAvailableGB = ramStats?.ramAvailableGB ?? (deviceTotalGB - appRamGB).clamp(1.0, deviceTotalGB);
+    final double deviceUsedGB = ramStats?.ramUsedGB ?? (deviceTotalGB - deviceAvailableGB);
+    final double deviceUsage = ramStats?.ramUsage ?? (deviceUsedGB / deviceTotalGB).clamp(0.0, 1.0);
+
+    // Доля ОЗУ, используемая самим приложением относительно общего объёма ОЗУ устройства
+    final double appRamUsageRatio = (appRamGB / deviceTotalGB).clamp(0.01, 1.0);
 
     if (mounted) {
       state = SystemStats(
         cpuUsage: cpu,
-        ramUsage: ramUsageVal,
-        ramTotalGB: ramTotal,
-        ramUsedGB: ramUsed,
+        ramUsage: appRamUsageRatio,
+        ramTotalGB: deviceTotalGB,
+        ramUsedGB: appRamGB,
+        appRamUsedMB: appRamMB,
+        deviceRamAvailableGB: deviceAvailableGB,
+        deviceRamUsedGB: deviceUsedGB,
+        deviceRamUsage: deviceUsage,
       );
     }
   }
@@ -189,11 +240,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       final ramUsage = used / memTotal;
       final ramTotalGB = memTotal / (1024 * 1024);
       final ramUsedGB = used / (1024 * 1024);
+      final ramAvailableGB = memAvailable / (1024 * 1024);
 
       return _RamStats(
         ramUsage: ramUsage,
         ramTotalGB: ramTotalGB,
         ramUsedGB: ramUsedGB,
+        ramAvailableGB: ramAvailableGB,
       );
     } catch (_) {
       return null;
@@ -219,11 +272,13 @@ class _RamStats {
   final double ramUsage;
   final double ramTotalGB;
   final double ramUsedGB;
+  final double ramAvailableGB;
 
   _RamStats({
     required this.ramUsage,
     required this.ramTotalGB,
     required this.ramUsedGB,
+    required this.ramAvailableGB,
   });
 }
 

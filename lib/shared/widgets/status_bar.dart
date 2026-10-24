@@ -377,9 +377,7 @@ class _SystemStatsChip extends ConsumerWidget {
               Icon(LucideIcons.memory_stick, size: 10, color: ramColor),
               const SizedBox(width: 3),
               Text(
-                compact
-                    ? '${(stats.ramUsage * 100).toStringAsFixed(0)}%'
-                    : '${stats.ramUsedGB.toStringAsFixed(1)}/${stats.ramTotalGB.toStringAsFixed(0)}G',
+                stats.appRamFormatted,
                 style: textStyle.copyWith(color: ramColor),
               ),
               if (!compact) ...[
@@ -461,16 +459,41 @@ class _SystemSheet extends ConsumerWidget {
               children: [
                 const Icon(LucideIcons.activity, size: 16, color: Colors.cyanAccent),
                 const SizedBox(width: 8),
-                Text('Система', style: GoogleFonts.inter(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
+                Text('Ресурсы и Память', style: GoogleFonts.inter(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () async {
+                    await ref.read(systemStatsProvider.notifier).freeBackgroundMemory();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Фоновые демоны (Gradle/Kotlin/Analysis) остановлены, память очищена'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(LucideIcons.sparkles, size: 13, color: Colors.cyanAccent),
+                  label: Text(
+                    'Очистить ОЗУ',
+                    style: GoogleFonts.inter(fontSize: 11.5, color: Colors.cyanAccent, fontWeight: FontWeight.w600),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
             _row('Процессор (CPU)', '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', stats.cpuUsage, LucideIcons.cpu),
             _row(
-              'Память (RAM)',
-              '${stats.ramUsedGB.toStringAsFixed(1)} / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
+              'Память Quantum IDE (App RAM)',
+              stats.appRamFormatted,
               stats.ramUsage,
               LucideIcons.memory_stick,
+            ),
+            _row(
+              'Память устройства (Свободно / Всего)',
+              'Свободно ${stats.deviceRamAvailableGB.toStringAsFixed(1)} / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
+              stats.deviceRamUsage,
+              LucideIcons.hard_drive,
             ),
             const SizedBox(height: 8),
             Container(
@@ -487,8 +510,8 @@ class _SystemSheet extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       high
-                          ? 'Высокая нагрузка. Закройте лишние вкладки терминала и неиспользуемые файлы, остановите Gradle-демон (gradle --stop).'
-                          : 'Нагрузка в норме.',
+                          ? 'Высокая нагрузка. Нажмите «Очистить ОЗУ» выше, чтобы остановить фоновые демоны сборки Gradle/Kotlin.'
+                          : 'Quantum IDE потребляет всего ${stats.appRamFormatted}. Остальная память занята системой Android и другими приложениями.',
                       style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70, height: 1.35),
                     ),
                   ),

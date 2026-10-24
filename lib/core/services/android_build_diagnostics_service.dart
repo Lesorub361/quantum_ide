@@ -140,6 +140,8 @@ class AndroidBuildDiagnosticsService {
       p.join(projectRoot, 'app', 'build', 'outputs', 'apk', 'debug'),
       p.join(projectRoot, 'build', 'app', 'outputs', 'flutter-apk'),
       p.join(projectRoot, 'app', 'build', 'outputs', 'apk', 'release'),
+      p.join(projectRoot, '.quantum_android_apk', 'app', 'build', 'outputs', 'apk', 'debug'),
+      p.join(projectRoot, '.quantum_android_apk', 'app', 'build', 'outputs', 'apk', 'release'),
       p.join(projectRoot, 'build', 'outputs', 'apk', 'debug'),
       p.join(projectRoot, 'app', 'build', 'outputs', 'apk'),
       projectRoot,
@@ -301,6 +303,8 @@ class AndroidBuildDiagnosticsService {
       suggestion = 'Несовместимость версии Gradle и Android Gradle Plugin (AGP).';
     } else if (lower.contains('gen_snapshot') || lower.contains('android_aot_release')) {
       suggestion = 'В Linux aarch64 (на телефоне) доступна только целевая архитектура android-arm64. Запустите: flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons';
+    } else if (lower.contains('cxx1429') || lower.contains('check for working c compiler') || lower.contains('prebuilt/linux-x86_64/bin/clang')) {
+      suggestion = 'Обнаружен официальный x86_64 Android NDK на ARM64 устройстве. Запустите "quantum-patch-ndk" в терминале или пересоберите проект (исправление применяется автоматически).';
     } else if (lower.contains('gtk+-3.0') || lower.contains('ninja: not found') || (lower.contains('cmake error') && lower.contains('linux'))) {
       suggestion = 'Для сборки под ПК/Linux требуются библиотеки рабочего стола. Установите пакет "Linux Desktop (PC) Build Tools" во вкладке Пакетов.';
     } else if (lower.contains('does not support platform android') || lower.contains('missing plugin implementation for platform android')) {
@@ -343,6 +347,9 @@ class AndroidBuildDiagnosticsService {
     }
     if (lower.contains('gen_snapshot') || lower.contains('android_aot_release')) {
       return 'В Linux ARM64 отсутствует AOT компилятор gen_snapshot для 32-bit ARM/x86. Требуется флаг --target-platform android-arm64.';
+    }
+    if (lower.contains('cxx1429') || lower.contains('check for working c compiler') || lower.contains('prebuilt/linux-x86_64/bin/clang')) {
+      return 'Android NDK содержит бинарники clang для x86_64 вместо ARM64. Требуется авто-патч NDK (quantum-patch-ndk).';
     }
     if (lower.contains('gtk+-3.0') || lower.contains('ninja: not found') || (lower.contains('cmake error') && lower.contains('linux'))) {
       return 'Для сборки под ПК/Linux требуются библиотеки рабочего стола (GTK 3, CMake, Ninja). Установите пакет "Linux Desktop (PC) Build Tools" во вкладке Пакетов.';

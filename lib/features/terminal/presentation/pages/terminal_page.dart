@@ -73,6 +73,7 @@ class TerminalPage extends ConsumerWidget {
       },
       child: Scaffold(
         backgroundColor: bg,
+        resizeToAvoidBottomInset: false,
         appBar: GlassAppBar(
           leading: IconButton(
             icon: const Icon(LucideIcons.arrow_left, size: 20, color: Colors.cyanAccent),

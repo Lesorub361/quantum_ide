@@ -60,17 +60,48 @@ class _TerminalTextSelectionModalState extends ConsumerState<TerminalTextSelecti
 
   void _extractText() {
     final buffer = widget.terminal.buffer;
-    final linesList = <String>[];
+    final rawLines = <String>[];
     for (var i = 0; i < buffer.lines.length; i++) {
-      linesList.add(buffer.lines[i].toString().trimRight());
+      rawLines.add(buffer.lines[i].toString().trimRight());
     }
     // Remove trailing empty lines
-    while (linesList.isNotEmpty && linesList.last.isEmpty) {
-      linesList.removeLast();
+    while (rawLines.isNotEmpty && rawLines.last.isEmpty) {
+      rawLines.removeLast();
     }
-    _lines = linesList;
-    _extractedText = linesList.join('\n');
+    _lines = _deduplicateLines(rawLines);
+    _extractedText = _lines.join('\n');
     _updateSearchMatches();
+  }
+
+  List<String> _deduplicateLines(List<String> lines) {
+    if (lines.length < 6) return lines;
+    final result = <String>[];
+    int i = 0;
+    while (i < lines.length) {
+      bool skippedBlock = false;
+      final maxWindow = ((lines.length - i) ~/ 2).clamp(0, 80);
+      for (int w = maxWindow; w >= 3; w--) {
+        int nonEmpty = 0;
+        bool matches = true;
+        for (int k = 0; k < w; k++) {
+          if (lines[i + k] != lines[i + w + k]) {
+            matches = false;
+            break;
+          }
+          if (lines[i + k].trim().isNotEmpty) nonEmpty++;
+        }
+        if (matches && nonEmpty >= 2) {
+          i += w;
+          skippedBlock = true;
+          break;
+        }
+      }
+      if (!skippedBlock) {
+        result.add(lines[i]);
+        i++;
+      }
+    }
+    return result;
   }
 
   void _onSearchChanged() {

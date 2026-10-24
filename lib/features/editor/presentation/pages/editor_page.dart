@@ -46,6 +46,7 @@ import 'package:quantum_ide/core/services/project_requirements_service.dart';
 import 'package:quantum_ide/shared/widgets/project_requirements_dialog.dart';
 import 'package:quantum_ide/shared/widgets/device_selector_pill.dart';
 import 'package:quantum_ide/shared/widgets/device_manager_dialog.dart';
+import 'package:quantum_ide/core/models/code_diagnostic.dart';
 
 
 
@@ -621,7 +622,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       int count = 0;
       s.allDiagnostics.forEach((filePath, list) {
         if (workspacePath != null && filePath.startsWith(workspacePath)) {
-          count += list.length;
+          for (final d in list) {
+            if (d.severity == CodeDiagnosticSeverity.error ||
+                d.severity == CodeDiagnosticSeverity.warning) {
+              count++;
+            }
+          }
         }
       });
       return count;
@@ -958,6 +964,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               onTap: () => _showWasmActionSelector(context, ref, safeActiveIndex),
                             ),
                             ActionIconButton(
+                              icon: LucideIcons.git_branch,
+                              color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent,
+                              tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.git);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                            ActionIconButton(
                               icon: LucideIcons.terminal,
                               tooltip: AppLocalizations.of(context)!.terminal,
                               onTap: () {
@@ -1002,6 +1021,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               icon: LucideIcons.save,
                               tooltip: AppLocalizations.of(context)!.saveTooltip,
                               onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.git_branch,
+                              color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent,
+                              tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.git);
+                                  panelNotifier.openPanel();
+                                }
+                              },
                             ),
                             ActionIconButton(
                               icon: LucideIcons.terminal,
@@ -1733,9 +1765,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 height: 60,
                                 color: Colors.white.withValues(alpha: 0.08),
                               ),
-                              _buildCircularGauge(
-                                label: 'RAM',
-                                value: '${stats.ramUsedGB.toStringAsFixed(1)} GB / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
+                                _buildCircularGauge(
+                                label: 'App RAM',
+                                value: '${stats.appRamFormatted} / ${stats.ramTotalGB.toStringAsFixed(0)} GB',
                                 progress: stats.ramUsage,
                                 color: Colors.purpleAccent,
                               ),

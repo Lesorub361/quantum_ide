@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/git_status.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/secure_storage_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 
@@ -44,6 +46,20 @@ class GitService {
   Future<String> _getGuestPath(String hostPath) async {
     final runtime = ref.read(runtimeServiceProvider);
     return PathMapper.mapToGuest(hostPath, runtime.appDirectory);
+  }
+
+  /// Builds a `git` command prefix that automatically injects the user's saved
+  /// GitHub token via HTTP extraheader so HTTPS remotes work without manual
+  /// credential prompts or leaking tokens into `.git/config`.
+  Future<String> _gitAuthPrefix() async {
+    try {
+      final token = await SecureStorageService().retrieve('github_token');
+      if (token != null && token.trim().isNotEmpty) {
+        final basicAuth = base64Encode(utf8.encode('x-access-token:${token.trim()}'));
+        return 'GIT_TERMINAL_PROMPT=0 git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $basicAuth"';
+      }
+    } catch (_) {}
+    return 'GIT_TERMINAL_PROMPT=0 git';
   }
 
   Future<String?> _detectProjectVersion(String hostPath) async {
@@ -93,8 +109,7 @@ class GitService {
       final runtime = ref.read(runtimeServiceProvider);
 
       // Run a single batched shell script to get repo check, branch, ahead/behind,
-      // porcelain status with -uall to list all untracked files individually instead
-      // of collapsing whole folders into single entries!
+      // porcelain status with -uall, diff stats, commits, tags, branches, remotes, stashes, and author config.
       final batchCmd = [
         'cd "$guestPath" 2>/dev/null || exit 0',
         'if [ "\$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then echo "__NOT_GIT_REPO__"; exit 0; fi',
@@ -107,12 +122,19 @@ class GitService {
         'echo "__SECTION_NUMSTAT__"',
         '(git diff --numstat 2>/dev/null || true; git diff --cached --numstat 2>/dev/null || true)',
         'echo "__SECTION_COMMITS__"',
-        '(git log -n 35 --pretty=format:"%H\t%h\t%s\t%an\t%ar\t%D" 2>/dev/null || true)',
+        '(git log -n 45 --pretty=format:"%H\t%h\t%s\t%an\t%ar\t%D" 2>/dev/null || true)',
         'echo ""',
         'echo "__SECTION_TAGS__"',
-        '(git for-each-ref --sort=-creatordate --format="%(refname:short)\t%(objectname:short)\t%(creatordate:short)\t%(contents:subject)" refs/tags 2>/dev/null | head -n 25 || true)',
+        '(git for-each-ref --sort=-creatordate --format="%(refname:short)\t%(objectname:short)\t%(creatordate:short)\t%(contents:subject)" refs/tags 2>/dev/null | head -n 30 || true)',
         'echo "__SECTION_BRANCHES__"',
         '(git for-each-ref --format="%(refname:short)" refs/heads 2>/dev/null || true)',
+        'echo "__SECTION_REMOTE_BRANCHES__"',
+        '(git for-each-ref --format="%(refname:short)" refs/remotes/origin 2>/dev/null || true)',
+        'echo "__SECTION_STASHES__"',
+        '(git stash list --pretty=format:"%gd\t%gs\t%cr" 2>/dev/null || true)',
+        'echo ""',
+        'echo "__SECTION_USER__"',
+        'echo "\$(git config user.name 2>/dev/null || true)\t\$(git config user.email 2>/dev/null || true)"',
         'echo "__SECTION_REMOTE__"',
         '(git config --get remote.origin.url 2>/dev/null || true)',
       ].join(' && ');
@@ -157,6 +179,7 @@ class GitService {
       final staged = <String>[];
       final untracked = <String>[];
       final conflicted = <String>[];
+      final fileStatusCodes = <String, String>{};
 
       // Note: Do NOT trim leading spaces of statusRaw because porcelain format uses leading space!
       final statusStartIdx = rawOut.indexOf('__SECTION_STATUS__');
@@ -183,8 +206,8 @@ class GitService {
         if (conflictStatuses.contains(status)) {
           final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
           if (!conflicted.contains(cleanRel)) conflicted.add(cleanRel);
+          fileStatusCodes[cleanRel] = 'U';
         } else if (status == '??') {
-          // If file ends with '/' or is a directory on host, recursively expand it into individual files
           final fullHostPath = p.join(hostPath, file);
           final hostDir = Directory(fullHostPath);
           if (file.endsWith('/') || hostDir.existsSync()) {
@@ -195,6 +218,7 @@ class GitService {
                   if (ent is File) {
                     final rel = p.relative(ent.path, from: hostPath).replaceAll('\\', '/');
                     if (!untracked.contains(rel)) untracked.add(rel);
+                    fileStatusCodes[rel] = '?';
                   }
                 }
                 continue;
@@ -203,13 +227,16 @@ class GitService {
           }
           final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
           if (!untracked.contains(cleanRel)) untracked.add(cleanRel);
+          fileStatusCodes[cleanRel] = '?';
         } else {
           final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
           if (x != ' ' && x != '?') {
             if (!staged.contains(cleanRel)) staged.add(cleanRel);
+            fileStatusCodes[cleanRel] = x;
           }
           if (y != ' ' && y != '?') {
             if (!modified.contains(cleanRel)) modified.add(cleanRel);
+            fileStatusCodes[cleanRel] = y;
           }
         }
       }
@@ -268,7 +295,7 @@ class GitService {
       }
 
       final branches = <String>[];
-      final branchesRaw = extractSection('__SECTION_BRANCHES__', '__SECTION_REMOTE__');
+      final branchesRaw = extractSection('__SECTION_BRANCHES__', '__SECTION_REMOTE_BRANCHES__');
       for (final line in branchesRaw.split('\n')) {
         final b = line.trim();
         if (b.isNotEmpty && !branches.contains(b)) {
@@ -277,6 +304,61 @@ class GitService {
       }
       if (!branches.contains(branch)) {
         branches.insert(0, branch);
+      }
+
+      final remoteBranches = <String>[];
+      final remoteBranchesRaw = extractSection('__SECTION_REMOTE_BRANCHES__', '__SECTION_STASHES__');
+      for (final line in remoteBranchesRaw.split('\n')) {
+        final rb = line.trim();
+        if (rb.isNotEmpty && rb != 'origin/HEAD' && !rb.endsWith('/HEAD') && !remoteBranches.contains(rb)) {
+          remoteBranches.add(rb);
+        }
+      }
+
+      final stashes = <GitStashEntry>[];
+      final stashesRaw = extractSection('__SECTION_STASHES__', '__SECTION_USER__');
+      for (final line in stashesRaw.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        final parts = trimmed.split('\t');
+        if (parts.isNotEmpty && parts[0].startsWith('stash@{')) {
+          final refName = parts[0].trim();
+          final rawSubject = parts.length > 1 ? parts[1].trim() : '';
+          final relTime = parts.length > 2 ? parts[2].trim() : '';
+          String stashBranch = '';
+          String stashMsg = rawSubject;
+          final onIdx = rawSubject.indexOf(': ');
+          if (onIdx != -1) {
+            final prefix = rawSubject.substring(0, onIdx);
+            stashMsg = rawSubject.substring(onIdx + 2).trim();
+            final branchMatch = RegExp(r'on\s+([^\s:]+)').firstMatch(prefix);
+            if (branchMatch != null) {
+              stashBranch = branchMatch.group(1) ?? '';
+            }
+          }
+          // Hide internal temporary agent checkpoints from cluttering the user's stash list unless desired
+          if (!stashMsg.startsWith('quantum-ide-agent-checkpoint-')) {
+            stashes.add(GitStashEntry(
+              ref: refName,
+              branch: stashBranch,
+              message: stashMsg.isEmpty ? refName : stashMsg,
+              relativeTime: relTime,
+            ));
+          }
+        }
+      }
+
+      String? userName;
+      String? userEmail;
+      final userRaw = extractSection('__SECTION_USER__', '__SECTION_REMOTE__');
+      if (userRaw.isNotEmpty) {
+        final uParts = userRaw.split('\t');
+        if (uParts.isNotEmpty && uParts[0].trim().isNotEmpty) {
+          userName = uParts[0].trim();
+        }
+        if (uParts.length > 1 && uParts[1].trim().isNotEmpty) {
+          userEmail = uParts[1].trim();
+        }
       }
 
       final remoteRaw = extractSection('__SECTION_REMOTE__', null);
@@ -289,15 +371,20 @@ class GitService {
         stagedFiles: staged,
         untrackedFiles: untracked,
         conflictedFiles: conflicted,
+        fileStatusCodes: fileStatusCodes,
         currentBranch: branch,
         branches: branches,
+        remoteBranches: remoteBranches,
         ahead: ahead,
         behind: behind,
         diffStats: diffStats,
         recentCommits: recentCommits,
         tags: tags,
+        stashes: stashes,
         projectVersion: projectVersion,
         remoteUrl: remoteUrl.isNotEmpty ? remoteUrl : null,
+        userName: userName,
+        userEmail: userEmail,
       );
       _cachedStatus = result;
       _cachedPath = hostPath;
@@ -349,7 +436,7 @@ class GitService {
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
 
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git reset HEAD "$filePath"');
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git reset HEAD -- "$filePath"');
     invalidateCache();
   }
 
@@ -377,29 +464,97 @@ class GitService {
       'git commit$amendFlag -m "$escaped"',
     ].join(' && ');
 
-    await ref.read(runtimeServiceProvider).runCommand(cmd);
+    final out = await ref.read(runtimeServiceProvider).runCommand('$cmd 2>&1');
     invalidateCache();
+    if (out.contains('fatal:') || out.contains('error:')) {
+      throw Exception(out.trim());
+    }
   }
 
-  Future<void> push() async {
+  Future<String> fetch() async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return '';
+    final guestPath = await _getGuestPath(hostPath);
+    final gitCmd = await _gitAuthPrefix();
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && $gitCmd fetch --all --prune 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('fatal:') || out.contains('error: failed')) {
+      throw Exception(out.trim());
+    }
+    return out.trim();
+  }
+
+  Future<String> push({bool force = false}) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return '';
+    final guestPath = await _getGuestPath(hostPath);
+    final gitCmd = await _gitAuthPrefix();
+    final forceFlag = force ? ' --force-with-lease' : '';
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && ($gitCmd push$forceFlag 2>&1 || $gitCmd push -u origin HEAD$forceFlag 2>&1)',
+    );
+    invalidateCache();
+    if (out.contains('fatal:') || out.contains('error: failed to push')) {
+      throw Exception(out.trim());
+    }
+    return out.trim();
+  }
+
+  Future<String> pull({bool rebase = false}) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return '';
+    final guestPath = await _getGuestPath(hostPath);
+    final gitCmd = await _gitAuthPrefix();
+    final rebaseFlag = rebase ? '--rebase=true' : '--rebase=false';
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && $gitCmd pull $rebaseFlag 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('fatal:') || out.contains('CONFLICT')) {
+      throw Exception(out.trim());
+    }
+    return out.trim();
+  }
+
+  Future<void> setRemoteUrl(String url, {String remoteName = 'origin'}) async {
     final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
+    final cleanUrl = url.trim().replaceAll('"', '');
 
     await ref.read(runtimeServiceProvider).runCommand(
-      'cd "$guestPath" && (git push 2>&1 || git push -u origin HEAD 2>&1)',
+      'cd "$guestPath" && (git remote set-url "$remoteName" "$cleanUrl" 2>/dev/null || git remote add "$remoteName" "$cleanUrl")',
     );
     invalidateCache();
   }
 
-  Future<void> createTag(String tagName, String message) async {
+  Future<void> setUserConfig(String name, String email, {bool global = true}) async {
+    final hostPath = _resolveRepoHostPath();
+    final guestPath = hostPath != null ? await _getGuestPath(hostPath) : '/root';
+    final scope = global ? '--global' : '';
+    final cleanName = name.trim().replaceAll('"', '\\"');
+    final cleanEmail = email.trim().replaceAll('"', '\\"');
+
+    await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git config $scope user.name "$cleanName" && git config $scope user.email "$cleanEmail"',
+    );
+    invalidateCache();
+  }
+
+  Future<void> createTag(String tagName, String message, {String? commitHash}) async {
     final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final escapedMsg = message.replaceAll('"', '\\"');
+    final target = (commitHash != null && commitHash.trim().isNotEmpty) ? ' "${commitHash.trim()}"' : '';
 
     await ref.read(runtimeServiceProvider).runCommand(
-      'cd "$guestPath" && git config user.name >/dev/null 2>&1 || git config user.name "Quantum Developer" && git config user.email >/dev/null 2>&1 || git config user.email "dev@quantum-ide.local" && git tag -f -a "$tagName" -m "$escapedMsg"',
+      'cd "$guestPath" && (git config user.name >/dev/null 2>&1 || git config user.name "Quantum Developer") && (git config user.email >/dev/null 2>&1 || git config user.email "dev@quantum-ide.local") && git tag -f -a "$tagName" -m "$escapedMsg"$target',
     );
     invalidateCache();
   }
@@ -417,20 +572,154 @@ class GitService {
     final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
+    final gitCmd = await _gitAuthPrefix();
 
-    await ref.read(runtimeServiceProvider).runCommand(
-      'cd "$guestPath" && (git push || git push -u origin HEAD) && git push --tags',
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && ($gitCmd push 2>&1 || $gitCmd push -u origin HEAD 2>&1) && $gitCmd push --tags 2>&1',
     );
     invalidateCache();
+    if (out.contains('fatal:') || out.contains('error: failed to push')) {
+      throw Exception(out.trim());
+    }
   }
 
-  Future<void> checkoutBranch(String branchName, {bool createNew = false}) async {
+  Future<void> checkoutBranch(String branchName, {bool createNew = false, String? fromRef}) async {
     final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
     final flag = createNew ? '-b ' : '';
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git checkout $flag"$branchName"');
+    final startPoint = (createNew && fromRef != null && fromRef.trim().isNotEmpty) ? ' "${fromRef.trim()}"' : '';
+
+    // If checking out a remote branch like origin/feature, create a local tracking branch automatically
+    String cmd;
+    if (!createNew && branchName.startsWith('origin/')) {
+      final localName = branchName.substring('origin/'.length);
+      cmd = 'cd "$guestPath" && (git checkout "$localName" 2>/dev/null || git checkout -b "$localName" --track "$branchName") 2>&1';
+    } else {
+      cmd = 'cd "$guestPath" && git checkout $flag"$branchName"$startPoint 2>&1';
+    }
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(cmd);
     invalidateCache();
+    if (out.contains('error:') || out.contains('fatal:')) {
+      throw Exception(out.trim());
+    }
+  }
+
+  Future<String> mergeBranch(String branchName) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return '';
+    final guestPath = await _getGuestPath(hostPath);
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git merge --no-edit "$branchName" 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('CONFLICT') || out.contains('fatal:') || out.contains('error:')) {
+      throw Exception(out.trim());
+    }
+    return out.trim();
+  }
+
+  Future<void> deleteBranch(String branchName, {bool force = false}) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    final flag = force ? '-D' : '-d';
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git branch $flag "$branchName" 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('error:') || out.contains('fatal:')) {
+      throw Exception(out.trim());
+    }
+  }
+
+  Future<void> renameBranch(String oldName, String newName) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git branch -m "$oldName" "$newName" 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('error:') || out.contains('fatal:')) {
+      throw Exception(out.trim());
+    }
+  }
+
+  Future<void> resetToCommit(String commitHash, {String mode = 'mixed'}) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    final safeMode = (mode == 'soft' || mode == 'hard') ? mode : 'mixed';
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git reset --$safeMode "$commitHash" 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('fatal:') || out.contains('error:')) {
+      throw Exception(out.trim());
+    }
+  }
+
+  Future<void> revertCommit(String commitHash) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git revert --no-edit "$commitHash" 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('CONFLICT') || out.contains('fatal:') || out.contains('error:')) {
+      throw Exception(out.trim());
+    }
+  }
+
+  Future<void> cherryPickCommit(String commitHash) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+
+    final out = await ref.read(runtimeServiceProvider).runCommand(
+      'cd "$guestPath" && git cherry-pick "$commitHash" 2>&1',
+    );
+    invalidateCache();
+    if (out.contains('CONFLICT') || out.contains('fatal:') || out.contains('error:')) {
+      throw Exception(out.trim());
+    }
+  }
+
+  Future<List<GitCommitFileEntry>> getCommitFiles(String commitHash) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return [];
+    final guestPath = await _getGuestPath(hostPath);
+
+    try {
+      final out = await ref.read(runtimeServiceProvider).runCommand(
+        'cd "$guestPath" && git show --name-status --pretty=format:"" "$commitHash" 2>/dev/null',
+      );
+      final files = <GitCommitFileEntry>[];
+      for (final line in out.split('\n')) {
+        final trimmed = line.trim();
+        if (trimmed.isEmpty) continue;
+        final parts = trimmed.split('\t');
+        if (parts.length >= 2) {
+          final status = parts[0].trim();
+          final path = parts.last.trim();
+          files.add(GitCommitFileEntry(
+            status: status.isNotEmpty ? status[0] : 'M',
+            path: path,
+          ));
+        }
+      }
+      return files;
+    } catch (_) {
+      return [];
+    }
   }
 
   Future<String> getCommitDetails(String commitHash) async {
@@ -479,15 +768,6 @@ class GitService {
     }
   }
 
-  Future<void> pull() async {
-    final hostPath = _resolveRepoHostPath();
-    if (hostPath == null) return;
-    final guestPath = await _getGuestPath(hostPath);
-
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git pull --rebase=false');
-    invalidateCache();
-  }
-
   Future<void> stashSave([String? message]) async {
     final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
@@ -499,11 +779,57 @@ class GitService {
     invalidateCache();
   }
 
-  Future<void> stashPop() async {
+  Future<void> stashPop([String? stashRef]) async {
     final hostPath = _resolveRepoHostPath();
     if (hostPath == null) return;
     final guestPath = await _getGuestPath(hostPath);
-    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git stash pop');
+    final target = (stashRef != null && stashRef.isNotEmpty) ? ' "$stashRef"' : '';
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git stash pop$target');
+    invalidateCache();
+  }
+
+  Future<void> stashApply(String stashRef) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git stash apply "$stashRef"');
+    invalidateCache();
+  }
+
+  Future<void> stashDrop(String stashRef) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final guestPath = await _getGuestPath(hostPath);
+    await ref.read(runtimeServiceProvider).runCommand('cd "$guestPath" && git stash drop "$stashRef"');
+    invalidateCache();
+  }
+
+  Future<String> getStashDiff(String stashRef) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return '';
+    final guestPath = await _getGuestPath(hostPath);
+    try {
+      return await ref.read(runtimeServiceProvider).runCommand(
+        'cd "$guestPath" && git stash show -p --stat --no-color "$stashRef" 2>/dev/null',
+      );
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> addToGitignore(String pattern) async {
+    final hostPath = _resolveRepoHostPath();
+    if (hostPath == null) return;
+    final gitignoreFile = File(p.join(hostPath, '.gitignore'));
+    String existing = '';
+    if (await gitignoreFile.exists()) {
+      existing = await gitignoreFile.readAsString();
+    }
+    final lines = existing.split('\n').map((e) => e.trim()).toList();
+    if (!lines.contains(pattern.trim())) {
+      final prefix = (existing.isNotEmpty && !existing.endsWith('\n')) ? '\n' : '';
+      await gitignoreFile.writeAsString('$existing$prefix${pattern.trim()}\n');
+    }
     invalidateCache();
   }
 
@@ -629,4 +955,3 @@ class GitService {
 }
 
 final gitServiceProvider = Provider((ref) => GitService(ref));
-

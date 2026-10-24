@@ -3,6 +3,9 @@ include: package:flutter_lints/flutter.yaml
 analyzer:
   exclude:
     - test_app/**
+    - local_plugins/**
+    - scratch/**
+    - .quantum/**
     - build/**
     - android/**
     - ios/**

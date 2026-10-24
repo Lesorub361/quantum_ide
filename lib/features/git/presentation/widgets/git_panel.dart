@@ -1,417 +1,1759 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/git_status.dart';
+import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/github_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
-import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_graph_page.dart';
-import 'package:quantum_ide/core/services/ai_service.dart';
-import 'package:quantum_ide/l10n/app_localizations.dart';
-import 'package:go_router/go_router.dart';
+import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
+import 'package:quantum_ide/features/github/presentation/pages/github_page.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-class SidebarGitPanel extends ConsumerStatefulWidget {
-  final bool isBottomPanel;
-
-  const SidebarGitPanel({
-    super.key,
-    this.isBottomPanel = false,
-  });
-
-  @override
-  ConsumerState<SidebarGitPanel> createState() => _SidebarGitPanelState();
+class SidebarGitPanel extends GitPanel {
+  const SidebarGitPanel({super.key, super.isBottomPanel = false});
 }
 
-class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
+class GitPanel extends ConsumerStatefulWidget {
+  final bool isBottomPanel;
+  const GitPanel({super.key, this.isBottomPanel = false});
+
+  @override
+  ConsumerState<GitPanel> createState() => _GitPanelState();
+}
+
+class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderStateMixin {
   final TextEditingController _commitController = TextEditingController();
-  int _selectedSection = 0; // 0: Изменения, 1: Коммиты, 2: Версии и сборки
+  final TextEditingController _fileFilterController = TextEditingController();
+  final TextEditingController _commitSearchController = TextEditingController();
+  late TabController _tabController;
+
+  bool _isGeneratingCommitMessage = false;
   bool _amendCommit = false;
-  bool _isBeginnerMode = true;
-  bool _isGeneratingAiCommit = false;
-  bool _isSyncing = false;
-  bool _isFaqExpanded = false;
+  bool _stagedExpanded = true;
+  bool _workingExpanded = true;
+  bool _conflictsExpanded = true;
+  String _fileFilter = '';
+  String _commitFilter = '';
+
+  static const List<String> _conventionalPrefixes = [
+    'feat: ',
+    'fix: ',
+    'refactor: ',
+    'ui: ',
+    'docs: ',
+    'chore: ',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+    _fileFilterController.addListener(() {
+      setState(() => _fileFilter = _fileFilterController.text.trim().toLowerCase());
+    });
+    _commitSearchController.addListener(() {
+      setState(() => _commitFilter = _commitSearchController.text.trim().toLowerCase());
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(gitProvider.notifier).refreshStatus();
+    });
+  }
 
   @override
   void dispose() {
     _commitController.dispose();
+    _fileFilterController.dispose();
+    _commitSearchController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _generateAiCommitMessage(GitStatus status) async {
-    final changedFiles = <String>[
+  void _applyPrefix(String prefix) {
+    final text = _commitController.text;
+    for (final existing in _conventionalPrefixes) {
+      if (text.startsWith(existing)) {
+        _commitController.text = '$prefix${text.substring(existing.length)}';
+        _commitController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _commitController.text.length),
+        );
+        setState(() {});
+        return;
+      }
+    }
+    _commitController.text = '$prefix$text';
+    _commitController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _commitController.text.length),
+    );
+    setState(() {});
+  }
+
+  Future<void> _generateSmartCommitMessage() async {
+    final gitState = ref.read(gitProvider);
+    final status = gitState.status;
+    if (status == null) return;
+
+    final allChanged = <String>{
       ...status.stagedFiles,
       ...status.modifiedFiles,
       ...status.untrackedFiles,
-    ];
-    if (changedFiles.isEmpty) {
+    }.toList();
+
+    if (allChanged.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Нет изменённых файлов для анализа')),
       );
       return;
     }
 
-    setState(() => _isGeneratingAiCommit = true);
+    setState(() => _isGeneratingCommitMessage = true);
+
     try {
-      final prompt = 'Придумай лаконичное сообщение коммита Git на русском языке (максимум 5-8 слов, без кавычек и точек в конце, в стиле "добавлен экран настроек" или "исправлена ошибка валидации") для следующих измененных файлов:\n${changedFiles.take(15).join('\n')}';
-      final completion = await ref.read(aiServiceProvider).getCompletion(prompt);
-      final cleaned = completion.trim().replaceAll('"', '').replaceAll("'", '').split('\n').first.trim();
-      if (cleaned.isNotEmpty) {
-        _commitController.text = cleaned;
-      } else {
-        _commitController.text = 'Обновление проекта (${changedFiles.length} файлов)';
+      final notifier = ref.read(gitProvider.notifier);
+      final diffSnippets = <String>[];
+      for (final file in allChanged.take(5)) {
+        final d = await notifier.getFileDiff(
+          file,
+          staged: status.stagedFiles.contains(file),
+        );
+        if (d.trim().isNotEmpty) {
+          final truncated = d.length > 700 ? '${d.substring(0, 700)}\n...' : d;
+          diffSnippets.add('--- $file ---\n$truncated');
+        }
       }
-    } catch (_) {
-      _commitController.text = 'Обновление проекта (${changedFiles.length} файлов)';
+
+      try {
+        final aiService = ref.read(aiServiceProvider);
+        final prompt =
+            'Сгенерируй краткое профессиональное сообщение коммита в формате Conventional Commits (например: "feat: ...", "fix: ...", "refactor: ...") на русском или английском языке (1 строка, без кавычек и без markdown). '
+            'Список файлов: ${allChanged.take(12).join(', ')}.\n'
+            '${diffSnippets.isNotEmpty ? "Фрагменты diff:\n${diffSnippets.join('\n')}" : ""}';
+        final response = await aiService
+            .getCompletion(prompt)
+            .timeout(const Duration(seconds: 10));
+        final clean = response
+            .trim()
+            .replaceAll('```', '')
+            .replaceAll('"', '')
+            .split('\n')
+            .first
+            .trim();
+        if (clean.isNotEmpty && !clean.startsWith('Error')) {
+          _commitController.text = clean;
+          setState(() => _isGeneratingCommitMessage = false);
+          return;
+        }
+      } catch (_) {}
+
+      // Fallback heuristic conventional commit generator
+      final names = allChanged.map((f) => p.basename(f)).take(3).join(', ');
+      final suffix = allChanged.length > 3 ? ' (+${allChanged.length - 3})' : '';
+      String prefix = 'chore';
+      if (status.untrackedFiles.isNotEmpty && status.modifiedFiles.isEmpty) {
+        prefix = 'feat';
+      } else if (allChanged.any((f) => f.contains('fix') || f.contains('bug') || f.contains('service'))) {
+        prefix = 'fix';
+      } else if (allChanged.any((f) => f.contains('widget') || f.contains('page') || f.contains('ui'))) {
+        prefix = 'feat';
+      }
+      _commitController.text = '$prefix: update $names$suffix';
     } finally {
-      if (mounted) setState(() => _isGeneratingAiCommit = false);
+      if (mounted) {
+        setState(() => _isGeneratingCommitMessage = false);
+      }
     }
   }
 
-  Future<void> _performBeginnerSync(GitNotifier gitNotifier, GitStatus status) async {
-    if (!status.hasChanges && status.ahead == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Все файлы уже сохранены и отправлены в Git!')),
-      );
-      return;
-    }
-
-    String msg = _commitController.text.trim();
-    if (msg.isEmpty) {
-      final total = status.totalChangesCount;
-      msg = 'Обновление проекта ($total файлов)';
-    }
-
-    setState(() => _isSyncing = true);
-    final scaffold = ScaffoldMessenger.of(context);
-
-    try {
-      if (status.hasChanges) {
-        await gitNotifier.stageAll();
-        await gitNotifier.commit(msg);
-      }
-      if (status.remoteUrl != null && status.remoteUrl!.isNotEmpty) {
-        await gitNotifier.push();
-      }
-      _commitController.clear();
-      scaffold.showSnackBar(
-        const SnackBar(
-          content: Text('🚀 Изменения успешно сохранены и отправлены в Git!'),
-          backgroundColor: Color(0xFF238636),
-          duration: Duration(seconds: 3),
+  void _openFileDiff(String file, {required bool isStaged}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => GitDiffPage(
+          relativePath: file,
+          initiallyStaged: isStaged,
         ),
-      );
-    } catch (e) {
-      scaffold.showSnackBar(
-        SnackBar(
-          content: Text('Ошибка отправки: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
-    }
+      ),
+    );
   }
 
-  void _confirmRollbackAll(GitNotifier gitNotifier) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141822),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Row(
-          children: [
-            const Icon(LucideIcons.triangle_alert, color: Colors.amberAccent, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              'Откатить все изменения?',
-              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+  void _openFileInEditor(String relativePath) {
+    final workspacePath = ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null) return;
+    final fullPath = p.join(workspacePath, relativePath);
+    ref.read(editorProvider.notifier).openFile(fullPath);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gitState = ref.watch(gitProvider);
+    final notifier = ref.read(gitProvider.notifier);
+    final isLight = Theme.of(context).brightness == Brightness.light;
+
+    return Container(
+      color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0B0E14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildTopToolbar(gitState, notifier, isLight),
+          if (gitState.isLoading)
+            const LinearProgressIndicator(
+              minHeight: 2,
+              backgroundColor: Colors.transparent,
+              color: Color(0xFF00F2FE),
             ),
-          ],
-        ),
-        content: Text(
-          'Вы действительно хотите отменить все несохранённые изменения и вернуть код к последнему коммиту?\n\nЭто действие безопасно вернет файлы в предыдущее сохранённое состояние.',
-          style: GoogleFonts.inter(fontSize: 12, color: Colors.white70, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white60)),
-          ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
-              Navigator.pop(ctx);
-              gitNotifier.discardAll();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Все изменения отменены, код возвращен назад')),
-              );
-            },
-            icon: const Icon(LucideIcons.rotate_ccw, size: 14),
-            label: const Text('Да, откатить'),
+          if (gitState.error != null)
+            _buildBanner(
+              message: gitState.error!,
+              color: Colors.redAccent,
+              icon: LucideIcons.circle_alert,
+              onClose: () => notifier.refreshStatus(silent: true),
+            ),
+          if (gitState.lastActionMessage != null && gitState.error == null)
+            _buildBanner(
+              message: gitState.lastActionMessage!,
+              color: Colors.greenAccent,
+              icon: LucideIcons.circle_check,
+              onClose: () => notifier.refreshStatus(silent: true),
+            ),
+          if (gitState.status != null) _buildTabBar(gitState.status!, isLight),
+          Expanded(
+            child: gitState.status == null && !gitState.isLoading
+                ? _buildNoRepoView(notifier, isLight)
+                : gitState.status == null
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F2FE)))
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildChangesTab(gitState.status!, notifier, isLight),
+                          _buildHistoryTab(gitState.status!, notifier, isLight),
+                          _buildBranchesAndStashTab(gitState.status!, notifier, isLight),
+                          _buildReleasesAndRemoteTab(gitState.status!, notifier, isLight),
+                        ],
+                      ),
           ),
         ],
       ),
     );
   }
 
-  void _performCommit(GitNotifier gitNotifier) {
-    final msg = _commitController.text.trim();
-    if (msg.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Введите сообщение коммита'),
-          backgroundColor: Colors.orangeAccent,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-    gitNotifier.commit(msg, amend: _amendCommit);
-    _commitController.clear();
-    if (_amendCommit) {
-      setState(() => _amendCommit = false);
-    }
+  Widget _buildBanner({
+    required String message,
+    required Color color,
+    required IconData icon,
+    required VoidCallback onClose,
+  }) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          InkWell(
+            onTap: onClose,
+            child: Icon(LucideIcons.x, size: 13, color: color.withValues(alpha: 0.7)),
+          ),
+        ],
+      ),
+    );
   }
 
-  void _showBranchSwitcherDialog(BuildContext context, GitStatus status, GitNotifier notifier) {
-    final newBranchCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141820),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: Row(
-          children: [
-            const Icon(LucideIcons.git_branch, size: 18, color: Colors.cyanAccent),
-            const SizedBox(width: 8),
-            Text(
-              'Ветки Git (${status.currentBranch})',
-              style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-          ],
+  Widget _buildTopToolbar(GitState gitState, GitNotifier notifier, bool isLight) {
+    final status = gitState.status;
+    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
+    final subColor = isLight ? Colors.black54 : Colors.white54;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: isLight ? Colors.white : const Color(0xFF111520),
+        border: Border(
+          bottom: BorderSide(color: isLight ? Colors.black12 : Colors.white10),
         ),
-        content: SizedBox(
-          width: 340,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: Title + Branch Selector + Sync Badges
+          Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: newBranchCtrl,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: 'Новая ветка (напр. feat/ui)...',
-                        hintStyle: GoogleFonts.inter(fontSize: 11, color: Colors.white30),
-                        isDense: true,
-                        filled: true,
-                        fillColor: Colors.black26,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
+              const Icon(LucideIcons.git_branch, size: 15, color: Color(0xFF00F2FE)),
+              const SizedBox(width: 6),
+              if (status != null)
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        InkWell(
+                          onTap: () => _showBranchPickerModal(status, notifier),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00F2FE).withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFF00F2FE).withValues(alpha: 0.35)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  status.currentBranch,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 11,
+                                    color: const Color(0xFF00F2FE),
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(LucideIcons.chevron_down, size: 11, color: Color(0xFF00F2FE)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        if (status.ahead > 0 || status.behind > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.amberAccent.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
+                            ),
+                            child: Text(
+                              '↑${status.ahead} ↓${status.behind}',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                color: Colors.amberAccent,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        if (status.ahead > 0 || status.behind > 0) const SizedBox(width: 6),
+                        InkWell(
+                          onTap: () => _showGitSettingsDialog(status, notifier),
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: (status.remoteUrl != null
+                                      ? Colors.greenAccent
+                                      : Colors.orangeAccent)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  status.remoteUrl != null ? LucideIcons.cloud : LucideIcons.cloud_off,
+                                  size: 11,
+                                  color: status.remoteUrl != null ? Colors.greenAccent : Colors.orangeAccent,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  status.remoteUrl != null
+                                      ? _shortRemoteName(status.remoteUrl!)
+                                      : 'Настроить Remote',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: status.remoteUrl != null ? Colors.greenAccent : Colors.orangeAccent,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: () {
-                      final name = newBranchCtrl.text.trim();
-                      if (name.isNotEmpty) {
-                        Navigator.pop(ctx);
-                        notifier.checkoutBranch(name, createNew: true);
-                      }
-                    },
-                    icon: const Icon(LucideIcons.plus, size: 13),
-                    label: const Text('Создать', style: TextStyle(fontSize: 11)),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.cyanAccent.withValues(alpha: 0.2),
-                      foregroundColor: Colors.cyanAccent,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                )
+              else
+                Expanded(
+                  child: Text(
+                    'SOURCE CONTROL (GIT)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                      letterSpacing: 0.8,
                     ),
+                  ),
+                ),
+              IconButton(
+                icon: Icon(LucideIcons.info, size: 14, color: subColor),
+                tooltip: 'Шпаргалка по Git',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                onPressed: _showGitGuideModal,
+              ),
+              IconButton(
+                icon: Icon(LucideIcons.refresh_cw, size: 14, color: subColor),
+                tooltip: 'Обновить статус Git',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                onPressed: () => notifier.refreshStatus(force: true),
+              ),
+            ],
+          ),
+          if (status != null) ...[
+            const SizedBox(height: 6),
+            // Row 2: Quick Professional Git Operations Bar
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _buildQuickToolBtn(
+                    icon: LucideIcons.refresh_ccw_dot,
+                    label: 'Fetch',
+                    tooltip: 'git fetch --all --prune (проверить изменения на сервере)',
+                    color: Colors.cyanAccent,
+                    onTap: () => notifier.fetch(),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickToolBtn(
+                    icon: LucideIcons.arrow_down_to_line,
+                    label: status.behind > 0 ? 'Pull (↓${status.behind})' : 'Pull',
+                    tooltip: 'git pull (зажать для Pull --rebase)',
+                    color: status.behind > 0 ? Colors.amberAccent : Colors.white70,
+                    onTap: () => notifier.pull(),
+                    onLongPress: () => notifier.pull(rebase: true),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickToolBtn(
+                    icon: LucideIcons.arrow_up_from_line,
+                    label: status.ahead > 0 ? 'Push (↑${status.ahead})' : 'Push',
+                    tooltip: 'git push (зажать для Force Push --force-with-lease)',
+                    color: status.ahead > 0 ? const Color(0xFF00F2FE) : Colors.white70,
+                    onTap: () => notifier.push(),
+                    onLongPress: () => _confirmForcePush(notifier),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickToolBtn(
+                    icon: LucideIcons.git_graph,
+                    label: 'Graph',
+                    tooltip: 'Открыть визуальное дерево веток и коммитов',
+                    color: const Color(0xFF8B5CF6),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const GitGraphPage()),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickToolBtn(
+                    icon: LucideIcons.archive,
+                    label: status.stashes.isNotEmpty ? 'Stash (${status.stashes.length})' : 'Stash',
+                    tooltip: 'Быстро спрятать изменения в Stash',
+                    color: Colors.orangeAccent,
+                    onTap: () => _showQuickStashDialog(status, notifier),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickToolBtn(
+                    icon: LucideIcons.settings_2,
+                    label: 'Remote / Автор',
+                    tooltip: 'Настроить URL репозитория (origin), имя автора и GitHub токен',
+                    color: Colors.white70,
+                    onTap: () => _showGitSettingsDialog(status, notifier),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _shortRemoteName(String url) {
+    var clean = url.trim();
+    if (clean.endsWith('.git')) {
+      clean = clean.substring(0, clean.length - 4);
+    }
+    final ghIdx = clean.indexOf('github.com/');
+    if (ghIdx != -1) {
+      return clean.substring(ghIdx + 'github.com/'.length);
+    }
+    final parts = clean.split('/');
+    if (parts.length >= 2) {
+      return '${parts[parts.length - 2]}/${parts.last}';
+    }
+    return clean;
+  }
+
+  Widget _buildQuickToolBtn({
+    required IconData icon,
+    required String label,
+    required String tooltip,
+    required Color color,
+    required VoidCallback onTap,
+    VoidCallback? onLongPress,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: color),
+              const SizedBox(width: 4),
               Text(
-                'ЛОКАЛЬНЫЕ ВЕТКИ',
-                style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white38),
-              ),
-              const SizedBox(height: 6),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 220),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: status.branches.length,
-                  itemBuilder: (_, idx) {
-                    final b = status.branches[idx];
-                    final isCurrent = b == status.currentBranch;
-                    return ListTile(
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      leading: Icon(
-                        isCurrent ? LucideIcons.circle_check : LucideIcons.git_branch,
-                        size: 14,
-                        color: isCurrent ? Colors.cyanAccent : Colors.white54,
-                      ),
-                      title: Text(
-                        b,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 12,
-                          color: isCurrent ? Colors.cyanAccent : Colors.white,
-                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                      onTap: isCurrent
-                          ? null
-                          : () {
-                              Navigator.pop(ctx);
-                              notifier.checkoutBranch(b);
-                            },
-                    );
-                  },
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: color,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Закрыть', style: TextStyle(color: Colors.white54)),
+      ),
+    );
+  }
+
+  Widget _buildTabBar(GitStatus status, bool isLight) {
+    final changesCount = status.totalChangesCount;
+    final commitsCount = status.recentCommits.length;
+    final branchesAndStashesCount = status.branches.length + status.stashes.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF0E121B),
+        border: Border(bottom: BorderSide(color: isLight ? Colors.black12 : Colors.white10)),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        indicatorColor: const Color(0xFF00F2FE),
+        indicatorWeight: 2,
+        labelColor: const Color(0xFF00F2FE),
+        unselectedLabelColor: isLight ? Colors.black54 : Colors.white54,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 10),
+        labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+        tabs: [
+          Tab(
+            height: 34,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.file_diff, size: 12),
+                const SizedBox(width: 5),
+                const Text('Изменения'),
+                if (changesCount > 0) ...[
+                  const SizedBox(width: 4),
+                  _buildCountPill(changesCount.toString(), const Color(0xFF00F2FE)),
+                ],
+              ],
+            ),
+          ),
+          Tab(
+            height: 34,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.history, size: 12),
+                const SizedBox(width: 5),
+                Text('История ($commitsCount)'),
+              ],
+            ),
+          ),
+          Tab(
+            height: 34,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.git_branch, size: 12),
+                const SizedBox(width: 5),
+                Text('Ветки / Stash ($branchesAndStashesCount)'),
+              ],
+            ),
+          ),
+          Tab(
+            height: 34,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(LucideIcons.rocket, size: 12),
+                const SizedBox(width: 5),
+                Text('Релизы (${status.tags.length})'),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _showCommitDetailsSheet(BuildContext context, GitCommitEntry commit, GitNotifier notifier) {
+  Widget _buildCountPill(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAB 1: ИЗМЕНЕНИЯ (STAGING, WORKING TREE & COMMIT COMPOSER)
+  // ===========================================================================
+
+  Widget _buildChangesTab(GitStatus status, GitNotifier notifier, bool isLight) {
+    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
+    final subColor = isLight ? Colors.black54 : Colors.white54;
+
+    final filteredConflicts = status.conflictedFiles
+        .where((f) => _fileFilter.isEmpty || f.toLowerCase().contains(_fileFilter))
+        .toList();
+    final filteredStaged = status.stagedFiles
+        .where((f) => _fileFilter.isEmpty || f.toLowerCase().contains(_fileFilter))
+        .toList();
+    final workingFiles = <String>[
+      ...status.modifiedFiles,
+      ...status.untrackedFiles.where((u) => !status.modifiedFiles.contains(u)),
+    ].where((f) => _fileFilter.isEmpty || f.toLowerCase().contains(_fileFilter)).toList();
+
+    return Column(
+      children: [
+        // Commit Composer Box
+        Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          decoration: BoxDecoration(
+            color: isLight ? Colors.white : const Color(0xFF121622),
+            border: Border(bottom: BorderSide(color: isLight ? Colors.black12 : Colors.white10)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Conventional Commit Quick Chips + AI + Amend
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final prefix in _conventionalPrefixes)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: InkWell(
+                          onTap: () => _applyPrefix(prefix),
+                          borderRadius: BorderRadius.circular(5),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _commitController.text.startsWith(prefix)
+                                  ? const Color(0xFF00F2FE).withValues(alpha: 0.2)
+                                  : Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(5),
+                              border: Border.all(
+                                color: _commitController.text.startsWith(prefix)
+                                    ? const Color(0xFF00F2FE)
+                                    : Colors.white12,
+                              ),
+                            ),
+                            child: Text(
+                              prefix.trim(),
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                color: _commitController.text.startsWith(prefix)
+                                    ? const Color(0xFF00F2FE)
+                                    : subColor,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              // Commit Message Input + AI Button
+              Stack(
+                alignment: Alignment.topRight,
+                children: [
+                  TextField(
+                    controller: _commitController,
+                    maxLines: 2,
+                    minLines: 1,
+                    style: TextStyle(fontSize: 12, color: textColor),
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: status.stagedFiles.isNotEmpty
+                          ? 'Сообщение коммита (${status.stagedFiles.length} в индексе)...'
+                          : 'Сообщение коммита (все изменения будут добавлены)...',
+                      hintStyle: TextStyle(color: subColor, fontSize: 11),
+                      filled: true,
+                      fillColor: isLight ? const Color(0xFFF1F5F9) : Colors.black26,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: isLight ? Colors.black12 : Colors.white12),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: isLight ? Colors.black12 : Colors.white12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF00F2FE)),
+                      ),
+                      contentPadding: const EdgeInsets.fromLTRB(10, 8, 56, 8),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, right: 4),
+                    child: InkWell(
+                      onTap: _isGeneratingCommitMessage ? null : _generateSmartCommitMessage,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF8B5CF6), Color(0xFF00F2FE)],
+                          ),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: _isGeneratingCommitMessage
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                              )
+                            : const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(LucideIcons.sparkles, size: 11, color: Colors.white),
+                                  SizedBox(width: 3),
+                                  Text(
+                                    'AI',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              // Amend toggle + Commit / Commit & Push Buttons
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _amendCommit = !_amendCommit;
+                        if (_amendCommit &&
+                            _commitController.text.trim().isEmpty &&
+                            status.recentCommits.isNotEmpty) {
+                          _commitController.text = status.recentCommits.first.message;
+                        }
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _amendCommit ? LucideIcons.square_check : LucideIcons.square,
+                            size: 13,
+                            color: _amendCommit ? const Color(0xFF00F2FE) : subColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Amend',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _amendCommit ? const Color(0xFF00F2FE) : subColor,
+                              fontWeight: _amendCommit ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SizedBox(
+                      height: 30,
+                      child: ElevatedButton.icon(
+                        onPressed: (status.hasChanges || _amendCommit)
+                            ? () async {
+                                final msg = _commitController.text.trim().isNotEmpty
+                                    ? _commitController.text.trim()
+                                    : 'chore: update (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})';
+                                final ok = await notifier.commit(msg, amend: _amendCommit);
+                                if (ok && mounted) {
+                                  _commitController.clear();
+                                  setState(() => _amendCommit = false);
+                                }
+                              }
+                            : null,
+                        icon: const Icon(LucideIcons.check, size: 13),
+                        label: Text(
+                          status.stagedFiles.isNotEmpty
+                              ? 'Коммит (${status.stagedFiles.length})'
+                              : 'Коммит все (${status.totalChangesCount})',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00F2FE),
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    height: 30,
+                    child: OutlinedButton.icon(
+                      onPressed: (status.hasChanges || status.ahead > 0)
+                          ? () async {
+                              if (status.hasChanges) {
+                                final msg = _commitController.text.trim().isNotEmpty
+                                    ? _commitController.text.trim()
+                                    : 'chore: sync (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})';
+                                final ok = await notifier.commitAndPush(msg, amend: _amendCommit);
+                                if (ok && mounted) {
+                                  _commitController.clear();
+                                  setState(() => _amendCommit = false);
+                                }
+                              } else {
+                                await notifier.push();
+                              }
+                            }
+                          : null,
+                      icon: const Icon(LucideIcons.cloud_upload, size: 13, color: Color(0xFF00F2FE)),
+                      label: const Text(
+                        '+ Push',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF00F2FE)),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFF00F2FE)),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+
+        // File Filter Bar (if > 4 files)
+        if (status.totalChangesCount > 4)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+            child: SizedBox(
+              height: 28,
+              child: TextField(
+                controller: _fileFilterController,
+                style: TextStyle(fontSize: 11, color: textColor),
+                decoration: InputDecoration(
+                  hintText: 'Фильтр изменённых файлов...',
+                  hintStyle: TextStyle(fontSize: 11, color: subColor),
+                  prefixIcon: Icon(LucideIcons.search, size: 13, color: subColor),
+                  suffixIcon: _fileFilter.isNotEmpty
+                      ? InkWell(
+                          onTap: () => _fileFilterController.clear(),
+                          child: Icon(LucideIcons.x, size: 12, color: subColor),
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: isLight ? Colors.white : const Color(0xFF141824),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        // Changed Files Sections
+        Expanded(
+          child: !status.hasChanges
+              ? _buildCleanWorkingTreeView(status, notifier, isLight)
+              : ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  children: [
+                    // 1. CONFLICTS SECTION
+                    if (filteredConflicts.isNotEmpty) ...[
+                      _buildCollapsibleHeader(
+                        title: 'КОНФЛИКТЫ СЛИЯНИЯ (${filteredConflicts.length})',
+                        color: Colors.redAccent,
+                        expanded: _conflictsExpanded,
+                        onToggle: () => setState(() => _conflictsExpanded = !_conflictsExpanded),
+                      ),
+                      if (_conflictsExpanded)
+                        ...filteredConflicts.map(
+                          (f) => _buildFileRow(
+                            file: f,
+                            statusCode: 'U',
+                            badgeColor: Colors.redAccent,
+                            stats: status.diffStats[f],
+                            isLight: isLight,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => GitMergeConflictPage(
+                                    relativePath: f,
+                                  ),
+                                ),
+                              );
+                            },
+                            actions: [
+                              _buildMiniIconBtn(
+                                icon: LucideIcons.wrench,
+                                color: Colors.amberAccent,
+                                tooltip: 'Разрешить конфликт',
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => GitMergeConflictPage(
+                                        relativePath: f,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              _buildMiniIconBtn(
+                                icon: LucideIcons.check,
+                                color: Colors.greenAccent,
+                                tooltip: 'Отметить решённым (git add)',
+                                onTap: () => notifier.stageFile(f),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+
+                    // 2. STAGED CHANGES (ИНДЕКС)
+                    _buildCollapsibleHeader(
+                      title: 'ИНДЕКС / STAGED (${filteredStaged.length})',
+                      color: Colors.greenAccent,
+                      expanded: _stagedExpanded,
+                      onToggle: () => setState(() => _stagedExpanded = !_stagedExpanded),
+                      trailing: filteredStaged.isNotEmpty
+                          ? InkWell(
+                              onTap: () => notifier.unstageAll(),
+                              borderRadius: BorderRadius.circular(4),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.minus, size: 11, color: Colors.orangeAccent),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Снять все',
+                                      style: TextStyle(fontSize: 10, color: Colors.orangeAccent, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : null,
+                    ),
+                    if (_stagedExpanded)
+                      if (filteredStaged.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                          child: Text(
+                            'Индекс пуст. Нажмите «+» у нужных файлов или «В индекс все», чтобы подготовить коммит.',
+                            style: TextStyle(fontSize: 10, color: subColor),
+                          ),
+                        )
+                      else
+                        ...filteredStaged.map(
+                          (f) => _buildFileRow(
+                            file: f,
+                            statusCode: status.fileStatusCodes[f] ?? 'A',
+                            badgeColor: Colors.greenAccent,
+                            stats: status.diffStats[f],
+                            isLight: isLight,
+                            onTap: () => _openFileDiff(f, isStaged: true),
+                            actions: [
+                              _buildMiniIconBtn(
+                                icon: LucideIcons.file_code,
+                                color: Colors.white54,
+                                tooltip: 'Открыть файл в редакторе',
+                                onTap: () => _openFileInEditor(f),
+                              ),
+                              _buildMiniIconBtn(
+                                icon: LucideIcons.minus,
+                                color: Colors.orangeAccent,
+                                tooltip: 'Убрать из индекса (Unstage)',
+                                onTap: () => notifier.unstageFile(f),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                    // 3. WORKING TREE (РАБОЧАЯ КОПИЯ)
+                    _buildCollapsibleHeader(
+                      title: 'РАБОЧАЯ КОПИЯ / WORKING TREE (${workingFiles.length})',
+                      color: Colors.amberAccent,
+                      expanded: _workingExpanded,
+                      onToggle: () => setState(() => _workingExpanded = !_workingExpanded),
+                      trailing: workingFiles.isNotEmpty
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                InkWell(
+                                  onTap: () => _confirmDiscardAll(notifier),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                    child: Icon(LucideIcons.trash_2, size: 12, color: Colors.redAccent),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                InkWell(
+                                  onTap: () => notifier.stageAll(),
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(LucideIcons.plus, size: 11, color: Color(0xFF00F2FE)),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'В индекс все',
+                                          style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE), fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                    ),
+                    if (_workingExpanded)
+                      ...workingFiles.map((f) {
+                        final isUntracked = status.untrackedFiles.contains(f);
+                        final code = isUntracked ? 'U' : (status.fileStatusCodes[f] ?? 'M');
+                        final color = isUntracked ? Colors.lightBlueAccent : Colors.amberAccent;
+                        return _buildFileRow(
+                          file: f,
+                          statusCode: code,
+                          badgeColor: color,
+                          stats: status.diffStats[f],
+                          isLight: isLight,
+                          onTap: () => _openFileDiff(f, isStaged: false),
+                          actions: [
+                            _buildMiniIconBtn(
+                              icon: LucideIcons.eye_off,
+                              color: Colors.white38,
+                              tooltip: 'Добавить в .gitignore',
+                              onTap: () => notifier.addToGitignore(f),
+                            ),
+                            _buildMiniIconBtn(
+                              icon: LucideIcons.undo_2,
+                              color: Colors.redAccent.withValues(alpha: 0.8),
+                              tooltip: 'Откатить изменения в файле (Discard)',
+                              onTap: () => _confirmDiscardFile(f, notifier),
+                            ),
+                            _buildMiniIconBtn(
+                              icon: LucideIcons.plus,
+                              color: const Color(0xFF00F2FE),
+                              tooltip: 'Добавить в индекс (Stage)',
+                              onTap: () => notifier.stageFile(f),
+                            ),
+                          ],
+                        );
+                      }),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCleanWorkingTreeView(GitStatus status, GitNotifier notifier, bool isLight) {
+    final subColor = isLight ? Colors.black54 : Colors.white54;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.greenAccent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(LucideIcons.check_check, size: 28, color: Colors.greenAccent),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Рабочая копия чиста',
+              style: TextStyle(
+                color: isLight ? Colors.black87 : Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Все изменения на ветке «${status.currentBranch}» сохранены в Git.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: subColor, fontSize: 11),
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                if (status.ahead > 0)
+                  ElevatedButton.icon(
+                    onPressed: () => notifier.push(),
+                    icon: const Icon(LucideIcons.cloud_upload, size: 14),
+                    label: Text('Отправить ${status.ahead} коммит(ов) в Remote'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F2FE),
+                      foregroundColor: Colors.black,
+                    ),
+                  ),
+                if (status.behind > 0)
+                  ElevatedButton.icon(
+                    onPressed: () => notifier.pull(),
+                    icon: const Icon(LucideIcons.cloud_download, size: 14),
+                    label: Text('Скачать ${status.behind} коммит(ов) (Pull)'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amberAccent,
+                      foregroundColor: Colors.black,
+                    ),
+                  ),
+                if (status.stashes.isNotEmpty)
+                  OutlinedButton.icon(
+                    onPressed: () => notifier.stashPop(),
+                    icon: const Icon(LucideIcons.archive_restore, size: 14, color: Colors.orangeAccent),
+                    label: Text(
+                      'Восстановить Stash (${status.stashes.length})',
+                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCollapsibleHeader({
+    required String title,
+    required Color color,
+    required bool expanded,
+    required VoidCallback onToggle,
+    Widget? trailing,
+  }) {
+    return InkWell(
+      onTap: onToggle,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        color: Colors.white.withValues(alpha: 0.02),
+        child: Row(
+          children: [
+            Icon(
+              expanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
+              size: 13,
+              color: color,
+            ),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                  letterSpacing: 0.6,
+                ),
+              ),
+            ),
+            ?trailing,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFileRow({
+    required String file,
+    required String statusCode,
+    required Color badgeColor,
+    required GitFileDiffStats? stats,
+    required bool isLight,
+    required VoidCallback onTap,
+    required List<Widget> actions,
+  }) {
+    final fileName = p.basename(file);
+    final dirName = p.dirname(file);
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        child: Row(
+          children: [
+            Container(
+              width: 18,
+              height: 18,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: badgeColor.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                statusCode,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: badgeColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileName,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isLight ? Colors.black87 : Colors.white,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (dirName != '.')
+                    Text(
+                      dirName,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: isLight ? Colors.black45 : Colors.white38,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            if (stats != null && (stats.additions > 0 || stats.deletions > 0)) ...[
+              if (stats.additions > 0)
+                Text(
+                  '+${stats.additions}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    color: Colors.greenAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              if (stats.additions > 0 && stats.deletions > 0) const SizedBox(width: 4),
+              if (stats.deletions > 0)
+                Text(
+                  '-${stats.deletions}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              const SizedBox(width: 6),
+            ],
+            ...actions,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniIconBtn({
+    required IconData icon,
+    required Color color,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Icon(icon, size: 13, color: color),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TAB 2: ИСТОРИЯ КОММИТОВ (COMMIT LOG & INTERACTIVE INSPECTOR)
+  // ===========================================================================
+
+  Widget _buildHistoryTab(GitStatus status, GitNotifier notifier, bool isLight) {
+    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
+    final subColor = isLight ? Colors.black54 : Colors.white54;
+
+    final commits = status.recentCommits.where((c) {
+      if (_commitFilter.isEmpty) return true;
+      return c.message.toLowerCase().contains(_commitFilter) ||
+          c.shortHash.toLowerCase().contains(_commitFilter) ||
+          c.author.toLowerCase().contains(_commitFilter) ||
+          c.refs.toLowerCase().contains(_commitFilter);
+    }).toList();
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 30,
+                  child: TextField(
+                    controller: _commitSearchController,
+                    style: TextStyle(fontSize: 11, color: textColor),
+                    decoration: InputDecoration(
+                      hintText: 'Поиск по коммитам, SHA, автору, тегам...',
+                      hintStyle: TextStyle(fontSize: 11, color: subColor),
+                      prefixIcon: Icon(LucideIcons.search, size: 13, color: subColor),
+                      suffixIcon: _commitFilter.isNotEmpty
+                          ? InkWell(
+                              onTap: () => _commitSearchController.clear(),
+                              child: Icon(LucideIcons.x, size: 12, color: subColor),
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: isLight ? Colors.white : const Color(0xFF141824),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                height: 30,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const GitGraphPage()),
+                    );
+                  },
+                  icon: const Icon(LucideIcons.git_graph, size: 13, color: Color(0xFF00F2FE)),
+                  label: const Text('Graph', style: TextStyle(fontSize: 11, color: Color(0xFF00F2FE))),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF00F2FE)),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: commits.isEmpty
+              ? Center(
+                  child: Text(
+                    'Коммиты не найдены',
+                    style: TextStyle(color: subColor, fontSize: 12),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: commits.length,
+                  itemBuilder: (context, index) {
+                    final c = commits[index];
+                    final isHead = index == 0 && _commitFilter.isEmpty;
+                    return InkWell(
+                      onTap: () => _showCommitInspectorSheet(c, notifier),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: isLight ? Colors.black12 : Colors.white.withValues(alpha: 0.05),
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  margin: const EdgeInsets.only(top: 4),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isHead ? const Color(0xFF00F2FE) : Colors.purpleAccent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF00F2FE).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          c.shortHash,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            color: const Color(0xFF00F2FE),
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                      if (c.refs.isNotEmpty) ...[
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.amberAccent.withValues(alpha: 0.15),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              c.refs,
+                                              style: const TextStyle(
+                                                fontSize: 9,
+                                                color: Colors.amberAccent,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      const Spacer(),
+                                      Text(
+                                        c.relativeTime,
+                                        style: TextStyle(fontSize: 10, color: subColor),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    c.message,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: textColor,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    c.author,
+                                    style: TextStyle(fontSize: 10, color: subColor),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  void _showCommitInspectorSheet(GitCommitEntry commit, GitNotifier notifier) {
+    List<GitCommitFileEntry>? changedFiles;
+    String? patchDiff;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0E1117),
+      backgroundColor: const Color(0xFF121622),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (ctx) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.75,
-          minChildSize: 0.4,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (_, scrollController) {
-            return FutureBuilder<String>(
-              future: notifier.getCommitDetails(commit.hash),
-              builder: (context, snapshot) {
-                final rawDiff = snapshot.data ?? '';
-                final lines = rawDiff.split('\n');
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
-                      child: Row(
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            if (changedFiles == null) {
+              notifier.getCommitFiles(commit.hash).then((files) {
+                if (modalCtx.mounted) setModalState(() => changedFiles = files);
+              });
+              notifier.getCommitDetails(commit.hash).then((diff) {
+                if (modalCtx.mounted) setModalState(() => patchDiff = diff);
+              });
+            }
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.78,
+              minChildSize: 0.45,
+              maxChildSize: 0.95,
+              expand: false,
+              builder: (_, scrollCtrl) {
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: Colors.cyanAccent.withValues(alpha: 0.15),
+                              color: const Color(0xFF00F2FE).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.35)),
                             ),
                             child: Text(
                               commit.shortHash,
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11,
+                                color: const Color(0xFF00F2FE),
                                 fontWeight: FontWeight.bold,
-                                color: Colors.cyanAccent,
+                                fontSize: 12,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  commit.message,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  '${commit.author} • ${commit.relativeTime}',
-                                  style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white54),
-                                ),
-                              ],
+                            child: Text(
+                              '${commit.author} • ${commit.relativeTime}',
+                              style: const TextStyle(color: Colors.white54, fontSize: 11),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(LucideIcons.copy, size: 15, color: Colors.white54),
-                            tooltip: 'Скопировать хэш',
+                            icon: const Icon(LucideIcons.copy, size: 15, color: Colors.white70),
+                            tooltip: 'Скопировать полный SHA',
                             onPressed: () {
                               Clipboard.setData(ClipboardData(text: commit.hash));
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Хэш ${commit.shortHash} скопирован')),
+                                const SnackBar(content: Text('SHA скопирован в буфер обмена')),
                               );
                             },
                           ),
                           IconButton(
                             icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
-                            onPressed: () => Navigator.pop(ctx),
+                            onPressed: () => Navigator.pop(modalCtx),
                           ),
                         ],
                       ),
-                    ),
-                    const Divider(height: 1, color: Colors.white10),
-                    Expanded(
-                      child: snapshot.connectionState == ConnectionState.waiting
-                          ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
-                          : ListView.builder(
-                              controller: scrollController,
-                              padding: const EdgeInsets.all(12),
-                              itemCount: lines.length,
-                              itemBuilder: (_, i) {
-                                final line = lines[i];
-                                Color textColor = Colors.white70;
-                                Color? bgColor;
-                                if (line.startsWith('+') && !line.startsWith('+++')) {
-                                  textColor = const Color(0xFF4ADE80);
-                                  bgColor = const Color(0xFF4ADE80).withValues(alpha: 0.08);
-                                } else if (line.startsWith('-') && !line.startsWith('---')) {
-                                  textColor = const Color(0xFFF87171);
-                                  bgColor = const Color(0xFFF87171).withValues(alpha: 0.08);
-                                } else if (line.startsWith('@@')) {
-                                  textColor = Colors.cyanAccent;
-                                  bgColor = Colors.cyanAccent.withValues(alpha: 0.06);
-                                } else if (line.startsWith('diff --git')) {
-                                  textColor = Colors.amberAccent;
-                                }
-                                return Container(
-                                  color: bgColor,
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                  child: SelectableText(
-                                    line,
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11,
-                                      color: textColor,
-                                      height: 1.35,
-                                    ),
-                                  ),
-                                );
-                              },
+                      const SizedBox(height: 6),
+                      Text(
+                        commit.message,
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Interactive Operations Row
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _buildModalActionBtn(
+                            icon: LucideIcons.git_pull_request_create,
+                            label: 'Cherry-pick',
+                            color: const Color(0xFF8B5CF6),
+                            onTap: () {
+                              Navigator.pop(modalCtx);
+                              notifier.cherryPickCommit(commit.hash);
+                            },
+                          ),
+                          _buildModalActionBtn(
+                            icon: LucideIcons.undo_2,
+                            label: 'Revert (обратить)',
+                            color: Colors.amberAccent,
+                            onTap: () {
+                              Navigator.pop(modalCtx);
+                              notifier.revertCommit(commit.hash);
+                            },
+                          ),
+                          _buildModalActionBtn(
+                            icon: LucideIcons.git_branch_plus,
+                            label: 'Ветка отсюда',
+                            color: const Color(0xFF00F2FE),
+                            onTap: () {
+                              Navigator.pop(modalCtx);
+                              _showCreateBranchDialog(notifier, fromRef: commit.shortHash);
+                            },
+                          ),
+                          _buildModalActionBtn(
+                            icon: LucideIcons.tag,
+                            label: 'Тег на коммит',
+                            color: Colors.greenAccent,
+                            onTap: () {
+                              Navigator.pop(modalCtx);
+                              _showCreateTagDialog(notifier, commitHash: commit.hash);
+                            },
+                          ),
+                          _buildModalActionBtn(
+                            icon: LucideIcons.rotate_ccw,
+                            label: 'Reset к коммиту...',
+                            color: Colors.redAccent,
+                            onTap: () {
+                              Navigator.pop(modalCtx);
+                              _showResetCommitDialog(commit, notifier);
+                            },
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Colors.white12, height: 20),
+
+                      // Changed files list & patch
+                      Expanded(
+                        child: ListView(
+                          controller: scrollCtrl,
+                          children: [
+                            Text(
+                              'ЗАТРОНУТЫЕ ФАЙЛЫ (${changedFiles?.length ?? 0})',
+                              style: const TextStyle(
+                                color: Colors.white54,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.7,
+                              ),
                             ),
-                    ),
-                  ],
+                            const SizedBox(height: 6),
+                            if (changedFiles == null)
+                              const Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: LinearProgressIndicator(color: Color(0xFF00F2FE)),
+                              )
+                            else
+                              ...changedFiles!.map(
+                                (f) => Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 3),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 18,
+                                        height: 18,
+                                        alignment: Alignment.center,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white10,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          f.status,
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: f.status == 'A'
+                                                ? Colors.greenAccent
+                                                : f.status == 'D'
+                                                    ? Colors.redAccent
+                                                    : Colors.amberAccent,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          f.path,
+                                          style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 14),
+                            const Text(
+                              'ПОЛНЫЙ DIFF КОММИТА',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.7,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.black38,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white10),
+                              ),
+                              child: SelectableText(
+                                patchDiff ?? 'Загрузка diff...',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10.5,
+                                  color: Colors.white70,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             );
@@ -421,90 +1763,30 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
     );
   }
 
-  void _showCreateTagDialog(BuildContext context, GitStatus status, GitNotifier notifier) {
-    final nextSuggested = status.projectVersion != null
-        ? 'v${status.projectVersion!.split('+').first}'
-        : (status.tags.isNotEmpty ? status.tags.first.name : 'v1.0.0');
-    final tagCtrl = TextEditingController(text: nextSuggested);
-    final msgCtrl = TextEditingController(text: 'Release $nextSuggested');
-    bool pushRemote = status.remoteUrl != null;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF141820),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          title: Row(
-            children: [
-              const Icon(LucideIcons.tag, size: 18, color: Colors.amberAccent),
-              const SizedBox(width: 8),
-              Text(
-                'Создать версию / тег релиза',
-                style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: 340,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: tagCtrl,
-                  style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Версия (тег)',
-                    labelStyle: const TextStyle(color: Colors.cyanAccent, fontSize: 11),
-                    hintText: 'v1.0.0',
-                    filled: true,
-                    fillColor: Colors.black26,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: msgCtrl,
-                  maxLines: 2,
-                  style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Описание сборки / изменений',
-                    labelStyle: const TextStyle(color: Colors.cyanAccent, fontSize: 11),
-                    filled: true,
-                    fillColor: Colors.black26,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                  value: pushRemote,
-                  onChanged: (v) => setDialogState(() => pushRemote = v ?? false),
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  activeColor: Colors.cyanAccent,
-                  title: Text(
-                    'Сразу отправить тег на GitHub (git push --tags)',
-                    style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
-            ),
-            FilledButton.icon(
-              onPressed: () {
-                final t = tagCtrl.text.trim();
-                if (t.isNotEmpty) {
-                  Navigator.pop(ctx);
-                  notifier.createVersionTag(t, msgCtrl.text.trim(), pushToRemote: pushRemote);
-                }
-              },
-              icon: const Icon(LucideIcons.check, size: 14),
-              label: const Text('Создать тег'),
+  Widget _buildModalActionBtn({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(7),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -512,1543 +1794,510 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final gitState = ref.watch(gitProvider);
-    final gitNotifier = ref.read(gitProvider.notifier);
-    final l10n = AppLocalizations.of(context)!;
+  // ===========================================================================
+  // TAB 3: ВЕТКИ И STASH (BRANCHES & STASH MANAGER)
+  // ===========================================================================
 
-    if (gitState.isLoading && gitState.status == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.cyanAccent));
-    }
+  Widget _buildBranchesAndStashTab(GitStatus status, GitNotifier notifier, bool isLight) {
+    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
+    final subColor = isLight ? Colors.black54 : Colors.white54;
 
-    if (gitState.status == null) {
-      return Center(
-        child: SingleChildScrollView(
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.02),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.amberAccent.withValues(alpha: 0.08),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.2)),
-                  ),
-                  child: const Icon(LucideIcons.git_branch, color: Colors.amberAccent, size: 28),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  l10n.repositoryNotFound,
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  l10n.initGitRepoDescription,
-                  style: GoogleFonts.inter(color: Colors.white54, fontSize: 11, height: 1.4),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () => gitNotifier.init(),
-                      icon: const Icon(LucideIcons.git_fork, size: 13),
-                      label: Text(l10n.initGitAction),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amberAccent.withValues(alpha: 0.15),
-                        foregroundColor: Colors.amberAccent,
-                        elevation: 0,
-                        side: BorderSide(color: Colors.amberAccent.withValues(alpha: 0.3)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => context.push('/github'),
-                      icon: const Icon(LucideIcons.folder_git_2, size: 13),
-                      label: const Text('GitHub Клон / Вход'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.cyanAccent,
-                        side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final status = gitState.status!;
-
-    return Column(
+    return ListView(
+      padding: const EdgeInsets.all(10),
       children: [
-        // Top Header: Branch switcher, ahead/behind indicators, quick actions
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF10131A),
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
-          ),
-          child: Row(
-            children: [
-              InkWell(
-                onTap: () => _showBranchSwitcherDialog(context, status, gitNotifier),
-                borderRadius: BorderRadius.circular(6),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.cyanAccent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.25)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(LucideIcons.git_branch, size: 12, color: Colors.cyanAccent),
-                      const SizedBox(width: 5),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 110),
-                        child: Text(
-                          status.currentBranch,
-                          overflow: TextOverflow.ellipsis,
+        // 1. LOCAL BRANCHES CARD
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'ЛОКАЛЬНЫЕ ВЕТКИ (${status.branches.length})',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF00F2FE),
+                letterSpacing: 0.7,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => _showCreateBranchDialog(notifier),
+              icon: const Icon(LucideIcons.plus, size: 12, color: Color(0xFF00F2FE)),
+              label: const Text('Новая ветка', style: TextStyle(fontSize: 11, color: Color(0xFF00F2FE))),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ...status.branches.map((b) {
+          final isCurrent = b == status.currentBranch;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: isCurrent
+                  ? const Color(0xFF00F2FE).withValues(alpha: 0.1)
+                  : (isLight ? Colors.white : const Color(0xFF141824)),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isCurrent
+                    ? const Color(0xFF00F2FE).withValues(alpha: 0.4)
+                    : (isLight ? Colors.black12 : Colors.white10),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isCurrent ? LucideIcons.circle_check : LucideIcons.git_branch,
+                  size: 14,
+                  color: isCurrent ? const Color(0xFF00F2FE) : subColor,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: isCurrent ? null : () => notifier.checkoutBranch(b),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          b,
                           style: GoogleFonts.jetBrainsMono(
-                            color: Colors.cyanAccent,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
+                            fontSize: 12,
+                            color: isCurrent ? const Color(0xFF00F2FE) : textColor,
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
                           ),
                         ),
-                      ),
-                      if (status.ahead > 0 || status.behind > 0) ...[
-                        const SizedBox(width: 5),
-                        Text(
-                          '${status.ahead > 0 ? "↑${status.ahead}" : ""}${status.behind > 0 ? "↓${status.behind}" : ""}',
+                        if (isCurrent)
+                          Text(
+                            'Активная ветка (HEAD)',
+                            style: TextStyle(fontSize: 9.5, color: subColor),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (!isCurrent) ...[
+                  _buildMiniIconBtn(
+                    icon: LucideIcons.git_merge,
+                    color: Colors.purpleAccent,
+                    tooltip: 'Влить $b в текущую ветку (${status.currentBranch})',
+                    onTap: () => notifier.mergeBranch(b),
+                  ),
+                  _buildMiniIconBtn(
+                    icon: LucideIcons.trash_2,
+                    color: Colors.redAccent,
+                    tooltip: 'Удалить ветку $b',
+                    onTap: () => _confirmDeleteBranch(b, notifier),
+                  ),
+                ] else ...[
+                  _buildMiniIconBtn(
+                    icon: LucideIcons.pencil,
+                    color: Colors.white54,
+                    tooltip: 'Переименовать текущую ветку',
+                    onTap: () => _showRenameBranchDialog(b, notifier),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }),
+
+        // 2. REMOTE BRANCHES
+        if (status.remoteBranches.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'УДАЛЁННЫЕ ВЕТКИ ORIGIN (${status.remoteBranches.length})',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: subColor,
+                  letterSpacing: 0.7,
+                ),
+              ),
+              InkWell(
+                onTap: () => notifier.fetch(),
+                child: const Text(
+                  'Fetch',
+                  style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE), fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ...status.remoteBranches.map(
+            (rb) => Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: isLight ? Colors.white : const Color(0xFF141824),
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.cloud, size: 13, color: Colors.white54),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      rb,
+                      style: GoogleFonts.jetBrainsMono(fontSize: 11, color: textColor),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => notifier.checkoutBranch(rb),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: const Text('Checkout', style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE))),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+
+        // 3. STASH MANAGER
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'STASH / ВРЕМЕННОЕ ХРАНИЛИЩЕ (${status.stashes.length})',
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Colors.orangeAccent,
+                letterSpacing: 0.7,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: status.hasChanges ? () => _showQuickStashDialog(status, notifier) : null,
+              icon: const Icon(LucideIcons.archive, size: 12, color: Colors.orangeAccent),
+              label: const Text('Спрятать в Stash', style: TextStyle(fontSize: 11, color: Colors.orangeAccent)),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (status.stashes.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isLight ? Colors.white : const Color(0xFF141824),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
+            ),
+            child: Text(
+              'Список Stash пуст. Stash позволяет временно отложить незакоммиченные правки, чтобы переключить ветку или сделать Pull.',
+              style: TextStyle(fontSize: 11, color: subColor),
+            ),
+          )
+        else
+          ...status.stashes.map(
+            (st) => Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: isLight ? Colors.white : const Color(0xFF141824),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.orangeAccent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          st.ref,
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
+                            color: Colors.orangeAccent,
                             fontWeight: FontWeight.bold,
-                            color: Colors.amberAccent,
                           ),
                         ),
+                      ),
+                      if (st.branch.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          'на ${st.branch}',
+                          style: TextStyle(fontSize: 10, color: subColor),
+                        ),
                       ],
-                      const SizedBox(width: 3),
-                      const Icon(LucideIcons.chevron_down, size: 11, color: Colors.cyanAccent),
+                      const Spacer(),
+                      Text(
+                        st.relativeTime,
+                        style: TextStyle(fontSize: 10, color: subColor),
+                      ),
                     ],
                   ),
-                ),
-              ),
-              if (status.projectVersion != null) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+                  const SizedBox(height: 6),
+                  Text(
+                    st.message,
+                    style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.w500),
                   ),
-                  child: Text(
-                    'v${status.projectVersion}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFFC084FC),
-                    ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildModalActionBtn(
+                        icon: LucideIcons.eye,
+                        label: 'Diff',
+                        color: Colors.white70,
+                        onTap: () => _showStashDiffModal(st, notifier),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildModalActionBtn(
+                        icon: LucideIcons.copy_check,
+                        label: 'Apply',
+                        color: const Color(0xFF00F2FE),
+                        onTap: () => notifier.stashApply(st.ref),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildModalActionBtn(
+                        icon: LucideIcons.archive_restore,
+                        label: 'Pop',
+                        color: Colors.greenAccent,
+                        onTap: () => notifier.stashPop(st.ref),
+                      ),
+                      const SizedBox(width: 6),
+                      _buildModalActionBtn(
+                        icon: LucideIcons.trash_2,
+                        label: 'Drop',
+                        color: Colors.redAccent,
+                        onTap: () => notifier.stashDrop(st.ref),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-              const Spacer(),
-              if (gitState.isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(right: 8),
-                  child: SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 1.8, color: Colors.cyanAccent),
-                  ),
-                ),
-              IconButton(
-                icon: const Icon(LucideIcons.git_commit_horizontal, size: 14, color: Colors.amberAccent),
-                tooltip: 'Граф коммитов (Git Graph)',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const GitGraphPage()),
-                  );
-                },
+                ],
               ),
-              IconButton(
-                icon: const Icon(LucideIcons.folder_git_2, size: 14, color: Colors.cyanAccent),
-                tooltip: 'GitHub репозитории и клонирование',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                onPressed: () => context.push('/github'),
-              ),
-              IconButton(
-                icon: const Icon(LucideIcons.refresh_cw, size: 13, color: Colors.white54),
-                tooltip: 'Обновить Git',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                onPressed: () => gitNotifier.refreshStatus(force: true),
-              ),
-            ],
-          ),
-        ),
-
-        // Segmented Navigation Tabs: Изменения | Коммиты | Версии и Сборки
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          color: const Color(0xFF0B0D13),
-          child: Row(
-            children: [
-              _buildSectionTab(
-                index: 0,
-                icon: LucideIcons.file_diff,
-                label: 'Изменения',
-                badge: '${status.totalChangesCount}',
-              ),
-              const SizedBox(width: 5),
-              _buildSectionTab(
-                index: 1,
-                icon: LucideIcons.history,
-                label: 'Коммиты',
-                badge: '${status.recentCommits.length}',
-              ),
-              const SizedBox(width: 5),
-              _buildSectionTab(
-                index: 2,
-                icon: LucideIcons.tag,
-                label: 'Сборки/Версии',
-                badge: '${status.tags.length}',
-              ),
-            ],
-          ),
-        ),
-
-        if (gitState.error != null && gitState.error!.trim().isNotEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            color: Colors.redAccent.withValues(alpha: 0.14),
-            child: Text(
-              gitState.error!,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(fontSize: 10.5, color: Colors.redAccent),
             ),
           ),
-
-        const Divider(color: Colors.white10, height: 1),
-
-        // Tab Body
-        Expanded(
-          child: IndexedStack(
-            index: _selectedSection,
-            children: [
-              _buildChangesTab(context, status, gitNotifier, l10n),
-              _buildCommitsTab(context, status, gitNotifier),
-              _buildVersionsTab(context, status, gitNotifier, l10n),
-            ],
-          ),
-        ),
       ],
     );
   }
 
-  Widget _buildSectionTab({
-    required int index,
-    required IconData icon,
-    required String label,
-    required String badge,
-  }) {
-    final isSelected = _selectedSection == index;
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _selectedSection = index),
-        borderRadius: BorderRadius.circular(7),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? Colors.cyanAccent.withValues(alpha: 0.14)
-                : Colors.white.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(7),
-            border: Border.all(
-              color: isSelected
-                  ? Colors.cyanAccent.withValues(alpha: 0.4)
-                  : Colors.white.withValues(alpha: 0.06),
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 12,
-                color: isSelected ? Colors.cyanAccent : Colors.white54,
-              ),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.inter(
-                    fontSize: 10.5,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? Colors.white : Colors.white60,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? Colors.cyanAccent.withValues(alpha: 0.22)
-                      : Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  badge,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.cyanAccent : Colors.white54,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // ===========================================================================
+  // TAB 4: РЕЛИЗЫ, ТЕГИ И REMOTE ORIGIN
+  // ===========================================================================
 
-  Widget _buildModeSwitcher() {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141822),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: InkWell(
-              onTap: () => setState(() => _isBeginnerMode = true),
-              borderRadius: BorderRadius.circular(7),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _isBeginnerMode ? Colors.cyanAccent.withValues(alpha: 0.2) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
-                  border: _isBeginnerMode ? Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)) : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(LucideIcons.smile, size: 13, color: Colors.cyanAccent),
-                    const SizedBox(width: 5),
-                    Text(
-                      'Простой (Новичок)',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: _isBeginnerMode ? FontWeight.bold : FontWeight.normal,
-                        color: _isBeginnerMode ? Colors.white : Colors.white60,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: InkWell(
-              onTap: () => setState(() => _isBeginnerMode = false),
-              borderRadius: BorderRadius.circular(7),
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: !_isBeginnerMode ? Colors.amberAccent.withValues(alpha: 0.2) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(7),
-                  border: !_isBeginnerMode ? Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)) : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(LucideIcons.sliders_horizontal, size: 13, color: Colors.amberAccent),
-                    const SizedBox(width: 5),
-                    Text(
-                      'Эксперт (Git Pro)',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: !_isBeginnerMode ? FontWeight.bold : FontWeight.normal,
-                        color: !_isBeginnerMode ? Colors.white : Colors.white60,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildReleasesAndRemoteTab(GitStatus status, GitNotifier notifier, bool isLight) {
+    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
+    final subColor = isLight ? Colors.black54 : Colors.white54;
+    final ghService = GitHubService();
+    final ghUserLogin = ghService.currentUser?['login']?.toString();
 
-  Widget _buildBeginnerChangesTab(
-    BuildContext context,
-    GitStatus status,
-    GitNotifier gitNotifier,
-    AppLocalizations l10n,
-  ) {
-    final changedCount = status.totalChangesCount;
-    final hasChanges = status.hasChanges;
-
-    return RefreshIndicator(
-      onRefresh: () => gitNotifier.refreshStatus(force: true),
-      child: ListView(
-        padding: const EdgeInsets.all(10),
-        children: [
-          _buildModeSwitcher(),
-          const SizedBox(height: 10),
-
-          // Status Summary Card
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: hasChanges
-                  ? Colors.amberAccent.withValues(alpha: 0.08)
-                  : Colors.greenAccent.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: hasChanges
-                    ? Colors.amberAccent.withValues(alpha: 0.25)
-                    : Colors.greenAccent.withValues(alpha: 0.25),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: hasChanges
-                        ? Colors.amberAccent.withValues(alpha: 0.15)
-                        : Colors.greenAccent.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    hasChanges ? LucideIcons.file_pen : LucideIcons.circle_check,
-                    size: 20,
-                    color: hasChanges ? Colors.amberAccent : Colors.greenAccent,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        hasChanges
-                            ? 'Есть несохранённые изменения: $changedCount файлов'
-                            : 'Все файлы сохранены в Git',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        'Ветка: ${status.currentBranch}${status.ahead > 0 ? " (к отправке: ↑${status.ahead})" : ""}${status.behind > 0 ? " (на GitHub: ↓${status.behind})" : ""}',
-                        style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white60),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Action Card 1: Сохранить и отправить (Commit & Push)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF0EA5E9).withValues(alpha: 0.12),
-                  const Color(0xFF8B5CF6).withValues(alpha: 0.10),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.cyanAccent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(LucideIcons.rocket, size: 16, color: Colors.cyanAccent),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '1. Сохранить и отправить в Git',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.cyanAccent.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'Главное действие',
-                        style: GoogleFonts.inter(fontSize: 9.5, color: Colors.cyanAccent, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Сохраняет все изменённые файлы и отправляет их на GitHub в один клик, чтобы ваш код был в безопасности.',
-                  style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.35),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _commitController,
-                  style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Что вы изменили? (например: добавил кнопку, исправил баг)',
-                    hintStyle: GoogleFonts.inter(fontSize: 11, color: Colors.white30),
-                    filled: true,
-                    fillColor: Colors.black38,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.white12),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: _isGeneratingAiCommit ? null : () => _generateAiCommitMessage(status),
-                      icon: _isGeneratingAiCommit
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.cyanAccent),
-                            )
-                          : const Icon(LucideIcons.sparkles, size: 13),
-                      label: Text(
-                        _isGeneratingAiCommit ? 'ИИ...' : '✨ Сообщение через ИИ',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.cyanAccent,
-                        side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.35)),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _isSyncing ? null : () => _performBeginnerSync(gitNotifier, status),
-                        icon: _isSyncing
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(LucideIcons.send, size: 14),
-                        label: Text(
-                          _isSyncing ? 'Отправка...' : 'Отправить в Git',
-                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF238636),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 9),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // Action Card 2 & 3: Откатить & Обновить
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(LucideIcons.rotate_ccw, size: 13, color: Colors.redAccent),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              '2. Откатить всё',
-                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Вернуть код к предыдущему сохранению.',
-                        style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: hasChanges ? () => _confirmRollbackAll(gitNotifier) : null,
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                            side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.4)),
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                          ),
-                          child: const Text('Откатить', style: TextStyle(fontSize: 10.5)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.02),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(LucideIcons.arrow_down, size: 13, color: Colors.blueAccent),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              '3. Обновить (Pull)',
-                              style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Скачать свежий код с GitHub.',
-                        style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => gitNotifier.pull(),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.blueAccent,
-                            side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.4)),
-                            padding: const EdgeInsets.symmetric(vertical: 6),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                          ),
-                          child: Text(status.behind > 0 ? 'Скачать (${status.behind})' : 'Обновить', style: const TextStyle(fontSize: 10.5)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Action Card 4: Собрать APK
-          Container(
-            padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(
-              color: Colors.amberAccent.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: Colors.amberAccent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: const Icon(LucideIcons.package_check, color: Colors.amberAccent, size: 18),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '4. Собрать релизный APK',
-                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      Text(
-                        'Ключ release-key.jks настроен: установится прямо поверх старого!',
-                        style: GoogleFonts.inter(fontSize: 10, color: Colors.white60),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
-                FilledButton.icon(
-                  onPressed: () => _showCloudBuildDialog(context),
-                  icon: const Icon(LucideIcons.rocket, size: 12),
-                  label: const Text('Собрать', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: Colors.amberAccent,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // File List
-          Row(
-            children: [
-              Text(
-                'ИЗМЕНЁННЫЕ ФАЙЛЫ ($changedCount)',
-                style: GoogleFonts.inter(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white38,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const Spacer(),
-              if (hasChanges)
-                InkWell(
-                  onTap: () => _confirmRollbackAll(gitNotifier),
-                  child: Text(
-                    'Откатить все',
-                    style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 10.5, fontWeight: FontWeight.w600),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-
-          if (!hasChanges)
-            Container(
-              padding: const EdgeInsets.all(14),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.02),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '🎉 Нет изменений. Все файлы сохранены в Git!',
-                style: GoogleFonts.inter(fontSize: 11, color: Colors.white54),
-              ),
-            ),
-
-          if (status.conflictedFiles.isNotEmpty) ...[
-            _buildBeginnerCategoryHeader('⚠️ Конфликты версий', status.conflictedFiles.length, Colors.redAccent),
-            ...status.conflictedFiles.map((f) => _buildBeginnerFileRow(f, status, isConflicted: true)),
-          ],
-          if (status.modifiedFiles.isNotEmpty || status.stagedFiles.isNotEmpty) ...[
-            _buildBeginnerCategoryHeader('🔵 Отредактированные файлы', status.modifiedFiles.length + status.stagedFiles.length, Colors.cyanAccent),
-            ...status.modifiedFiles.map((f) => _buildBeginnerFileRow(f, status)),
-            ...status.stagedFiles.map((f) => _buildBeginnerFileRow(f, status)),
-          ],
-          if (status.untrackedFiles.isNotEmpty) ...[
-            _buildBeginnerCategoryHeader('🟢 Новые файлы', status.untrackedFiles.length, Colors.greenAccent),
-            ...status.untrackedFiles.map((f) => _buildBeginnerFileRow(f, status, isUntracked: true)),
-          ],
-
-          const SizedBox(height: 14),
-          _buildBeginnerFaqCard(),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBeginnerFileRow(String path, GitStatus status, {bool isUntracked = false, bool isConflicted = false}) {
-    final notifier = ref.read(gitProvider.notifier);
-    final cleanPath = path.endsWith('/') ? path.substring(0, path.length - 1) : path;
-    final fileName = cleanPath.split('/').last;
-    final parentDir = cleanPath.contains('/') ? cleanPath.substring(0, cleanPath.lastIndexOf('/')) : '';
-    final diffStat = status.diffStats[cleanPath] ?? status.diffStats[path];
-
-    final Color statusColor = isConflicted
-        ? Colors.redAccent
-        : (isUntracked ? Colors.greenAccent : Colors.cyanAccent);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.025),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        fileName,
-                        style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (diffStat != null && (diffStat.additions > 0 || diffStat.deletions > 0)) ...[
-                      const SizedBox(width: 5),
-                      if (diffStat.additions > 0)
-                        Text('+${diffStat.additions}', style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
-                      if (diffStat.deletions > 0) ...[
-                        const SizedBox(width: 3),
-                        Text('-${diffStat.deletions}', style: GoogleFonts.jetBrainsMono(fontSize: 9.5, color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                      ],
-                    ],
-                  ],
-                ),
-                Text(
-                  parentDir.isNotEmpty ? parentDir : cleanPath,
-                  style: GoogleFonts.jetBrainsMono(fontSize: 9, color: Colors.white38),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          InkWell(
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => GitDiffPage(relativePath: cleanPath, initiallyStaged: false),
-                ),
-              );
-            },
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-              decoration: BoxDecoration(
-                color: Colors.cyanAccent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(LucideIcons.file_diff, size: 11, color: Colors.cyanAccent),
-                  const SizedBox(width: 3),
-                  Text('Diff', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.cyanAccent, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(LucideIcons.rotate_ccw, size: 12, color: Colors.redAccent),
-            tooltip: 'Откатить этот файл назад',
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-            onPressed: () {
-              notifier.discardFile(path);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Файл $fileName возвращён к исходному состоянию')),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBeginnerCategoryHeader(String title, int count, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 4),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: color),
-          ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              '$count',
-              style: GoogleFonts.jetBrainsMono(fontSize: 9, fontWeight: FontWeight.bold, color: color),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBeginnerFaqCard() {
-    return Container(
-      padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _isFaqExpanded = !_isFaqExpanded),
-            child: Row(
-              children: [
-                const Icon(LucideIcons.circle_question_mark, size: 15, color: Colors.amberAccent),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '💡 Как работает Git? (Понятный справочник)',
-                    style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
-                Icon(
-                  _isFaqExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down,
-                  size: 13,
-                  color: Colors.white54,
-                ),
-              ],
-            ),
-          ),
-          if (_isFaqExpanded) ...[
-            const SizedBox(height: 8),
-            const Divider(color: Colors.white10, height: 1),
-            const SizedBox(height: 8),
-            _buildFaqItem('Что такое коммит?', 'Коммит — это сохранение вашей работы (как точка сохранения в видеоигре). Если в будущем что-то сломается, вы всегда сможете вернуться к этому моменту.'),
-            _buildFaqItem('Зачем нужен Push?', 'Push отправляет ваши сохранения из памяти телефона/ПК на сервер GitHub. Даже если телефон потеряется, код останется в безопасности.'),
-            _buildFaqItem('Что делает Откат (Discard)?', 'Откат отменяет все последние изменения и возвращает код в точности к предыдущему коммиту.'),
-            _buildFaqItem('Как обновлять приложение на телефоне?', 'Благодаря единому ключу release-key.jks, который мы настроили в вашем проекте, каждая новая сборка APK может быть установлена прямо поверх старой, без удаления и без потери ваших данных!'),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFaqItem(String q, String a) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(q, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
-          const SizedBox(height: 2),
-          Text(a, style: GoogleFonts.inter(fontSize: 10, color: Colors.white70, height: 1.35)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChangesTab(
-    BuildContext context,
-    GitStatus status,
-    GitNotifier gitNotifier,
-    AppLocalizations l10n,
-  ) {
-    if (_isBeginnerMode) {
-      return _buildBeginnerChangesTab(context, status, gitNotifier, l10n);
-    }
-
-    return RefreshIndicator(
-      onRefresh: () => gitNotifier.refreshStatus(force: true),
-      child: ListView(
-        padding: const EdgeInsets.all(10),
-        children: [
-          _buildModeSwitcher(),
-          const SizedBox(height: 10),
-          // Commit & Sync Control Box (always visible!)
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFF141822),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: _commitController,
-                  maxLines: 2,
-                  minLines: 1,
-                  decoration: InputDecoration(
-                    hintText: l10n.commitMessageHint,
-                    hintStyle: GoogleFonts.inter(color: Colors.white30, fontSize: 11),
-                    filled: true,
-                    fillColor: Colors.black.withValues(alpha: 0.28),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.cyanAccent, width: 0.9),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  ),
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
-                  onSubmitted: (_) => _performCommit(gitNotifier),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _performCommit(gitNotifier),
-                        icon: const Icon(LucideIcons.check, size: 13),
-                        label: Text(
-                          _amendCommit ? 'Amend Коммит' : 'Закоммитить',
-                          style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.cyanAccent.withValues(alpha: 0.18),
-                          foregroundColor: Colors.cyanAccent,
-                          elevation: 0,
-                          side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.35)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: () => setState(() => _amendCommit = !_amendCommit),
-                      borderRadius: BorderRadius.circular(7),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: _amendCommit
-                              ? Colors.amberAccent.withValues(alpha: 0.18)
-                              : Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(7),
-                          border: Border.all(
-                            color: _amendCommit
-                                ? Colors.amberAccent.withValues(alpha: 0.4)
-                                : Colors.white.withValues(alpha: 0.08),
-                          ),
-                        ),
-                        child: Text(
-                          'Amend',
-                          style: GoogleFonts.inter(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w600,
-                            color: _amendCommit ? Colors.amberAccent : Colors.white54,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => gitNotifier.push(),
-                        icon: const Icon(LucideIcons.arrow_up, size: 12),
-                        label: Text(
-                          status.ahead > 0 ? 'Push (${status.ahead})' : 'Push',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
-                          foregroundColor: Colors.blueAccent,
-                          elevation: 0,
-                          side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.28)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                          padding: const EdgeInsets.symmetric(vertical: 7),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => gitNotifier.pull(),
-                        icon: const Icon(LucideIcons.arrow_down, size: 12),
-                        label: Text(
-                          status.behind > 0 ? 'Pull (${status.behind})' : 'Pull',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.greenAccent.withValues(alpha: 0.15),
-                          foregroundColor: Colors.greenAccent,
-                          elevation: 0,
-                          side: BorderSide(color: Colors.greenAccent.withValues(alpha: 0.28)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                          padding: const EdgeInsets.symmetric(vertical: 7),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      icon: const Icon(LucideIcons.archive, size: 14, color: Colors.white60),
-                      tooltip: 'Спрятать изменения в Stash',
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.white.withValues(alpha: 0.05),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-                      ),
-                      onPressed: () => gitNotifier.stashSave(),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          // Quick Bulk Actions Bar
-          if (status.hasChanges)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Text(
-                    'ФАЙЛЫ (${status.totalChangesCount})',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white38,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const Spacer(),
-                  _buildMiniActionChip(
-                    icon: LucideIcons.plus,
-                    label: 'Все в Stage',
-                    color: Colors.greenAccent,
-                    onTap: () => gitNotifier.stageAll(),
-                  ),
-                  const SizedBox(width: 6),
-                  if (status.stagedFiles.isNotEmpty)
-                    _buildMiniActionChip(
-                      icon: LucideIcons.minus,
-                      label: 'Снять все',
-                      color: Colors.amberAccent,
-                      onTap: () => gitNotifier.unstageAll(),
-                    ),
-                ],
-              ),
-            ),
-
-          if (!status.hasChanges)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 12),
-              alignment: Alignment.center,
-              child: Column(
-                children: [
-                  Icon(LucideIcons.circle_check, size: 28, color: Colors.greenAccent.withValues(alpha: 0.6)),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Рабочая директория чиста',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Нет незакоммиченных изменений. Перейдите во вкладку «Коммиты» для просмотра истории.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white38),
-                  ),
-                ],
-              ),
-            ),
-
-          if (status.conflictedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitConflicted, status.conflictedFiles.length, Colors.redAccent),
-            ...status.conflictedFiles.map(
-              (f) => _buildGitFileItem(f, status: status, isStaged: false, isConflicted: true),
-            ),
-          ],
-          if (status.stagedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitStaged, status.stagedFiles.length, Colors.greenAccent),
-            ...status.stagedFiles.map(
-              (f) => _buildGitFileItem(f, status: status, isStaged: true),
-            ),
-          ],
-          if (status.modifiedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitModified, status.modifiedFiles.length, Colors.amberAccent),
-            ...status.modifiedFiles.map(
-              (f) => _buildGitFileItem(f, status: status, isStaged: false),
-            ),
-          ],
-          if (status.untrackedFiles.isNotEmpty) ...[
-            _buildGitSectionHeader(l10n.gitUntracked, status.untrackedFiles.length, Colors.orangeAccent),
-            ...status.untrackedFiles.map(
-              (f) => _buildGitFileItem(f, status: status, isStaged: false, isUntracked: true),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommitsTab(BuildContext context, GitStatus status, GitNotifier gitNotifier) {
-    if (status.recentCommits.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Text(
-            'В репозитории пока нет коммитов.\nСделайте первый коммит во вкладке «Изменения».',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white54),
-          ),
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: () => gitNotifier.refreshStatus(force: true),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(10),
-        itemCount: status.recentCommits.length,
-        itemBuilder: (context, index) {
-          final commit = status.recentCommits[index];
-          final isHead = index == 0;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            decoration: BoxDecoration(
-              color: isHead
-                  ? Colors.cyanAccent.withValues(alpha: 0.05)
-                  : Colors.white.withValues(alpha: 0.02),
-              borderRadius: BorderRadius.circular(9),
-              border: Border.all(
-                color: isHead
-                    ? Colors.cyanAccent.withValues(alpha: 0.25)
-                    : Colors.white.withValues(alpha: 0.05),
-              ),
-            ),
-            child: InkWell(
-              onTap: () => _showCommitDetailsSheet(context, commit, gitNotifier),
-              borderRadius: BorderRadius.circular(9),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.cyanAccent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            commit.shortHash,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.cyanAccent,
-                            ),
-                          ),
-                        ),
-                        if (commit.refs.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.amberAccent.withValues(alpha: 0.14),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                commit.refs,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.amberAccent,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                        const Spacer(),
-                        Text(
-                          commit.relativeTime,
-                          style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      commit.message,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withValues(alpha: 0.92),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(LucideIcons.user, size: 10, color: Colors.white38),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            commit.author,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(fontSize: 10, color: Colors.white54),
-                          ),
-                        ),
-                        Text(
-                          'Открыть diff →',
-                          style: GoogleFonts.inter(
-                            fontSize: 9.5,
-                            color: Colors.cyanAccent.withValues(alpha: 0.8),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildVersionsTab(
-    BuildContext context,
-    GitStatus status,
-    GitNotifier gitNotifier,
-    AppLocalizations l10n,
-  ) {
     return ListView(
       padding: const EdgeInsets.all(10),
       children: [
-        // Current Project Build Version Card
+        // Remote & Author Configuration Card
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isLight ? Colors.white : const Color(0xFF141824),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(LucideIcons.globe, size: 15, color: Color(0xFF00F2FE)),
+                      SizedBox(width: 6),
+                      Text(
+                        'Удалённый репозиторий (Remote Origin)',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF00F2FE)),
+                      ),
+                    ],
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _showGitSettingsDialog(status, notifier),
+                    icon: const Icon(LucideIcons.pencil, size: 12),
+                    label: const Text('Изменить', style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                status.remoteUrl ?? 'Remote origin не задан. Нажмите «Изменить», чтобы подключить GitHub URL.',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: status.remoteUrl != null ? textColor : Colors.orangeAccent,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(LucideIcons.user, size: 12, color: subColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Автор: ${status.userName ?? "Quantum Developer"} <${status.userEmail ?? "dev@quantum-ide.local"}>',
+                      style: TextStyle(fontSize: 11, color: subColor),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    ghService.isAuthenticated ? LucideIcons.shield_check : LucideIcons.key_round,
+                    size: 12,
+                    color: ghService.isAuthenticated ? Colors.greenAccent : Colors.amberAccent,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      ghService.isAuthenticated
+                          ? 'GitHub авторизован${ghUserLogin != null ? ": @$ghUserLogin" : ""} (Push/Pull работает автоматически)'
+                          : 'GitHub токен не подключён (нажмите для входа в GitHub)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: ghService.isAuthenticated ? Colors.greenAccent : Colors.amberAccent,
+                      ),
+                    ),
+                  ),
+                  if (!ghService.isAuthenticated)
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const GitHubPage(),
+                          ),
+                        );
+                      },
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      child: const Text('Войти', style: TextStyle(fontSize: 11)),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Cloud Release Builder Card
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
                 const Color(0xFF8B5CF6).withValues(alpha: 0.16),
-                const Color(0xFF0EA5E9).withValues(alpha: 0.10),
+                const Color(0xFF00F2FE).withValues(alpha: 0.08),
               ],
             ),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.3)),
+            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.35)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(LucideIcons.package_check, size: 16, color: Color(0xFFC084FC)),
+                  const Icon(LucideIcons.rocket, size: 16, color: Color(0xFF00F2FE)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Версия сборки проекта',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                      'Выпуск релиза и облачная сборка APK',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.black38,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      status.projectVersion ?? '1.0.0+1',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.cyanAccent,
+                  if (status.projectVersion != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00F2FE).withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'v${status.projectVersion}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: const Color(0xFF00F2FE),
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
-                status.recentCommits.isNotEmpty
-                    ? 'Последний коммит сборки: ${status.recentCommits.first.shortHash} (${status.recentCommits.first.message})'
-                    : 'Коммитов ещё нет',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white60),
+                'Создаёт семантический Git-тег (vX.Y.Z) и пушит в GitHub для запуска GitHub Actions.',
+                style: TextStyle(fontSize: 11, color: subColor),
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => _showCreateTagDialog(context, status, gitNotifier),
-                      icon: const Icon(LucideIcons.tag, size: 13),
-                      label: const Text('Создать версию (Tag)', style: TextStyle(fontSize: 11)),
+                      onPressed: () => _showReleaseAndBuildModal(status, notifier),
+                      icon: const Icon(LucideIcons.cloud_lightning, size: 14),
+                      label: const Text('Выпустить релиз + APK', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.cyanAccent.withValues(alpha: 0.16),
-                        foregroundColor: Colors.cyanAccent,
-                        elevation: 0,
-                        side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.35)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        backgroundColor: const Color(0xFF8B5CF6),
+                        foregroundColor: Colors.white,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showCloudBuildDialog(context),
-                      icon: const Icon(LucideIcons.rocket, size: 13),
-                      label: Text(
-                        l10n.cloudBuildApk,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.amberAccent.withValues(alpha: 0.16),
-                        foregroundColor: Colors.amberAccent,
-                        elevation: 0,
-                        side: BorderSide(color: Colors.amberAccent.withValues(alpha: 0.35)),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                      ),
-                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => _showCreateTagDialog(notifier, status: status),
+                    icon: const Icon(LucideIcons.tag, size: 13),
+                    label: const Text('+ Тег', style: TextStyle(fontSize: 11)),
                   ),
                 ],
               ),
             ],
           ),
         ),
+        const SizedBox(height: 14),
 
-        const SizedBox(height: 12),
+        // Tags List
         Text(
-          'ИСТОРИЯ ВЕРСИЙ И РЕЛИЗОВ (${status.tags.length})',
-          style: GoogleFonts.inter(
+          'ТЕГИ ВЕРСИЙ (${status.tags.length})',
+          style: TextStyle(
             fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: Colors.white38,
-            letterSpacing: 0.8,
+            fontWeight: FontWeight.bold,
+            color: subColor,
+            letterSpacing: 0.7,
           ),
         ),
         const SizedBox(height: 6),
-
         if (status.tags.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.02),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            ),
-            child: Text(
-              'Теги версий (например v1.0.0, v1.1.0) пока не созданы.\nНажмите «Создать версию (Tag)» выше, чтобы зафиксировать версию сборки.',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(fontSize: 11, color: Colors.white54),
-            ),
-          )
+          Text('Теги ещё не созданы', style: TextStyle(fontSize: 11, color: subColor))
         else
-          ...status.tags.map((tag) {
-            return Container(
+          ...status.tags.map(
+            (t) => Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
+                color: isLight ? Colors.white : const Color(0xFF141824),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.tag, size: 14, color: Colors.amberAccent),
+                  const Icon(LucideIcons.tag, size: 13, color: Colors.amberAccent),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -2057,454 +2306,764 @@ class _SidebarGitPanelState extends ConsumerState<SidebarGitPanel> {
                         Row(
                           children: [
                             Text(
-                              tag.name,
+                              t.name,
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.amberAccent,
                               ),
                             ),
-                            if (tag.shortHash.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                '(${tag.shortHash})',
-                                style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white38),
-                              ),
-                            ],
-                            const Spacer(),
+                            const SizedBox(width: 6),
                             Text(
-                              tag.date,
-                              style: GoogleFonts.inter(fontSize: 10, color: Colors.white38),
+                              t.shortHash,
+                              style: GoogleFonts.jetBrainsMono(fontSize: 10, color: subColor),
                             ),
                           ],
                         ),
-                        if (tag.subject.isNotEmpty) ...[
-                          const SizedBox(height: 2),
+                        if (t.subject.isNotEmpty)
                           Text(
-                            tag.subject,
+                            t.subject,
+                            style: TextStyle(fontSize: 11, color: textColor),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
                           ),
-                        ],
                       ],
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(LucideIcons.trash_2, size: 13, color: Colors.redAccent),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Удалить тег',
-                    onPressed: () => gitNotifier.deleteTag(tag.name),
+                  Text(t.date, style: TextStyle(fontSize: 10, color: subColor)),
+                  const SizedBox(width: 4),
+                  _buildMiniIconBtn(
+                    icon: LucideIcons.trash_2,
+                    color: Colors.redAccent,
+                    tooltip: 'Удалить тег ${t.name}',
+                    onTap: () => notifier.deleteTag(t.name),
                   ),
                 ],
               ),
-            );
-          }),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildMiniActionChip({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 11, color: color),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
+  // ===========================================================================
+  // MODALS & DIALOGS
+  // ===========================================================================
+
+  void _showBranchPickerModal(GitStatus status, GitNotifier notifier) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141824),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Управление ветками',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showCreateBranchDialog(notifier);
+                      },
+                      icon: const Icon(LucideIcons.plus, size: 13, color: Color(0xFF00F2FE)),
+                      label: const Text('Создать ветку', style: TextStyle(color: Color(0xFF00F2FE), fontSize: 12)),
+                    ),
+                  ],
+                ),
+                const Divider(color: Colors.white12),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      ...status.branches.map((b) {
+                        final isCurrent = b == status.currentBranch;
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(
+                            isCurrent ? LucideIcons.circle_check : LucideIcons.git_branch,
+                            size: 16,
+                            color: isCurrent ? const Color(0xFF00F2FE) : Colors.white54,
+                          ),
+                          title: Text(
+                            b,
+                            style: GoogleFonts.jetBrainsMono(
+                              color: isCurrent ? const Color(0xFF00F2FE) : Colors.white,
+                              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 12,
+                            ),
+                          ),
+                          trailing: !isCurrent
+                              ? TextButton(
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    notifier.mergeBranch(b);
+                                  },
+                                  child: const Text('Merge в текущую', style: TextStyle(fontSize: 11, color: Colors.purpleAccent)),
+                                )
+                              : const Text('HEAD', style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE))),
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            if (!isCurrent) notifier.checkoutBranch(b);
+                          },
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildGitSectionHeader(String title, int count, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 5),
-      child: Row(
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+  void _showCreateBranchDialog(GitNotifier notifier, {String? fromRef}) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: Text(
+          fromRef != null ? 'Новая ветка от $fromRef' : 'Создать новую ветку',
+          style: const TextStyle(color: Colors.white, fontSize: 15),
+        ),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: const InputDecoration(
+            hintText: 'Например: feat/new-ui или fix/auth',
+            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
           ),
-          const SizedBox(width: 6),
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 9.5,
-              color: Colors.white54,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.0,
-            ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
           ),
-          const SizedBox(width: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: Text(
-              '$count',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 9,
-                color: color,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+          ElevatedButton(
+            onPressed: () {
+              final name = ctrl.text.trim().replaceAll(' ', '-');
+              if (name.isNotEmpty) {
+                notifier.checkoutBranch(name, createNew: true, fromRef: fromRef);
+                Navigator.pop(ctx);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
+            child: const Text('Создать и перейти'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGitFileItem(
-    String path, {
-    required GitStatus status,
-    required bool isStaged,
-    bool isUntracked = false,
-    bool isConflicted = false,
-  }) {
-    final notifier = ref.read(gitProvider.notifier);
-    final Color statusColor = isConflicted
-        ? Colors.redAccent
-        : (isStaged ? Colors.greenAccent : (isUntracked ? Colors.orangeAccent : Colors.amberAccent));
-    final cleanPath = path.endsWith('/') ? path.substring(0, path.length - 1) : path;
-    final fileName = cleanPath.split('/').last;
-    final parentDir = cleanPath.contains('/') ? cleanPath.substring(0, cleanPath.lastIndexOf('/')) : '';
-    final diffStat = status.diffStats[cleanPath] ?? status.diffStats[path];
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+  void _showRenameBranchDialog(String oldName, GitNotifier notifier) {
+    final ctrl = TextEditingController(text: oldName);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: const Text('Переименовать ветку', style: TextStyle(color: Colors.white, fontSize: 15)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () {
+              final newName = ctrl.text.trim().replaceAll(' ', '-');
+              if (newName.isNotEmpty && newName != oldName) {
+                notifier.renameBranch(oldName, newName);
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Переименовать'),
+          ),
+        ],
       ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () {
-          if (isConflicted) {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => GitMergeConflictPage(relativePath: cleanPath),
-              ),
-            );
-          } else {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => GitDiffPage(
-                  relativePath: cleanPath,
-                  initiallyStaged: isStaged,
-                ),
-              ),
-            );
-          }
-        },
-        child: Row(
+    );
+  }
+
+  void _confirmDeleteBranch(String branch, GitNotifier notifier) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: Text('Удалить ветку $branch?', style: const TextStyle(color: Colors.white, fontSize: 15)),
+        content: const Text(
+          'Локальная ветка будет удалена.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              notifier.deleteBranch(branch, force: true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showResetCommitDialog(GitCommitEntry commit, GitNotifier notifier) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: Text('Reset к коммиту ${commit.shortHash}', style: const TextStyle(color: Colors.white, fontSize: 15)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(width: 3, height: 38, color: statusColor),
-            const SizedBox(width: 8),
-            Icon(
-              isConflicted
-                  ? LucideIcons.git_pull_request
-                  : (isUntracked ? LucideIcons.file_plus : LucideIcons.file_code),
-              size: 14,
-              color: statusColor,
+            Text(commit.message, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            const SizedBox(height: 12),
+            _buildResetOptionTile(
+              title: 'Soft (--soft)',
+              subtitle: 'Переместить HEAD, но оставить все изменения в Индексе (Staged)',
+              color: Colors.greenAccent,
+              onTap: () {
+                Navigator.pop(ctx);
+                notifier.resetToCommit(commit.hash, mode: 'soft');
+              },
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            fileName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        if (diffStat != null && (diffStat.additions > 0 || diffStat.deletions > 0)) ...[
-                          const SizedBox(width: 6),
-                          if (diffStat.additions > 0)
-                            Text(
-                              '+${diffStat.additions}',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.greenAccent,
-                              ),
-                            ),
-                          if (diffStat.deletions > 0) ...[
-                            const SizedBox(width: 3),
-                            Text(
-                              '-${diffStat.deletions}',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.redAccent,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ],
-                    ),
-                    Text(
-                      parentDir.isNotEmpty ? parentDir : cleanPath,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 8.5, color: Colors.white38),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
+            const SizedBox(height: 6),
+            _buildResetOptionTile(
+              title: 'Mixed (--mixed)',
+              subtitle: 'Переместить HEAD и оставить файлы изменёнными в Рабочей копии',
+              color: Colors.amberAccent,
+              onTap: () {
+                Navigator.pop(ctx);
+                notifier.resetToCommit(commit.hash, mode: 'mixed');
+              },
             ),
-            if (!isStaged)
-              IconButton(
-                icon: const Icon(LucideIcons.rotate_ccw, size: 12, color: Colors.white38),
-                tooltip: 'Откатить изменения файла',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                onPressed: () => notifier.discardFile(path),
-              ),
-            IconButton(
-              icon: Icon(
-                isStaged ? LucideIcons.circle_minus : LucideIcons.circle_plus,
-                size: 14,
-                color: isStaged ? Colors.amberAccent : Colors.greenAccent,
-              ),
-              tooltip: isStaged ? 'Убрать из индекса (Unstage)' : 'Добавить в коммит (Stage)',
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-              onPressed: () => isStaged ? notifier.unstageFile(path) : notifier.stageFile(path),
+            const SizedBox(height: 6),
+            _buildResetOptionTile(
+              title: 'Hard (--hard)',
+              subtitle: 'Полностью откатить код к этому коммиту (несохранённые правки удалятся!)',
+              color: Colors.redAccent,
+              onTap: () {
+                Navigator.pop(ctx);
+                notifier.resetToCommit(commit.hash, mode: 'hard');
+              },
             ),
-            const SizedBox(width: 4),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResetOptionTile({
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 2),
+            Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
           ],
         ),
       ),
     );
   }
 
-  void _showCloudBuildDialog(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final tagController = TextEditingController(text: 'v1.0.0');
-    final commitController = TextEditingController(text: 'chore: release v1.0.0');
-    final notesController = TextEditingController();
-    bool isSubmitting = false;
+  void _showQuickStashDialog(GitStatus status, GitNotifier notifier) {
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: const Text('Спрятать изменения в Stash', style: TextStyle(color: Colors.white, fontSize: 15)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: const InputDecoration(
+            hintText: 'Описание Stash (необязательно)...',
+            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              notifier.stashSave(ctrl.text.trim());
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black),
+            child: const Text('В Stash'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStashDiffModal(GitStashEntry stash, GitNotifier notifier) async {
+    final diff = await notifier.getStashDiff(stash.ref);
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141824),
+      isScrollControlled: true,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${stash.ref} — ${stash.message}',
+              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 350),
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black38,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  diff.isNotEmpty ? diff : 'Нет данных diff',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white70),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showGitSettingsDialog(GitStatus status, GitNotifier notifier) {
+    final remoteCtrl = TextEditingController(text: status.remoteUrl ?? '');
+    final nameCtrl = TextEditingController(text: status.userName ?? 'Quantum Developer');
+    final emailCtrl = TextEditingController(text: status.userEmail ?? 'dev@quantum-ide.local');
 
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: const Color(0xFF161B22),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.amberAccent.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(LucideIcons.rocket, color: Colors.amberAccent, size: 20),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    l10n.cloudBuildApk,
-                    style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.cloudBuildApkDesc,
-                      style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white60, height: 1.4),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      l10n.releaseTagName,
-                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: tagController,
-                      enabled: !isSubmitting,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: l10n.releaseTagNameHint,
-                        hintStyle: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white24),
-                        filled: true,
-                        fillColor: Colors.black.withValues(alpha: 0.3),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.releaseCommitMsg,
-                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: commitController,
-                      enabled: !isSubmitting,
-                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: l10n.releaseCommitMsgHint,
-                        hintStyle: GoogleFonts.inter(fontSize: 11.5, color: Colors.white24),
-                        filled: true,
-                        fillColor: Colors.black.withValues(alpha: 0.3),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      l10n.releaseNotes,
-                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: notesController,
-                      enabled: !isSubmitting,
-                      maxLines: 4,
-                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: l10n.releaseNotesHint,
-                        hintStyle: GoogleFonts.inter(fontSize: 11.5, color: Colors.white24),
-                        filled: true,
-                        fillColor: Colors.black.withValues(alpha: 0.3),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.all(10),
-                      ),
-                    ),
-                    if (isSubmitting) ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.amberAccent),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              l10n.releasingAndPushing,
-                              style: GoogleFonts.inter(fontSize: 11.5, color: Colors.amberAccent),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: const Row(
+          children: [
+            Icon(LucideIcons.settings_2, color: Color(0xFF00F2FE), size: 18),
+            SizedBox(width: 8),
+            Text('Настройки Git и Remote', style: TextStyle(color: Colors.white, fontSize: 15)),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Remote URL (origin):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              const SizedBox(height: 4),
+              TextField(
+                controller: remoteCtrl,
+                style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
+                decoration: const InputDecoration(
+                  hintText: 'https://github.com/user/repo.git',
+                  hintStyle: TextStyle(color: Colors.white30, fontSize: 11),
                 ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
-                child: Text(AppLocalizations.of(context)!.cancel, style: const TextStyle(color: Colors.white60)),
+              const SizedBox(height: 12),
+              const Text('Имя автора коммитов (user.name):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              const SizedBox(height: 4),
+              TextField(
+                controller: nameCtrl,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
-              FilledButton.icon(
-                onPressed: isSubmitting
+              const SizedBox(height: 12),
+              const Text('Email автора (user.email):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              const SizedBox(height: 4),
+              TextField(
+                controller: emailCtrl,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              if (remoteCtrl.text.trim().isNotEmpty) {
+                await notifier.setRemoteUrl(remoteCtrl.text.trim());
+              }
+              if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
+                await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmForcePush(GitNotifier notifier) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: const Text('Выполнить Force Push?', style: TextStyle(color: Colors.white, fontSize: 15)),
+        content: const Text(
+          'Будет выполнен безопасный git push --force-with-lease (полезно после Amend или Reset).',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              notifier.push(force: true);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Force Push'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDiscardFile(String file, GitNotifier notifier) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: const Text('Откатить изменения в файле?', style: TextStyle(color: Colors.white, fontSize: 15)),
+        content: Text(
+          'Все несохранённые правки в «$file» будут возвращены к последнему коммиту.',
+          style: const TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              notifier.discardFile(file);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Откатить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDiscardAll(GitNotifier notifier) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF161922),
+        title: const Text('Откатить ВСЕ изменения?', style: TextStyle(color: Colors.white, fontSize: 15)),
+        content: const Text(
+          'Будет выполнен git reset --hard HEAD && git clean -fd. Все незакоммиченные правки будут удалены.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              notifier.discardAll();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Откатить всё'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCreateTagDialog(GitNotifier notifier, {GitStatus? status, String? commitHash}) {
+    final tagCtrl = TextEditingController(text: _suggestNextVersionTag(status, 'patch'));
+    final msgCtrl = TextEditingController(text: 'Release');
+    bool pushRemote = status?.remoteUrl != null;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF161922),
+          title: const Text('Создать тег версии', style: TextStyle(color: Colors.white, fontSize: 15)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: tagCtrl,
+                style: GoogleFonts.jetBrainsMono(color: Colors.amberAccent, fontSize: 13),
+                decoration: const InputDecoration(labelText: 'Имя тега (например v1.0.1)'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: msgCtrl,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                decoration: const InputDecoration(labelText: 'Описание'),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                value: pushRemote,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Отправить тег в GitHub (git push --tags)', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                onChanged: (v) => setDialogState(() => pushRemote = v ?? false),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+            ElevatedButton(
+              onPressed: () {
+                if (tagCtrl.text.trim().isNotEmpty) {
+                  notifier.createVersionTag(
+                    tagCtrl.text.trim(),
+                    msgCtrl.text.trim(),
+                    pushToRemote: pushRemote,
+                    commitHash: commitHash,
+                  );
+                  Navigator.pop(ctx);
+                }
+              },
+              child: const Text('Создать тег'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _suggestNextVersionTag(GitStatus? status, String bumpType) {
+    String base = status?.projectVersion?.split('+').first ?? '1.0.0';
+    if (status != null && status.tags.isNotEmpty) {
+      final latestTag = status.tags.first.name;
+      final clean = latestTag.startsWith('v') ? latestTag.substring(1) : latestTag;
+      if (RegExp(r'^\d+\.\d+\.\d+').hasMatch(clean)) {
+        base = clean.split('-').first.split('+').first;
+      }
+    }
+    final parts = base.split('.');
+    int major = parts.isNotEmpty ? (int.tryParse(parts[0]) ?? 1) : 1;
+    int minor = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    int patch = parts.length > 2 ? (int.tryParse(parts[2]) ?? 0) : 0;
+
+    if (bumpType == 'major') {
+      major++;
+      minor = 0;
+      patch = 0;
+    } else if (bumpType == 'minor') {
+      minor++;
+      patch = 0;
+    } else {
+      patch++;
+    }
+    return 'v$major.$minor.$patch';
+  }
+
+  void _showReleaseAndBuildModal(GitStatus status, GitNotifier notifier) {
+    final tagCtrl = TextEditingController(text: _suggestNextVersionTag(status, 'patch'));
+    final notesCtrl = TextEditingController(
+      text: _commitController.text.trim().isNotEmpty
+          ? _commitController.text.trim()
+          : 'Release ${ _suggestNextVersionTag(status, 'patch') }',
+    );
+    bool isReleasing = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF141824),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            top: 16,
+            bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 16,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Выпуск релиза и сборка APK в GitHub Actions',
+                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: tagCtrl,
+                style: GoogleFonts.jetBrainsMono(color: Colors.amberAccent, fontSize: 13),
+                decoration: const InputDecoration(labelText: 'Тег релиза (vX.Y.Z)'),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: notesCtrl,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+                decoration: const InputDecoration(labelText: 'Описание релиза'),
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                onPressed: isReleasing
                     ? null
                     : () async {
-                        final tag = tagController.text.trim();
+                        final tag = tagCtrl.text.trim();
                         if (tag.isEmpty) return;
-
-                        final scaffoldMessenger = ScaffoldMessenger.of(context);
-                        setDialogState(() => isSubmitting = true);
-
+                        setModalState(() => isReleasing = true);
                         try {
-                          final currentWorkspace = ref.read(workspaceProvider).currentPath;
-                          if (currentWorkspace != null) {
-                            await GitHubService().setupCloudApkWorkflow(currentWorkspace);
-                          }
-
-                          await ref.read(gitProvider.notifier).releaseAndBuildApk(
-                                tagName: tag,
-                                commitMessage: commitController.text.trim(),
-                                releaseNotes: notesController.text.trim(),
-                              );
-
-                          if (dialogCtx.mounted) {
-                            Navigator.pop(dialogCtx);
-                          }
-
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content: Text(l10n.releaseTriggeredSuccess(tag)),
-                              backgroundColor: const Color(0xFF238636),
-                              duration: const Duration(seconds: 5),
-                            ),
+                          await notifier.releaseAndBuildApk(
+                            tagName: tag,
+                            commitMessage: 'chore(release): $tag — ${notesCtrl.text.trim()}',
+                            releaseNotes: notesCtrl.text.trim(),
                           );
-                        } catch (e) {
-                          setDialogState(() => isSubmitting = false);
-                          scaffoldMessenger.showSnackBar(
-                            SnackBar(
-                              content: Text(l10n.releaseTriggerFailed(e.toString())),
-                              backgroundColor: Colors.redAccent,
-                            ),
-                          );
+                          if (modalCtx.mounted) Navigator.pop(modalCtx);
+                          final remote = status.remoteUrl;
+                          if (remote != null && remote.contains('github.com')) {
+                            var cleanUrl = remote.replaceAll('.git', '');
+                            if (cleanUrl.startsWith('git@github.com:')) {
+                              cleanUrl = cleanUrl.replaceFirst('git@github.com:', 'https://github.com/');
+                            }
+                            final uri = Uri.tryParse('$cleanUrl/actions');
+                            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                          }
+                        } catch (_) {
+                          if (modalCtx.mounted) setModalState(() => isReleasing = false);
                         }
                       },
-                icon: const Icon(LucideIcons.send, size: 14),
-                label: Text(l10n.publishReleaseBtn),
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF238636),
+                icon: const Icon(LucideIcons.rocket, size: 15),
+                label: Text(isReleasing ? 'Отправка в GitHub...' : 'Закоммитить, создать тег и запустить сборку'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8B5CF6),
                   foregroundColor: Colors.white,
                 ),
               ),
             ],
-          );
-        },
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGitGuideModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141824),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => const Padding(
+        padding: EdgeInsets.all(16),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Icon(LucideIcons.book_open, color: Color(0xFF00F2FE), size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'Как работает профессиональный Git в Quantum IDE',
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              SizedBox(height: 12),
+              Text(
+                '1. Рабочая копия (Working Tree) → Индекс (Staged):\n'
+                '   • Все изменённые (M) и новые (U) файлы появляются в разделе «Рабочая копия».\n'
+                '   • Нажмите на файл, чтобы открыть визуальный Diff (сравнение было/стало).\n'
+                '   • Нажмите «+» напротив нужных файлов, чтобы перенести их в «Индекс (Staged)» для точечного коммита.\n\n'
+                '2. Коммит и Conventional Commits:\n'
+                '   • Используйте быстрые префиксы (feat:, fix:, refactor:) или кнопку «✨ AI» для автогенерации описания по вашим правкам.\n'
+                '   • Флажок «Amend» позволяет дополнить предыдущий коммит без создания нового.\n\n'
+                '3. История, Cherry-pick, Revert и Reset:\n'
+                '   • Во вкладке «История» нажмите на любой коммит — откроется Инспектор коммита со списком файлов, полным патчем и кнопками Cherry-pick, Revert, Reset (--soft/--mixed/--hard) и создания ветки.\n\n'
+                '4. Ветки и Stash:\n'
+                '   • Во вкладке «Ветки / Stash» вы можете переключать локальные и удалённые ветки, вливать (Merge) одну ветку в другую и управлять Stash-хранилищем.',
+                style: TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoRepoView(GitNotifier notifier, bool isLight) {
+    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
+    final subColor = isLight ? Colors.black54 : Colors.white54;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(LucideIcons.folder_git_2, size: 42, color: Color(0xFF00F2FE)),
+            const SizedBox(height: 12),
+            Text(
+              'Git-репозиторий не инициализирован',
+              style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Инициализируйте Git в текущем проекте, чтобы отслеживать изменения, управлять ветками и пушить на GitHub.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: subColor, fontSize: 11),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => notifier.init(),
+              icon: const Icon(LucideIcons.plus, size: 15),
+              label: const Text('Инициализировать Git (git init)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00F2FE),
+                foregroundColor: Colors.black,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
-
-

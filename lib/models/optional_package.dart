@@ -55,11 +55,19 @@ const String _sdkPrefix = '$_ensureCmdlineTools && '
     '/root/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/root/android-sdk';
 
 String _cmakeArm64Command(String version, String sdkDirName) {
-  return '${_aptPrefix}apt install -y cmake ninja-build ca-certificates && '
-      'mkdir -p /root/android-sdk/cmake/$sdkDirName/bin && '
-      'ln -sf /usr/bin/cmake /root/android-sdk/cmake/$sdkDirName/bin/cmake && '
+  return '${_aptPrefix}apt install -y curl wget tar ninja-build ca-certificates && '
+      'mkdir -p /opt/cmake-$version /root/android-sdk/cmake/$sdkDirName/bin && '
+      '(curl -k -fL --retry 3 -o /tmp/cmake.tar.gz "https://github.com/Kitware/CMake/releases/download/v$version/cmake-$version-linux-aarch64.tar.gz" || '
+      'wget --no-check-certificate -qO /tmp/cmake.tar.gz "https://github.com/Kitware/CMake/releases/download/v$version/cmake-$version-linux-aarch64.tar.gz") && '
+      'tar -xzf /tmp/cmake.tar.gz --strip-components=1 -C /opt/cmake-$version && '
+      'rm -f /tmp/cmake.tar.gz && '
+      'ln -sf /opt/cmake-$version/bin/cmake /usr/local/bin/cmake && '
+      'ln -sf /opt/cmake-$version/bin/cmake /usr/bin/cmake && '
+      'printf "#!/bin/bash\\n/usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true\\nexec /opt/cmake-$version/bin/cmake \\"\\\$@\\"\\n" > /root/android-sdk/cmake/$sdkDirName/bin/cmake && '
+      'chmod +x /root/android-sdk/cmake/$sdkDirName/bin/cmake && '
       'ln -sf /usr/bin/ninja /root/android-sdk/cmake/$sdkDirName/bin/ninja && '
       'printf "Pkg.Desc = CMake $version\\nPkg.Revision = $version\\n" > /root/android-sdk/cmake/$sdkDirName/source.properties && '
+      '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && '
       'echo "CMake $version (ARM64 native) successfully configured"';
 }
 

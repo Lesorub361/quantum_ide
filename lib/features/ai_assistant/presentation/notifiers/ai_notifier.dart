@@ -417,6 +417,14 @@ class AINotifier extends StateNotifier<AIState> {
         addLiveActivity(activity);
       },
       onDeltaText: (delta) {
+        if (delta.isEmpty) return;
+        // Deduplicate if the incoming chunk is identical to the entire accumulated response
+        // or already present at the end of accumulatedText (e.g., final DONE step_update).
+        if (accumulatedText.isNotEmpty &&
+            delta.length >= 24 &&
+            (accumulatedText == delta || accumulatedText.endsWith(delta))) {
+          return;
+        }
         accumulatedText += delta;
         _updateLastAssistantMessage(accumulatedText, isDone: false);
       },
@@ -474,7 +482,11 @@ class AINotifier extends StateNotifier<AIState> {
         workedMillis: durationMillis > 0 ? durationMillis : list[lastIdx].workedMillis,
         workItems: state.liveActivityItems,
       );
-      state = state.copyWith(messages: list);
+      if (isDone) {
+        _updateMessagesAndSync(list);
+      } else {
+        state = state.copyWith(messages: list);
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
+import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/problems_panel.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/widgets/global_search_panel.dart';
@@ -78,7 +79,16 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     );
   }
 
-  Widget _buildActivityIcon(WidgetRef ref, int index, IconData icon, String tooltip, bool isActive, {int badgeCount = 0, bool isMobile = false}) {
+  Widget _buildActivityIcon(
+    WidgetRef ref,
+    int index,
+    IconData icon,
+    String tooltip,
+    bool isActive, {
+    int badgeCount = 0,
+    Color badgeColor = const Color(0xFFFF3C3C),
+    bool isMobile = false,
+  }) {
     const activeColor = Color(0xFF4CD7F6);
     final iconWidget = Icon(
       icon,
@@ -115,8 +125,8 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                       top: -4,
                       child: Container(
                         padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFF3C3C), // Mandy Red
+                        decoration: BoxDecoration(
+                          color: badgeColor,
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(
@@ -148,15 +158,26 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     final workspacePath = ref.watch(workspaceProvider.select((s) => s.currentPath ?? ''));
     final selectedTab = ref.watch(drawerTabProvider);
 
-    // Оптимизировано: считываем только количество проблем через select() — не ребилдимся при каждом нажатии клавиши!
-    final totalProblems = ref.watch(editorProvider.select((s) {
-      if (workspacePath.isEmpty) return 0;
-      int count = 0;
+    // Оптимизировано: учитываем только реальные ошибки (error) и предупреждения (warning), не пугая пользователя красным бейджем из-за мелких подсказок (hint/info).
+    final (errorCount, warningCount) = ref.watch(editorProvider.select((s) {
+      if (workspacePath.isEmpty) return (0, 0);
+      int errors = 0;
+      int warnings = 0;
       s.allDiagnostics.forEach((filePath, list) {
-        if (filePath.startsWith(workspacePath)) count += list.length;
+        if (filePath.startsWith(workspacePath)) {
+          for (final d in list) {
+            if (d.severity == CodeDiagnosticSeverity.error) {
+              errors++;
+            } else if (d.severity == CodeDiagnosticSeverity.warning) {
+              warnings++;
+            }
+          }
+        }
       });
-      return count;
+      return (errors, warnings);
     }));
+    final totalProblems = errorCount + warningCount;
+    final problemsBadgeColor = errorCount > 0 ? const Color(0xFFFF3C3C) : const Color(0xFFF59E0B);
 
     final gitChangesCount = ref.watch(gitProvider.select((s) =>
       (s.status?.stagedFiles.length ?? 0) +
@@ -193,7 +214,16 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                   if (!disabledTabs.contains('disk'))
                     _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3, isMobile: isMobile),
                   if (!disabledTabs.contains('problems'))
-                    _buildActivityIcon(ref, 4, LucideIcons.circle_alert, AppLocalizations.of(context)!.problems, selectedTab == 4, badgeCount: totalProblems, isMobile: isMobile),
+                    _buildActivityIcon(
+                      ref,
+                      4,
+                      LucideIcons.circle_alert,
+                      AppLocalizations.of(context)!.problems,
+                      selectedTab == 4,
+                      badgeCount: totalProblems,
+                      badgeColor: problemsBadgeColor,
+                      isMobile: isMobile,
+                    ),
                   if (!disabledTabs.contains('git'))
                     _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount, isMobile: isMobile),
                   if (!disabledTabs.contains('preview'))
@@ -687,7 +717,7 @@ class DrawerStatsPanel extends ConsumerWidget {
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerRight,
                             child: Text(
-                              '${stats.ramUsedGB.toStringAsFixed(1)} / ${stats.ramTotalGB.toStringAsFixed(0)} GB', 
+                              stats.appRamFormatted,
                               style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _getLoadColor(stats.ramUsage), fontWeight: FontWeight.bold)
                             ),
                           ),
