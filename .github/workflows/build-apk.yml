@@ -32,22 +32,30 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.47 - AI Agent Tool Calling Fix & Sleek Terminal UI/Selection Overhaul
+        ## 🚀 QuantumIDE v1.2.48 - USB-C OTG ADB Bridge, RAM Optimization, Terminal Input Fix & AI Agent Overhaul
 
-        ### 🤖 Исправление вызовов инструментов ИИ-агента (Special Tool Call Tokens & Liquid LFM Fix):
-        - **Парсинг токенов `<|tool_call_start|>` и списков вызовов**: Полная поддержка специальных форматов вызова инструментов (`<|tool_call_start|>...<|tool_call_end|>`, `<tool_call>`, `<|action_start|>`, списки `[read_file(path='...'), ...]`).
-        - **Автоматическое исполнение**: Устранена проблема, когда агент возвращал сырой текст `<|tool_call_start|>[read_file(...)]<|tool_call_end|>` вместо исполнения действий.
-        - **Статический анализ**: Поддержка и маппинг вызовов `flutter_analyze` / `dart_analyze` в исполняемые команды проекта.
-        - **Дедупликация действий**: Предотвращение повторного чтения одного и того же файла в одном шаге агента.
+        ### 🔌 Прямая работа с устройствами по USB-C OTG и установка любых APK:
+        - **Нативный USB-C OTG ↔ ADB мост (`UsbAdbBridge.kt`)**: Подключение внешнего телефона/планшета напрямую кабелем Type-C без ПК, автоматический RSA-ключ, `installApkOnUsbDevice` (streaming `pm install`), `runUsbShell` и чтение `logcat`.
+        - **Установка любого `.apk` из редактора**: Кнопка выбора и установки произвольного APK в Менеджере устройств + CLI утилита `quantum-device`.
 
-        ### 📱 Редизайн и оптимизация интерфейса терминала (Terminal UI & Touch Selection):
-        - **Пиксельно точное выделение текста**: Устранен визуальный сдвиг оверлея относительно терминала за счет нормализации координат RenderBox.
-        - **Нативные каплевидные ручки (Teardrop Pins)**: Заменены артефактные палочки-леденцы на аккуратные гладкие пины выделения без перекрытия текста строками. Добавлена защита от инверсии/скрещивания ручек при перетаскивании.
-        - **Компактный плавающий тулбар**: `[Копировать] [AI ✨] [Поделиться] [✕]` с умным позиционированием выше/ниже выделения.
-        - **Очистка от визуального шума и лишних кнопок**:
-          - Из шапки терминала убраны 5 избыточных кнопок на мобильных экранах — `copyAll`, `split`, `wakelock` и `inline selection` аккуратно перенесены в меню `⋮`.
-          - Из виртуальной клавиатуры удалены дублирующие кнопки `SEL` и `COPY`, второй ряд отдан под востребованные спецсимволы: `~`, `/`, `-`, `_`, `|`, `\`, `"`, `'`, `:`.
-          - Панель плагинов (`Pub Get`, `Format Code`) автоматически скрывается при открытой клавиатуре и оптимизирована по высоте.
+        ### ⚡ Кардинальная оптимизация ОЗУ и производительности на планшетах и телефонах:
+        - **Лимит кучи Dart Analysis Server (`--old_gen_heap_size=384`)**: Снижение потребления памяти фоновым анализатором в 3–4 раза.
+        - **Авто-остановка неиспользуемых LSP-серверов**: Фоновые языковые серверы выгружаются при закрытии последнего файла соответствующего языка.
+        - **Ограничение пула процессов (`RuntimeService`) и изолятов (`SymbolIndexerService`)**: Исключены пиковые перегрузки CPU/RAM при открытии больших проектов.
+        - **Устранение ребилдов UI и `BackdropFilter` лагов**: Оптимизированы `EditorPage`, `EditorNotifier` и `GlassContainer` на мобильных GPU.
+
+        ### ⌨️ Исправление ввода и отображения терминала при открытии клавиатуры:
+        - **Прямой `TextInputClient` (`_AndroidTerminalDirectInput`)**: Полностью устранено «прыгание» русских/латинских букв по углам экрана (вверх/вниз/вправо) при печати в TUI-приложениях (`agy`, `claude`, `vim`, `htop`).
+        - **Позиционирование над экранной клавиатурой (`bottom: keyboardInset`)**: Нижняя панель терминала на планшетах и телефонах больше не перекрывается клавиатурой и не мерцает при её открытии.
+        - **Умное отключение автодополнения путей в TUI**: Всплывающее окно подсказок больше не мешает работе в `agy` и других интерактивных CLI.
+
+        ### 📦 Исправление проверки пакетов и локальной сборки APK «из коробки»:
+        - **Корректное распознавание симлинков в PRoot (`followLinks: false`)**: Окно «Необходимые компоненты» больше не появляется повторно при каждом запуске проекта.
+        - **Готовая локальная сборка APK (`build-tools` 34/35/36 + `platforms` 34/35/36)**: Автоматическое комплектование `d8`, `core-lambda-stubs.jar`, `apksigner`, `aapt2` и CMake/Ninja для сборки проектов сразу после установки IDE.
+
+        ### 🤖 Исправление встроенного ИИ-чат-бота (`AINotifier` & `CliAgentBridge`):
+        - **Немедленное выполнение действий на 1-м шаге**: Устранена ошибка, из-за которой `Planner` отбрасывал блок `<actions>` на первом шаге.
+        - **Корректная передача истории и ошибок `replace_code_block`**: Чат-бот теперь видит результаты команд и ошибки сопоставления блоков, автоматически перечитывает файл через `read_file` и доводит исправления до конца.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -142,11 +150,11 @@ jobs:
           retention-days: 14
 
       - name: Create GitHub Release
-        if: github.ref_type == 'tag' && (startsWith(github.ref_name, 'v') || github.event.inputs.create_release == 'true')
+        if: (github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
-          name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || github.ref_name }}
+          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || 'v1.2.48') }}
+          name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || 'v1.2.48') }}
           body: ${{ github.event.inputs.release_notes != '' && github.event.inputs.release_notes || env.DEFAULT_NOTES }}
           files: |
             build/app/outputs/flutter-apk/app-release.apk

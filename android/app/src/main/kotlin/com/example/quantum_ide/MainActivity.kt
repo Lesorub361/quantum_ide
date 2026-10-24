@@ -27,6 +27,7 @@ class MainActivity : FlutterActivity() {
     private val DOWNLOAD_CHANNEL = "com.example.quantum_ide/download"
     private lateinit var bootstrapManager: BootstrapManager
     private lateinit var processManager: ProcessManager
+    private var usbAdbBridge: UsbAdbBridge? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val downloadIds = mutableMapOf<String, Long>()
 
@@ -38,6 +39,10 @@ class MainActivity : FlutterActivity() {
 
         bootstrapManager = BootstrapManager(applicationContext, filesDir, nativeLibDir)
         processManager = ProcessManager(filesDir, nativeLibDir)
+        usbAdbBridge?.stop()
+        usbAdbBridge = UsbAdbBridge(applicationContext, filesDir, processManager).also {
+            it.start()
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -151,36 +156,30 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "isUsbHostSupported" -> {
-                    try {
-                        val hasHost = packageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
-                        result.success(hasHost)
-                    } catch (e: Exception) {
-                        result.success(false)
-                    }
+                    result.success(usbAdbBridge?.isUsbHostSupported() ?: false)
                 }
                 "getConnectedUsbDevices" -> {
-                    try {
-                        val usbManager = getSystemService(Context.USB_SERVICE) as? android.hardware.usb.UsbManager
-                        val deviceList = usbManager?.deviceList?.values?.map { dev ->
-                            val manufacturer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                                try { dev.manufacturerName ?: "" } catch (_: Exception) { "" }
-                            } else ""
-                            val product = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                                try { dev.productName ?: "" } catch (_: Exception) { "" }
-                            } else ""
-                            mapOf(
-                                "deviceName" to dev.deviceName,
-                                "vendorId" to dev.vendorId,
-                                "productId" to dev.productId,
-                                "manufacturer" to manufacturer,
-                                "product" to product,
-                                "deviceClass" to dev.deviceClass
-                            )
-                        } ?: emptyList<Map<String, Any?>>()
-                        result.success(deviceList)
-                    } catch (e: Exception) {
-                        result.success(emptyList<Map<String, Any?>>())
-                    }
+                    val autoReq = call.argument<Boolean>("autoRequestPermission") ?: true
+                    Thread {
+                        try {
+                            val list = usbAdbBridge?.scanAndConnectUsbDevices(autoRequestPermission = autoReq)
+                                ?: emptyList()
+                            runOnUiThread { result.success(list) }
+                        } catch (e: Exception) {
+                            runOnUiThread { result.success(emptyList<Map<String, Any?>>()) }
+                        }
+                    }.start()
+                }
+                "connectUsbOtg" -> {
+                    Thread {
+                        try {
+                            val list = usbAdbBridge?.scanAndConnectUsbDevices(autoRequestPermission = true)
+                                ?: emptyList()
+                            runOnUiThread { result.success(list) }
+                        } catch (e: Exception) {
+                            runOnUiThread { result.error("USB_OTG_ERROR", e.message, null) }
+                        }
+                    }.start()
                 }
                 else -> result.notImplemented()
             }
@@ -359,5 +358,10 @@ class MainActivity : FlutterActivity() {
         } catch (_: Exception) {
             false
         }
+    }
+
+    override fun onDestroy() {
+        usbAdbBridge?.stop()
+        super.onDestroy()
     }
 }

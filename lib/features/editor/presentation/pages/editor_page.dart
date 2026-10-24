@@ -255,6 +255,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   double _rightSidebarWidth = 340.0;
   bool _isResizingLeft = false;
   bool _isResizingRight = false;
+  bool _wasmWebViewEnabled = false;
 
   void _showWasmActionSelector(BuildContext context, WidgetRef ref, int activeFileIndex) {
     final l10n = AppLocalizations.of(context)!;
@@ -269,6 +270,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         ),
       );
       return;
+    }
+
+    if (!_wasmWebViewEnabled) {
+      setState(() => _wasmWebViewEnabled = true);
     }
 
     AdaptiveDialogHelper.showAdaptiveSheet(
@@ -629,14 +634,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     ));
     final isServerRunning = ref.watch(serverRunningProvider);
 
-    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    final double keyboardInset = MediaQuery.of(context).viewInsets.bottom;
+    final isKeyboardOpen = keyboardInset > 0;
 
     final mainBody = LayoutBuilder(
       builder: (context, constraints) {
-        final double availableHeight = constraints.maxHeight;
-        final isMobileTerminalWithKeyboard = !isDesktop && isKeyboardOpen && panelState.selectedTab == PanelTab.terminal;
+        final double availableHeight = (constraints.maxHeight - keyboardInset).clamp(120.0, constraints.maxHeight);
+        final isMobileTerminalWithKeyboard =
+            (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
+            isKeyboardOpen &&
+            panelState.selectedTab == PanelTab.terminal;
 
-        // Panel height: drag range 90..availableHeight (full screen overlay)
+        // Panel height: drag range 90..availableHeight (above software keyboard)
         double activePanelHeight = 0.0;
         if (panelState.isOpened) {
           if (panelState.isMaximized || isMobileTerminalWithKeyboard) {
@@ -650,14 +659,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           children: [
             // ── Редактор (динамически уменьшает высоту при открытии панели) ────
             AnimatedPositioned(
-              duration: _isDragging
+              duration: (_isDragging || isKeyboardOpen)
                   ? Duration.zero
-                  : const Duration(milliseconds: 280),
+                  : const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
               top: 0,
               left: 0,
               right: 0,
-              bottom: activePanelHeight,
+              bottom: activePanelHeight + keyboardInset,
               child: activeFile == null
                   ? _buildDashboard(context, ref, isDesktop, workspacePath)
                   : Column(
@@ -800,15 +809,15 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               ),
             ),
 
-            // ── Панель (overlay, выезжает снизу поверх редактора) ────
+            // ── Панель (overlay, выезжает снизу поверх редактора над клавиатурой) ────
             AnimatedPositioned(
-              duration: _isDragging
+              duration: (_isDragging || isKeyboardOpen)
                   ? Duration.zero
-                  : const Duration(milliseconds: 280),
+                  : const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
               left: 0,
               right: 0,
-              bottom: 0,
+              bottom: keyboardInset,
               height: activePanelHeight,
               child: activePanelHeight > 0
                   ? _buildBottomPanel(
@@ -1103,16 +1112,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       endDrawer: null,
       body: Stack(
         children: [
-          Positioned(
-            left: 0,
-            top: 0,
-            width: 1,
-            height: 1,
-            child: SizedBox(
+          if (_wasmWebViewEnabled && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS))
+            Positioned(
+              left: 0,
+              top: 0,
               width: 1,
               height: 1,
-              child: (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
-                  ? InAppWebView(
+              child: SizedBox(
+                width: 1,
+                height: 1,
+                child: InAppWebView(
                       initialSettings: InAppWebViewSettings(
                         javaScriptEnabled: true,
                         domStorageEnabled: true,
@@ -1217,10 +1226,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       onWebViewCreated: (controller) {
                         ref.read(wasmPluginServiceProvider.notifier).setController(controller);
                       },
-                    )
-                  : const SizedBox.shrink(),
+                    ),
+              ),
             ),
-          ),
           Positioned.fill(
             child: isDesktop 
                 ? _buildDesktopMultiSplit(
@@ -1250,8 +1258,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     double maxAllowedPanelHeight,
   ) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
-    final isMobileTerminalWithKeyboard = !isDesktop && isKeyboardOpen && panelState.selectedTab == PanelTab.terminal;
+    final isDesktop = MediaQuery.of(context).size.width > 800;
+    final isMobileTerminalWithKeyboard =
+        (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
+        isKeyboardOpen &&
+        panelState.selectedTab == PanelTab.terminal;
 
     final double targetHeight = (panelState.isMaximized || isMobileTerminalWithKeyboard)
         ? maxAllowedPanelHeight

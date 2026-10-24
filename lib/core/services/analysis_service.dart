@@ -26,13 +26,20 @@ class AnalysisService {
   }
 
   void triggerAnalysis({bool immediate = false}) {
+    // On mobile/tablet (Android/iOS), LspService (dart language-server) already provides
+    // real-time diagnostics over stdio. Spawning a separate `dart analyze .` VM on every edit
+    // consumes an extra 600+ MB of RAM and saturates CPU in PRoot.
+    if (defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS) {
+      return;
+    }
     _debounceTimer?.cancel();
     if (immediate) {
       _debounceTimer = Timer(const Duration(seconds: 5), () {
         runAnalysis();
       });
     } else {
-      _debounceTimer = Timer(const Duration(seconds: 10), () {
+      _debounceTimer = Timer(const Duration(seconds: 15), () {
         runAnalysis();
       });
     }

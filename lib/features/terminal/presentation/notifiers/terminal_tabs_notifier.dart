@@ -176,7 +176,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       bool hadUserCommandRecently = false;
 
       final xtermTerm = xt.Terminal(
-        maxLines: 8000,
+        maxLines: 2500,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : (Platform.isIOS
@@ -197,7 +197,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           final safeCols = cols.clamp(20, 400);
           if (safeRows != lastRows || safeCols != lastCols) {
             resizeDebounceTimer?.cancel();
-            resizeDebounceTimer = Timer(const Duration(milliseconds: 320), () {
+            resizeDebounceTimer = Timer(const Duration(milliseconds: 80), () {
               if (safeRows != lastRows || safeCols != lastCols) {
                 lastRows = safeRows;
                 lastCols = safeCols;
@@ -357,7 +357,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         final safeRows = rows.clamp(6, 250);
         final safeCols = cols.clamp(20, 400);
         restartResizeDebounce?.cancel();
-        restartResizeDebounce = Timer(const Duration(milliseconds: 320), () {
+        restartResizeDebounce = Timer(const Duration(milliseconds: 80), () {
           if (safeRows != lastRestartRows || safeCols != lastRestartCols) {
             lastRestartRows = safeRows;
             lastRestartCols = safeCols;

@@ -980,7 +980,7 @@ class AINotifier extends StateNotifier<AIState> {
       taskStartedAt: taskStart,
       totalTokens: state.totalTokens + userTokens,
       canRollback: _lastCheckpointRef != null,
-      activeAgentRole: isAutopilot ? 'Planner' : (isDebug ? 'Debugger' : null),
+      activeAgentRole: isAutopilot ? 'Coder' : (isDebug ? 'Debugger' : null),
       currentStatusMessage: isAutopilot ? l10n.analyzingTaskAndPlanning : (isDebug ? 'Анализ бага...' : null),
     );
     _updateMessagesAndSync([...state.messages, userMessage]);
@@ -1153,9 +1153,13 @@ class AINotifier extends StateNotifier<AIState> {
           systemInstruction = systemInstruction + sessionMemoryAddendum;
         }
 
-        // Prepare conversation history
-        final history = state.messages
-            .where((m) => m != state.messages.last)
+        // Prepare conversation history:
+        // On Step 1, exclude userMessage because nextPrompt is the user prompt.
+        // On Step 2+, include userMessage and assistant messages (excluding UI step-log cards),
+        // while nextPrompt carries the tool results for the current step.
+        final history = (currentStep == 1
+                ? state.messages.where((m) => m != userMessage && !m.isActionStep && !m.isStepSummary)
+                : state.messages.where((m) => !m.isActionStep && !m.isStepSummary && m.content.trim().isNotEmpty))
             .map((m) => {
                   'role': m.role == MessageRole.user 
                       ? 'user' 
@@ -1508,7 +1512,7 @@ class AINotifier extends StateNotifier<AIState> {
               )
             ]);
 
-            nextPrompt = '$nextPrompt\n\n$resultsText\n\nПожалуйста, продолжи выполнение запроса пользователя на основе полученных данных.';
+            nextPrompt = '$resultsText\n\nПожалуйста, продолжи выполнение запроса пользователя на основе полученных данных.';
             continue;
           } else {
             // No actions proposed, or all executed. Finish chat turn.
@@ -1537,14 +1541,14 @@ class AINotifier extends StateNotifier<AIState> {
         }
 
         if (state.activeAgentRole == 'Planner') {
-          // Move from Planner to Coder once the plan is made
           state = state.copyWith(
             activeAgentRole: 'Coder',
             currentStatusMessage: l10n.generatingCodeChanges,
           );
-          nextPrompt = 'Plan accepted. Please implement the changes according to the proposed plan and output the actions.';
-          // Убрана искусственная задержка 500мс — она не нужна, только замедляет агента
-          continue;
+          if (actions.isEmpty) {
+            nextPrompt = 'Plan accepted. Please implement the changes according to the proposed plan and output the actions.';
+            continue;
+          }
         }
 
         if (actions.isEmpty) {
@@ -1568,7 +1572,7 @@ class AINotifier extends StateNotifier<AIState> {
                 lowerClean.contains('will') || 
                 lowerClean.contains('next step');
 
-            if (mentionsCheck) {
+            if (mentionsCheck && currentStep == 1) {
               // Model intended to check for errors/analysis — auto-run static analysis and feed results
               state = state.copyWith(
                 activeAgentRole: 'Validator',
@@ -1596,20 +1600,13 @@ class AINotifier extends StateNotifier<AIState> {
                     'Продолжай автономное выполнение задачи по плану: переходи к реализации следующего шага и обязательно выведи действия в блоке <actions>!';
               }
               continue;
-            } else if (mentionsIntent) {
+            } else if (mentionsIntent && currentStep <= 2) {
               state = state.copyWith(
                 activeAgentRole: 'Coder',
                 currentStatusMessage: l10n.generatingCodeChanges,
               );
               nextPrompt = 'Ты сообщил: "$cleanContent".\n\n'
                   'Не останавливайся! Сразу выполни это действие: выведи команды или изменения файлов в формате <actions>.';
-              continue;
-            } else if (state.activeAgentRole == 'Coder') {
-              state = state.copyWith(
-                activeAgentRole: 'Validator',
-                currentStatusMessage: l10n.verifyingImplementation,
-              );
-              nextPrompt = 'Please verify the implementation. Are there any compilation or analyzer errors? If all is good, write "Task completed".';
               continue;
             }
           }
@@ -1739,14 +1736,36 @@ class AINotifier extends StateNotifier<AIState> {
             )
           ]);
 
-          final isReadOnlyBatch = allowedActions.every(_isReadOnlyAction);
-          if (isReadOnlyBatch) {
-            final resultsText = allowedActions
-                .asMap()
-                .map((idx, act) => MapEntry(idx, '[Результат действия ${act.type} для ${act.path.isNotEmpty ? act.path : act.content}]\n${results[idx]}'))
-                .values
-                .join('\n\n');
-            nextPrompt = '$nextPrompt\n\n$resultsText\n\nПожалуйста, ответь на вопрос пользователя или продолжи анализ задачи на основе полученных данных.';
+          final resultsText = allowedActions
+              .asMap()
+              .map((idx, act) => MapEntry(idx, '[Результат действия ${act.type} для ${act.path.isNotEmpty ? act.path : act.content}]\n${results[idx]}'))
+              .values
+              .join('\n\n');
+
+          final hasActionFailure = results.any((r) =>
+              r.contains('не найден в файле') ||
+              r.contains('Защита от перезаписи') ||
+              r.startsWith('Error:') ||
+              r.contains('Command failed'));
+
+          final hasFileModifications = allowedActions.any((a) =>
+              a.type == 'edit' ||
+              a.type == 'create' ||
+              a.type == 'replace_code_block' ||
+              a.type == 'rewrite_whole_file' ||
+              a.type == 'delete' ||
+              a.type == 'insert_log');
+
+          if (!hasFileModifications || hasActionFailure) {
+            state = state.copyWith(
+              activeAgentRole: 'Coder',
+              currentStatusMessage: hasActionFailure
+                  ? 'Уточнение контекста файла после ошибки сопоставления...'
+                  : l10n.generatingCodeChanges,
+            );
+            nextPrompt = hasActionFailure
+                ? '$resultsText\n\nОдно или несколько действий не удалось применить. Сначала прочитай целевой файл через `read_file`, чтобы увидеть точный код, и затем примени `replace_code_block` с точным `search_block`.'
+                : '$resultsText\n\nПожалуйста, ответь на вопрос пользователя или продолжи выполнение задачи на основе полученных данных.';
             continue;
           }
 

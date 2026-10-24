@@ -33,7 +33,7 @@ class RuntimeService extends ChangeNotifier {
   String _nativeLibDir = '';
   final _dio = Dio();
 
-  static const int _maxConcurrentCommands = 1;
+  static const int _maxConcurrentCommands = 3;
   int _runningCommands = 0;
   final List<Completer<void>> _commandQueue = [];
 
@@ -463,7 +463,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '14';
+    const bashrcVersion = '15';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -501,7 +501,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=14
+# BASHRC_VERSION=15
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -520,8 +520,10 @@ else
         export JAVA_HOME="/usr/lib/jvm/java-17-openjdk-arm64"
     fi
 fi
-if command -v flutter >/dev/null 2>&1 && [ -d "$JAVA_HOME" ]; then
-    flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1 || true
+if [ -d "$JAVA_HOME" ] && ! grep -q "$JAVA_HOME" /root/.config/flutter/settings 2>/dev/null; then
+    if command -v flutter >/dev/null 2>&1; then
+        flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1 || true
+    fi
 fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
@@ -532,13 +534,13 @@ export HISTSIZE=5000
 export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
 
-# Starship-inspired developer prompt with git status (proper readline SOH/STX 001/002 escaping)
+# Zero-fork pure-bash git branch prompt (avoids expensive `git status` across 3000+ files in PRoot)
 __git_info() {
-    local branch=$(git branch --show-current 2>/dev/null)
-    if [ -n "$branch" ]; then
-        local status_icon=""
-        [ -n "$(git status --porcelain 2>/dev/null)" ] && status_icon="*"
-        printf " \001\033[35m\002git:(\001\033[1;31m\002%s%s\001\033[0m\033[35m\002)\001\033[0m\002" "$branch" "$status_icon"
+    if [ -f ".git/HEAD" ]; then
+        local head_ref
+        read -r head_ref < ".git/HEAD" 2>/dev/null || return
+        local branch="${head_ref#ref: refs/heads/}"
+        printf " \001\033[35m\002git:(\001\033[1;31m\002%s\001\033[0m\033[35m\002)\001\033[0m\002" "$branch"
     fi
 }
 export PS1="\[\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;34m\]\$ \[\e[0m\]"
@@ -1455,7 +1457,11 @@ fi
 # setup-arm64.sh - Automatically configure ARM64 environment inside QuantumIDE
 # This script is called by init-host in the background.
 
-# Prevent multiple instances of setup-arm64.sh running at once
+# Prevent multiple instances of setup-arm64.sh running at once or re-running unnecessarily
+DONE_FLAG="/tmp/setup_arm64_done.flag"
+if [ -f "$DONE_FLAG" ] && [ "$1" != "--force" ]; then
+    exit 0
+fi
 LOCKFILE="/tmp/setup_daemon.lock"
 if [ -f "$LOCKFILE" ]; then
     read -r last_pid < "$LOCKFILE"
@@ -1465,6 +1471,7 @@ if [ -f "$LOCKFILE" ]; then
     fi
 fi
 echo "$$" > "$LOCKFILE"
+touch "$DONE_FLAG"
 
 # 1. SDK Toolchain Symlinking & Licenses
 SDK_ROOT="/root/android-sdk"
@@ -1482,23 +1489,62 @@ if [ -d "$SDK_ROOT" ]; then
     mkdir -p "$SDK_ROOT/platform-tools"
     [ ! -L "$SDK_ROOT/platform-tools/adb" ] && ln -sf /usr/bin/adb "$SDK_ROOT/platform-tools/adb"
 
-    # Build tools
+    # Build tools: ensure 35.0.0 / 35.0.1 / 36.0.0 have d8, core-lambda-stubs.jar, lib/, source.properties from 34.0.0
+    if [ -d "$SDK_ROOT/build-tools/34.0.0/lib" ]; then
+        for ver in 35.0.0 35.0.1 36.0.0; do
+            if [ -d "$SDK_ROOT/build-tools/$ver" ] && [ ! -f "$SDK_ROOT/build-tools/$ver/core-lambda-stubs.jar" ]; then
+                cp -rn "$SDK_ROOT/build-tools/34.0.0/"* "$SDK_ROOT/build-tools/$ver/" 2>/dev/null || true
+                printf "Pkg.UserSrc=false\nPkg.Revision=%s\n" "$ver" > "$SDK_ROOT/build-tools/$ver/source.properties"
+                if [ -f "$SDK_ROOT/build-tools/34.0.0/package.xml" ]; then
+                    major=$(echo "$ver" | cut -d. -f1)
+                    minor=$(echo "$ver" | cut -d. -f2)
+                    micro=$(echo "$ver" | cut -d. -f3)
+                    sed -e "s/build-tools;34.0.0/build-tools;$ver/g" \
+                        -e "s/<major>34<\/major>/<major>$major<\/major>/g" \
+                        -e "s/<minor>0<\/minor>/<minor>$minor<\/minor>/g" \
+                        -e "s/<micro>0<\/micro>/<micro>$micro<\/micro>/g" \
+                        "$SDK_ROOT/build-tools/34.0.0/package.xml" > "$SDK_ROOT/build-tools/$ver/package.xml"
+                fi
+            fi
+        done
+    fi
+
     for bt in "$SDK_ROOT/build-tools/"*; do
         if [ -d "$bt" ] && [ "$bt" != "$SDK_ROOT/build-tools/debian" ]; then
             [ -f /usr/bin/aapt ] && [ ! -L /usr/bin/aapt ] && ln -sf /usr/bin/aapt "$bt/aapt"
             [ -f /usr/bin/aapt2 ] && [ ! -L /usr/bin/aapt2 ] && ln -sf /usr/bin/aapt2 "$bt/aapt2"
             [ -f /usr/bin/zipalign ] && [ ! -L /usr/bin/zipalign ] && ln -sf /usr/bin/zipalign "$bt/zipalign"
-            [ -f /usr/bin/apksigner ] && [ ! -L /usr/bin/apksigner ] && ln -sf /usr/bin/apksigner "$bt/apksigner"
+            [ -f /usr/bin/apksigner ] && [ ! -L /usr/bin/apksigner ] && [ ! -f "$bt/apksigner" ] && ln -sf /usr/bin/apksigner "$bt/apksigner"
+            chmod +x "$bt/"* 2>/dev/null || true
         fi
     done
 
-    # CMake & Ninja
-    for cm in "$SDK_ROOT/cmake/"*; do
-        if [ -d "$cm/bin" ]; then
-            [ ! -L "$cm/bin/cmake" ] && ln -sf /usr/bin/cmake "$cm/bin/cmake"
-            [ ! -L "$cm/bin/ninja" ] && ln -sf /usr/bin/ninja "$cm/bin/ninja"
-        fi
-    done
+    # Ensure Android 35 & 36 platform stubs exist if Android 34 is installed
+    if [ -f "$SDK_ROOT/platforms/android-34/android.jar" ]; then
+        for api in 35 36; do
+            if [ ! -f "$SDK_ROOT/platforms/android-$api/android.jar" ]; then
+                mkdir -p "$SDK_ROOT/platforms/android-$api"
+                cp -rn "$SDK_ROOT/platforms/android-34/"* "$SDK_ROOT/platforms/android-$api/" 2>/dev/null || true
+                sed -i "s/AndroidVersion.ApiLevel=34/AndroidVersion.ApiLevel=$api/g; s/Platform.Version=14/Platform.Version=$((api - 20))/g" "$SDK_ROOT/platforms/android-$api/source.properties" 2>/dev/null || true
+                sed -i "s/ro.build.version.sdk=34/ro.build.version.sdk=$api/g" "$SDK_ROOT/platforms/android-$api/build.prop" 2>/dev/null || true
+                if [ -f "$SDK_ROOT/platforms/android-34/package.xml" ]; then
+                    sed -e "s/platforms;android-34/platforms;android-$api/g" \
+                        -e "s/<api-level>34<\/api-level>/<api-level>$api<\/api-level>/g" \
+                        "$SDK_ROOT/platforms/android-34/package.xml" > "$SDK_ROOT/platforms/android-$api/package.xml"
+                fi
+            fi
+        done
+    fi
+
+    # CMake & Ninja auto-provisioning
+    if command -v cmake >/dev/null 2>&1; then
+        for cmver in 3.22.1 3.31.0; do
+            mkdir -p "$SDK_ROOT/cmake/$cmver/bin"
+            ln -sf "$(command -v cmake)" "$SDK_ROOT/cmake/$cmver/bin/cmake"
+            command -v ninja >/dev/null 2>&1 && ln -sf "$(command -v ninja)" "$SDK_ROOT/cmake/$cmver/bin/ninja"
+            [ ! -f "$SDK_ROOT/cmake/$cmver/source.properties" ] && printf "Pkg.Desc = CMake %s\nPkg.Revision = %s\n" "$cmver" "$cmver" > "$SDK_ROOT/cmake/$cmver/source.properties"
+        done
+    fi
 
     # NDK Clang/LLVM fixes
     # If a native ARM64 NDK is installed, ensure AGP symlinks exist and preserve binaries.

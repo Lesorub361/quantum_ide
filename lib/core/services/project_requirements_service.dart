@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/optional_package.dart';
 import '../../models/project_model.dart';
 import 'project_detector.dart';
@@ -26,6 +27,7 @@ class ProjectRequirementsResult {
 class ProjectRequirementsService {
   final Ref _ref;
   final Set<String> _checkedPaths = <String>{};
+  static const _checkedPrefsKey = 'checked_project_requirements_paths_v2';
 
   ProjectRequirementsService(this._ref);
 
@@ -38,8 +40,16 @@ class ProjectRequirementsService {
     if (projectPath.isEmpty) return null;
     if (!force && _checkedPaths.contains(projectPath)) return null;
 
+    final prefs = await SharedPreferences.getInstance();
+    final persistedPaths = (prefs.getStringList(_checkedPrefsKey) ?? []).toSet();
+    _checkedPaths.addAll(persistedPaths);
+    if (!force && _checkedPaths.contains(projectPath)) return null;
+
     final dir = Directory(projectPath);
     if (!await dir.exists()) return null;
+
+    // Wait for actual filesystem package verification before reading state
+    await _ref.read(packageServiceProvider.notifier).checkActualInstallation();
 
     final projectType = await ProjectDetector.detect(projectPath);
     final projectName = p.basename(projectPath);
@@ -47,6 +57,19 @@ class ProjectRequirementsService {
     // Make sure we have latest packages installation state
     final packagesList = _ref.read(packageServiceProvider);
     final packageMap = {for (final pkg in packagesList) pkg.id: pkg};
+
+    bool hasAnyAndroidPlatform() {
+      return (packageMap['platform-android-36']?.isInstalled ?? false) ||
+          (packageMap['platform-android-35']?.isInstalled ?? false) ||
+          (packageMap['platform-android-34']?.isInstalled ?? false);
+    }
+
+    bool hasAnyAndroidBuildTools() {
+      return (packageMap['build-tools-36.0.0']?.isInstalled ?? false) ||
+          (packageMap['build-tools-35.0.0']?.isInstalled ?? false) ||
+          (packageMap['build-tools-34.0.0']?.isInstalled ?? false) ||
+          (packageMap['android-sdk-tools-arm64']?.isInstalled ?? false);
+    }
 
     final requiredPackageIds = <String>{};
 
@@ -56,28 +79,40 @@ class ProjectRequirementsService {
         final androidDir = Directory(p.join(projectPath, 'android'));
         if (await androidDir.exists()) {
           requiredPackageIds.add('android-sdk');
-          
-          // Determine target/compile SDK
+
           final compileSdk = await _detectCompileSdk(androidDir.path);
-          if (compileSdk >= 36) {
-            requiredPackageIds.add('platform-android-36');
-            requiredPackageIds.add('build-tools-36.0.0');
-          } else if (compileSdk == 35) {
-            requiredPackageIds.add('platform-android-35');
-            requiredPackageIds.add('build-tools-35.0.0');
-          } else {
-            requiredPackageIds.add('platform-android-34');
-            requiredPackageIds.add('build-tools-34.0.0');
+          if (!hasAnyAndroidPlatform()) {
+            if (compileSdk >= 36) {
+              requiredPackageIds.add('platform-android-36');
+            } else if (compileSdk == 35) {
+              requiredPackageIds.add('platform-android-35');
+            } else {
+              requiredPackageIds.add('platform-android-34');
+            }
+          }
+          if (!hasAnyAndroidBuildTools()) {
+            if (compileSdk >= 36) {
+              requiredPackageIds.add('build-tools-36.0.0');
+            } else if (compileSdk == 35) {
+              requiredPackageIds.add('build-tools-35.0.0');
+            } else {
+              requiredPackageIds.add('build-tools-34.0.0');
+            }
           }
 
           // Check if C++/CMake is used
           if (await _hasNativeCmake(projectPath)) {
-            requiredPackageIds.add('cmake-3.22');
+            if (!(packageMap['cmake-3.31']?.isInstalled ?? false)) {
+              requiredPackageIds.add('cmake-3.22');
+            }
           }
         }
-        final linuxDir = Directory(p.join(projectPath, 'linux'));
-        if (await linuxDir.exists()) {
-          requiredPackageIds.add('desktop-build-tools');
+        // Only require Linux desktop build tools when running on Desktop Linux
+        if (!Platform.isAndroid && !Platform.isIOS) {
+          final linuxDir = Directory(p.join(projectPath, 'linux'));
+          if (await linuxDir.exists()) {
+            requiredPackageIds.add('desktop-build-tools');
+          }
         }
         break;
 
@@ -101,18 +136,27 @@ class ProjectRequirementsService {
       case ProjectType.androidKotlin:
         requiredPackageIds.add('android-sdk');
         final compileSdk = await _detectCompileSdk(projectPath);
-        if (compileSdk >= 36) {
-          requiredPackageIds.add('platform-android-36');
-          requiredPackageIds.add('build-tools-36.0.0');
-        } else {
-          requiredPackageIds.add('platform-android-35');
-          requiredPackageIds.add('build-tools-35.0.0');
+        if (!hasAnyAndroidPlatform()) {
+          if (compileSdk >= 36) {
+            requiredPackageIds.add('platform-android-36');
+          } else {
+            requiredPackageIds.add('platform-android-35');
+          }
+        }
+        if (!hasAnyAndroidBuildTools()) {
+          if (compileSdk >= 36) {
+            requiredPackageIds.add('build-tools-36.0.0');
+          } else {
+            requiredPackageIds.add('build-tools-35.0.0');
+          }
         }
         break;
 
       default:
-        if (await File(p.join(projectPath, 'CMakeLists.txt')).exists()) {
-          requiredPackageIds.add('desktop-build-tools');
+        if (!Platform.isAndroid && !Platform.isIOS) {
+          if (await File(p.join(projectPath, 'CMakeLists.txt')).exists()) {
+            requiredPackageIds.add('desktop-build-tools');
+          }
         }
         break;
     }
@@ -121,14 +165,13 @@ class ProjectRequirementsService {
     final missing = <OptionalPackage>[];
     for (final id in requiredPackageIds) {
       final pkg = packageMap[id];
-      if (pkg != null) {
-        if (!pkg.isInstalled) {
-          missing.add(pkg);
-        }
+      if (pkg != null && !pkg.isInstalled) {
+        missing.add(pkg);
       }
     }
 
     _checkedPaths.add(projectPath);
+    await prefs.setStringList(_checkedPrefsKey, _checkedPaths.toList());
 
     return ProjectRequirementsResult(
       projectPath: projectPath,
@@ -184,9 +227,10 @@ class ProjectRequirementsService {
     final terminal = _ref.read(terminalTabsProvider.notifier);
     final packageService = _ref.read(packageServiceProvider.notifier);
 
-    // Mark packages as installing in UI
+    // Mark packages as installing in UI and persist in preferences
     for (final pkg in packages) {
       pkg.isInstalling = true;
+      packageService.markPackageInstalled(pkg.id);
     }
 
     final commands = <String>[];
@@ -206,10 +250,12 @@ class ProjectRequirementsService {
     final fullCommand = commands.join(' && ');
     terminal.sendCommand(fullCommand);
 
-    // Refresh status after installation initiates
-    Future.delayed(const Duration(seconds: 4), () {
-      packageService.checkActualInstallation();
-    });
+    // Refresh status after installation progresses/completes
+    for (final delaySec in [10, 30, 60, 120]) {
+      Future.delayed(Duration(seconds: delaySec), () {
+        packageService.checkActualInstallation();
+      });
+    }
   }
 }
 

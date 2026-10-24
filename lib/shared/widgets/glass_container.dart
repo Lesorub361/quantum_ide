@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,9 +28,11 @@ class GlassContainer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
-    final effectiveBlur = blur ?? settings.glassmorphismBlur;
-    final effectiveOpacity = opacity ?? settings.glassmorphismOpacity;
+    final userBlur = ref.watch(settingsProvider.select((s) => s.glassmorphismBlur));
+    final userOpacity = ref.watch(settingsProvider.select((s) => s.glassmorphismOpacity));
+    // Avoid expensive GPU offscreen BackdropFilter passes on Android tablets/phones
+    final effectiveBlur = (Platform.isAndroid || userBlur <= 0) ? 0.0 : (blur ?? userBlur);
+    final effectiveOpacity = opacity ?? userOpacity;
 
     Widget current = Container(
       padding: padding,
@@ -87,9 +90,10 @@ class GlassAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
-    final effectiveBlur = blur ?? settings.glassmorphismBlur;
-    final effectiveOpacity = opacity ?? settings.glassmorphismOpacity;
+    final userBlur = ref.watch(settingsProvider.select((s) => s.glassmorphismBlur));
+    final userOpacity = ref.watch(settingsProvider.select((s) => s.glassmorphismOpacity));
+    final effectiveBlur = (Platform.isAndroid || userBlur <= 0) ? 0.0 : (blur ?? userBlur);
+    final effectiveOpacity = opacity ?? userOpacity;
 
     final Widget appBar = AppBar(
       title: title,

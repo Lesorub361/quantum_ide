@@ -44,6 +44,7 @@ class LspService {
   final Map<String, Process?> _processes = {};
   final Map<String, Future<bool>?> _startingServers = {};
   final Map<String, String> _runningProjectPaths = {};
+  final Map<String, DateTime> _lastStartFailure = {};
   final Map<String, String> _stdoutBuffers = {};
   final Map<String, bool> _binaryAvailabilityCache = {};
   int _id = 1;
@@ -131,6 +132,23 @@ class LspService {
     // Dart server is started lazily on first file open via onFileOpened
   }
 
+  Future<void> _killServerProcess(String key, Process? proc) async {
+    if (proc != null) {
+      try {
+        final pid = proc.pid;
+        if (!Platform.isWindows) {
+          await Process.run('pkill', ['-9', '-P', '$pid']).catchError((_) => ProcessResult(0, 0, '', ''));
+        }
+        proc.kill(ProcessSignal.sigkill);
+      } catch (_) {}
+    }
+    if (Platform.isAndroid && key == 'dart') {
+      try {
+        await Process.run('pkill', ['-9', '-f', 'language-server']).catchError((_) => ProcessResult(0, 0, '', ''));
+      } catch (_) {}
+    }
+  }
+
   Future<bool> _ensureServerStarted(String key) async {
     // If server is already starting, wait for it
     if (_startingServers.containsKey(key)) {
@@ -143,15 +161,25 @@ class LspService {
     }
 
     final currentActivePath = activeProjectPath;
+    // Never start LSP on the root /projects container directory (would scan all projects at once)
+    if (currentActivePath == fallbackProjectPath || currentActivePath.isEmpty) {
+      return false;
+    }
+
     if (_processes.containsKey(key) && _processes[key] != null) {
       if (_runningProjectPaths[key] == currentActivePath) {
         return true;
       }
       debugPrint('LSP: Workspace changed from ${_runningProjectPaths[key]} to $currentActivePath. Restarting $key server...');
-      try {
-        _processes[key]?.kill();
-      } catch (_) {}
+      await _killServerProcess(key, _processes[key]);
       _processes[key] = null;
+      _lastStartFailure.remove(key);
+    }
+
+    // Prevent rapid re-spawn loops if server recently failed/timed out
+    final lastFail = _lastStartFailure[key];
+    if (lastFail != null && DateTime.now().difference(lastFail).inSeconds < 45) {
+      return false;
     }
 
     final completer = Completer<bool>();
@@ -191,14 +219,19 @@ class LspService {
       } else if (key == 'cpp') {
         commandArgs = ['clangd'];
       } else {
-        commandArgs = ['dart', 'language-server'];
+        // Cap Dart Analysis Server heap at 256 MB so it doesn't consume 750+ MB on mobile/tablets
+        commandArgs = ['dart', '--old_gen_heap_size=256', 'language-server', '--protocol=lsp'];
       }
 
       if (!await _isBinaryAvailable(commandArgs[0])) {
         debugPrint('LSP [$key]: Binary ${commandArgs[0]} not found. Skipping start.');
+        _lastStartFailure[key] = DateTime.now();
         completer.complete(false);
         return false;
       }
+
+      // Clean up any orphaned language-server processes before spawning a new one
+      await _killServerProcess(key, null);
 
       Process process;
       if ((Platform.isAndroid || Platform.isIOS) && initHostPath.isNotEmpty && await File(initHostPath).exists()) {
@@ -229,21 +262,22 @@ class LspService {
           'processId': pid,
           'rootUri': Uri.file(guestActivePath).toString(),
           'capabilities': {},
-        }).timeout(const Duration(seconds: 10));
+        }).timeout(const Duration(seconds: 45));
 
         _sendNotificationForServer(key, 'initialized', {});
+        _lastStartFailure.remove(key);
         debugPrint('LSP [$key]: Started and initialized');
         completer.complete(true);
       } catch (initErr) {
         debugPrint('LSP [$key]: Initialization request failed: $initErr');
-        try {
-          process.kill();
-        } catch (_) {}
+        _lastStartFailure[key] = DateTime.now();
+        await _killServerProcess(key, process);
         _processes.remove(key);
         completer.complete(false);
       }
     } catch (e) {
       debugPrint('LSP [$key]: Failed to start: $e');
+      _lastStartFailure[key] = DateTime.now();
       completer.complete(false);
     } finally {
       _startingServers.remove(key);
@@ -803,12 +837,13 @@ class LspService {
   }
 
   void stop() {
-    for (final process in _processes.values) {
-      process?.kill();
+    for (final entry in _processes.entries) {
+      _killServerProcess(entry.key, entry.value);
     }
     _processes.clear();
     _startingServers.clear();
     _runningProjectPaths.clear();
+    _lastStartFailure.clear();
     _stdoutBuffers.clear();
     for (final completer in _pendingRequests.values) {
       if (!completer.isCompleted) completer.complete(null);

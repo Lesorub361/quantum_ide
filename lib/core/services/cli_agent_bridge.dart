@@ -131,24 +131,14 @@ class CliAgentBridge {
         if (!candidate.contains('/')) continue;
         final guestPath = candidate.startsWith('/') ? candidate.substring(1) : candidate;
         for (final filesDir in filesDirs) {
-          final rootfsCandidate = File(p.join(filesDir, 'rootfs', 'ubuntu', guestPath));
-          if (rootfsCandidate.existsSync()) {
+          final rootfsCandidatePath = p.join(filesDir, 'rootfs', 'ubuntu', guestPath);
+          if (FileSystemEntity.typeSync(rootfsCandidatePath, followLinks: false) !=
+              FileSystemEntityType.notFound) {
             return candidate;
           }
         }
       }
-
-      // Guest PRoot environment fallback: inside the Ubuntu container binaries reside in standard PATH
-      switch (kind) {
-        case AgentKind.antigravity:
-          return '/usr/local/bin/agy';
-        case AgentKind.claudeCode:
-          return '/usr/local/bin/claude';
-        case AgentKind.deepseekHarness:
-          return '/usr/local/bin/dsh';
-        case AgentKind.native:
-          return null;
-      }
+      return null;
     }
 
     return null;

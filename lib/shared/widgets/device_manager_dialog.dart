@@ -4,6 +4,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/adb_device_service.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
@@ -396,14 +397,107 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
                   side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.3)),
                   padding: const EdgeInsets.symmetric(vertical: 10),
                 ),
-                icon: const Icon(LucideIcons.search, size: 15),
-                label: Text('Проверить USB', style: GoogleFonts.inter(fontSize: 12)),
-                onPressed: () => adbService.refreshDevices(),
+                icon: const Icon(LucideIcons.cable, size: 15),
+                label: Text('Подключить USB OTG', style: GoogleFonts.inter(fontSize: 12)),
+                onPressed: () async {
+                  setState(() => _statusBannerText = 'Запрос USB-OTG и запуск моста ADB...');
+                  final res = await adbService.connectUsbOtg();
+                  setState(() => _statusBannerText = res);
+                },
               ),
             ),
           ],
         ),
+        const SizedBox(height: 14),
+        _buildCompiledApksSection(adbState, adbService),
       ],
+    );
+  }
+
+  Widget _buildCompiledApksSection(AdbDeviceState adbState, AdbDeviceService adbService) {
+    final currentWs = ref.watch(workspaceProvider).currentPath;
+    return FutureBuilder<List<String>>(
+      future: adbService.findCompiledApks(workspacePath: currentWs),
+      builder: (context, snapshot) {
+        final apks = snapshot.data ?? const [];
+        if (apks.isEmpty) return const SizedBox.shrink();
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(LucideIcons.package, size: 15, color: Colors.cyanAccent),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Скомпилированные APK в проектах (${apks.length}):',
+                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...apks.take(5).map((apkPath) {
+                final shortPath = apkPath.replaceFirst('/root/projects/', '');
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          shortPath,
+                          style: GoogleFonts.firaCode(fontSize: 10, color: Colors.white70),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      if (adbState.selectedDevice != null)
+                        _buildSmallActionButton(
+                          icon: LucideIcons.smartphone,
+                          label: 'На OTG/ADB',
+                          color: Colors.greenAccent,
+                          onTap: () async {
+                            setState(() {
+                              _isActionRunning = true;
+                              _statusBannerText = 'Установка $shortPath на ${adbState.selectedDevice!.displayName}...';
+                            });
+                            final res = await adbService.installAndRun(
+                              apkPath: apkPath,
+                              deviceId: adbState.selectedDevice!.id,
+                            );
+                            setState(() {
+                              _isActionRunning = false;
+                              _statusBannerText = res;
+                            });
+                          },
+                        ),
+                      const SizedBox(width: 6),
+                      _buildSmallActionButton(
+                        icon: LucideIcons.download,
+                        label: 'На этот телефон',
+                        color: Colors.cyanAccent,
+                        onTap: () async {
+                          final res = await adbService.installApkOnHostPhone(apkPath);
+                          setState(() => _statusBannerText = res);
+                        },
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -424,41 +518,82 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
               : Colors.amberAccent.withValues(alpha: 0.25),
         ),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            isSupported ? LucideIcons.circle_check_big : LucideIcons.circle_alert,
-            size: 18,
-            color: isSupported ? Colors.greenAccent : Colors.amberAccent,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isSupported
-                      ? 'USB Host (OTG) поддерживается'
-                      : 'USB Host (OTG) не обнаружен',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isSupported ? Colors.greenAccent : Colors.amberAccent,
-                  ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                isSupported ? LucideIcons.circle_check_big : LucideIcons.circle_alert,
+                size: 18,
+                color: isSupported ? Colors.greenAccent : Colors.amberAccent,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isSupported
+                          ? 'USB Host (OTG) поддерживается'
+                          : 'USB Host (OTG) не обнаружен',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isSupported ? Colors.greenAccent : Colors.amberAccent,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isSupported
+                          ? (hasUsbDevices
+                              ? 'Физически подключено по Type-C: ${adbState.rawUsbDevices.length} устр.'
+                              : 'Подключите второй телефон кабелем Type-C ↔ Type-C и включите «Отладку по USB».')
+                          : 'Используйте вкладку «Wi-Fi ADB» для беспроводного подключения второго телефона.',
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  isSupported
-                      ? (hasUsbDevices
-                          ? 'К USB подключено устройств: ${adbState.rawUsbDevices.length}. Кабель соединен.'
-                          : 'Ваш смартфон может управлять вторым телефоном через кабель Type-C ↔ Type-C.')
-                      : 'Используйте вкладку «Wi-Fi ADB» для беспроводного подключения второго телефона.',
-                  style: GoogleFonts.inter(fontSize: 11, color: Colors.white70),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
+          if (hasUsbDevices) ...[
+            const SizedBox(height: 8),
+            ...adbState.rawUsbDevices.map((usb) {
+              final mfg = (usb['manufacturer'] ?? '').toString().trim();
+              final prod = (usb['product'] ?? '').toString().trim();
+              final title = '$mfg $prod'.trim().isNotEmpty
+                  ? '$mfg $prod'.trim()
+                  : 'USB ${usb['vendorHex'] ?? usb['vendorId']}:${usb['productHex'] ?? usb['productId']}';
+              final modeDesc = (usb['modeDescription'] ?? '').toString();
+              final hasAdb = usb['hasAdbInterface'] == true;
+              return Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                       LucideIcons.usb,
+                      size: 14,
+                      color: hasAdb ? Colors.cyanAccent : Colors.amberAccent,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$title — $modeDesc',
+                        style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
         ],
       ),
     );
@@ -931,7 +1066,7 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
   Future<void> _installAndRunProject(AdbDevice device) async {
     setState(() {
       _isActionRunning = true;
-      _statusBannerText = 'Сборка и установка проекта на ${device.displayName}...';
+      _statusBannerText = 'Поиск / сборка APK и установка на ${device.displayName}...';
     });
 
     final currentWs = ref.read(workspaceProvider).currentPath;
@@ -943,24 +1078,54 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
       return;
     }
 
-    // Try finding latest release APK
-    const apkPath = '/root/projects/quantum_ide/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk';
-    const universalApk = '/root/projects/quantum_ide/build/app/outputs/flutter-apk/app-release.apk';
-    String targetApk = apkPath;
-    if (!File(apkPath).existsSync() && File(universalApk).existsSync()) {
-      targetApk = universalApk;
+    final candidates = [
+      '$currentWs/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk',
+      '$currentWs/build/app/outputs/flutter-apk/app-release.apk',
+      '$currentWs/build/app/outputs/flutter-apk/app-debug.apk',
+    ];
+
+    String? targetApk;
+    for (final c in candidates) {
+      if (File(c).existsSync()) {
+        targetApk = c;
+        break;
+      }
     }
 
-    if (!File(targetApk).existsSync()) {
+    if (targetApk == null && File('$currentWs/pubspec.yaml').existsSync()) {
+      setState(() {
+        _statusBannerText = 'Сборка APK текущего проекта ($currentWs)...';
+      });
+      try {
+        final runtime = ref.read(runtimeServiceProvider);
+        await runtime.runCommand('cd "$currentWs" && flutter build apk --debug');
+        for (final c in candidates) {
+          if (File(c).existsSync()) {
+            targetApk = c;
+            break;
+          }
+        }
+      } catch (e) {
+        setState(() {
+          _isActionRunning = false;
+          _statusBannerText = 'Ошибка сборки APK: $e';
+        });
+        return;
+      }
+    }
+
+    if (targetApk == null || !File(targetApk).existsSync()) {
       setState(() {
         _isActionRunning = false;
-        _statusBannerText = 'APK файл не найден в build/. Сначала скомпилируйте проект.';
+        _statusBannerText = 'APK файл не найден в $currentWs/build/. Скомпилируйте проект.';
       });
       return;
     }
 
+    final pkg = await ref.read(adbDeviceServiceProvider.notifier).detectPackageNameForApk(targetApk);
     final res = await ref.read(adbDeviceServiceProvider.notifier).installAndRun(
           apkPath: targetApk,
+          packageName: pkg,
           deviceId: device.id,
         );
 

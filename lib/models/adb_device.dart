@@ -168,6 +168,12 @@ class AdbDevice {
     AdbConnectionType connType;
     if (id.startsWith('emulator-')) {
       connType = AdbConnectionType.emulator;
+    } else if (id.startsWith('127.0.0.1:555') ||
+        id.startsWith('127.0.0.1:556') ||
+        id.startsWith('localhost:555') ||
+        id.startsWith('localhost:556')) {
+      // Local UsbAdbBridge TCP-to-USB-Bulk OTG tunnel (ports 5556+)
+      connType = AdbConnectionType.usb;
     } else if (id.contains(':') && RegExp(r'^\d+\.\d+\.\d+\.\d+:\d+$').hasMatch(id)) {
       connType = AdbConnectionType.wifi;
     } else if (isUsbExplicit || !id.contains(':')) {

@@ -213,11 +213,21 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
       final newlyInstalledIds = <String>{};
 
       Future<bool> hasCmd(String cmd) => _hasCommandAsync(cmd, searchDirs);
+      Future<bool> hasRootfsEntity(String relPath) async {
+        if (rootfsPath.isEmpty) return false;
+        final fullPath = p.join(rootfsPath, relPath);
+        final type = await FileSystemEntity.type(fullPath, followLinks: false);
+        return type != FileSystemEntityType.notFound;
+      }
       Future<bool> hasRootfsBin(String bin) async {
-        return await File(p.join(rootfsPath, 'usr', 'bin', bin)).exists() ||
-            await File(p.join(rootfsPath, 'usr', 'local', 'bin', bin)).exists() ||
-            await File(p.join(rootfsPath, 'usr', 'local', 'lib', 'nodejs', 'bin', bin)).exists() ||
-            await File(p.join(rootfsPath, 'root', '.local', 'bin', bin)).exists();
+        return await hasRootfsEntity(p.join('usr', 'bin', bin)) ||
+            await hasRootfsEntity(p.join('usr', 'local', 'bin', bin)) ||
+            await hasRootfsEntity(p.join('bin', bin)) ||
+            await hasRootfsEntity(p.join('usr', 'local', 'lib', 'nodejs', 'bin', bin)) ||
+            await hasRootfsEntity(p.join('root', '.local', 'bin', bin)) ||
+            await hasRootfsEntity(p.join('root', 'flutter', 'bin', bin)) ||
+            await hasRootfsEntity(p.join('usr', 'lib', 'jvm', 'java-17-openjdk-arm64', 'bin', bin)) ||
+            await hasRootfsEntity(p.join('usr', 'lib', 'jvm', 'java-21-openjdk-arm64', 'bin', bin));
       }
 
       for (final pkg in state) {
@@ -225,10 +235,12 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
 
         if (pkg.id.startsWith('platform-android-')) {
           final version = pkg.id.replaceFirst('platform-android-', '');
-          exists = await Directory(p.join(sdkPath, 'platforms', 'android-$version')).exists();
+          exists = await Directory(p.join(sdkPath, 'platforms', 'android-$version')).exists() ||
+              (isAndroid && await hasRootfsEntity(p.join('root', 'android-sdk', 'platforms', 'android-$version')));
         } else if (pkg.id.startsWith('build-tools-')) {
           final version = pkg.id.replaceFirst('build-tools-', '');
-          exists = await Directory(p.join(sdkPath, 'build-tools', version)).exists();
+          exists = await Directory(p.join(sdkPath, 'build-tools', version)).exists() ||
+              (isAndroid && await hasRootfsEntity(p.join('root', 'android-sdk', 'build-tools', version)));
         } else if (pkg.id.startsWith('cmake-')) {
           final version = pkg.id.replaceFirst('cmake-', '');
           final dirName = version == '3.6'
@@ -241,7 +253,8 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                           ? '3.22.1'
                           : (version == '3.31' ? '3.31.0' : version))));
           exists = await Directory(p.join(sdkPath, 'cmake', dirName)).exists() ||
-              await hasCmd('cmake');
+              (isAndroid && await hasRootfsEntity(p.join('root', 'android-sdk', 'cmake', dirName))) ||
+              (isAndroid ? await hasRootfsBin('cmake') : await hasCmd('cmake'));
         } else if (pkg.id.startsWith('ndk-')) {
           final version = pkg.id.replaceFirst('ndk-', '');
           final dirName = version == 'r21e'
@@ -263,7 +276,11 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                                           : (version == 'r29' ? '29.0.14206865' : version))))))));
           exists = await Directory(p.join(sdkPath, 'ndk', dirName)).exists() ||
               await Directory(p.join(sdkPath, 'ndk', version)).exists() ||
-              await Directory(p.join(sdkPath, 'ndk', 'android-ndk-$version')).exists();
+              await Directory(p.join(sdkPath, 'ndk', 'android-ndk-$version')).exists() ||
+              (isAndroid &&
+                  (await hasRootfsEntity(p.join('root', 'android-sdk', 'ndk', dirName)) ||
+                      await hasRootfsEntity(p.join('root', 'android-sdk', 'ndk', version)) ||
+                      await hasRootfsEntity(p.join('root', 'android-sdk', 'ndk', 'android-ndk-$version'))));
         } else if (!isAndroid) {
           switch (pkg.id) {
             case 'android-sdk-tools-arm64':
@@ -454,8 +471,12 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               exists = await hasRootfsBin('gcc') || await hasRootfsBin('g++');
               break;
             case 'android-sdk':
-              final hasJava = await hasRootfsBin('java');
+              final hasJava = await hasRootfsBin('java') ||
+                  await hasRootfsEntity(p.join('usr', 'lib', 'jvm', 'java-17-openjdk-arm64')) ||
+                  await hasRootfsEntity(p.join('usr', 'lib', 'jvm', 'java-21-openjdk-arm64')) ||
+                  await hasRootfsEntity(p.join('root', 'jdk-17'));
               final hasSdkManager = await File(p.join(sdkPath, 'cmdline-tools', 'latest', 'bin', 'sdkmanager')).exists() ||
+                  await hasRootfsEntity(p.join('root', 'android-sdk', 'cmdline-tools', 'latest', 'bin', 'sdkmanager')) ||
                   await hasRootfsBin('sdkmanager');
               exists = hasJava && hasSdkManager;
               break;

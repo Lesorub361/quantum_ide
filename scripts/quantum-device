@@ -1,49 +1,89 @@
 #!/usr/bin/env bash
 # QuantumIDE Device CLI Helper
-# Provides fast ADB phone-to-phone management & autonomous AI testing commands
+# Provides fast ADB phone-to-phone (USB-C OTG & Wi-Fi) management & autonomous AI testing commands
 
 set -e
 
 CMD="${1:-help}"
 shift 1 || true
 
+sync_usb_otg_bridge() {
+    # Query native Android UsbAdbBridge control server (127.0.0.1:5038) to scan USB OTG & start TCP-USB bridge
+    if command -v curl >/dev/null 2>&1; then
+        curl -s --max-time 3 "http://127.0.0.1:5038/connect" >/tmp/quantum_usb_otg_live.json 2>/dev/null || true
+    fi
+    local STATUS_FILE="/tmp/quantum_usb_otg_live.json"
+    if [ ! -s "$STATUS_FILE" ] && [ -f "/tmp/quantum_usb_otg.json" ]; then
+        STATUS_FILE="/tmp/quantum_usb_otg.json"
+    fi
+    if [ -s "$STATUS_FILE" ]; then
+        # Extract any active bridge addresses (e.g. 127.0.0.1:5556) and ensure adb connects
+        for addr in $(grep -oE '127\.0\.0\.1:55[0-9]{2}' "$STATUS_FILE" | sort -u); do
+            adb connect "$addr" >/dev/null 2>&1 || true
+        done
+    fi
+}
+
 get_target_device() {
     if [ -n "$DEVICE_ID" ]; then
         echo "$DEVICE_ID"
         return
     fi
+    sync_usb_otg_bridge
     # Pick first online device from adb devices
     adb devices | grep -v "List of devices" | grep -v "^$" | grep "device$" | head -n 1 | awk '{print $1}'
 }
 
+detect_package_name() {
+    local SEARCH_DIR="${1:-.}"
+    for f in "$SEARCH_DIR/android/app/build.gradle.kts" "$SEARCH_DIR/android/app/build.gradle" "$SEARCH_DIR/app/build.gradle.kts" "$SEARCH_DIR/app/build.gradle"; do
+        if [ -f "$f" ]; then
+            local pkg
+            pkg=$(grep -oE 'applicationId[[:space:]]*=*[[:space:]]*["'\''][a-zA-Z0-9_.]+["'\'']' "$f" | head -n 1 | sed -E 's/.*["'\'']([a-zA-Z0-9_.]+)["'\''].*/\1/')
+            if [ -n "$pkg" ]; then
+                echo "$pkg"
+                return
+            fi
+        fi
+    done
+}
+
 case "$CMD" in
     list|devices)
+        sync_usb_otg_bridge
         echo "=== 📱 Обнаруженные устройства ADB ==="
         adb devices -l
         echo ""
-        echo "=== 🔌 Физические USB порты ==="
-        if command -v lsusb >/dev/null 2>&1; then
-            lsusb || true
+        echo "=== 🔌 Физические USB-C OTG устройства (Android UsbManager) ==="
+        if [ -s "/tmp/quantum_usb_otg_live.json" ]; then
+            cat /tmp/quantum_usb_otg_live.json
+            echo ""
+        elif [ -f "/tmp/quantum_usb_otg.json" ]; then
+            cat /tmp/quantum_usb_otg.json
+            echo ""
         else
-            echo "lsusb не установлен (проверка через sysfs):"
-            ls -d /sys/bus/usb/devices/* 2>/dev/null || true
+            echo "Статус OTG моста: ожидание инициализации UsbAdbBridge (или перезапустите APK Quantum IDE)."
         fi
         ;;
 
-    otg-check|check-otg)
-        echo "=== 🔍 Проверка поддержки USB Host (OTG) ==="
-        if [ -d "/dev/bus/usb" ]; then
-            echo "✅ USB шина (/dev/bus/usb) доступна в системе."
+    otg-check|check-otg|usb-connect)
+        sync_usb_otg_bridge
+        echo "=== 🔍 Проверка поддержки USB Host (OTG) & Моста ADB ==="
+        if [ -s "/tmp/quantum_usb_otg_live.json" ]; then
+            cat /tmp/quantum_usb_otg_live.json
+            echo ""
+        elif [ -f "/tmp/quantum_usb_otg.json" ]; then
+            cat /tmp/quantum_usb_otg.json
+            echo ""
         else
-            echo "⚠️ /dev/bus/usb не найдена в текущей файловой системе."
+            if [ -d "/sys/class/android_usb" ] || [ -d "/sys/bus/usb" ]; then
+                echo "✅ Ядро Linux поддерживает USB контроллер."
+            fi
+            echo "ℹ️ Для прямого проброса USB-C OTG без root используется нативный мост UsbAdbBridge (127.0.0.1:5038 -> 127.0.0.1:5556)."
         fi
-
-        if [ -d "/sys/class/android_usb" ] || [ -d "/sys/bus/usb" ]; then
-            echo "✅ Ядро Linux поддерживает USB контроллер."
-        fi
-
-        echo "Подключенные USB устройства:"
-        ls /sys/bus/usb/devices/ 2>/dev/null || true
+        echo ""
+        echo "=== 📱 Текущий список ADB ==="
+        adb devices -l
         ;;
 
     connect)
@@ -153,7 +193,7 @@ case "$CMD" in
         ;;
 
     logcat|logs|errors)
-        LINES="${1:-50}"
+        LINES="${1:-80}"
         DEV=$(get_target_device)
         if [ -z "$DEV" ]; then
             echo "❌ Ошибка: нет подключенного телефона"
@@ -166,10 +206,24 @@ case "$CMD" in
     install)
         APK="$1"
         PKG="$2"
+        if [ -z "$APK" ]; then
+            for candidate in \
+                "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" \
+                "build/app/outputs/flutter-apk/app-release.apk" \
+                "build/app/outputs/flutter-apk/app-debug.apk"; do
+                if [ -f "$candidate" ]; then
+                    APK="$candidate"
+                    break
+                fi
+            done
+        fi
         DEV=$(get_target_device)
         if [ -z "$DEV" ] || [ -z "$APK" ]; then
             echo "Использование: quantum-device install <путь_к_apk> [package_name]"
             exit 1
+        fi
+        if [ -z "$PKG" ]; then
+            PKG=$(detect_package_name ".")
         fi
         echo ">>> Установка $APK на $DEV..."
         adb -s "$DEV" install -r "$APK"
@@ -184,6 +238,7 @@ case "$CMD" in
         echo ">>> Перезапуск ADB сервера..."
         adb kill-server || true
         adb start-server
+        sync_usb_otg_bridge
         echo "✅ ADB сервер перезапущен"
         ;;
 
@@ -191,12 +246,12 @@ case "$CMD" in
         echo "QuantumIDE Device Manager & AI Testing CLI"
         echo ""
         echo "Команды:"
-        echo "  quantum-device list                 - Список подключенных телефонов и USB"
-        echo "  quantum-device otg-check            - Проверка поддержки USB Host (OTG)"
+        echo "  quantum-device list                 - Список подключенных телефонов (OTG + Wi-Fi)"
+        echo "  quantum-device otg-check            - Проверка и активация моста USB-C OTG -> ADB"
         echo "  quantum-device connect <IP:PORT>    - Подключение по Wi-Fi ADB"
         echo "  quantum-device pair <IP:PORT> <CODE>- Сопряжение по Wi-Fi (Android 11+)"
         echo "  quantum-device disconnect           - Отключение Wi-Fi устройств"
-        echo "  quantum-device install <APK> [PKG]  - Установка и запуск APK на телефоне"
+        echo "  quantum-device install [APK] [PKG]  - Установка и запуск APK на телефоне"
         echo "  quantum-device screenshot [FILE]    - Скриншот экрана телефона"
         echo "  quantum-device inspect [FILE]       - Дамп элементов интерфейса (UI XML)"
         echo "  quantum-device tap <X> <Y>          - Клик пальцем по координатам"

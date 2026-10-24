@@ -78,6 +78,7 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
   static const _ignoredDirs = {
     '.git',
     '.dart_tool',
+    '.quantum',
     'build',
     'node_modules',
     'ios',
@@ -89,6 +90,10 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
     '.gradle',
     '.idea',
     'assets',
+    'local_plugins',
+    'scratch',
+    'external',
+    'ephemeral',
   };
 
   void clearIndex() {
@@ -105,8 +110,9 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
       final List<String> allFiles = [];
       final List<Directory> queue = [Directory(workspaceRoot)];
       int processedCount = 0;
+      int parsedFileCount = 0;
 
-      while (queue.isNotEmpty) {
+      while (queue.isNotEmpty && allFiles.length < 1500) {
         final currentDir = queue.removeLast();
         try {
           final List<FileSystemEntity> entities = await currentDir.list(recursive: false, followLinks: false).toList();
@@ -119,23 +125,28 @@ class SymbolIndexerNotifier extends StateNotifier<SymbolIndexerState> {
             if (entity is File) {
               allFiles.add(entity.path);
               final ext = p.extension(entity.path).toLowerCase();
-              if (ext == '.dart' || ext == '.js' || ext == '.ts' || ext == '.py' || ext == '.go') {
-                final symbols = await _parseFile(entity);
-                allSymbols.addAll(symbols);
+              if (parsedFileCount < 250 &&
+                  (ext == '.dart' || ext == '.js' || ext == '.ts' || ext == '.py' || ext == '.go')) {
+                final stat = await entity.stat();
+                if (stat.size <= 180 * 1024) {
+                  parsedFileCount++;
+                  final symbols = await _parseFile(entity);
+                  allSymbols.addAll(symbols);
+                }
               }
             } else if (entity is Directory) {
               queue.add(entity);
             }
 
             processedCount++;
-            if (processedCount % 20 == 0) {
-              await Future.delayed(Duration.zero);
+            if (processedCount % 15 == 0) {
+              await Future.delayed(const Duration(milliseconds: 2));
             }
           }
         } catch (_) {
           // ignore directory access errors
         }
-        await Future.delayed(Duration.zero);
+        await Future.delayed(const Duration(milliseconds: 1));
       }
 
       state = state.copyWith(isIndexing: false, symbols: allSymbols, files: allFiles);

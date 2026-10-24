@@ -125,6 +125,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   late final LspService _lspService;
   Timer? _diffTimer;
   final Map<String, Timer> _autoSaveTimers = {};
+  final Map<String, CodeLines> _lastCodeLines = {};
   final DiffService _diffService = DiffService();
   static const int _maxOpenFiles = 10;
 
@@ -301,8 +302,13 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         isDiffView: isDiffView,
       );
 
+      _lastCodeLines[path] = controller.codeLines;
       controller.addListener(() {
-        _handleContentChange(path);
+        final currentLines = controller.codeLines;
+        if (!identical(_lastCodeLines[path], currentLines)) {
+          _lastCodeLines[path] = currentLines;
+          _handleContentChange(path);
+        }
         _handleCursorMove(path);
       });
 
@@ -370,25 +376,25 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
     final file = state.openFiles[index];
     
-    // Broadcast text changes instantly for collaboration
-    final collabService = ref.read(collaborationProvider.notifier);
-    if (!collabService.isApplyingRemoteChange) {
-      collabService.handleLocalChange(path, file.controller.text);
+    // Broadcast text changes for collaboration only if a live session is actually connected
+    final collabState = ref.read(collaborationProvider);
+    if (collabState.isConnected) {
+      final collabService = ref.read(collaborationProvider.notifier);
+      if (!collabService.isApplyingRemoteChange) {
+        collabService.handleLocalChange(path, file.controller.text);
+      }
     }
 
-    final isModified = file.controller.text != file.originalContent;
-
-    // Synchronous update only when isModified flag actually changes —
-    // avoids rebuilding the whole UI on every single keystroke.
-    if (file.isModified != isModified) {
+    // Mark modified in O(1) without joining all lines into a String on every keystroke
+    if (!file.isModified) {
       if (!mounted) return;
       final newOpenFiles = List<EditorFile>.from(state.openFiles);
-      newOpenFiles[index] = file.copyWith(isModified: isModified);
+      newOpenFiles[index] = file.copyWith(isModified: true);
       state = state.copyWith(openFiles: newOpenFiles);
     }
 
     _diffTimer?.cancel();
-    _diffTimer = Timer(const Duration(milliseconds: 1500), () {
+    _diffTimer = Timer(const Duration(milliseconds: 1800), () {
       _updateDiff(path);
       // Re-read text at timer fire time to avoid stale closure
       final latestIdx = state.openFiles.indexWhere((f) => f.path == path);
@@ -410,6 +416,9 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   }
 
   void _handleCursorMove(String path) {
+    final collabState = ref.read(collaborationProvider);
+    if (!collabState.isConnected) return;
+
     final index = state.openFiles.indexWhere((f) => f.path == path);
     if (index == -1) return;
 
@@ -742,8 +751,13 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       final controller = CodeLineEditingController(
         codeLines: CodeLines.fromText(initialContent),
       );
+      _lastCodeLines[path] = controller.codeLines;
       controller.addListener(() {
-        _handleContentChange(path);
+        final currentLines = controller.codeLines;
+        if (!identical(_lastCodeLines[path], currentLines)) {
+          _lastCodeLines[path] = currentLines;
+          _handleContentChange(path);
+        }
         _handleCursorMove(path);
       });
       

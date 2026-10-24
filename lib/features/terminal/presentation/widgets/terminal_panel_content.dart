@@ -171,10 +171,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
+  final Map<String, GlobalKey<_AndroidTerminalDirectInputState>> _directInputKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
 
   GlobalKey<xt.TerminalViewState> _getTerminalKey(String id) {
     return _terminalKeys.putIfAbsent(id, () => GlobalKey<xt.TerminalViewState>());
+  }
+
+  GlobalKey<_AndroidTerminalDirectInputState> _getDirectInputKey(String id) {
+    return _directInputKeys.putIfAbsent(id, () => GlobalKey<_AndroidTerminalDirectInputState>());
   }
 
   TerminalFocusNode _getFocusNode(String id) {
@@ -195,7 +200,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final focusNode = _getFocusNode(keyId);
     focusNode.allowAutoKeyboard = true;
     focusNode.requestFocus();
-    _getTerminalKey(keyId).currentState?.requestKeyboard();
+    if (Platform.isAndroid || Platform.isIOS) {
+      _getDirectInputKey(keyId).currentState?.requestKeyboard();
+    } else {
+      _getTerminalKey(keyId).currentState?.requestKeyboard();
+    }
     SystemChannels.textInput.invokeMethod('TextInput.show');
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
@@ -209,7 +218,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
-    _getTerminalKey(keyId).currentState?.closeKeyboard();
+    if (Platform.isAndroid || Platform.isIOS) {
+      _getDirectInputKey(keyId).currentState?.closeKeyboard();
+    } else {
+      _getTerminalKey(keyId).currentState?.closeKeyboard();
+    }
     FocusManager.instance.primaryFocus?.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');
     if (mounted && wasActive) setState(() {});
@@ -380,7 +393,31 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     return PathMapper.mapToHost(guestPath, runtime.appDirectory);
   }
 
+  bool _isAtShellPrompt(TerminalSession session) {
+    if (session.xtermTerminal.isUsingAltBuffer) return false;
+    try {
+      final buf = session.xtermTerminal.buffer;
+      final y = buf.absoluteCursorY;
+      if (y >= 0 && y < buf.lines.length) {
+        final line = buf.lines[y].toString();
+        return line.contains('boss@') ||
+            line.contains('root@') ||
+            line.contains(r'$ ') ||
+            line.contains('# ');
+      }
+    } catch (_) {}
+    return false;
+  }
+
   void _handleInputForAutocomplete(TerminalSession session, String data) {
+    if (!_isAtShellPrompt(session)) {
+      if (_suggestionsNotifier.value != null) {
+        _suggestionsNotifier.value = null;
+      }
+      _currentInput = '';
+      return;
+    }
+
     if (data == '\r' || data == '\n') {
       _suggestionsNotifier.value = null;
       _currentInput = '';
@@ -1955,55 +1992,61 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               _pasteToTerminal(session);
                             }
                           },
-                          child: xt.TerminalView(
-                            key: _getTerminalKey(keyId),
-                            session.xtermTerminal,
-                            controller: session.xtermViewController,
+                          child: _AndroidTerminalDirectInput(
+                            key: _getDirectInputKey(keyId),
+                            terminal: session.xtermTerminal,
                             focusNode: _getFocusNode(keyId),
-                            autofocus: !isMobile,
-                            hardwareKeyboardOnly: false,
-                            onTapUp: (details, offset) {
-                              if (session.xtermViewController.selection != null) {
-                                session.xtermViewController.clearSelection();
-                                return;
-                              }
-
-                              final lineIndex = offset.y;
-                              final colIndex = offset.x;
-                              final buffer = session.xtermTerminal.buffer;
-                              if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
-                                final lineText = buffer.lines[lineIndex].toString();
-                                final url = _findUrlAt(lineText, colIndex);
-                                if (url != null) {
-                                  _showUrlDetected(url);
+                            enabled: Platform.isAndroid || Platform.isIOS,
+                            child: xt.TerminalView(
+                              key: _getTerminalKey(keyId),
+                              session.xtermTerminal,
+                              controller: session.xtermViewController,
+                              focusNode: _getFocusNode(keyId),
+                              autofocus: !isMobile,
+                              hardwareKeyboardOnly: Platform.isAndroid || Platform.isIOS,
+                              onTapUp: (details, offset) {
+                                if (session.xtermViewController.selection != null) {
+                                  session.xtermViewController.clearSelection();
                                   return;
                                 }
-                              }
 
-                              _openTerminalKeyboard(session, isSecondary: isSecondary);
-                            },
-                            padding: const EdgeInsets.all(10),
-                            theme: theme,
-                            backgroundOpacity: 0,
-                            textStyle: xt.TerminalStyle(
-                              fontSize: terminalFontSize,
-                              fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                              fontFamilyFallback: const [
-                                'SymbolsNerdFont',
-                                'Symbols Nerd Font',
-                                'jetBrainsMono',
-                                'firaCode',
-                                'cascadia',
-                                'dejaVuSansMono',
-                                'inconsolata',
-                                'sourceCodePro',
-                                'Noto Sans Mono',
-                                'DejaVu Sans Mono',
-                                'monospace',
-                              ],
+                                final lineIndex = offset.y;
+                                final colIndex = offset.x;
+                                final buffer = session.xtermTerminal.buffer;
+                                if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
+                                  final lineText = buffer.lines[lineIndex].toString();
+                                  final url = _findUrlAt(lineText, colIndex);
+                                  if (url != null) {
+                                    _showUrlDetected(url);
+                                    return;
+                                  }
+                                }
+
+                                _openTerminalKeyboard(session, isSecondary: isSecondary);
+                              },
+                              padding: const EdgeInsets.all(10),
+                              theme: theme,
+                              backgroundOpacity: 0,
+                              textStyle: xt.TerminalStyle(
+                                fontSize: terminalFontSize,
+                                fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                                fontFamilyFallback: const [
+                                  'SymbolsNerdFont',
+                                  'Symbols Nerd Font',
+                                  'jetBrainsMono',
+                                  'firaCode',
+                                  'cascadia',
+                                  'dejaVuSansMono',
+                                  'inconsolata',
+                                  'sourceCodePro',
+                                  'Noto Sans Mono',
+                                  'DejaVu Sans Mono',
+                                  'monospace',
+                                ],
+                              ),
+                              keyboardType: TextInputType.visiblePassword,
+                              deleteDetection: true,
                             ),
-                            keyboardType: TextInputType.visiblePassword,
-                            deleteDetection: true,
                           ),
                         ),
                       ),
@@ -3350,4 +3393,166 @@ class _CollapsibleConsoleState extends State<CollapsibleConsole> {
       ),
     );
   }
+}
+
+/// Direct Android/iOS TextInputClient that commits every character immediately
+/// without buffering IME composing regions at the VT100 cursor position.
+/// This prevents Cyrillic/Gboard composing text from floating at random top/bottom/right
+/// coordinates when using TUI apps like `agy`, `vim`, `htop`, or `claude`.
+class _AndroidTerminalDirectInput extends StatefulWidget {
+  final xt.Terminal terminal;
+  final FocusNode focusNode;
+  final bool enabled;
+  final Widget child;
+
+  const _AndroidTerminalDirectInput({
+    super.key,
+    required this.terminal,
+    required this.focusNode,
+    required this.enabled,
+    required this.child,
+  });
+
+  @override
+  State<_AndroidTerminalDirectInput> createState() => _AndroidTerminalDirectInputState();
+}
+
+class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput>
+    with TextInputClient {
+  static const String _sentinel = '  ';
+  static const TextEditingValue _initEditingState = TextEditingValue(
+    text: _sentinel,
+    selection: TextSelection.collapsed(offset: _sentinel.length),
+  );
+
+  TextInputConnection? _connection;
+  TextEditingValue _currentEditingState = _initEditingState;
+
+  bool get hasInputConnection => _connection != null && _connection!.attached;
+
+  @override
+  void dispose() {
+    closeKeyboard();
+    super.dispose();
+  }
+
+  void requestKeyboard() {
+    if (!widget.enabled) return;
+    if (!widget.focusNode.hasFocus) {
+      widget.focusNode.requestFocus();
+    }
+    if (hasInputConnection) {
+      _connection!.show();
+      _resetState();
+    } else {
+      const config = TextInputConfiguration(
+        inputType: TextInputType.visiblePassword,
+        inputAction: TextInputAction.newline,
+        keyboardAppearance: Brightness.dark,
+        autocorrect: false,
+        enableSuggestions: false,
+        enableIMEPersonalizedLearning: false,
+      );
+      _connection = TextInput.attach(this, config);
+      _connection!.show();
+      _resetState();
+    }
+  }
+
+  void closeKeyboard() {
+    if (_connection != null && _connection!.attached) {
+      _connection!.close();
+    }
+    _connection = null;
+  }
+
+  void _resetState() {
+    _currentEditingState = _initEditingState;
+    _connection?.setEditingState(_initEditingState);
+  }
+
+  @override
+  TextEditingValue? get currentTextEditingValue => _currentEditingState;
+
+  @override
+  AutofillScope? get currentAutofillScope => null;
+
+  @override
+  void updateEditingValue(TextEditingValue value) {
+    if (!widget.enabled) return;
+    final text = value.text;
+    if (text == _sentinel) {
+      _currentEditingState = _initEditingState;
+      if (!value.composing.isCollapsed) {
+        _connection?.setEditingState(_initEditingState);
+      }
+      return;
+    }
+
+    if (text.length < _sentinel.length) {
+      final delCount = (_sentinel.length - text.length).clamp(1, 2);
+      for (int i = 0; i < delCount; i++) {
+        widget.terminal.keyInput(xt.TerminalKey.backspace);
+      }
+      _resetState();
+      return;
+    }
+
+    String delta;
+    if (text.startsWith(_sentinel)) {
+      delta = text.substring(_sentinel.length);
+    } else if (text.startsWith(' ')) {
+      delta = text.substring(1);
+    } else {
+      delta = text;
+    }
+
+    if (delta.isNotEmpty) {
+      _sendText(delta);
+    }
+    _resetState();
+  }
+
+  void _sendText(String delta) {
+    for (int i = 0; i < delta.length; i++) {
+      final ch = delta[i];
+      if (ch == '\n' || ch == '\r') {
+        widget.terminal.keyInput(xt.TerminalKey.enter);
+      } else if (ch == '\t') {
+        widget.terminal.keyInput(xt.TerminalKey.tab);
+      } else if (ch == '\x7f' || ch == '\b') {
+        widget.terminal.keyInput(xt.TerminalKey.backspace);
+      } else {
+        widget.terminal.textInput(ch);
+      }
+    }
+  }
+
+  @override
+  void performAction(TextInputAction action) {
+    if (action == TextInputAction.newline ||
+        action == TextInputAction.done ||
+        action == TextInputAction.go ||
+        action == TextInputAction.send ||
+        action == TextInputAction.search) {
+      widget.terminal.keyInput(xt.TerminalKey.enter);
+    }
+  }
+
+  @override
+  void updateFloatingCursor(RawFloatingCursorPoint point) {}
+
+  @override
+  void performPrivateCommand(String action, Map<String, dynamic> data) {}
+
+  @override
+  void showAutocorrectionPromptRect(int start, int end) {}
+
+  @override
+  void connectionClosed() {
+    _connection = null;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

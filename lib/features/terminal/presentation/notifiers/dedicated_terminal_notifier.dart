@@ -160,7 +160,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       int lastCols = -1;
       int lastRows = -1;
       final xtermTerm = xt.Terminal(
-        maxLines: 10000,
+        maxLines: 2500,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : (Platform.isIOS

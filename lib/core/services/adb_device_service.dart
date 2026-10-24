@@ -81,7 +81,7 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
   }
 
   /// Checks whether this device supports USB Host mode (OTG) and lists attached USB devices
-  Future<void> checkUsbHostSupport() async {
+  Future<void> checkUsbHostSupport({bool autoRequestPermission = true}) async {
     if (!Platform.isAndroid) {
       final usbDir = Directory('/dev/bus/usb');
       final supported = await usbDir.exists();
@@ -91,7 +91,10 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     try {
       final bool? isSupported = await _nativeChannel.invokeMethod<bool>('isUsbHostSupported');
-      final List<dynamic>? rawDevices = await _nativeChannel.invokeMethod<List<dynamic>>('getConnectedUsbDevices');
+      final List<dynamic>? rawDevices = await _nativeChannel.invokeMethod<List<dynamic>>(
+        'getConnectedUsbDevices',
+        {'autoRequestPermission': autoRequestPermission},
+      );
 
       final List<Map<String, dynamic>> parsedList = [];
       if (rawDevices != null) {
@@ -111,6 +114,42 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     }
   }
 
+  /// Explicitly requests USB OTG permission and starts the native USB-to-ADB bridge
+  Future<String> connectUsbOtg() async {
+    if (!Platform.isAndroid) {
+      await refreshDevices();
+      return 'Проверка USB завершена';
+    }
+    try {
+      final List<dynamic>? rawDevices = await _nativeChannel.invokeMethod<List<dynamic>>('connectUsbOtg');
+      final List<Map<String, dynamic>> parsedList = [];
+      if (rawDevices != null) {
+        for (final item in rawDevices) {
+          if (item is Map) {
+            parsedList.add(Map<String, dynamic>.from(item));
+          }
+        }
+      }
+      state = state.copyWith(rawUsbDevices: parsedList);
+      await refreshDevices();
+
+      if (parsedList.isEmpty) {
+        return 'Физические USB-устройства не обнаружены. Проверьте кабель Type-C и включите «Подключение OTG» в настройках.';
+      }
+      final adbCapable = parsedList.where((d) => d['hasAdbInterface'] == true).toList();
+      if (adbCapable.isEmpty) {
+        return 'Телефон подключен по USB, но «Отладка по USB» на втором телефоне выключена (режим только зарядки/MTP).';
+      }
+      final noPerm = adbCapable.where((d) => d['hasPermission'] != true).toList();
+      if (noPerm.isNotEmpty) {
+        return 'Подтвердите системное окно Android «Разрешить доступ к USB-устройству» и нажмите «Подключить USB» ещё раз.';
+      }
+      return 'USB-OTG мост активен! Подтвердите отладку (RSA-ключ) на экране второго телефона.';
+    } catch (e) {
+      return 'Ошибка USB OTG: $e';
+    }
+  }
+
   /// Refreshes ADB device list (`adb devices -l`)
   Future<void> refreshDevices({bool silent = false}) async {
     if (!silent) {
@@ -119,8 +158,19 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     final runtime = _ref.read(runtimeServiceProvider);
     try {
+      await checkUsbHostSupport(autoRequestPermission: !silent);
+
       // Ensure ADB server is running
       await runtime.runCommand('adb start-server 2>/dev/null || true');
+
+      // Connect any active native USB-OTG bridges (e.g. 127.0.0.1:5556)
+      for (final usbDev in state.rawUsbDevices) {
+        final bridgeActive = usbDev['bridgeActive'] == true;
+        final bridgeAddr = (usbDev['bridgeAddress'] ?? '').toString().trim();
+        if (bridgeActive && bridgeAddr.isNotEmpty) {
+          await runtime.runCommand('adb connect $bridgeAddr 2>/dev/null || true');
+        }
+      }
 
       final String output = await runtime.runCommand('adb devices -l').catchError((e) => '');
       final List<AdbDevice> parsed = [];
@@ -134,8 +184,20 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
           continue;
         }
 
-        final device = AdbDevice.fromAdbLine(trimmed);
+        var device = AdbDevice.fromAdbLine(trimmed);
         if (device.id.isNotEmpty) {
+          // Enrich USB-bridged device name from UsbManager metadata if model is not yet reported
+          if (device.model.isEmpty) {
+            final matchingUsb = state.rawUsbDevices.where((u) => u['bridgeAddress'] == device.id).toList();
+            if (matchingUsb.isNotEmpty) {
+              final mfg = (matchingUsb.first['manufacturer'] ?? '').toString().trim();
+              final prod = (matchingUsb.first['product'] ?? '').toString().trim();
+              final combined = '$mfg $prod'.trim();
+              if (combined.isNotEmpty) {
+                device = device.copyWith(model: combined);
+              }
+            }
+          }
           parsed.add(device);
         }
       }
@@ -147,7 +209,11 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
           try {
             final versionOut = await runtime.runCommand('adb -s ${dev.id} shell getprop ro.build.version.release 2>/dev/null || true');
             final cleanVersion = versionOut.trim();
+            final modelOut = dev.model.isEmpty
+                ? (await runtime.runCommand('adb -s ${dev.id} shell getprop ro.product.model 2>/dev/null || true')).trim()
+                : dev.model;
             final devWithVersion = dev.copyWith(
+              model: modelOut.isNotEmpty ? modelOut : dev.model,
               androidVersion: cleanVersion.isNotEmpty ? 'Android $cleanVersion' : null,
             );
             enriched.add(devWithVersion);
@@ -174,8 +240,6 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
       } else {
         newSelected = null;
       }
-
-      await checkUsbHostSupport();
 
       state = state.copyWith(
         isChecking: false,
@@ -266,13 +330,17 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
       return 'Целевое устройство не выбрано или не подключено';
     }
 
+    final resolvedPkg = (packageName != null && packageName.isNotEmpty)
+        ? packageName
+        : await detectPackageNameForApk(apkPath);
+
     final runtime = _ref.read(runtimeServiceProvider);
     final cmd = StringBuffer('adb -s $targetId install -r "$apkPath"');
-    if (packageName != null && packageName.isNotEmpty) {
+    if (resolvedPkg != null && resolvedPkg.isNotEmpty) {
       if (activityName != null && activityName.isNotEmpty) {
-        cmd.write(' && adb -s $targetId shell am start -n "$packageName/$activityName"');
+        cmd.write(' && adb -s $targetId shell am start -n "$resolvedPkg/$activityName"');
       } else {
-        cmd.write(' && adb -s $targetId shell monkey -p "$packageName" -c android.intent.category.LAUNCHER 1');
+        cmd.write(' && adb -s $targetId shell monkey -p "$resolvedPkg" -c android.intent.category.LAUNCHER 1');
       }
     }
 
@@ -282,6 +350,140 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     } catch (e) {
       return 'Ошибка установки: $e';
     }
+  }
+
+  /// Installs any compiled APK directly onto this phone (host device) via Android PackageInstaller
+  Future<String> installApkOnHostPhone(String prootApkPath, {bool launchAfterInstall = true}) async {
+    if (!Platform.isAndroid) {
+      return 'Локальная установка APK поддерживается только на Android';
+    }
+    try {
+      final filesDir = await _nativeChannel.invokeMethod<String>('getFilesDir') ??
+          '/data/user/0/com.example.quantum_ide/files';
+      String hostPath = prootApkPath;
+      if (prootApkPath.startsWith('/root/projects/external/')) {
+        hostPath = prootApkPath.replaceFirst('/root/projects/external/', '/storage/emulated/0/QuantumIDE/');
+      } else if (prootApkPath.startsWith('/sdcard/')) {
+        hostPath = prootApkPath.replaceFirst('/sdcard/', '/storage/emulated/0/');
+      } else if (prootApkPath.startsWith('/root/projects/')) {
+        hostPath = prootApkPath.replaceFirst('/root/projects/', '$filesDir/projects/');
+      } else if (!prootApkPath.startsWith('/data/') && !prootApkPath.startsWith('/storage/')) {
+        hostPath = '$filesDir/rootfs/ubuntu$prootApkPath';
+      }
+
+      await _nativeChannel.invokeMethod('installApk', {
+        'apkPath': hostPath,
+        'launchAfterInstall': launchAfterInstall,
+      });
+      return 'Запущен системный установщик Android для $prootApkPath';
+    } catch (e) {
+      return 'Ошибка локальной установки APK: $e';
+    }
+  }
+
+  /// Finds all compiled .apk files in the current workspace and across `/root/projects/`
+  Future<List<String>> findCompiledApks({String? workspacePath}) async {
+    final results = <String>[];
+    final seen = <String>{};
+
+    void addIfExists(String path) {
+      if (seen.contains(path)) return;
+      final f = File(path);
+      if (f.existsSync() && f.lengthSync() > 0) {
+        seen.add(path);
+        results.add(path);
+      }
+    }
+
+    void scanProjectDir(String projectDir) {
+      addIfExists('$projectDir/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk');
+      addIfExists('$projectDir/build/app/outputs/flutter-apk/app-release.apk');
+      addIfExists('$projectDir/build/app/outputs/flutter-apk/app-debug.apk');
+      final flutterApkDir = Directory('$projectDir/build/app/outputs/flutter-apk');
+      if (flutterApkDir.existsSync()) {
+        try {
+          for (final entity in flutterApkDir.listSync()) {
+            if (entity is File && entity.path.endsWith('.apk')) {
+              addIfExists(entity.path);
+            }
+          }
+        } catch (_) {}
+      }
+      final gradleApkDir = Directory('$projectDir/app/build/outputs/apk');
+      if (gradleApkDir.existsSync()) {
+        try {
+          for (final entity in gradleApkDir.listSync(recursive: true)) {
+            if (entity is File && entity.path.endsWith('.apk')) {
+              addIfExists(entity.path);
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (workspacePath != null && workspacePath.isNotEmpty) {
+      scanProjectDir(workspacePath);
+    }
+
+    final projectsRoot = Directory('/root/projects');
+    if (projectsRoot.existsSync()) {
+      try {
+        for (final dir in projectsRoot.listSync()) {
+          if (dir is Directory && !dir.path.endsWith('/external')) {
+            scanProjectDir(dir.path);
+          }
+        }
+      } catch (_) {}
+    }
+    return results;
+  }
+
+  /// Automatically detects Android package name (applicationId) from a project or APK path
+  Future<String?> detectPackageNameForApk(String apkOrProjectPath) async {
+    String projectDir = apkOrProjectPath;
+    final buildIdx = apkOrProjectPath.indexOf('/build/');
+    if (buildIdx > 0) {
+      projectDir = apkOrProjectPath.substring(0, buildIdx);
+    } else {
+      final appBuildIdx = apkOrProjectPath.indexOf('/app/build/');
+      if (appBuildIdx > 0) {
+        projectDir = apkOrProjectPath.substring(0, appBuildIdx);
+      }
+    }
+
+    final candidates = [
+      '$projectDir/android/app/build.gradle.kts',
+      '$projectDir/android/app/build.gradle',
+      '$projectDir/app/build.gradle.kts',
+      '$projectDir/app/build.gradle',
+    ];
+
+    for (final path in candidates) {
+      final f = File(path);
+      if (f.existsSync()) {
+        try {
+          final content = await f.readAsString();
+          final match = RegExp(r'''applicationId\s*=?\s*["']([a-zA-Z0-9_.]+)["']''').firstMatch(content);
+          if (match != null) return match.group(1);
+        } catch (_) {}
+      }
+    }
+
+    final manifests = [
+      '$projectDir/android/app/src/main/AndroidManifest.xml',
+      '$projectDir/app/src/main/AndroidManifest.xml',
+    ];
+    for (final path in manifests) {
+      final f = File(path);
+      if (f.existsSync()) {
+        try {
+          final content = await f.readAsString();
+          final match = RegExp(r'''package\s*=\s*["']([a-zA-Z0-9_.]+)["']''').firstMatch(content);
+          if (match != null) return match.group(1);
+        } catch (_) {}
+      }
+    }
+    return null;
   }
 
   /// Takes screenshot from target device and copies it to local workspace
