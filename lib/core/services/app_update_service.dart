@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:quantum_ide/core/services/android_app_installer_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppUpdateInfo {
@@ -67,6 +69,8 @@ class AppUpdateState {
   final String? errorMessage;
   final String? statusMessage;
   final String? downloadedApkPath;
+  final String currentVersion;
+  final String currentBuildNumber;
 
   const AppUpdateState({
     this.isChecking = false,
@@ -79,7 +83,11 @@ class AppUpdateState {
     this.errorMessage,
     this.statusMessage,
     this.downloadedApkPath,
+    this.currentVersion = '1.2.55',
+    this.currentBuildNumber = '71',
   });
+
+  bool get hasUpdate => updateInfo != null;
 
   AppUpdateState copyWith({
     bool? isChecking,
@@ -94,6 +102,8 @@ class AppUpdateState {
     bool clearError = false,
     String? statusMessage,
     String? downloadedApkPath,
+    String? currentVersion,
+    String? currentBuildNumber,
   }) {
     return AppUpdateState(
       isChecking: isChecking ?? this.isChecking,
@@ -106,6 +116,8 @@ class AppUpdateState {
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       statusMessage: statusMessage ?? this.statusMessage,
       downloadedApkPath: downloadedApkPath ?? this.downloadedApkPath,
+      currentVersion: currentVersion ?? this.currentVersion,
+      currentBuildNumber: currentBuildNumber ?? this.currentBuildNumber,
     );
   }
 }
@@ -114,28 +126,116 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 30),
+    headers: {
+      'User-Agent': 'QuantumIDE-Updater',
+    },
   ));
+
+  static const String githubApiLatestRelease =
+      'https://api.github.com/repos/Lesorub361/quantum_ide/releases/latest';
 
   static const String defaultManifestUrl =
       'https://raw.githubusercontent.com/Lesorub361/quantum_ide/main/quantum-ide-update.json';
 
-  AppUpdateService() : super(const AppUpdateState());
+  AppUpdateService() : super(const AppUpdateState()) {
+    _initCurrentVersion();
+  }
 
-  Future<AppUpdateInfo?> checkForUpdates({String? customManifestUrl}) async {
+  Future<void> _initCurrentVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      state = state.copyWith(
+        currentVersion: packageInfo.version,
+        currentBuildNumber: packageInfo.buildNumber,
+      );
+    } catch (_) {}
+  }
+
+  static bool isNewerVersion(String latest, String current) {
+    try {
+      final cleanLatest = latest.replaceAll(RegExp(r'[^0-9.]'), '');
+      final cleanCurrent = current.replaceAll(RegExp(r'[^0-9.]'), '');
+      final v1 = cleanLatest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+      final v2 = cleanCurrent.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+      for (int i = 0; i < math.max(v1.length, v2.length); i++) {
+        final num1 = i < v1.length ? v1[i] : 0;
+        final num2 = i < v2.length ? v2[i] : 0;
+        if (num1 > num2) return true;
+        if (num1 < num2) return false;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<AppUpdateInfo?> checkForUpdates({String? customManifestUrl, bool silent = false}) async {
     state = state.copyWith(
       isChecking: true,
       clearError: true,
-      statusMessage: 'Проверка обновлений приложения...',
+      statusMessage: silent ? null : 'Проверка обновлений QuantumIDE...',
     );
 
     try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = packageInfo.version;
+      final currentCode = int.tryParse(packageInfo.buildNumber) ?? 1;
+
+      state = state.copyWith(
+        currentVersion: currentVersion,
+        currentBuildNumber: packageInfo.buildNumber,
+      );
+
+      // 1. Try GitHub Releases API first (always contains newest releases and APK URLs)
+      try {
+        final ghResponse = await _dio.get(githubApiLatestRelease);
+        if (ghResponse.statusCode == 200 && ghResponse.data is Map<String, dynamic>) {
+          final data = ghResponse.data as Map<String, dynamic>;
+          final tagName = data['tag_name']?.toString() ?? '';
+          final cleanVersion = tagName.replaceFirst(RegExp(r'^[vV]'), '');
+          final notes = data['body']?.toString() ?? '';
+          final assets = (data['assets'] as List<dynamic>?) ?? [];
+
+          // Look for APK in assets
+          String apkUrl = '';
+          int sizeBytes = 0;
+          for (final a in assets) {
+            if (a is Map<String, dynamic>) {
+              final name = a['name']?.toString() ?? '';
+              if (name.endsWith('.apk')) {
+                // Prefer arm64 or release apk
+                if (apkUrl.isEmpty || name.contains('arm64') || name == 'app-release.apk') {
+                  apkUrl = a['browser_download_url']?.toString() ?? '';
+                  sizeBytes = (a['size'] is int) ? a['size'] as int : 0;
+                }
+              }
+            }
+          }
+
+          if (isNewerVersion(cleanVersion, currentVersion) && apkUrl.isNotEmpty) {
+            final info = AppUpdateInfo(
+              versionCode: currentCode + 1,
+              versionName: cleanVersion,
+              apkUrl: apkUrl,
+              sha256: '',
+              sizeBytes: sizeBytes,
+              notes: notes,
+            );
+            state = state.copyWith(
+              isChecking: false,
+              updateInfo: info,
+              statusMessage: 'Доступна новая версия $cleanVersion!',
+            );
+            return info;
+          }
+        }
+      } catch (ghError) {
+        debugPrint('[AppUpdateService] GitHub API check fallback: $ghError');
+      }
+
+      // 2. Fallback to raw manifest if GitHub API failed or rate-limited
       final prefs = await SharedPreferences.getInstance();
       final manifestUrl = customManifestUrl ??
           prefs.getString('app_update_manifest_url') ??
           defaultManifestUrl;
-
-      final packageInfo = await PackageInfo.fromPlatform();
-      final currentCode = int.tryParse(packageInfo.buildNumber) ?? 1;
 
       final response = await _dio.get(manifestUrl);
       if (response.statusCode == 200 && response.data != null) {
@@ -144,18 +244,19 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
             : jsonDecode(response.data.toString()) as Map<String, dynamic>;
 
         final info = AppUpdateInfo.fromJson(data);
-        if (info.versionCode > currentCode && info.apkUrl.isNotEmpty) {
+        if ((info.versionCode > currentCode || isNewerVersion(info.versionName, currentVersion)) &&
+            info.apkUrl.isNotEmpty) {
           state = state.copyWith(
             isChecking: false,
             updateInfo: info,
-            statusMessage: 'Доступна новая версия ${info.versionName} (сборка ${info.versionCode})',
+            statusMessage: 'Доступна новая версия ${info.versionName}!',
           );
           return info;
         } else {
           state = state.copyWith(
             isChecking: false,
             clearUpdateInfo: true,
-            statusMessage: 'Установлена последняя версия (${packageInfo.version}+${packageInfo.buildNumber})',
+            statusMessage: 'Установлена последняя версия ($currentVersion)',
           );
           return null;
         }
@@ -166,7 +267,7 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
       debugPrint('[AppUpdateService] Check update error: $e');
       state = state.copyWith(
         isChecking: false,
-        errorMessage: 'Не удалось проверить обновления: $e',
+        errorMessage: silent ? null : 'Не удалось проверить обновления: $e',
         statusMessage: null,
       );
       return null;
@@ -250,8 +351,18 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
         statusMessage: 'Обновление загружено. Открытие установщика...',
       );
 
-      // Trigger installation via OpenFilex
-      await OpenFilex.open(targetFile.path);
+      // 1. First attempt native direct install on Android
+      if (Platform.isAndroid) {
+        final installResult = await AndroidAppInstallerService().installApk(
+          targetFile.path,
+          launchAfterInstall: true,
+        );
+        if (!installResult.success) {
+          await OpenFilex.open(targetFile.path);
+        }
+      } else {
+        await OpenFilex.open(targetFile.path);
+      }
     } catch (e) {
       debugPrint('[AppUpdateService] Download update error: $e');
       state = state.copyWith(

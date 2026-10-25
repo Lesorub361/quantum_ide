@@ -15,6 +15,7 @@ import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/app_update_service.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -27,6 +28,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedStackFilter = 'all';
+  String? _dismissedUpdateTag;
 
   bool _matchesStackFilter(Project p) {
     switch (_selectedStackFilter) {
@@ -56,6 +58,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       ref.read(editorProvider.notifier).clearWorkspace();
       ref.read(terminalTabsProvider.notifier).closeAllSessions();
       ref.read(runtimeServiceProvider).init();
+      ref.read(appUpdateServiceProvider.notifier).checkForUpdates(silent: true);
     });
   }
 
@@ -284,9 +287,15 @@ class _HomePageState extends ConsumerState<HomePage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  AppLocalizations.of(context)!.welcomeTitle,
-                                  style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
+                                Row(
+                                  children: [
+                                    Text(
+                                      AppLocalizations.of(context)!.welcomeTitle,
+                                      style: GoogleFonts.inter(fontSize: 24, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    _buildVersionChip(context),
+                                  ],
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -320,6 +329,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ],
                       ),
                       const SizedBox(height: 18),
+                      _buildAppUpdateBanner(context),
                       _buildQuickActionsAdaptive(context),
                       const SizedBox(height: 18),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
@@ -452,6 +462,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       const SizedBox(height: 10),
                       _buildSearchField(),
                       const SizedBox(height: 14),
+                      _buildAppUpdateBanner(context),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
                         _buildResumeCard(context, lastProject),
                       ],
@@ -550,6 +561,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                           letterSpacing: -0.5,
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      _buildVersionChip(context),
                     ],
                   ),
                 ),
@@ -699,6 +712,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ],
                       ),
                       const SizedBox(height: 20),
+                      _buildAppUpdateBanner(context),
                       _buildQuickActionsAdaptive(context),
                       const SizedBox(height: 20),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
@@ -937,14 +951,22 @@ class _HomePageState extends ConsumerState<HomePage> {
       flexibleSpace: FlexibleSpaceBar(
         titlePadding: const EdgeInsets.only(left: 20, bottom: 12),
         centerTitle: false,
-        title: Text(
-          'Quantum IDE',
-          style: GoogleFonts.inter(
-            fontSize: 18,
-            fontWeight: FontWeight.w900,
-            color: theme.colorScheme.onSurface,
-            letterSpacing: -0.5,
-          ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              'Quantum IDE',
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: theme.colorScheme.onSurface,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(width: 8),
+            _buildVersionChip(context),
+          ],
         ),
         background: Container(
           decoration: BoxDecoration(
@@ -996,6 +1018,362 @@ class _HomePageState extends ConsumerState<HomePage> {
         tooltip: tooltip,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints(),
+      ),
+    );
+  }
+
+  Widget _buildVersionChip(BuildContext context) {
+    final updateState = ref.watch(appUpdateServiceProvider);
+    final theme = Theme.of(context);
+    final hasUpdate = updateState.hasUpdate;
+
+    return InkWell(
+      onTap: () {
+        if (hasUpdate) {
+          _showUpdateDialog(context, updateState.updateInfo!);
+        } else {
+          ref.read(appUpdateServiceProvider.notifier).checkForUpdates();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                updateState.isChecking
+                    ? 'Проверка обновлений...'
+                    : 'QuantumIDE v${updateState.currentVersion} • Установлена актуальная версия',
+              ),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: hasUpdate
+              ? Colors.amber.withValues(alpha: 0.15)
+              : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasUpdate
+                ? Colors.amber.withValues(alpha: 0.6)
+                : Colors.white.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasUpdate) ...[
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: Colors.amber,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              'v${updateState.currentVersion}',
+              style: GoogleFonts.firaCode(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: hasUpdate ? Colors.amber : theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              ),
+            ),
+            if (hasUpdate) ...[
+              const SizedBox(width: 4),
+              const Icon(LucideIcons.arrow_up_circle, size: 12, color: Colors.amber),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAppUpdateBanner(BuildContext context) {
+    final updateState = ref.watch(appUpdateServiceProvider);
+    if (!updateState.hasUpdate) return const SizedBox.shrink();
+
+    final info = updateState.updateInfo!;
+    if (_dismissedUpdateTag == info.versionName) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            theme.colorScheme.primary.withValues(alpha: 0.15),
+            Colors.purpleAccent.withValues(alpha: 0.08),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.3),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(LucideIcons.sparkles, color: Colors.amber, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Доступно обновление',
+                          style: GoogleFonts.inter(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'v${info.versionName}',
+                            style: GoogleFonts.firaCode(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.greenAccent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Текущая версия: v${updateState.currentVersion} • Обновление в 1 клик',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(LucideIcons.x, size: 16),
+                color: theme.colorScheme.onSurfaceVariant,
+                onPressed: () {
+                  setState(() {
+                    _dismissedUpdateTag = info.versionName;
+                  });
+                },
+                tooltip: 'Скрыть',
+              ),
+            ],
+          ),
+          if (updateState.isDownloading) ...[
+            const SizedBox(height: 14),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: updateState.downloadProgress > 0 ? updateState.downloadProgress : null,
+                minHeight: 8,
+                backgroundColor: Colors.white10,
+                valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  updateState.statusMessage ?? 'Загрузка...',
+                  style: GoogleFonts.inter(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                ),
+                Text(
+                  '${(updateState.downloadProgress * 100).toStringAsFixed(0)}%',
+                  style: GoogleFonts.firaCode(fontSize: 11, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                ),
+              ],
+            ),
+          ] else ...[
+            if (info.notes.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  info.notes.length > 200 ? '${info.notes.substring(0, 200)}...' : info.notes,
+                  style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () => ref.read(appUpdateServiceProvider.notifier).downloadAndInstallUpdate(info),
+                  icon: const Icon(LucideIcons.download, size: 16),
+                  label: const Text('Обновить приложение'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: () => _showUpdateDialog(context, info),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: theme.colorScheme.onSurface,
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Подробнее'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showUpdateDialog(BuildContext context, AppUpdateInfo info) {
+    final theme = Theme.of(context);
+    final sizeMb = info.sizeBytes > 0 ? ' • ${(info.sizeBytes / 1024 / 1024).toStringAsFixed(1)} MB' : '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Consumer(
+        builder: (context, ref, _) {
+          final state = ref.watch(appUpdateServiceProvider);
+          return AlertDialog(
+            backgroundColor: theme.colorScheme.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            title: Row(
+              children: [
+                const Icon(LucideIcons.sparkles, color: Colors.amber, size: 24),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Обновление QuantumIDE',
+                    style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Версия: v${info.versionName}$sizeMb',
+                        style: GoogleFonts.firaCode(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (info.notes.isNotEmpty) ...[
+                      Text(
+                        'Что нового:',
+                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                        child: Text(
+                          info.notes,
+                          style: GoogleFonts.inter(fontSize: 12, height: 1.4, color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                    if (state.isDownloading) ...[
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: state.downloadProgress > 0 ? state.downloadProgress : null,
+                          minHeight: 8,
+                          backgroundColor: Colors.white10,
+                          valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        state.statusMessage ?? 'Загрузка...',
+                        style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Закрыть'),
+              ),
+              if (!state.isDownloading)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    ref.read(appUpdateServiceProvider.notifier).downloadAndInstallUpdate(info);
+                  },
+                  icon: const Icon(LucideIcons.download, size: 16),
+                  label: const Text('Скачать и установить'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

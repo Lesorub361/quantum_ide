@@ -1,10 +1,10 @@
 {
-  "versionCode": 36,
-  "versionName": "1.2.18",
-  "notes": "Обновление QuantumIDE v1.2.18: Исправлено отображение и детекция CLI агентов в чате (Antigravity, Claude Code, DeepSeek Harness), синхронизация с установленными пакетами, поддержка PATH для Node.js и PRoot в ProcessManager.",
+  "versionCode": 72,
+  "versionName": "1.2.56",
+  "notes": "QuantumIDE v1.2.56: Отображение версии на главной странице, проверка и обновление приложения в 1 клик через встроенный установщик, исправление AOT-компилятора gen_snapshot и полная совместимость с ARM64 планшетами.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.18/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.56/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
