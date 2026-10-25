@@ -620,6 +620,7 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
   Widget _buildSystemStatsBadge() {
     final stats = ref.watch(systemStatsProvider);
     final cpuColor = _getStatsBadgeColor(stats.cpuUsage);
+    final gpuColor = _getStatsBadgeColor(stats.gpuUsage);
     final ramColor = _getStatsBadgeColor(stats.ramUsage);
     
     return Container(
@@ -636,6 +637,15 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
           const SizedBox(width: 2),
           Text(
             '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
+            style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.white54, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(width: 4),
+          Container(width: 0.5, height: 6, color: Colors.white12),
+          const SizedBox(width: 4),
+          Icon(LucideIcons.zap, size: 9, color: gpuColor),
+          const SizedBox(width: 2),
+          Text(
+            '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
             style: GoogleFonts.jetBrainsMono(fontSize: 8, color: Colors.white54, fontWeight: FontWeight.bold),
           ),
           const SizedBox(width: 4),

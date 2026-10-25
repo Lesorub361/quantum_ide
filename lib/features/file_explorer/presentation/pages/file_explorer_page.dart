@@ -728,7 +728,32 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.zap, size: 12, color: Colors.greenAccent),
+                      const SizedBox(width: 4),
+                      Text(
+                        'GPU: ${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
+                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: stats.gpuUsage,
+                            minHeight: 2,
+                            backgroundColor: Colors.white.withValues(alpha: 0.05),
+                            valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.gpuUsage)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Row(
                     children: [

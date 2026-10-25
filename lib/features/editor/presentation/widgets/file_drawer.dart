@@ -680,12 +680,12 @@ class DrawerStatsPanel extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('CPU', style: GoogleFonts.inter(fontSize: 12, color: Colors.white38)),
+                        Text('CPU', style: GoogleFonts.inter(fontSize: 11, color: Colors.white38)),
                         Expanded(
                           child: Text(
                             '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', 
                             textAlign: TextAlign.right,
-                            style: GoogleFonts.jetBrainsMono(fontSize: 12, color: _getLoadColor(stats.cpuUsage), fontWeight: FontWeight.bold),
+                            style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _getLoadColor(stats.cpuUsage), fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
@@ -703,7 +703,7 @@ class DrawerStatsPanel extends ConsumerWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -711,7 +711,38 @@ class DrawerStatsPanel extends ConsumerWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('RAM', style: GoogleFonts.inter(fontSize: 12, color: Colors.white38)),
+                        Text('GPU', style: GoogleFonts.inter(fontSize: 11, color: Colors.white38)),
+                        Expanded(
+                          child: Text(
+                            '${(stats.gpuUsage * 100).toStringAsFixed(0)}%', 
+                            textAlign: TextAlign.right,
+                            style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _getLoadColor(stats.gpuUsage), fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: LinearProgressIndicator(
+                        value: stats.gpuUsage,
+                        minHeight: 3,
+                        backgroundColor: Colors.white.withValues(alpha: 0.05),
+                        valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.gpuUsage)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('RAM', style: GoogleFonts.inter(fontSize: 11, color: Colors.white38)),
                         Expanded(
                           child: FittedBox(
                             fit: BoxFit.scaleDown,

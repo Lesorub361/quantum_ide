@@ -1941,7 +1941,44 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(LucideIcons.zap, size: 12, color: Colors.greenAccent),
+                            const SizedBox(width: 4),
+                            Text(
+                              'GPU',
+                              style: GoogleFonts.inter(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
+                          style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: stats.gpuUsage,
+                        minHeight: 3,
+                        backgroundColor: Colors.white10,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.greenAccent),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1954,13 +1991,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                             const Icon(LucideIcons.memory_stick, size: 12, color: Colors.purpleAccent),
                             const SizedBox(width: 4),
                             Text(
-                              'App RAM',
+                              'RAM',
                               style: GoogleFonts.inter(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
                         Text(
-                          '${stats.appRamFormatted} (Своб. ${stats.deviceRamAvailableGB.toStringAsFixed(1)}G)',
+                          stats.appRamFormatted,
                           style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
                         ),
                       ],

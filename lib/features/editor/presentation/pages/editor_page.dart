@@ -1444,7 +1444,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 height: 60,
                                 color: Colors.white.withValues(alpha: 0.08),
                               ),
-                                _buildCircularGauge(
+                              _buildCircularGauge(
+                                label: 'GPU',
+                                value: '${(stats.gpuUsage * 100).toStringAsFixed(1)}%',
+                                progress: stats.gpuUsage,
+                                color: Colors.greenAccent,
+                              ),
+                              Container(
+                                width: 1,
+                                height: 60,
+                                color: Colors.white.withValues(alpha: 0.08),
+                              ),
+                              _buildCircularGauge(
                                 label: 'App RAM',
                                 value: '${stats.appRamFormatted} / ${stats.ramTotalGB.toStringAsFixed(0)} GB',
                                 progress: stats.ramUsage,

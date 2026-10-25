@@ -349,8 +349,11 @@ class _SystemStatsChip extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(systemStatsProvider);
     final cpuColor = loadColor(stats.cpuUsage);
+    final gpuColor = loadColor(stats.gpuUsage);
     final ramColor = loadColor(stats.ramUsage);
-    final worst = stats.cpuUsage > stats.ramUsage ? cpuColor : ramColor;
+    final worst = (stats.cpuUsage >= stats.ramUsage && stats.cpuUsage >= stats.gpuUsage)
+        ? cpuColor
+        : (stats.gpuUsage >= stats.ramUsage ? gpuColor : ramColor);
     final textStyle = GoogleFonts.jetBrainsMono(fontSize: 9.5, fontWeight: FontWeight.w600);
 
     return InkWell(
@@ -373,6 +376,14 @@ class _SystemStatsChip extends ConsumerWidget {
               _miniBar(stats.cpuUsage, cpuColor),
             ],
             if (!ultraCompact) ...[
+              const SizedBox(width: 6),
+              Icon(LucideIcons.zap, size: 10, color: gpuColor),
+              const SizedBox(width: 3),
+              Text('${(stats.gpuUsage * 100).toStringAsFixed(0)}%', style: textStyle.copyWith(color: gpuColor)),
+              if (!compact) ...[
+                const SizedBox(width: 4),
+                _miniBar(stats.gpuUsage, gpuColor),
+              ],
               const SizedBox(width: 6),
               Icon(LucideIcons.memory_stick, size: 10, color: ramColor),
               const SizedBox(width: 3),
@@ -483,6 +494,12 @@ class _SystemSheet extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             _row('Процессор (CPU)', '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', stats.cpuUsage, LucideIcons.cpu),
+            _row(
+              'Видеоускоритель (${stats.gpuName})',
+              '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
+              stats.gpuUsage,
+              LucideIcons.zap,
+            ),
             _row(
               'Память Quantum IDE (App RAM)',
               stats.appRamFormatted,

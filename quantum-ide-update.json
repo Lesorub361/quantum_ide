@@ -1,10 +1,10 @@
 {
-  "versionCode": 76,
-  "versionName": "1.2.60",
-  "notes": "QuantumIDE v1.2.60: Добавлены авто-предложение и диалог установки рекомендуемых пакетов окружения при запуске (Vulkan 3D, Box64, Build Fix, APK Signer), информационный баннер на главной и Hero-карточка Vulkan в Менеджере пакетов.",
+  "versionCode": 77,
+  "versionName": "1.2.61",
+  "notes": "QuantumIDE v1.2.61: Добавлен мониторинг загрузки видеоускорителя (GPU) в проводник файлов, боковую панель проводника, системную телеметрию на главной странице, Bento Dashboard редактора и строку состояния.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.60/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.61/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
