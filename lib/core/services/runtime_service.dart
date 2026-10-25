@@ -569,7 +569,7 @@ alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
 alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons --extra-gen-snapshot-options=--dedup_instructions"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -800,7 +800,7 @@ alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
 alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons --extra-gen-snapshot-options=--dedup_instructions"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -1725,7 +1725,31 @@ PY_EOF
         fi
     done
 done
+
+# Auto-heal Flutter ARM64 linux host gen_snapshot for release/profile builds
+# Ensures Dart VM snapshot has --dedup_instructions enabled to match release Flutter Engine in product mode
+for fl_dir in "${FLUTTER_ROOT:-/root/flutter}" "$HOME/flutter" "/root/flutter"; do
+    [ -d "$fl_dir/bin/cache/artifacts/engine" ] || continue
+    for mode in release profile; do
+        ENGINE_DIR="$fl_dir/bin/cache/artifacts/engine/android-arm64-$mode/linux-arm64"
+        [ -d "$ENGINE_DIR" ] || continue
+        if [ ! -f "$ENGINE_DIR/gen_snapshot.real" ] && [ -f "$ENGINE_DIR/gen_snapshot" ]; then
+            if ! grep -q "gen_snapshot.real" "$ENGINE_DIR/gen_snapshot" 2>/dev/null; then
+                mv "$ENGINE_DIR/gen_snapshot" "$ENGINE_DIR/gen_snapshot.real"
+            fi
+        fi
+        if [ -f "$ENGINE_DIR/gen_snapshot.real" ]; then
+            cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$DIR/gen_snapshot.real" --dedup_instructions "$@"
+WRAP_GS
+            chmod +x "$ENGINE_DIR/gen_snapshot"
+        fi
+    done
+done
 ''';
+
   }
 
   String _generateSetupArm64Script() {
@@ -1969,6 +1993,25 @@ if [ -d "$SDK_ROOT" ]; then
     done
 fi
 
+# Flutter Version Pinning & Auto-Healing (Target: 3.44.9)
+# Guarantees that Flutter on device stays at verified 3.44.9 tag, preventing
+# ARM64 AOT gen_snapshot errors and Vulkan Impeller black screen crashes.
+TARGET_FLUTTER_TAG="3.44.9"
+if [ -d "/root/flutter/.git" ]; then
+    rm -f /root/flutter/.git/*.lock 2>/dev/null || true
+    git -C /root/flutter config --global --add safe.directory /root/flutter 2>/dev/null || true
+    CURRENT_TAG=$(cd /root/flutter && git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD 2>/dev/null || true)
+    if [ "$CURRENT_TAG" != "$TARGET_FLUTTER_TAG" ]; then
+        echo "[setup-arm64] Flutter version mismatch ($CURRENT_TAG != $TARGET_FLUTTER_TAG). Auto-healing..."
+        (
+            cd /root/flutter && \
+            git fetch --depth 1 origin tag "$TARGET_FLUTTER_TAG" 2>/dev/null || git fetch --tags origin 2>/dev/null || true
+            git checkout "$TARGET_FLUTTER_TAG" -f 2>/dev/null || true
+            /root/flutter/bin/flutter precache --android 2>/dev/null || true
+        ) &
+    fi
+fi
+
 # gen_snapshot fix:
 # Flutter AOT compilation requires gen_snapshot for the HOST architecture.
 # On ARM64 Android, Flutter looks for android-arm64-release/linux-arm64/gen_snapshot
@@ -1977,11 +2020,11 @@ FLUTTER_ENGINE="/root/flutter/bin/cache/artifacts/engine"
 if [ -f "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" ]; then
     for build_type in android-arm64-release android-arm64-profile; do
         TARGET_DIR="$FLUTTER_ENGINE/$build_type/linux-arm64"
-        if [ ! -f "$TARGET_DIR/gen_snapshot" ]; then
-            mkdir -p "$TARGET_DIR"
-            cp "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" "$TARGET_DIR/gen_snapshot"
+        mkdir -p "$TARGET_DIR"
+        if ! cmp -s "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" "$TARGET_DIR/gen_snapshot"; then
+            cp -f "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" "$TARGET_DIR/gen_snapshot"
             chmod +x "$TARGET_DIR/gen_snapshot"
-            echo "[setup-arm64] Installed gen_snapshot for $build_type/linux-arm64"
+            echo "[setup-arm64] Synchronized gen_snapshot for $build_type/linux-arm64"
         fi
     done
 fi
