@@ -14,6 +14,7 @@ import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_graph_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/features/github/presentation/pages/github_page.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_download_dialog.dart';
 import 'package:quantum_ide/core/services/secure_storage_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -562,6 +563,19 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     tooltip: 'Временно спрятать незавершённые изменения рабочей копии в тайник',
                     color: Colors.orangeAccent,
                     onTap: () => _showQuickStashDialog(status, notifier),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickToolBtn(
+                    icon: LucideIcons.cloud_download,
+                    label: 'Загрузить из Git',
+                    tooltip: 'Выбрать и скачать файл или папку из любого репозитория GitHub в проект',
+                    color: const Color(0xFF10B981),
+                    onTap: () {
+                      final wsPath = ref.read(workspaceProvider).currentPath;
+                      if (wsPath != null) {
+                        GitDownloadDialog.show(context, workspacePath: wsPath, gitNotifier: notifier);
+                      }
+                    },
                   ),
                   const SizedBox(width: 6),
                   _buildQuickToolBtn(
@@ -1386,7 +1400,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               ),
               ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.file_edit, color: Colors.white70, size: 18),
+                leading: const Icon(LucideIcons.pencil, color: Colors.white70, size: 18),
                 title: const Text('Открыть в редакторе кода', style: TextStyle(color: Colors.white, fontSize: 13)),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1396,7 +1410,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               if (isStaged)
                 ListTile(
                   dense: true,
-                  leading: const Icon(LucideIcons.minus_circle, color: Colors.orangeAccent, size: 18),
+                  leading: const Icon(LucideIcons.circle_minus, color: Colors.orangeAccent, size: 18),
                   title: const Text('Убрать из индекса (Unstage)', style: TextStyle(color: Colors.white, fontSize: 13)),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -1406,7 +1420,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               else
                 ListTile(
                   dense: true,
-                  leading: const Icon(LucideIcons.plus_circle, color: Color(0xFF00F2FE), size: 18),
+                  leading: const Icon(LucideIcons.circle_plus, color: Color(0xFF00F2FE), size: 18),
                   title: const Text('Добавить в индекс (Stage)', style: TextStyle(color: Colors.white, fontSize: 13)),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -2912,6 +2926,16 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     final nameCtrl = TextEditingController(text: status.userName ?? 'Quantum Developer');
     final emailCtrl = TextEditingController(text: status.userEmail ?? 'dev@quantum-ide.local');
 
+    final wsPath = ref.read(workspaceProvider).currentPath;
+    final defaultRepoName = wsPath != null ? p.basename(wsPath) : 'my-project';
+    final newRepoNameCtrl = TextEditingController(text: defaultRepoName);
+    final newRepoDescCtrl = TextEditingController(text: '');
+
+    bool isCreatingNewRepo = (status.remoteUrl == null || status.remoteUrl!.isEmpty);
+    bool isPrivateRepo = true; // Default to Private (закрытый) for user security
+    bool isCreatingRepoNow = false;
+    String? repoCreateError;
+
     bool obscureToken = true;
     bool isVerifyingToken = false;
     String? tokenVerifyStatus;
@@ -2933,12 +2957,93 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               ],
             ),
             content: SizedBox(
-              width: 480,
+              width: 500,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Mode Switcher: Create New Repo on GitHub vs Existing Remote URL
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.black38,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setDialogState(() => isCreatingNewRepo = true),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 7),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: isCreatingNewRepo ? const Color(0xFF00F2FE).withValues(alpha: 0.18) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.transparent,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.circle_plus, size: 12, color: isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Создать на GitHub',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setDialogState(() => isCreatingNewRepo = false),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 7),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: !isCreatingNewRepo ? const Color(0xFF00F2FE).withValues(alpha: 0.18) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: !isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.transparent,
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(LucideIcons.link, size: 12, color: !isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Существующий URL',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: !isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
                     // Section 1: GitHub PAT Token
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -2977,7 +3082,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Нужен для отправки кода (git push) на GitHub. Создаётся в GitHub Settings -> Developer Settings -> Personal access tokens (Classic) с галочками repo и workflow.',
+                            'Нужен для отправки кода и создания репозиториев. Создаётся в GitHub Settings -> Developer Settings -> Personal access tokens (Classic) с правами repo и workflow.',
                             style: TextStyle(color: Colors.white54, fontSize: 10),
                           ),
                           const SizedBox(height: 6),
@@ -3078,32 +3183,166 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     ),
                     const SizedBox(height: 12),
 
-                    // Section 2: Remote URL
-                    const Text('Удалённый репозиторий (Remote URL origin):', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                    const SizedBox(height: 4),
-                    TextField(
-                      controller: remoteCtrl,
-                      style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                      decoration: InputDecoration(
-                        hintText: 'https://github.com/пользователь/репозиторий.git',
-                        hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
-                        filled: true,
-                        fillColor: Colors.black26,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
-                        suffixIcon: IconButton(
-                          icon: const Icon(LucideIcons.clipboard, size: 14, color: Color(0xFF00F2FE)),
-                          tooltip: 'Вставить из буфера',
-                          onPressed: () async {
-                            final data = await Clipboard.getData(Clipboard.kTextPlain);
-                            if (data?.text != null && data!.text!.trim().isNotEmpty) {
-                              remoteCtrl.text = data.text!.trim();
-                            }
-                          },
+                    // Section 2: Either New Repo Creation or Existing Remote URL
+                    if (isCreatingNewRepo) ...[
+                      const Text('Название нового репозитория на GitHub:', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: newRepoNameCtrl,
+                        style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'my-project-name',
+                          hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
+                          filled: true,
+                          fillColor: Colors.black26,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                      const Text('Описание репозитория (необязательно):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: newRepoDescCtrl,
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'Краткое описание проекта...',
+                          hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
+                          filled: true,
+                          fillColor: Colors.black26,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Text('Доступ к репозиторию (Приватность):', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      // Two visual cards for Private vs Public
+                      Row(
+                        children: [
+                          // Private Card (Закрытый)
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setDialogState(() => isPrivateRepo = true),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: isPrivateRepo ? Colors.amberAccent.withValues(alpha: 0.12) : Colors.black26,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isPrivateRepo ? Colors.amberAccent : Colors.white12,
+                                    width: isPrivateRepo ? 1.5 : 0.8,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(LucideIcons.lock, size: 14, color: isPrivateRepo ? Colors.amberAccent : Colors.white54),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Приватный',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: isPrivateRepo ? Colors.amberAccent : Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'Закрыт от всех. Код виден только вам.',
+                                      style: TextStyle(fontSize: 9.5, color: Colors.white54),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Public Card (Открытый)
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => setDialogState(() => isPrivateRepo = false),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: !isPrivateRepo ? const Color(0xFF00F2FE).withValues(alpha: 0.12) : Colors.black26,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: !isPrivateRepo ? const Color(0xFF00F2FE) : Colors.white12,
+                                    width: !isPrivateRepo ? 1.5 : 0.8,
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(LucideIcons.globe, size: 14, color: !isPrivateRepo ? const Color(0xFF00F2FE) : Colors.white54),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Публичный',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: !isPrivateRepo ? const Color(0xFF00F2FE) : Colors.white70,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    const Text(
+                                      'Открыт для всех в интернете (open-source).',
+                                      style: TextStyle(fontSize: 9.5, color: Colors.white54),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (repoCreateError != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          repoCreateError!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                        ),
+                      ],
+                    ] else ...[
+                      const Text('Удалённый репозиторий (Remote URL origin):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      const SizedBox(height: 4),
+                      TextField(
+                        controller: remoteCtrl,
+                        style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'https://github.com/пользователь/репозиторий.git',
+                          hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
+                          filled: true,
+                          fillColor: Colors.black26,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                          suffixIcon: IconButton(
+                            icon: const Icon(LucideIcons.clipboard, size: 14, color: Color(0xFF00F2FE)),
+                            tooltip: 'Вставить из буфера',
+                            onPressed: () async {
+                              final data = await Clipboard.getData(Clipboard.kTextPlain);
+                              if (data?.text != null && data!.text!.trim().isNotEmpty) {
+                                remoteCtrl.text = data.text!.trim();
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
 
                     // Section 3: Author info
@@ -3140,42 +3379,106 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
             ),
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  final tokenText = tokenCtrl.text.trim();
-                  if (tokenText.isNotEmpty) {
-                    await GitHubService().authenticateWithToken(tokenText);
-                  }
-                  if (remoteCtrl.text.trim().isNotEmpty) {
-                    await notifier.setRemoteUrl(remoteCtrl.text.trim());
-                  }
-                  if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
-                    await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
-                  }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
-                child: const Text('Сохранить'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  final tokenText = tokenCtrl.text.trim();
-                  if (tokenText.isNotEmpty) {
-                    await GitHubService().authenticateWithToken(tokenText);
-                  }
-                  if (remoteCtrl.text.trim().isNotEmpty) {
-                    await notifier.setRemoteUrl(remoteCtrl.text.trim());
-                  }
-                  if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
-                    await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
-                  }
-                  await notifier.push();
-                },
-                icon: const Icon(LucideIcons.cloud_upload, size: 14),
-                label: const Text('Сохранить и Push'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
-              ),
+              if (isCreatingNewRepo)
+                ElevatedButton.icon(
+                  onPressed: isCreatingRepoNow
+                      ? null
+                      : () async {
+                          final tokenText = tokenCtrl.text.trim();
+                          if (tokenText.isNotEmpty) {
+                            await GitHubService().authenticateWithToken(tokenText);
+                          }
+                          if (!GitHubService().isAuthenticated) {
+                            setDialogState(() {
+                              repoCreateError = 'Для создания репозитория необходимо ввести и проверить GitHub токен (PAT)';
+                            });
+                            return;
+                          }
+                          final repoName = newRepoNameCtrl.text.trim();
+                          if (repoName.isEmpty) {
+                            setDialogState(() {
+                              repoCreateError = 'Введите название репозитория';
+                            });
+                            return;
+                          }
+                          setDialogState(() {
+                            isCreatingRepoNow = true;
+                            repoCreateError = null;
+                          });
+
+                          final res = await GitHubService().createRepository(
+                            name: repoName,
+                            description: newRepoDescCtrl.text.trim(),
+                            isPrivate: isPrivateRepo,
+                          );
+
+                          if (res != null) {
+                            final cloneUrl = res['clone_url']?.toString() ?? 'https://github.com/${res['full_name']}.git';
+                            await notifier.setRemoteUrl(cloneUrl);
+                            if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
+                              await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                            }
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            await notifier.push();
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('✓ Репозиторий «$repoName» (${isPrivateRepo ? "Приватный" : "Публичный"}) успешно создан и отправлен на GitHub!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } else {
+                            setDialogState(() {
+                              isCreatingRepoNow = false;
+                              repoCreateError = GitHubService().lastError ?? 'Не удалось создать репозиторий на GitHub';
+                            });
+                          }
+                        },
+                  icon: isCreatingRepoNow
+                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(LucideIcons.rocket, size: 14),
+                  label: Text(isCreatingRepoNow ? 'Создание...' : '🚀 Создать и Push (${isPrivateRepo ? "Приватный" : "Публичный"})'),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
+                )
+              else ...[
+                ElevatedButton(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final tokenText = tokenCtrl.text.trim();
+                    if (tokenText.isNotEmpty) {
+                      await GitHubService().authenticateWithToken(tokenText);
+                    }
+                    if (remoteCtrl.text.trim().isNotEmpty) {
+                      await notifier.setRemoteUrl(remoteCtrl.text.trim());
+                    }
+                    if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
+                      await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
+                  child: const Text('Сохранить'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    final tokenText = tokenCtrl.text.trim();
+                    if (tokenText.isNotEmpty) {
+                      await GitHubService().authenticateWithToken(tokenText);
+                    }
+                    if (remoteCtrl.text.trim().isNotEmpty) {
+                      await notifier.setRemoteUrl(remoteCtrl.text.trim());
+                    }
+                    if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
+                      await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                    }
+                    await notifier.push();
+                  },
+                  icon: const Icon(LucideIcons.cloud_upload, size: 14),
+                  label: const Text('Сохранить и Push'),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
+                ),
+              ],
             ],
           );
         },

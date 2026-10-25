@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/secure_storage_service.dart';
 
 class GitHubService {
@@ -461,13 +463,134 @@ class GitHubService {
   }) async {
     try {
       final resp = await _dio.post('/user/repos', data: {
-        'name': name,
-        'description': ?description,
+        'name': name.trim(),
+        'description': description?.trim().isEmpty == true ? null : description?.trim(),
         'private': isPrivate,
+        'auto_init': false,
       });
+      return resp.data as Map<String, dynamic>?;
+    } catch (e) {
+      if (e is DioException && e.response?.data != null) {
+        _lastError = e.response?.data['message']?.toString() ?? e.message;
+      } else {
+        _lastError = e.toString();
+      }
+      return null;
+    }
+  }
+
+  /// Get contents of a repository path (file or folder)
+  Future<dynamic> getContents(String owner, String repo, {String path = '', String? ref}) async {
+    try {
+      final cleanPath = path.startsWith('/') ? path.substring(1) : path;
+      final queryParams = <String, dynamic>{};
+      if (ref != null && ref.trim().isNotEmpty) {
+        queryParams['ref'] = ref.trim();
+      }
+      final endpoint = cleanPath.isEmpty
+          ? '/repos/$owner/$repo/contents'
+          : '/repos/$owner/$repo/contents/$cleanPath';
+      final resp = await _dio.get(endpoint, queryParameters: queryParams);
       return resp.data;
     } catch (e) {
+      if (e is DioException && e.response?.data != null) {
+        _lastError = e.response?.data['message']?.toString() ?? e.message;
+      } else {
+        _lastError = e.toString();
+      }
       return null;
+    }
+  }
+
+  /// Download a specific file from GitHub repo to local disk
+  Future<bool> downloadFile(
+    String owner,
+    String repo,
+    String remoteFilePath,
+    String localDestinationPath, {
+    String? ref,
+  }) async {
+    try {
+      final cleanPath = remoteFilePath.startsWith('/') ? remoteFilePath.substring(1) : remoteFilePath;
+      final queryParams = <String, dynamic>{};
+      if (ref != null && ref.trim().isNotEmpty) {
+        queryParams['ref'] = ref.trim();
+      }
+      final endpoint = '/repos/$owner/$repo/contents/$cleanPath';
+      final resp = await _dio.get<List<int>>(
+        endpoint,
+        queryParameters: queryParams,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Accept': 'application/vnd.github.raw'},
+        ),
+      );
+
+      if (resp.data == null) return false;
+
+      final targetFile = File(localDestinationPath);
+      final parentDir = targetFile.parent;
+      if (!await parentDir.exists()) {
+        await parentDir.create(recursive: true);
+      }
+      await targetFile.writeAsBytes(resp.data!);
+      return true;
+    } catch (e) {
+      if (e is DioException && e.response?.data != null) {
+        _lastError = e.response?.data['message']?.toString() ?? e.message;
+      } else {
+        _lastError = e.toString();
+      }
+      return false;
+    }
+  }
+
+  /// Download an entire folder from GitHub repo recursively
+  Future<int> downloadFolder(
+    String owner,
+    String repo,
+    String remoteFolderPath,
+    String localDestinationDir, {
+    String? ref,
+    void Function(String currentFile, int downloadedCount)? onProgress,
+  }) async {
+    int count = 0;
+    try {
+      final contents = await getContents(owner, repo, path: remoteFolderPath, ref: ref);
+      if (contents is! List) return 0;
+
+      final destDir = Directory(localDestinationDir);
+      if (!await destDir.exists()) {
+        await destDir.create(recursive: true);
+      }
+
+      for (final item in contents) {
+        if (item is! Map) continue;
+        final type = item['type']?.toString();
+        final name = item['name']?.toString() ?? '';
+        final remoteItemPath = item['path']?.toString() ?? name;
+        final targetPath = p.join(localDestinationDir, name);
+
+        if (type == 'dir') {
+          final subCount = await downloadFolder(
+            owner,
+            repo,
+            remoteItemPath,
+            targetPath,
+            ref: ref,
+            onProgress: onProgress,
+          );
+          count += subCount;
+        } else if (type == 'file') {
+          onProgress?.call(remoteItemPath, count + 1);
+          final ok = await downloadFile(owner, repo, remoteItemPath, targetPath, ref: ref);
+          if (ok) count++;
+        }
+      }
+      return count;
+    } catch (e) {
+      _lastError = e.toString();
+      return count;
     }
   }
 

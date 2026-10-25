@@ -23,6 +23,7 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
 import 'package:quantum_ide/features/git/presentation/widgets/git_panel.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_download_dialog.dart';
 import 'package:quantum_ide/features/preview/presentation/widgets/web_preview_panel.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/packages_panel.dart';
@@ -132,6 +133,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
           case 'git':
             ref.read(drawerTabProvider.notifier).state = 5;
             break;
+          case 'git_download':
+            GitDownloadDialog.show(context, workspacePath: workspacePath, gitNotifier: ref.read(gitProvider.notifier));
+            break;
           case 'env':
             showEnvironmentBottomSheet(context, ref);
             break;
@@ -157,6 +161,17 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               Icon(LucideIcons.git_branch, size: 14, color: Colors.white70),
               SizedBox(width: 8),
               Text('Git', style: TextStyle(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'git_download',
+          height: 32,
+          child: Row(
+            children: [
+              Icon(LucideIcons.cloud_download, size: 14, color: Color(0xFF10B981)),
+              SizedBox(width: 8),
+              Text('Загрузить из Git (файл/папка)', style: TextStyle(fontSize: 12, color: Colors.white)),
             ],
           ),
         ),
