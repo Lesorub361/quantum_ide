@@ -14,6 +14,7 @@ import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_graph_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
 import 'package:quantum_ide/features/github/presentation/pages/github_page.dart';
+import 'package:quantum_ide/core/services/secure_storage_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SidebarGitPanel extends GitPanel {
@@ -200,18 +201,51 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildTopToolbar(gitState, notifier, isLight),
-          if (gitState.isLoading)
+          if (gitState.isLoading) ...[
             const LinearProgressIndicator(
               minHeight: 2,
               backgroundColor: Colors.transparent,
               color: Color(0xFF00F2FE),
             ),
+            _buildOperationProgressBanner(gitState.currentOperation),
+          ],
           if (gitState.error != null)
             _buildBanner(
               message: gitState.error!,
               color: Colors.redAccent,
               icon: LucideIcons.circle_alert,
               onClose: () => notifier.refreshStatus(silent: true),
+              action: (gitState.status != null &&
+                      (gitState.error!.contains('remote') ||
+                          gitState.error!.contains('Authentication') ||
+                          gitState.error!.contains('fatal:') ||
+                          gitState.error!.contains('token') ||
+                          gitState.error!.contains('denied') ||
+                          gitState.error!.contains('failed to push')))
+                  ? InkWell(
+                      onTap: () => _showGitSettingsDialog(gitState.status!, notifier),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(LucideIcons.key_round, size: 10, color: Colors.white),
+                            SizedBox(width: 3),
+                            Text(
+                              'Настроить токен/Remote',
+                              style: TextStyle(fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : null,
             ),
           if (gitState.lastActionMessage != null && gitState.error == null)
             _buildBanner(
@@ -241,11 +275,45 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     );
   }
 
+  Widget _buildOperationProgressBanner(String? operationText) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF00F2FE).withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF00F2FE).withValues(alpha: 0.4), width: 0.8),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 13,
+            height: 13,
+            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00F2FE)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              operationText ?? 'Выполняется операция Git...',
+              style: const TextStyle(
+                color: Color(0xFF00F2FE),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBanner({
     required String message,
     required Color color,
     required IconData icon,
     required VoidCallback onClose,
+    Widget? action,
   }) {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 6, 10, 2),
@@ -267,6 +335,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          if (action != null) ...[
+            const SizedBox(width: 6),
+            action,
+          ],
+          const SizedBox(width: 6),
           InkWell(
             onTap: onClose,
             child: Icon(LucideIcons.x, size: 13, color: color.withValues(alpha: 0.7)),
@@ -353,31 +426,41 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           onTap: () => _showGitSettingsDialog(status, notifier),
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                             decoration: BoxDecoration(
-                              color: (status.remoteUrl != null
-                                      ? Colors.greenAccent
-                                      : Colors.orangeAccent)
-                                  .withValues(alpha: 0.12),
+                              gradient: status.remoteUrl == null
+                                  ? const LinearGradient(
+                                      colors: [Color(0xFF8B5CF6), Color(0xFF00F2FE)],
+                                    )
+                                  : null,
+                              color: status.remoteUrl != null
+                                  ? Colors.greenAccent.withValues(alpha: 0.14)
+                                  : null,
                               borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: status.remoteUrl != null
+                                    ? Colors.greenAccent.withValues(alpha: 0.4)
+                                    : Colors.transparent,
+                                width: 0.6,
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  status.remoteUrl != null ? LucideIcons.cloud : LucideIcons.cloud_off,
+                                  status.remoteUrl != null ? LucideIcons.cloud : LucideIcons.cloud_upload,
                                   size: 11,
-                                  color: status.remoteUrl != null ? Colors.greenAccent : Colors.orangeAccent,
+                                  color: status.remoteUrl != null ? Colors.greenAccent : Colors.white,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   status.remoteUrl != null
                                       ? _shortRemoteName(status.remoteUrl!)
-                                      : 'Настроить Remote',
+                                      : '🚀 Опубликовать на GitHub',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: status.remoteUrl != null ? Colors.greenAccent : Colors.orangeAccent,
-                                    fontWeight: FontWeight.w600,
+                                    color: status.remoteUrl != null ? Colors.greenAccent : Colors.white,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
                               ],
@@ -391,7 +474,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               else
                 Expanded(
                   child: Text(
-                    'SOURCE CONTROL (GIT)',
+                    'УПРАВЛЕНИЕ ВЕРСИЯМИ (GIT)',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -420,23 +503,33 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
           ),
           if (status != null) ...[
             const SizedBox(height: 6),
-            // Row 2: Quick Professional Git Operations Bar
+            // Row 2: Quick Professional Git Operations Bar in Russian
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
                   _buildQuickToolBtn(
+                    icon: LucideIcons.refresh_cw,
+                    label: (status.ahead > 0 || status.behind > 0)
+                        ? 'Синхр (↓${status.behind} ↑${status.ahead})'
+                        : 'Синхронизация',
+                    tooltip: 'Синхронизировать код с сервером (Pull & Push в одно действие)',
+                    color: (status.ahead > 0 || status.behind > 0) ? const Color(0xFF00F2FE) : Colors.cyanAccent,
+                    onTap: () => notifier.sync(),
+                  ),
+                  const SizedBox(width: 6),
+                  _buildQuickToolBtn(
                     icon: LucideIcons.refresh_ccw_dot,
-                    label: 'Fetch',
-                    tooltip: 'git fetch --all --prune (проверить изменения на сервере)',
+                    label: 'Проверить (Fetch)',
+                    tooltip: 'git fetch --all --prune (проверить наличие свежих коммитов на сервере)',
                     color: Colors.cyanAccent,
                     onTap: () => notifier.fetch(),
                   ),
                   const SizedBox(width: 6),
                   _buildQuickToolBtn(
                     icon: LucideIcons.arrow_down_to_line,
-                    label: status.behind > 0 ? 'Pull (↓${status.behind})' : 'Pull',
-                    tooltip: 'git pull (зажать для Pull --rebase)',
+                    label: status.behind > 0 ? 'Подтянуть (↓${status.behind})' : 'Подтянуть (Pull)',
+                    tooltip: 'git pull (скачать свежие изменения с сервера, долгое нажатие — Pull --rebase)',
                     color: status.behind > 0 ? Colors.amberAccent : Colors.white70,
                     onTap: () => notifier.pull(),
                     onLongPress: () => notifier.pull(rebase: true),
@@ -444,8 +537,8 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   const SizedBox(width: 6),
                   _buildQuickToolBtn(
                     icon: LucideIcons.arrow_up_from_line,
-                    label: status.ahead > 0 ? 'Push (↑${status.ahead})' : 'Push',
-                    tooltip: 'git push (зажать для Force Push --force-with-lease)',
+                    label: status.ahead > 0 ? 'Отправить (↑${status.ahead})' : 'Отправить (Push)',
+                    tooltip: 'git push (отправить локальные коммиты на сервер, долгое нажатие — Force Push)',
                     color: status.ahead > 0 ? const Color(0xFF00F2FE) : Colors.white70,
                     onTap: () => notifier.push(),
                     onLongPress: () => _confirmForcePush(notifier),
@@ -453,8 +546,8 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   const SizedBox(width: 6),
                   _buildQuickToolBtn(
                     icon: LucideIcons.git_graph,
-                    label: 'Graph',
-                    tooltip: 'Открыть визуальное дерево веток и коммитов',
+                    label: 'Граф коммитов',
+                    tooltip: 'Открыть визуальное интерактивное дерево веток и истории коммитов',
                     color: const Color(0xFF8B5CF6),
                     onTap: () {
                       Navigator.of(context).push(
@@ -465,16 +558,16 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   const SizedBox(width: 6),
                   _buildQuickToolBtn(
                     icon: LucideIcons.archive,
-                    label: status.stashes.isNotEmpty ? 'Stash (${status.stashes.length})' : 'Stash',
-                    tooltip: 'Быстро спрятать изменения в Stash',
+                    label: status.stashes.isNotEmpty ? 'Stash (${status.stashes.length})' : 'Спрятать (Stash)',
+                    tooltip: 'Временно спрятать незавершённые изменения рабочей копии в тайник',
                     color: Colors.orangeAccent,
                     onTap: () => _showQuickStashDialog(status, notifier),
                   ),
                   const SizedBox(width: 6),
                   _buildQuickToolBtn(
-                    icon: LucideIcons.settings_2,
-                    label: 'Remote / Автор',
-                    tooltip: 'Настроить URL репозитория (origin), имя автора и GitHub токен',
+                    icon: LucideIcons.key_round,
+                    label: 'GitHub / Remote',
+                    tooltip: 'Настроить токен GitHub (PAT), URL репозитория (origin) и автора',
                     color: Colors.white70,
                     onTap: () => _showGitSettingsDialog(status, notifier),
                   ),
@@ -813,7 +906,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   const SizedBox(width: 8),
                   Expanded(
                     child: SizedBox(
-                      height: 30,
+                      height: 32,
                       child: ElevatedButton.icon(
                         onPressed: (status.hasChanges || _amendCommit)
                             ? () async {
@@ -833,6 +926,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                               ? 'Коммит (${status.stagedFiles.length})'
                               : 'Коммит все (${status.totalChangesCount})',
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF00F2FE),
@@ -844,34 +938,38 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     ),
                   ),
                   const SizedBox(width: 6),
-                  SizedBox(
-                    height: 30,
-                    child: OutlinedButton.icon(
-                      onPressed: (status.hasChanges || status.ahead > 0)
-                          ? () async {
-                              if (status.hasChanges) {
-                                final msg = _commitController.text.trim().isNotEmpty
-                                    ? _commitController.text.trim()
-                                    : 'chore: sync (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})';
-                                final ok = await notifier.commitAndPush(msg, amend: _amendCommit);
-                                if (ok && mounted) {
-                                  _commitController.clear();
-                                  setState(() => _amendCommit = false);
+                  Expanded(
+                    child: SizedBox(
+                      height: 32,
+                      child: ElevatedButton.icon(
+                        onPressed: (status.hasChanges || status.ahead > 0)
+                            ? () async {
+                                if (status.hasChanges) {
+                                  final msg = _commitController.text.trim().isNotEmpty
+                                      ? _commitController.text.trim()
+                                      : 'chore: sync (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})';
+                                  final ok = await notifier.commitAndPush(msg, amend: _amendCommit);
+                                  if (ok && mounted) {
+                                    _commitController.clear();
+                                    setState(() => _amendCommit = false);
+                                  }
+                                } else {
+                                  await notifier.push();
                                 }
-                              } else {
-                                await notifier.push();
                               }
-                            }
-                          : null,
-                      icon: const Icon(LucideIcons.cloud_upload, size: 13, color: Color(0xFF00F2FE)),
-                      label: const Text(
-                        '+ Push',
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF00F2FE)),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF00F2FE)),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            : null,
+                        icon: const Icon(LucideIcons.cloud_upload, size: 13),
+                        label: Text(
+                          status.ahead > 0 ? 'Push (${status.ahead})' : 'Коммит и Push',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF8B5CF6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
                       ),
                     ),
                   ),
@@ -972,7 +1070,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
 
                     // 2. STAGED CHANGES (ИНДЕКС)
                     _buildCollapsibleHeader(
-                      title: 'ИНДЕКС / STAGED (${filteredStaged.length})',
+                      title: 'В ИНДЕКСЕ ДЛЯ КОММИТА (${filteredStaged.length})',
                       color: Colors.greenAccent,
                       expanded: _stagedExpanded,
                       onToggle: () => setState(() => _stagedExpanded = !_stagedExpanded),
@@ -1015,6 +1113,12 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                             stats: status.diffStats[f],
                             isLight: isLight,
                             onTap: () => _openFileDiff(f, isStaged: true),
+                            onLongPress: () => _showFileContextMenu(
+                              file: f,
+                              isStaged: true,
+                              notifier: notifier,
+                              status: status,
+                            ),
                             actions: [
                               _buildMiniIconBtn(
                                 icon: LucideIcons.file_code,
@@ -1034,7 +1138,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
 
                     // 3. WORKING TREE (РАБОЧАЯ КОПИЯ)
                     _buildCollapsibleHeader(
-                      title: 'РАБОЧАЯ КОПИЯ / WORKING TREE (${workingFiles.length})',
+                      title: 'ИЗМЕНЕНИЯ РАБОЧЕЙ КОПИИ (${workingFiles.length})',
                       color: Colors.amberAccent,
                       expanded: _workingExpanded,
                       onToggle: () => setState(() => _workingExpanded = !_workingExpanded),
@@ -1085,6 +1189,12 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           stats: status.diffStats[f],
                           isLight: isLight,
                           onTap: () => _openFileDiff(f, isStaged: false),
+                          onLongPress: () => _showFileContextMenu(
+                            file: f,
+                            isStaged: false,
+                            notifier: notifier,
+                            status: status,
+                          ),
                           actions: [
                             _buildMiniIconBtn(
                               icon: LucideIcons.eye_off,
@@ -1226,6 +1336,124 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     );
   }
 
+  void _showFileContextMenu({
+    required String file,
+    required bool isStaged,
+    required GitNotifier notifier,
+    required GitStatus status,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141824),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.file_code, size: 16, color: Color(0xFF00F2FE)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        file,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.white10, height: 1),
+              ListTile(
+                dense: true,
+                leading: const Icon(LucideIcons.eye, color: Color(0xFF00F2FE), size: 18),
+                title: const Text('Просмотреть изменения (Diff)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openFileDiff(file, isStaged: isStaged);
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(LucideIcons.file_edit, color: Colors.white70, size: 18),
+                title: const Text('Открыть в редакторе кода', style: TextStyle(color: Colors.white, fontSize: 13)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openFileInEditor(file);
+                },
+              ),
+              if (isStaged)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(LucideIcons.minus_circle, color: Colors.orangeAccent, size: 18),
+                  title: const Text('Убрать из индекса (Unstage)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    notifier.unstageFile(file);
+                  },
+                )
+              else
+                ListTile(
+                  dense: true,
+                  leading: const Icon(LucideIcons.plus_circle, color: Color(0xFF00F2FE), size: 18),
+                  title: const Text('Добавить в индекс (Stage)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    notifier.stageFile(file);
+                  },
+                ),
+              ListTile(
+                dense: true,
+                leading: const Icon(LucideIcons.undo_2, color: Colors.redAccent, size: 18),
+                title: const Text('Откатить изменения (Discard)', style: TextStyle(color: Colors.redAccent, fontSize: 13)),
+                subtitle: const Text('Сбросить файл к состоянию последнего коммита', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _confirmDiscardFile(file, notifier);
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(LucideIcons.eye_off, color: Colors.white54, size: 18),
+                title: const Text('Добавить в .gitignore', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  notifier.addToGitignore(file);
+                },
+              ),
+              ListTile(
+                dense: true,
+                leading: const Icon(LucideIcons.copy, color: Colors.white54, size: 18),
+                title: const Text('Скопировать относительный путь', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Clipboard.setData(ClipboardData(text: file));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Путь скопирован: $file'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFileRow({
     required String file,
     required String statusCode,
@@ -1233,6 +1461,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     required GitFileDiffStats? stats,
     required bool isLight,
     required VoidCallback onTap,
+    VoidCallback? onLongPress,
     required List<Widget> actions,
   }) {
     final fileName = p.basename(file);
@@ -1240,6 +1469,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: Row(
@@ -2672,70 +2902,283 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     );
   }
 
-  void _showGitSettingsDialog(GitStatus status, GitNotifier notifier) {
+  void _showGitSettingsDialog(GitStatus status, GitNotifier notifier) async {
+    final storage = SecureStorageService();
+    final savedToken = await storage.retrieve('github_token') ?? '';
+    if (!mounted) return;
+
+    final tokenCtrl = TextEditingController(text: savedToken);
     final remoteCtrl = TextEditingController(text: status.remoteUrl ?? '');
     final nameCtrl = TextEditingController(text: status.userName ?? 'Quantum Developer');
     final emailCtrl = TextEditingController(text: status.userEmail ?? 'dev@quantum-ide.local');
 
-    showDialog(
+    bool obscureToken = true;
+    bool isVerifyingToken = false;
+    String? tokenVerifyStatus;
+    Color tokenVerifyColor = Colors.white70;
+
+    await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: const Row(
-          children: [
-            Icon(LucideIcons.settings_2, color: Color(0xFF00F2FE), size: 18),
-            SizedBox(width: 8),
-            Text('Настройки Git и Remote', style: TextStyle(color: Colors.white, fontSize: 15)),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Remote URL (origin):', style: TextStyle(color: Colors.white70, fontSize: 11)),
-              const SizedBox(height: 4),
-              TextField(
-                controller: remoteCtrl,
-                style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                decoration: const InputDecoration(
-                  hintText: 'https://github.com/user/repo.git',
-                  hintStyle: TextStyle(color: Colors.white30, fontSize: 11),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final ghService = GitHubService();
+          return AlertDialog(
+            backgroundColor: const Color(0xFF161922),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            title: const Row(
+              children: [
+                Icon(LucideIcons.git_pull_request, color: Color(0xFF00F2FE), size: 18),
+                SizedBox(width: 8),
+                Text('Настройки Git и GitHub', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Section 1: GitHub PAT Token
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C2230),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(LucideIcons.key_round, size: 14, color: Color(0xFF00F2FE)),
+                              const SizedBox(width: 6),
+                              const Expanded(
+                                child: Text(
+                                  'GitHub Персональный токен (PAT):',
+                                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              if (ghService.isAuthenticated)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.greenAccent.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.4)),
+                                  ),
+                                  child: Text(
+                                    '@${ghService.currentUser?['login'] ?? 'ok'}',
+                                    style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Нужен для отправки кода (git push) на GitHub. Создаётся в GitHub Settings -> Developer Settings -> Personal access tokens (Classic) с галочками repo и workflow.',
+                            style: TextStyle(color: Colors.white54, fontSize: 10),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: tokenCtrl,
+                            obscureText: obscureToken,
+                            style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 11),
+                            decoration: InputDecoration(
+                              hintText: 'ghp_xxxxxxxxxxxxxxxxxxxx',
+                              hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+                              filled: true,
+                              fillColor: Colors.black26,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                              suffixIcon: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(obscureToken ? LucideIcons.eye_off : LucideIcons.eye, size: 14, color: Colors.white54),
+                                    onPressed: () => setDialogState(() => obscureToken = !obscureToken),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(LucideIcons.clipboard, size: 14, color: Color(0xFF00F2FE)),
+                                    tooltip: 'Вставить из буфера',
+                                    onPressed: () async {
+                                      final data = await Clipboard.getData(Clipboard.kTextPlain);
+                                      if (data?.text != null && data!.text!.trim().isNotEmpty) {
+                                        setDialogState(() {
+                                          tokenCtrl.text = data.text!.trim();
+                                        });
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              SizedBox(
+                                height: 26,
+                                child: OutlinedButton.icon(
+                                  onPressed: isVerifyingToken
+                                      ? null
+                                      : () async {
+                                          final t = tokenCtrl.text.trim();
+                                          if (t.isEmpty) return;
+                                          setDialogState(() {
+                                            isVerifyingToken = true;
+                                            tokenVerifyStatus = null;
+                                          });
+                                          try {
+                                            final ok = await GitHubService().authenticateWithToken(t);
+                                            setDialogState(() {
+                                              isVerifyingToken = false;
+                                              if (ok) {
+                                                tokenVerifyStatus = '✓ Токен валиден (@${GitHubService().currentUser?['login'] ?? ''})';
+                                                tokenVerifyColor = Colors.greenAccent;
+                                              } else {
+                                                tokenVerifyStatus = '⚠ Ошибка проверки токена';
+                                                tokenVerifyColor = Colors.orangeAccent;
+                                              }
+                                            });
+                                          } catch (e) {
+                                            setDialogState(() {
+                                              isVerifyingToken = false;
+                                              tokenVerifyStatus = '✗ Ошибка: $e';
+                                              tokenVerifyColor = Colors.redAccent;
+                                            });
+                                          }
+                                        },
+                                  icon: isVerifyingToken
+                                      ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white))
+                                      : const Icon(LucideIcons.shield_check, size: 12),
+                                  label: const Text('Проверить токен', style: TextStyle(fontSize: 10)),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF00F2FE),
+                                    side: const BorderSide(color: Color(0xFF00F2FE), width: 0.8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (tokenVerifyStatus != null)
+                                Expanded(
+                                  child: Text(
+                                    tokenVerifyStatus!,
+                                    style: TextStyle(color: tokenVerifyColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Section 2: Remote URL
+                    const Text('Удалённый репозиторий (Remote URL origin):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: remoteCtrl,
+                      style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'https://github.com/пользователь/репозиторий.git',
+                        hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
+                        filled: true,
+                        fillColor: Colors.black26,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                        suffixIcon: IconButton(
+                          icon: const Icon(LucideIcons.clipboard, size: 14, color: Color(0xFF00F2FE)),
+                          tooltip: 'Вставить из буфера',
+                          onPressed: () async {
+                            final data = await Clipboard.getData(Clipboard.kTextPlain);
+                            if (data?.text != null && data!.text!.trim().isNotEmpty) {
+                              remoteCtrl.text = data.text!.trim();
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Section 3: Author info
+                    const Text('Имя автора коммитов (user.name):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: nameCtrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.black26,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Email автора коммитов (user.email):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    const SizedBox(height: 4),
+                    TextField(
+                      controller: emailCtrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.black26,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              const Text('Имя автора коммитов (user.name):', style: TextStyle(color: Colors.white70, fontSize: 11)),
-              const SizedBox(height: 4),
-              TextField(
-                controller: nameCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final tokenText = tokenCtrl.text.trim();
+                  if (tokenText.isNotEmpty) {
+                    await GitHubService().authenticateWithToken(tokenText);
+                  }
+                  if (remoteCtrl.text.trim().isNotEmpty) {
+                    await notifier.setRemoteUrl(remoteCtrl.text.trim());
+                  }
+                  if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
+                    await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
+                child: const Text('Сохранить'),
               ),
-              const SizedBox(height: 12),
-              const Text('Email автора (user.email):', style: TextStyle(color: Colors.white70, fontSize: 11)),
-              const SizedBox(height: 4),
-              TextField(
-                controller: emailCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  final tokenText = tokenCtrl.text.trim();
+                  if (tokenText.isNotEmpty) {
+                    await GitHubService().authenticateWithToken(tokenText);
+                  }
+                  if (remoteCtrl.text.trim().isNotEmpty) {
+                    await notifier.setRemoteUrl(remoteCtrl.text.trim());
+                  }
+                  if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
+                    await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                  }
+                  await notifier.push();
+                },
+                icon: const Icon(LucideIcons.cloud_upload, size: 14),
+                label: const Text('Сохранить и Push'),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
               ),
             ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              if (remoteCtrl.text.trim().isNotEmpty) {
-                await notifier.setRemoteUrl(remoteCtrl.text.trim());
-              }
-              if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
-                await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
-            child: const Text('Сохранить'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

@@ -8,12 +8,14 @@ class GitState {
   final bool isLoading;
   final String? error;
   final String? lastActionMessage;
+  final String? currentOperation;
 
   GitState({
     this.status,
     this.isLoading = false,
     this.error,
     this.lastActionMessage,
+    this.currentOperation,
   });
 
   GitState copyWith({
@@ -21,14 +23,17 @@ class GitState {
     bool? isLoading,
     String? error,
     String? lastActionMessage,
+    String? currentOperation,
     bool clearError = false,
     bool clearMessage = false,
+    bool clearOperation = false,
   }) {
     return GitState(
       status: status ?? this.status,
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
       lastActionMessage: clearMessage ? null : (lastActionMessage ?? this.lastActionMessage),
+      currentOperation: clearOperation ? null : (currentOperation ?? this.currentOperation),
     );
   }
 }
@@ -49,9 +54,10 @@ class GitNotifier extends StateNotifier<GitState> {
         isLoading: false,
         error: null,
         lastActionMessage: message,
+        currentOperation: null,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, clearOperation: true, error: e.toString());
     }
   }
 
@@ -76,13 +82,15 @@ class GitNotifier extends StateNotifier<GitState> {
   }
 
   Future<void> discardFile(String path) async {
+    state = state.copyWith(isLoading: true, currentOperation: 'Откат изменений в файле...', clearError: true);
     await _gitService.discardChanges(path);
-    await refreshStatus(silent: true, force: true);
+    await refreshStatus(silent: true, force: true, message: 'Изменения в файле сброшены');
   }
 
   Future<void> discardAll() async {
+    state = state.copyWith(isLoading: true, currentOperation: 'Откат всех изменений рабочей копии...', clearError: true);
     await _gitService.discardAllChanges();
-    await refreshStatus(silent: true, force: true);
+    await refreshStatus(silent: true, force: true, message: 'Все изменения рабочей копии откатаны');
   }
 
   Future<void> addToGitignore(String pattern) async {
@@ -91,7 +99,12 @@ class GitNotifier extends StateNotifier<GitState> {
   }
 
   Future<bool> commit(String message, {bool amend = false, bool autoStageIfEmpty = true}) async {
-    state = state.copyWith(isLoading: true, clearError: true, clearMessage: true);
+    state = state.copyWith(
+      isLoading: true,
+      currentOperation: amend ? 'Дополнение предыдущего коммита (--amend)...' : 'Создание Git-коммита...',
+      clearError: true,
+      clearMessage: true,
+    );
     try {
       final current = state.status;
       if (autoStageIfEmpty &&
@@ -101,16 +114,21 @@ class GitNotifier extends StateNotifier<GitState> {
         await _gitService.stageAll();
       }
       await _gitService.commit(message, amend: amend);
-      await refreshStatus(silent: true, force: true, message: amend ? 'Коммит обновлён (--amend)' : 'Коммит создан');
+      await refreshStatus(silent: true, force: true, message: amend ? 'Коммит успешно обновлён (--amend)' : 'Коммит успешно создан');
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, clearOperation: true, error: e.toString());
       return false;
     }
   }
 
   Future<bool> commitAndPush(String message, {bool amend = false}) async {
-    state = state.copyWith(isLoading: true, clearError: true, clearMessage: true);
+    state = state.copyWith(
+      isLoading: true,
+      currentOperation: 'Создание коммита и отправка на GitHub (git push)...',
+      clearError: true,
+      clearMessage: true,
+    );
     try {
       final current = state.status;
       if (current != null &&
@@ -120,48 +138,82 @@ class GitNotifier extends StateNotifier<GitState> {
       }
       await _gitService.commit(message, amend: amend);
       await _gitService.push();
-      await refreshStatus(silent: true, force: true, message: 'Закоммичено и отправлено в Remote');
+      await refreshStatus(silent: true, force: true, message: 'Коммит успешно создан и отправлен на GitHub!');
       return true;
     } catch (e) {
       await refreshStatus(silent: true, force: true);
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, clearOperation: true, error: e.toString());
       return false;
     }
   }
 
   Future<bool> fetch() async {
-    state = state.copyWith(isLoading: true, clearError: true, clearMessage: true);
+    state = state.copyWith(
+      isLoading: true,
+      currentOperation: 'Проверка изменений на GitHub (git fetch)...',
+      clearError: true,
+      clearMessage: true,
+    );
     try {
       await _gitService.fetch();
-      await refreshStatus(silent: true, force: true, message: 'Fetch выполнен (ветки и теги обновлены)');
+      await refreshStatus(silent: true, force: true, message: 'Проверка завершена (ветки и теги обновлены)');
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, clearOperation: true, error: e.toString());
       return false;
     }
   }
 
   Future<bool> push({bool force = false}) async {
-    state = state.copyWith(isLoading: true, clearError: true, clearMessage: true);
+    state = state.copyWith(
+      isLoading: true,
+      currentOperation: force ? 'Принудительная отправка на GitHub (force push)...' : 'Отправка коммитов на GitHub (git push)...',
+      clearError: true,
+      clearMessage: true,
+    );
     try {
       await _gitService.push(force: force);
-      await refreshStatus(silent: true, force: true, message: 'Push выполнен успешно');
+      await refreshStatus(silent: true, force: true, message: 'Код успешно отправлен на GitHub!');
       return true;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, clearOperation: true, error: e.toString());
       return false;
     }
   }
 
   Future<bool> pull({bool rebase = false}) async {
-    state = state.copyWith(isLoading: true, clearError: true, clearMessage: true);
+    state = state.copyWith(
+      isLoading: true,
+      currentOperation: 'Подтягивание изменений с GitHub (git pull)...',
+      clearError: true,
+      clearMessage: true,
+    );
     try {
       await _gitService.pull(rebase: rebase);
-      await refreshStatus(silent: true, force: true, message: 'Pull выполнен успешно');
+      await refreshStatus(silent: true, force: true, message: 'Изменения успешно подтянуты с GitHub!');
       return true;
     } catch (e) {
       await refreshStatus(silent: true, force: true);
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, clearOperation: true, error: e.toString());
+      return false;
+    }
+  }
+
+  Future<bool> sync() async {
+    state = state.copyWith(
+      isLoading: true,
+      currentOperation: 'Синхронизация с сервером (Pull & Push)...',
+      clearError: true,
+      clearMessage: true,
+    );
+    try {
+      await _gitService.pull();
+      await _gitService.push();
+      await refreshStatus(silent: true, force: true, message: 'Синхронизация успешно завершена (Pull + Push)!');
+      return true;
+    } catch (e) {
+      await refreshStatus(silent: true, force: true);
+      state = state.copyWith(isLoading: false, clearOperation: true, error: e.toString());
       return false;
     }
   }
