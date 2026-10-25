@@ -1,10 +1,10 @@
 {
-  "versionCode": 73,
-  "versionName": "1.2.57",
-  "notes": "QuantumIDE v1.2.57: Исправлено отображение статуса установки пакетов Box64 (x86_64 Emulator) и Build Environment Fix в Package Manager, авто-обновление и фикс AOT gen_snapshot.",
+  "versionCode": 74,
+  "versionName": "1.2.58",
+  "notes": "QuantumIDE v1.2.58: Устранена ошибка 'Unrecognized flags: dedup_instructions' при компиляции Dart AOT snapshot, очищены устаревшие флаги extra-gen-snapshot-options из gradle.properties и защищен wrapper gen_snapshot.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.57/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.58/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

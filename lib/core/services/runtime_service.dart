@@ -1740,7 +1740,8 @@ for fl_dir in "${FLUTTER_ROOT:-/root/flutter}" "$HOME/flutter" "/root/flutter"; 
 
         if [ ! -f "$X64_DIR/gen_snapshot" ] && [ -n "$ENGINE_HASH" ]; then
             (
-                curl -sSL "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-arm64-$mode/linux-x64.zip" -o "/tmp/x64-$mode.zip" && \
+                (curl -k -fsSL "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-arm64-$mode/linux-x64.zip" -o "/tmp/x64-$mode.zip" || \
+                 wget --no-check-certificate -qO "/tmp/x64-$mode.zip" "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-arm64-$mode/linux-x64.zip") && \
                 unzip -qo "/tmp/x64-$mode.zip" gen_snapshot -d "$X64_DIR" && \
                 chmod +x "$X64_DIR/gen_snapshot" && \
                 rm -f "/tmp/x64-$mode.zip"
@@ -1758,13 +1759,24 @@ elif command -v box64 >/dev/null 2>&1; then
     EMU="box64"
 fi
 
+ARGS=()
+for arg in "$@"; do
+    case "$arg" in
+        --dedup_instructions|--dedup-instructions|--no-dedup_instructions|--no-dedup-instructions)
+            ;;
+        *)
+            ARGS+=("$arg")
+            ;;
+    esac
+done
+
 if [ -n "$EMU" ] && [ -f "$X64_SNAP" ]; then
     chmod +x "$X64_SNAP" 2>/dev/null || true
-    exec "$EMU" "$X64_SNAP" "$@"
+    exec "$EMU" "$X64_SNAP" "${ARGS[@]}"
 fi
 
 if [ -f "$DIR/gen_snapshot.real" ]; then
-    exec "$DIR/gen_snapshot.real" "$@"
+    exec "$DIR/gen_snapshot.real" "${ARGS[@]}"
 fi
 WRAP_GS
         chmod +x "$ENGINE_DIR/gen_snapshot"
@@ -2043,7 +2055,10 @@ if [ -x /usr/local/bin/quantum-patch-ndk ]; then
 fi
 
 # 2. Project Patching (Auto-fix common build issues on ARM64)
+sed -i '/extra-gen-snapshot-options/d' /root/.gradle/gradle.properties 2>/dev/null || true
+sed -i '/extra-gen-snapshot-options/d' ~/.gradle/gradle.properties 2>/dev/null || true
 find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties" 2>/dev/null | while read f; do
+    sed -i '/extra-gen-snapshot-options/d' "$f" 2>/dev/null || true
     if ! grep -q "android.aapt2.daemon" "$f"; then
         echo "android.aapt2.daemon=false" >> "$f"
         echo "android.aapt2FromMaven=false" >> "$f"
