@@ -193,6 +193,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   bool _isCreatingFile = false;
   bool _isCreatingFolder = false;
   bool _isRenaming = false;
+  bool _isHovered = false;
   TextEditingController? _inlineController;
   final FocusNode _inlineFocusNode = FocusNode();
 
@@ -1467,23 +1468,17 @@ Please fulfill this request. If you need to modify the file, create a new one, d
   Widget _buildFolderQuickActionButton({
     required IconData icon,
     required String tooltip,
-    required Color color,
     required VoidCallback onTap,
   }) {
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(5),
-        child: Container(
-          padding: const EdgeInsets.all(3.5),
-          margin: const EdgeInsets.only(left: 3),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: color.withValues(alpha: 0.25), width: 0.5),
-          ),
-          child: Icon(icon, size: 11.5, color: color),
+        borderRadius: BorderRadius.circular(3),
+        hoverColor: Colors.white.withValues(alpha: 0.12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2),
+          child: Icon(icon, size: 12.5, color: Colors.white60),
         ),
       ),
     );
@@ -1536,195 +1531,185 @@ Please fulfill this request. If you need to modify the file, create a new one, d
       }
     }
 
-    final nodeContent = InkWell(
-      onTap: () async {
-        if (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
-          final selected = {...ref.read(selectedPathsProvider)};
-          if (selected.contains(widget.path)) {
-            selected.remove(widget.path);
-          } else {
-            selected.add(widget.path);
+    final nodeContent = MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: InkWell(
+        onTap: () async {
+          if (HardwareKeyboard.instance.isControlPressed || HardwareKeyboard.instance.isMetaPressed) {
+            final selected = {...ref.read(selectedPathsProvider)};
+            if (selected.contains(widget.path)) {
+              selected.remove(widget.path);
+            } else {
+              selected.add(widget.path);
+            }
+            ref.read(selectedPathsProvider.notifier).state = selected;
+            return;
           }
-          ref.read(selectedPathsProvider.notifier).state = selected;
-          return;
-        }
 
-        if (widget.isDirectory) {
-          _toggleExpanded();
-        } else if (widget.name.toLowerCase().endsWith('.apk')) {
-          try {
-            await OpenFilex.open(widget.path);
-          } catch (e) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Error opening APK: $e')),
-              );
-            }
-          }
-        } else {
-          await ref.read(editorProvider.notifier).openFile(widget.path);
-          if (mounted) {
-            final scaffold = Scaffold.maybeOf(context);
-            if (scaffold != null && (scaffold.isDrawerOpen || scaffold.isEndDrawerOpen)) {
-              Navigator.pop(context);
-            }
-          }
-        }
-      },
-      onLongPress: () => _showBottomSheetMenu(context, ref),
-      child: ContextMenuArea(
-        builder: (context) => [
-          ListTile(
-            leading: const Icon(LucideIcons.file_plus, size: 16),
-            title: const Text('New File', style: TextStyle(fontSize: 14)),
-            dense: true,
-            onTap: () {
-              Navigator.pop(context);
-              _startInlineCreation(isDir: false);
-            },
-          ),
-          ListTile(
-            leading: const Icon(LucideIcons.folder_plus, size: 16),
-            title: const Text('New Folder', style: TextStyle(fontSize: 14)),
-            dense: true,
-            onTap: () {
-              Navigator.pop(context);
-              _startInlineCreation(isDir: true);
-            },
-          ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(LucideIcons.pencil, size: 16),
-            title: const Text('Rename', style: TextStyle(fontSize: 14)),
-            dense: true,
-            onTap: () {
-              Navigator.pop(context);
-              setState(() {
-                _inlineController = TextEditingController(text: widget.name);
-                _isRenaming = true;
-                _inlineFocusNode.requestFocus();
-              });
-            },
-          ),
-          ListTile(
-            leading: const Icon(LucideIcons.trash_2, size: 16, color: Colors.redAccent),
-            title: const Text('Delete', style: TextStyle(fontSize: 14, color: Colors.redAccent)),
-            dense: true,
-            onTap: () {
-              Navigator.pop(context);
-              _confirmDelete(context, ref);
-            },
-          ),
-        ],
-        child: Container(
-        color: isSelected 
-            ? Colors.blue.withValues(alpha: 0.15) 
-            : (_hasAIPending(ref) && !widget.isDirectory)
-                ? Colors.purpleAccent.withValues(alpha: 0.06)
-                : Colors.transparent,
-        padding: EdgeInsets.symmetric(vertical: 1.0, horizontal: isMobile ? 4.0 : 6.0),
-        child: Row(
-          children: [
-            if (widget.depth > 0)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: indentGuides,
-              ),
-            if (widget.isDirectory)
-              Icon(
-                isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
-                size: isMobile ? 12.5 : 13.5,
-                color: isExpanded ? Colors.white70 : Colors.white38,
-              )
-            else
-              SizedBox(width: isMobile ? 10 : 12),
-            const SizedBox(width: 4),
-            () {
-              final iconInfo = FileIconHelper.getIconInfo(widget.visualName ?? widget.name, widget.isDirectory, isExpanded);
-              if (!widget.isDirectory) {
-                return Icon(iconInfo.icon, size: isMobile ? 14 : 15, color: iconInfo.color);
+          if (widget.isDirectory) {
+            _toggleExpanded();
+          } else if (widget.name.toLowerCase().endsWith('.apk')) {
+            try {
+              await OpenFilex.open(widget.path);
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error opening APK: $e')),
+                );
               }
-              return Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      iconInfo.color.withValues(alpha: isExpanded ? 0.24 : 0.14),
-                      iconInfo.color.withValues(alpha: 0.04),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(5),
-                  border: Border.all(
-                    color: iconInfo.color.withValues(alpha: isExpanded ? 0.4 : 0.2),
-                    width: 0.6,
-                  ),
-                ),
-                child: Icon(iconInfo.icon, size: isMobile ? 12.5 : 13.5, color: iconInfo.color),
-              );
-            }(),
-            SizedBox(width: isMobile ? 6 : 7),
-            Expanded(
-              child: _isRenaming
-                  ? _buildInlineRenameField()
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: _buildFileNameText(
-                            widget.visualName ?? widget.name,
-                            searchQuery,
-                            _hasAIPending(ref) ? Colors.purpleAccent : gitColor,
-                            isMobile: isMobile,
-                          ),
-                        ),
-                        if (!widget.isDirectory && ref.watch(bookmarksProvider).contains(widget.path)) ...[
-                          const SizedBox(width: 4),
-                          const Icon(
-                            LucideIcons.star,
-                            size: 10,
-                            color: Colors.amberAccent,
-                          ),
-                        ],
-                      ],
-                    ),
+            }
+          } else {
+            await ref.read(editorProvider.notifier).openFile(widget.path);
+            if (mounted) {
+              final scaffold = Scaffold.maybeOf(context);
+              if (scaffold != null && (scaffold.isDrawerOpen || scaffold.isEndDrawerOpen)) {
+                Navigator.pop(context);
+              }
+            }
+          }
+        },
+        onLongPress: () => _showBottomSheetMenu(context, ref),
+        child: ContextMenuArea(
+          builder: (context) => [
+            ListTile(
+              leading: const Icon(LucideIcons.file_plus, size: 16),
+              title: const Text('New File', style: TextStyle(fontSize: 14)),
+              dense: true,
+              onTap: () {
+                Navigator.pop(context);
+                _startInlineCreation(isDir: false);
+              },
             ),
-            if (!_isRenaming) ...[
-              _buildAIBadge(ref),
-              if (gitColor != Colors.white70 && gitColor != Colors.white)
-                _buildGitBadge(gitColor, ref),
-              if (widget.isDirectory) ...[
-                _buildFolderQuickActionButton(
-                  icon: LucideIcons.file_plus,
-                  tooltip: 'Создать файл в "${widget.name}"',
-                  color: const Color(0xFF4CD7F6),
-                  onTap: () => _startInlineCreation(isDir: false),
-                ),
-                _buildFolderQuickActionButton(
-                  icon: LucideIcons.folder_plus,
-                  tooltip: 'Создать папку в "${widget.name}"',
-                  color: const Color(0xFFFFCA28),
-                  onTap: () => _startInlineCreation(isDir: true),
-                ),
-              ],
-            ],
-            if (!_isRenaming)
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _showBottomSheetMenu(context, ref),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 4.0),
-                  child: Icon(
-                    LucideIcons.ellipsis_vertical,
-                    size: 14,
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
-                ),
-              ),
+            ListTile(
+              leading: const Icon(LucideIcons.folder_plus, size: 16),
+              title: const Text('New Folder', style: TextStyle(fontSize: 14)),
+              dense: true,
+              onTap: () {
+                Navigator.pop(context);
+                _startInlineCreation(isDir: true);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(LucideIcons.pencil, size: 16),
+              title: const Text('Rename', style: TextStyle(fontSize: 14)),
+              dense: true,
+              onTap: () {
+                Navigator.pop(context);
+                setState(() {
+                  _inlineController = TextEditingController(text: widget.name);
+                  _isRenaming = true;
+                  _inlineFocusNode.requestFocus();
+                });
+              },
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.trash_2, size: 16, color: Colors.redAccent),
+              title: const Text('Delete', style: TextStyle(fontSize: 14, color: Colors.redAccent)),
+              dense: true,
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDelete(context, ref);
+              },
+            ),
           ],
+          child: Container(
+            decoration: BoxDecoration(
+              color: isSelected 
+                  ? Colors.blue.withValues(alpha: 0.18) 
+                  : (_hasAIPending(ref) && !widget.isDirectory)
+                      ? Colors.purpleAccent.withValues(alpha: 0.06)
+                      : _isHovered
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: isMobile ? 3.0 : 4.0),
+            child: Row(
+              children: [
+                if (widget.depth > 0)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: indentGuides,
+                  ),
+                if (widget.isDirectory)
+                  Icon(
+                    isExpanded ? LucideIcons.chevron_down : LucideIcons.chevron_right,
+                    size: isMobile ? 12.0 : 13.0,
+                    color: isExpanded ? Colors.white70 : Colors.white38,
+                  )
+                else
+                  SizedBox(width: isMobile ? 9 : 11),
+                const SizedBox(width: 4),
+                () {
+                  final iconInfo = FileIconHelper.getIconInfo(widget.visualName ?? widget.name, widget.isDirectory, isExpanded);
+                  return Icon(
+                    iconInfo.icon,
+                    size: isMobile ? 13.5 : 14.5,
+                    color: iconInfo.color,
+                  );
+                }(),
+                SizedBox(width: isMobile ? 5 : 6),
+                Expanded(
+                  child: _isRenaming
+                      ? _buildInlineRenameField()
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: _buildFileNameText(
+                                widget.visualName ?? widget.name,
+                                searchQuery,
+                                _hasAIPending(ref) ? Colors.purpleAccent : gitColor,
+                                isMobile: isMobile,
+                              ),
+                            ),
+                            if (!widget.isDirectory && ref.watch(bookmarksProvider).contains(widget.path)) ...[
+                              const SizedBox(width: 4),
+                              const Icon(
+                                LucideIcons.star,
+                                size: 10,
+                                color: Colors.amberAccent,
+                              ),
+                            ],
+                          ],
+                        ),
+                ),
+                if (!_isRenaming) ...[
+                  _buildAIBadge(ref),
+                  if (gitColor != Colors.white70 && gitColor != Colors.white)
+                    _buildGitBadge(gitColor, ref),
+                  if ((_isHovered || isSelected) && widget.isDirectory) ...[
+                    _buildFolderQuickActionButton(
+                      icon: LucideIcons.file_plus,
+                      tooltip: 'Создать файл в "${widget.name}"',
+                      onTap: () => _startInlineCreation(isDir: false),
+                    ),
+                    _buildFolderQuickActionButton(
+                      icon: LucideIcons.folder_plus,
+                      tooltip: 'Создать папку в "${widget.name}"',
+                      onTap: () => _startInlineCreation(isDir: true),
+                    ),
+                  ],
+                ],
+                if (!_isRenaming && (_isHovered || isSelected))
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showBottomSheetMenu(context, ref),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 2.0),
+                      child: Icon(
+                        LucideIcons.ellipsis,
+                        size: 13,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ),
-      ),
       ),
     );
 

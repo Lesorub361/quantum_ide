@@ -1,10 +1,10 @@
 {
-  "versionCode": 79,
-  "versionName": "1.2.63",
-  "notes": "QuantumIDE v1.2.63: Исправлена ошибка 'AAPT: unknown option --source-path' при сборке release APK: добавлен интеллектуальный фильтр аргументов AAPT2 и автозагрузка современного нативного ARM64 aapt2 с поддержкой AGP 8.x.",
+  "versionCode": 80,
+  "versionName": "1.2.64",
+  "notes": "QuantumIDE v1.2.64: Компактный и эстетичный проводник в стиле VS Code: однострочный заголовок с быстрыми действиями и скрываемым поиском, чистые иконки папок без громоздких рамок, контекстные кнопки действий только при наведении/выделении без обрезания длинных названий файлов.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.63/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.64/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

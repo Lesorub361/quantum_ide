@@ -45,6 +45,7 @@ class FileDrawer extends ConsumerStatefulWidget {
 class FileDrawerState extends ConsumerState<FileDrawer> {
   // Persistent controller: recreating it on every build reset the cursor and caused jank while typing.
   final TextEditingController _searchController = TextEditingController();
+  bool _isSearchVisible = false;
 
   @override
   void dispose() {
@@ -55,27 +56,122 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
   Widget _buildFilterChip(WidgetRef ref, String label, String query, bool isSelected) {
     return InkWell(
       onTap: () => ref.read(fileSearchQueryProvider.notifier).state = query,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(4),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF4CD7F6).withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(12),
+          color: isSelected ? const Color(0xFF4CD7F6).withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(4),
           border: Border.all(
             color: isSelected ? const Color(0xFF4CD7F6).withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.06),
-            width: 0.8,
+            width: 0.6,
           ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 10.5,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             color: isSelected ? const Color(0xFF4CD7F6) : Colors.white60,
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHeaderAction({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool isActive = false,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(4),
+        hoverColor: Colors.white.withValues(alpha: 0.08),
+        splashColor: Colors.white.withValues(alpha: 0.12),
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+          decoration: isActive
+              ? BoxDecoration(
+                  color: const Color(0xFF4CD7F6).withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                )
+              : null,
+          child: Icon(
+            icon,
+            size: 14,
+            color: isActive ? const Color(0xFF4CD7F6) : Colors.white60,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderMenu(BuildContext context, WidgetRef ref, String workspacePath) {
+    final l10n = AppLocalizations.of(context)!;
+    return PopupMenuButton<String>(
+      icon: const Icon(LucideIcons.ellipsis, size: 14, color: Colors.white60),
+      padding: EdgeInsets.zero,
+      tooltip: l10n.more,
+      color: const Color(0xFF1E2230),
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+      ),
+      onSelected: (value) {
+        switch (value) {
+          case 'sort':
+            showSortMenu(context, ref);
+            break;
+          case 'git':
+            ref.read(drawerTabProvider.notifier).state = 5;
+            break;
+          case 'env':
+            showEnvironmentBottomSheet(context, ref);
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'sort',
+          height: 32,
+          child: Row(
+            children: [
+              const Icon(LucideIcons.arrow_up_down, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(l10n.sortByDate.split(' ').first, style: const TextStyle(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'git',
+          height: 32,
+          child: Row(
+            children: [
+              Icon(LucideIcons.git_branch, size: 14, color: Colors.white70),
+              SizedBox(width: 8),
+              Text('Git', style: TextStyle(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'env',
+          height: 32,
+          child: Row(
+            children: [
+              const Icon(LucideIcons.wrench, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(l10n.environment, style: const TextStyle(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -306,146 +402,144 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         break;
       case 0:
       default:
+        final currentQuery = ref.watch(fileSearchQueryProvider);
         activePanel = Stack(
           children: [
             Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 14, vertical: isMobile ? 6 : 12),
-                  child: Column(
+                // VS Code Style sleek compact header bar
+                Container(
+                  height: 36,
+                  padding: const EdgeInsets.only(left: 10, right: 6),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5)),
+                  ),
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          ShaderMask(
-                            shaderCallback: (bounds) => const LinearGradient(
-                              colors: [Colors.blue, Colors.cyan],
-                            ).createShader(bounds),
-                            child: Icon(LucideIcons.folder, color: Colors.white, size: isMobile ? 15 : 18),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(AppLocalizations.of(context)!.explorer, style: TextStyle(fontSize: isMobile ? 13 : 15, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
-                          ),
-                        ],
-                      ),
-                      if (workspacePath.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.03),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.05), width: 0.5),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              DrawerActionIcon(
-                                icon: LucideIcons.file_plus,
-                                tooltip: AppLocalizations.of(context)!.newFile,
-                                onPressed: () => showCreateDialog(context, ref, workspacePath, false),
-                              ),
-                              DrawerActionIcon(
-                                icon: LucideIcons.folder_plus,
-                                tooltip: AppLocalizations.of(context)!.newFolder,
-                                onPressed: () => showCreateDialog(context, ref, workspacePath, true),
-                              ),
-                              DrawerActionIcon(
-                                icon: LucideIcons.folder_closed,
-                                tooltip: AppLocalizations.of(context)!.collapseAll,
-                                onPressed: () {
-                                  ref.read(expandedFoldersProvider.notifier).setExpanded({});
-                                },
-                              ),
-                              DrawerActionIcon(
-                                icon: LucideIcons.arrow_up_down,
-                                tooltip: AppLocalizations.of(context)!.sortByDate.split(' ').first,
-                                onPressed: () => showSortMenu(context, ref),
-                              ),
-                              DrawerActionIcon(
-                                icon: LucideIcons.git_branch,
-                                tooltip: 'Git',
-                                onPressed: () {
-                                  ref.read(drawerTabProvider.notifier).state = 5;
-                                },
-                              ),
-                              DrawerActionIcon(
-                                icon: LucideIcons.wrench,
-                                tooltip: AppLocalizations.of(context)!.environment,
-                                onPressed: () => showEnvironmentBottomSheet(context, ref),
-                              ),
-                            ],
-                          ),
+                      Text(
+                        AppLocalizations.of(context)!.explorer.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: Colors.white70,
                         ),
-                      ],
+                      ),
+                      const Spacer(),
                       if (workspacePath.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Consumer(
-                          builder: (context, ref, _) {
-                            final currentQuery = ref.watch(fileSearchQueryProvider);
-                            return Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                TextField(
-                                  onChanged: (value) => ref.read(fileSearchQueryProvider.notifier).state = value,
-                                  controller: () {
-                                    if (_searchController.text != currentQuery) {
-                                      _searchController.value = TextEditingValue(
-                                        text: currentQuery,
-                                        selection: TextSelection.collapsed(offset: currentQuery.length),
-                                      );
-                                    }
-                                    return _searchController;
-                                  }(),
-                                  decoration: InputDecoration(
-                                    hintText: AppLocalizations.of(context)!.searchFiles,
-                                    hintStyle: const TextStyle(fontSize: 12.5, color: Colors.white30),
-                                    prefixIcon: const Icon(LucideIcons.search, size: 14, color: Colors.white38),
-                                    suffixIcon: currentQuery.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(LucideIcons.x, size: 14, color: Colors.white54),
-                                            onPressed: () => ref.read(fileSearchQueryProvider.notifier).state = '',
-                                          )
-                                        : null,
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                    fillColor: Colors.white.withValues(alpha: 0.05),
-                                    filled: true,
-                                  ),
-                                  style: const TextStyle(fontSize: 12.5, color: Colors.white),
-                                ),
-                                const SizedBox(height: 6),
-                                SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  physics: const BouncingScrollPhysics(),
-                                  child: Row(
-                                    children: [
-                                      _buildFilterChip(ref, AppLocalizations.of(context)!.all, '', currentQuery == ''),
-                                      const SizedBox(width: 4),
-                                      _buildFilterChip(ref, 'Dart', '.dart', currentQuery == '.dart'),
-                                      const SizedBox(width: 4),
-                                      _buildFilterChip(ref, 'YAML', '.yaml', currentQuery == '.yaml'),
-                                      const SizedBox(width: 4),
-                                      _buildFilterChip(ref, 'JSON', '.json', currentQuery == '.json'),
-                                      const SizedBox(width: 4),
-                                      _buildFilterChip(ref, 'Web', '.html', currentQuery == '.html'),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
+                        _buildHeaderAction(
+                          icon: LucideIcons.file_plus,
+                          tooltip: AppLocalizations.of(context)!.newFile,
+                          onPressed: () => showCreateDialog(context, ref, workspacePath, false),
+                        ),
+                        _buildHeaderAction(
+                          icon: LucideIcons.folder_plus,
+                          tooltip: AppLocalizations.of(context)!.newFolder,
+                          onPressed: () => showCreateDialog(context, ref, workspacePath, true),
+                        ),
+                        _buildHeaderAction(
+                          icon: LucideIcons.folder_closed,
+                          tooltip: AppLocalizations.of(context)!.collapseAll,
+                          onPressed: () {
+                            ref.read(expandedFoldersProvider.notifier).setExpanded({});
                           },
                         ),
+                        _buildHeaderAction(
+                          icon: LucideIcons.search,
+                          tooltip: AppLocalizations.of(context)!.searchFiles,
+                          isActive: _isSearchVisible || currentQuery.isNotEmpty,
+                          onPressed: () {
+                            setState(() {
+                              _isSearchVisible = !_isSearchVisible;
+                              if (!_isSearchVisible) {
+                                ref.read(fileSearchQueryProvider.notifier).state = '';
+                                _searchController.clear();
+                              }
+                            });
+                          },
+                        ),
+                        _buildHeaderMenu(context, ref, workspacePath),
                       ],
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: Colors.white10, indent: 14, endIndent: 14),
-                const SizedBox(height: 6),
+                // Compact Search & Filters dropdown (only when search is toggled or active)
+                if (workspacePath.isNotEmpty && (_isSearchVisible || currentQuery.isNotEmpty)) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 28,
+                          child: TextField(
+                            onChanged: (value) => ref.read(fileSearchQueryProvider.notifier).state = value,
+                            controller: () {
+                              if (_searchController.text != currentQuery) {
+                                _searchController.value = TextEditingValue(
+                                  text: currentQuery,
+                                  selection: TextSelection.collapsed(offset: currentQuery.length),
+                                );
+                              }
+                              return _searchController;
+                            }(),
+                            decoration: InputDecoration(
+                              hintText: AppLocalizations.of(context)!.searchFiles,
+                              hintStyle: const TextStyle(fontSize: 11.5, color: Colors.white30),
+                              prefixIcon: const Icon(LucideIcons.search, size: 13, color: Colors.white38),
+                              prefixIconConstraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                              suffixIcon: currentQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(LucideIcons.x, size: 12, color: Colors.white54),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                      onPressed: () => ref.read(fileSearchQueryProvider.notifier).state = '',
+                                    )
+                                  : null,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(4),
+                                borderSide: const BorderSide(color: Color(0xFF4CD7F6), width: 1.0),
+                              ),
+                              fillColor: Colors.white.withValues(alpha: 0.04),
+                              filled: true,
+                            ),
+                            style: const TextStyle(fontSize: 11.5, color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: Row(
+                            children: [
+                              _buildFilterChip(ref, AppLocalizations.of(context)!.all, '', currentQuery == ''),
+                              const SizedBox(width: 4),
+                              _buildFilterChip(ref, 'Dart', '.dart', currentQuery == '.dart'),
+                              const SizedBox(width: 4),
+                              _buildFilterChip(ref, 'YAML', '.yaml', currentQuery == '.yaml'),
+                              const SizedBox(width: 4),
+                              _buildFilterChip(ref, 'JSON', '.json', currentQuery == '.json'),
+                              const SizedBox(width: 4),
+                              _buildFilterChip(ref, 'Web', '.html', currentQuery == '.html'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Colors.white10),
+                ],
                 if (workspacePath.isNotEmpty)
                   Expanded(
                     child: DragTarget<String>(
