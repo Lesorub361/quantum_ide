@@ -357,7 +357,14 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               final homeDir = Platform.environment['HOME'] ?? '/root';
               final marker = File(p.join(homeDir, '.quantum_build_fix_installed'));
               final rootMarker = File('/root/.quantum_build_fix_installed');
-              exists = await marker.exists() || await rootMarker.exists() || installedIds.contains('build-fix');
+              final hasAapt = await hasCmd('aapt') || await hasCmd('aapt2');
+              exists = await marker.exists() || await rootMarker.exists() || hasAapt || installedIds.contains('build-fix');
+              break;
+            case 'box64-emulator':
+              exists = await hasCmd('box64') ||
+                  await File('/usr/local/bin/box64').exists() ||
+                  await File('/usr/bin/box64').exists() ||
+                  installedIds.contains('box64-emulator');
               break;
             case 'build-clean':
               exists = installedIds.contains('build-clean');
@@ -510,8 +517,14 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               break;
             case 'build-fix':
               final marker = File(p.join(rootfsPath, 'root', '.quantum_build_fix_installed'));
-              final hasAapt2 = await hasRootfsBin('aapt2');
-              exists = (await marker.exists()) || (hasAapt2 && installedIds.contains('build-fix'));
+              final hasAapt = await hasRootfsBin('aapt') || await hasRootfsBin('aapt2');
+              exists = (await marker.exists()) || hasAapt || installedIds.contains('build-fix');
+              break;
+            case 'box64-emulator':
+              exists = await hasRootfsBin('box64') ||
+                  await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'box64')).exists() ||
+                  await File(p.join(rootfsPath, 'usr', 'bin', 'box64')).exists() ||
+                  installedIds.contains('box64-emulator');
               break;
             case 'build-clean':
               exists = installedIds.contains('build-clean');
@@ -596,6 +609,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
           if (installedIds.contains(pkg.id) &&
               (pkg.id == 'build-clean' ||
                   pkg.id == 'build-fix' ||
+                  pkg.id == 'box64-emulator' ||
                   pkg.id == 'antigravity-cli' ||
                   pkg.id == 'claude-code' ||
                   pkg.id == 'deepseek-harness')) {

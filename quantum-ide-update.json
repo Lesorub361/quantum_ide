@@ -1,10 +1,10 @@
 {
-  "versionCode": 72,
-  "versionName": "1.2.56",
-  "notes": "QuantumIDE v1.2.56: Отображение версии на главной странице, проверка и обновление приложения в 1 клик через встроенный установщик, исправление AOT-компилятора gen_snapshot и полная совместимость с ARM64 планшетами.",
+  "versionCode": 73,
+  "versionName": "1.2.57",
+  "notes": "QuantumIDE v1.2.57: Исправлено отображение статуса установки пакетов Box64 (x86_64 Emulator) и Build Environment Fix в Package Manager, авто-обновление и фикс AOT gen_snapshot.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.56/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.57/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
