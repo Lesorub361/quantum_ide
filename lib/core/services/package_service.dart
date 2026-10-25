@@ -366,6 +366,11 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                   await File('/usr/bin/box64').exists() ||
                   installedIds.contains('box64-emulator');
               break;
+            case 'vulkan-graphics':
+              exists = await hasCmd('vulkaninfo') ||
+                  await File('/usr/bin/vulkaninfo').exists() ||
+                  installedIds.contains('vulkan-graphics');
+              break;
             case 'build-clean':
               exists = installedIds.contains('build-clean');
               break;
@@ -526,6 +531,11 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                   await File(p.join(rootfsPath, 'usr', 'bin', 'box64')).exists() ||
                   installedIds.contains('box64-emulator');
               break;
+            case 'vulkan-graphics':
+              exists = await hasRootfsBin('vulkaninfo') ||
+                  await File(p.join(rootfsPath, 'usr', 'bin', 'vulkaninfo')).exists() ||
+                  installedIds.contains('vulkan-graphics');
+              break;
             case 'build-clean':
               exists = installedIds.contains('build-clean');
               break;
@@ -610,6 +620,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               (pkg.id == 'build-clean' ||
                   pkg.id == 'build-fix' ||
                   pkg.id == 'box64-emulator' ||
+                  pkg.id == 'vulkan-graphics' ||
                   pkg.id == 'antigravity-cli' ||
                   pkg.id == 'claude-code' ||
                   pkg.id == 'deepseek-harness')) {

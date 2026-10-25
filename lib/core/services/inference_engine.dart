@@ -142,20 +142,30 @@ class InferenceEngine {
         final threads = (Platform.numberOfProcessors > 2)
             ? (Platform.numberOfProcessors - 1).clamp(2, 6)
             : 2;
+
+        final hasVulkan = File('/system/lib64/libvulkan.so').existsSync() ||
+            File('/usr/lib/aarch64-linux-gnu/libvulkan.so').existsSync() ||
+            File('/usr/lib/libvulkan.so').existsSync() ||
+            File('/vendor/lib64/hw/vulkan.adreno.so').existsSync() ||
+            File('/vendor/lib64/hw/vulkan.mali.so').existsSync();
+
+        final serverArgs = [
+          '-m',
+          modelPath,
+          '-c',
+          '$contextSize',
+          '-t',
+          '$threads',
+          '--host',
+          '127.0.0.1',
+          '--port',
+          '8080',
+          if (hasVulkan) ...['-ngl', '33'],
+        ];
+
         _serverProcess = await Process.start(
           foundBinary,
-          [
-            '-m',
-            modelPath,
-            '-c',
-            '$contextSize',
-            '-t',
-            '$threads',
-            '--host',
-            '127.0.0.1',
-            '--port',
-            '8080',
-          ],
+          serverArgs,
         );
 
         for (int i = 0; i < 20; i++) {
@@ -168,9 +178,9 @@ class InferenceEngine {
             onProgress?.call(1.0);
             return LoadResult(
               success: true,
-              message: 'Запущен локальный llama-server ($threads потоков CPU).',
+              message: 'Запущен локальный llama-server (${hasVulkan ? "Vulkan GPU + " : ""}$threads потоков CPU).',
               runtime: 'llama-server',
-              backend: 'cpu',
+              backend: hasVulkan ? 'vulkan' : 'cpu',
             );
           }
         }

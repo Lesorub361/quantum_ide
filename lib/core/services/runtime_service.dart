@@ -2054,6 +2054,14 @@ if [ -x /usr/local/bin/quantum-patch-ndk ]; then
     /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
 fi
 
+# Auto-configure Vulkan drivers and host GPU passthrough
+if [ -f "/system/lib64/libvulkan.so" ] && [ ! -f /usr/lib/aarch64-linux-gnu/libvulkan.so.1 ]; then
+    mkdir -p /usr/lib/aarch64-linux-gnu 2>/dev/null || true
+    ln -sf /system/lib64/libvulkan.so /usr/lib/aarch64-linux-gnu/libvulkan.so.1 2>/dev/null || true
+    ln -sf /system/lib64/libvulkan.so /usr/lib/aarch64-linux-gnu/libvulkan.so 2>/dev/null || true
+    ln -sf /system/lib64/libvulkan.so /usr/lib/libvulkan.so 2>/dev/null || true
+fi
+
 # 2. Project Patching (Auto-fix common build issues on ARM64)
 sed -i '/extra-gen-snapshot-options/d' /root/.gradle/gradle.properties 2>/dev/null || true
 sed -i '/extra-gen-snapshot-options/d' ~/.gradle/gradle.properties 2>/dev/null || true
