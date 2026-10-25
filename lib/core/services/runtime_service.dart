@@ -2092,19 +2092,86 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 \( -name "settings.gradle
     sed -i -E "s/id\s+'org.jetbrains.kotlin.android'\s+version\s+'[^']+'/id 'org.jetbrains.kotlin.android' version '2.2.20'/g" "$f"
 done
 
-# Ensure modern aapt2 wrapper via QEMU is present and functional (supports Android 35/36+)
-if [ -f /usr/local/lib/aapt2-bin ] && [ -x /usr/bin/qemu-x86_64-static ]; then
-    if [ ! -f /usr/bin/aapt2 ] || [ -L /usr/bin/aapt2 ] || ! grep -q "qemu-x86_64-static" /usr/bin/aapt2 2>/dev/null; then
-        rm -f /usr/bin/aapt2
-        cat << 'AAPT2_EOF' > /usr/bin/aapt2
-#!/bin/sh
-if [ "$1" = "version" ]; then
-    exec /usr/bin/qemu-x86_64-static /usr/local/lib/aapt2-bin "$@" 2>&1
-fi
-exec /usr/bin/qemu-x86_64-static /usr/local/lib/aapt2-bin "$@"
-AAPT2_EOF
-        chmod +x /usr/bin/aapt2
+# Ensure modern ARM64 aapt2 or universal compatibility wrapper for AGP 8.x
+# 1. Preserve real binary if /usr/bin/aapt2 is not already a wrapper
+if [ -f /usr/bin/aapt2 ] && [ ! -L /usr/bin/aapt2 ]; then
+    if ! head -n 1 /usr/bin/aapt2 2>/dev/null | grep -q "^#!"; then
+        cp -f /usr/bin/aapt2 /usr/bin/aapt2-real 2>/dev/null || true
     fi
+fi
+
+# 2. In background, download modern ARM64 native aapt2 (supports Android 35/36 & AGP 8.x --source-path)
+if [ ! -s /usr/local/bin/aapt2-arm64 ]; then
+    (
+        curl -sSL -o /tmp/aapt2-arm64 "https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a" 2>/dev/null && \
+        chmod +x /tmp/aapt2-arm64 && \
+        mv -f /tmp/aapt2-arm64 /usr/local/bin/aapt2-arm64 2>/dev/null
+    ) &
+fi
+
+# 3. Create or update smart wrapper at /usr/bin/aapt2
+if [ ! -f /usr/bin/aapt2 ] || [ -L /usr/bin/aapt2 ] || ! grep -q "AAPT2_UNIVERSAL_WRAPPER" /usr/bin/aapt2 2>/dev/null; then
+    rm -f /usr/bin/aapt2
+    cat << 'AAPT2_EOF' > /usr/bin/aapt2
+#!/bin/bash
+# AAPT2_UNIVERSAL_WRAPPER - Quantum IDE AAPT2 Universal Compatibility Wrapper
+
+REAL_EXEC=()
+if [ -x /usr/local/bin/aapt2-arm64 ]; then
+    REAL_EXEC=("/usr/local/bin/aapt2-arm64")
+elif [ -f /usr/local/lib/aapt2-bin ] && [ -x /usr/bin/qemu-x86_64-static ]; then
+    REAL_EXEC=("/usr/bin/qemu-x86_64-static" "/usr/local/lib/aapt2-bin")
+elif [ -x /usr/bin/aapt2-real ]; then
+    REAL_EXEC=("/usr/bin/aapt2-real")
+elif [ -x /usr/bin/aapt2.orig ]; then
+    REAL_EXEC=("/usr/bin/aapt2.orig")
+fi
+
+if [ ${#REAL_EXEC[@]} -eq 0 ]; then
+    echo "ERROR: AAPT2 executable not found in container!" >&2
+    exit 1
+fi
+
+SUPPORTS_SOURCE_PATH=0
+if [ -x /usr/local/bin/aapt2-arm64 ] && [ "${REAL_EXEC[0]}" = "/usr/local/bin/aapt2-arm64" ]; then
+    SUPPORTS_SOURCE_PATH=1
+elif "${REAL_EXEC[@]}" compile -h 2>&1 | grep -q -- "--source-path"; then
+    SUPPORTS_SOURCE_PATH=1
+fi
+
+if [ "$SUPPORTS_SOURCE_PATH" -eq 1 ]; then
+    if [ "$1" = "version" ]; then
+        exec "${REAL_EXEC[@]}" "$@" 2>&1
+    fi
+    exec "${REAL_EXEC[@]}" "$@"
+fi
+
+# Filter out --source-path and its argument for legacy AAPT2
+ARGS=()
+SKIP_NEXT=0
+for arg in "$@"; do
+    if [ "$SKIP_NEXT" -eq 1 ]; then
+        SKIP_NEXT=0
+        continue
+    fi
+    if [ "$arg" = "--source-path" ]; then
+        SKIP_NEXT=1
+        continue
+    fi
+    case "$arg" in
+        --source-path=*)
+            continue
+            ;;
+    esac
+    ARGS+=("$arg")
+done
+
+if [ "$1" = "version" ]; then
+    exec "${REAL_EXEC[@]}" "${ARGS[@]}" 2>&1
+fi
+exec "${REAL_EXEC[@]}" "${ARGS[@]}"
+AAPT2_EOF
+    chmod +x /usr/bin/aapt2
 fi
 
 # Ensure apksigner wrapper is present
@@ -2121,7 +2188,7 @@ fi
 
 # 3. AAPT2 background overwrite (for those in .gradle cache)
 if [ -f /usr/bin/aapt2 ]; then
-  find /root/.gradle -name "aapt2" -exec cp /usr/bin/aapt2 {} \; 2>/dev/null || true
+  find /root/.gradle -name "aapt2" -exec cp -f /usr/bin/aapt2 {} \; 2>/dev/null || true
 fi
 
 # 4. Precache Flutter Engine components in the background
