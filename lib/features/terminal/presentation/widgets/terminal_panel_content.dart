@@ -1056,6 +1056,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final l10n = AppLocalizations.of(context)!;
     final dedicatedState = ref.watch(dedicatedTerminalProvider);
     final session = dedicatedState.sessions[DedicatedTerminalType.build];
+    final ws = ref.watch(workspaceProvider).currentPath ?? '';
+    final isFlutter = ws.isNotEmpty && File(p.join(ws, 'pubspec.yaml')).existsSync();
+    final isNativeAndroid = ws.isNotEmpty && !isFlutter && (
+      File(p.join(ws, 'build.gradle.kts')).existsSync() ||
+      File(p.join(ws, 'build.gradle')).existsSync() ||
+      File(p.join(ws, 'settings.gradle.kts')).existsSync() ||
+      File(p.join(ws, 'settings.gradle')).existsSync() ||
+      File(p.join(ws, 'gradlew')).existsSync()
+    );
 
     return Column(
       children: [
@@ -1078,10 +1087,26 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               ? Column(
                   children: [
                     _buildActionHeader(l10n.build, [
-                      _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build linux --release')),
-                      _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation --extra-gen-snapshot-options=--dedup_instructions && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
-                      _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get')),
-                      _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean')),
+                      if (isFlutter)
+                        _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && flutter build linux --release')),
+                      _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () {
+                        if (isNativeAndroid) {
+                          _runDedicatedCommand(DedicatedTerminalType.build, '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"');
+                        } else {
+                          _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation --extra-gen-snapshot-options=--dedup_instructions && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)');
+                        }
+                      }),
+                      if (isNativeAndroid)
+                        _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"')),
+                      if (isFlutter)
+                        _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter pub get')),
+                      _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () {
+                        if (isNativeAndroid) {
+                          _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk');
+                        } else {
+                          _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean');
+                        }
+                      }),
                       _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.build)),
                     ]),
                     Expanded(

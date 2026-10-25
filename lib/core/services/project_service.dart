@@ -914,6 +914,10 @@ edition = "2021"
         RegExp(r'id\("com\.android\.library"\)\s+version\s+"[\d.]+"'),
         (_) => 'id("com.android.library") version "8.11.1"',
       );
+      content = content.replaceAllMapped(
+        RegExp(r'id\("org\.jetbrains\.kotlin\.android"\)\s+version\s+"[\d.]+"'),
+        (_) => 'id("org.jetbrains.kotlin.android") version "2.2.20"',
+      );
       await settingsFile.writeAsString(content);
       debugPrint('[ProjectService] Patched settings.gradle.kts');
     }
@@ -944,6 +948,27 @@ edition = "2021"
       }
     } else {
       await _copyGradleWrapper(p.join(projectPath, 'android'));
+    }
+
+    // --- android/gradle.properties (Safe memory and dedup_instructions) ---
+    final gradlePropsFile = File(p.join(projectPath, 'android', 'gradle.properties'));
+    const safeProps = '''org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=320m
+android.useAndroidX=true
+android.enableJetifier=true
+org.gradle.daemon=false
+org.gradle.parallel=false
+org.gradle.workers.max=1
+android.aapt2.daemon=false
+extra-gen-snapshot-options=--dedup_instructions
+org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
+''';
+    await gradlePropsFile.writeAsString(safeProps);
+    debugPrint('[ProjectService] Injected safe mobile gradle.properties');
+
+    // --- android/local.properties ---
+    final localProps = File(p.join(projectPath, 'android', 'local.properties'));
+    if (!await localProps.exists()) {
+      await localProps.writeAsString('flutter.sdk=/root/flutter\n');
     }
   }
 
@@ -1169,9 +1194,12 @@ include(":app")
     await _createFile(p.join(projectPath, 'gradle.properties'), '''android.useAndroidX=true
 kotlin.code.style=official
 android.nonTransitiveRClass=true
-org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
+org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=320m
 org.gradle.daemon=false
 org.gradle.parallel=false
+org.gradle.workers.max=1
+android.aapt2.daemon=false
+org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
 ''');
 
     // 3. app/build.gradle.kts
@@ -1226,6 +1254,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
