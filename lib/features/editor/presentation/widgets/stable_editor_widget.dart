@@ -93,7 +93,108 @@ class DiffBackgroundPainter extends CustomPainter {
 // CodeEditor НИКОГДА не уничтожается и не пересоздаётся при смене вкладки.
 // Это устраняет stale _CodeEditableState listener crash из re_editor.
 
+/// Контроллер всплывающей панели выделения (Selection Toolbar).
+/// Решает проблему зависания и дублирования контекстного меню "Копировать/Вставить":
+/// 1. Гарантирует синглтон оверлея — в любой момент времени существует максимум 1 тулбар на весь экран.
+/// 2. Оборачивает меню в TapRegion: тап в любое место за пределами тулбара мгновенно скрывает его.
+/// 3. Реагирует на смену видимости selectionOverlayController и скрывается при снятии выделения.
+class QuantumSelectionToolbarController implements SelectionToolbarController {
+  final ToolbarMenuBuilder builder;
+  static OverlayEntry? _activeEntry;
+  static VoidCallback? _activeVisibilityListener;
+  static ValueNotifier<bool>? _activeVisibility;
 
+  QuantumSelectionToolbarController({required this.builder});
+
+  static void dismissAll() {
+    if (_activeVisibility != null && _activeVisibilityListener != null) {
+      try {
+        _activeVisibility!.removeListener(_activeVisibilityListener!);
+      } catch (_) {}
+      _activeVisibility = null;
+      _activeVisibilityListener = null;
+    }
+    if (_activeEntry != null) {
+      try {
+        _activeEntry?.remove();
+      } catch (_) {}
+      _activeEntry = null;
+    }
+  }
+
+  @override
+  void hide(BuildContext context) {
+    dismissAll();
+  }
+
+  @override
+  void show({
+    required BuildContext context,
+    required CodeLineEditingController controller,
+    required TextSelectionToolbarAnchors anchors,
+    Rect? renderRect,
+    required LayerLink layerLink,
+    required ValueNotifier<bool> visibility,
+  }) {
+    dismissAll();
+
+    final OverlayState? overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+
+    void onVisibilityChanged() {
+      if (!visibility.value) {
+        dismissAll();
+      }
+    }
+
+    visibility.addListener(onVisibilityChanged);
+    _activeVisibility = visibility;
+    _activeVisibilityListener = onVisibilityChanged;
+
+    final entry = OverlayEntry(
+      builder: (entryContext) {
+        return TapRegion(
+          groupId: 'quantum_selection_toolbar',
+          onTapOutside: (_) => dismissAll(),
+          child: Directionality(
+            textDirection: Directionality.of(context),
+            child: ValueListenableBuilder<bool>(
+              valueListenable: visibility,
+              builder: (ctx, isVisible, child) {
+                if (!isVisible) return const SizedBox.shrink();
+                return CompositedTransformFollower(
+                  link: layerLink,
+                  showWhenUnlinked: false,
+                  offset: renderRect != null ? -renderRect.topLeft : Offset.zero,
+                  child: builder(
+                    context: context,
+                    anchors: anchors,
+                    controller: controller,
+                    onDismiss: () => dismissAll(),
+                    onRefresh: () {
+                      dismissAll();
+                      show(
+                        context: context,
+                        controller: controller,
+                        anchors: anchors,
+                        renderRect: renderRect,
+                        layerLink: layerLink,
+                        visibility: visibility,
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(entry);
+    _activeEntry = entry;
+  }
+}
 
 class StableEditorWidget extends ConsumerStatefulWidget {
   final EditorFile file;
@@ -109,12 +210,11 @@ class StableEditorWidget extends ConsumerStatefulWidget {
   ConsumerState<StableEditorWidget> createState() => StableEditorWidgetState();
 }
 
-
-
 class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   late List<CodeDiagnostic> _diagnostics;
   late List<DiffMarker> _diffMarkers;
   late final CodeFindController _findController;
+  late final SelectionToolbarController _toolbarController;
   List<AIAction> _pendingActions = [];
 
   final Map<int, Offset> _pinchPointers = {};
@@ -321,11 +421,13 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     _diagnostics = widget.file.diagnostics;
     _diffMarkers = widget.file.diffMarkers;
     _findController = CodeFindController(widget.file.controller);
+    _toolbarController = QuantumSelectionToolbarController(builder: _buildToolbarMenu);
     _setupControllerListener();
   }
 
   @override
   void dispose() {
+    QuantumSelectionToolbarController.dismissAll();
     _removeControllerListener();
     _findController.dispose();
     super.dispose();
@@ -334,6 +436,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   @override
   void didUpdateWidget(StableEditorWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.file.id != oldWidget.file.id) {
+      QuantumSelectionToolbarController.dismissAll();
+    }
     // Обновляем только диагностику и маркеры — не пересоздаём CodeEditor
     if (widget.file.diagnostics != oldWidget.file.diagnostics ||
         widget.file.diffMarkers != oldWidget.file.diffMarkers) {
@@ -794,201 +899,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         controller: controller,
         readOnly: readOnly,
       ),
-      toolbarController: MobileSelectionToolbarController(
-        builder: ({
-          required BuildContext context,
-          required TextSelectionToolbarAnchors anchors,
-          required CodeLineEditingController controller,
-          required VoidCallback onDismiss,
-          required VoidCallback onRefresh,
-        }) {
-          final List<ContextMenuButtonItem> buttonItems = [];
-          final l10n = AppLocalizations.of(context)!;
-          
-          if (!controller.selection.isCollapsed) {
-            buttonItems.add(
-              ContextMenuButtonItem(
-                label: l10n.cut,
-                onPressed: () {
-                  controller.cut();
-                  onDismiss();
-                },
-              ),
-            );
-            buttonItems.add(
-              ContextMenuButtonItem(
-                label: l10n.copy,
-                onPressed: () {
-                  controller.copy();
-                  onDismiss();
-                },
-              ),
-            );
-          }
-          
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.paste,
-              onPressed: () {
-                controller.paste();
-                onDismiss();
-              },
-            ),
-          );
-          
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.selectAll,
-              onPressed: () {
-                controller.selectAll();
-                onRefresh();
-              },
-            ),
-          );
-
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.goToDefinition,
-              onPressed: () {
-                onDismiss();
-                ref.read(editorProvider.notifier).goToDefinition();
-              },
-            ),
-          );
-
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.search,
-              onPressed: () {
-                onDismiss();
-                _findController.findMode();
-                _findController.focusOnFindInput();
-              },
-            ),
-          );
-
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.info,
-              onPressed: () async {
-                onDismiss();
-                final hover = await ref.read(editorProvider.notifier).getHover();
-                if (hover != null && context.mounted) {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: const Color(0xFF1E2230),
-                      title: Text(l10n.documentation, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                      content: SingleChildScrollView(
-                        child: Text(
-                          hover.contents,
-                          style: const TextStyle(color: Colors.white70, fontSize: 14),
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: Text(l10n.ok),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-            ),
-          );
-
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.usages,
-              onPressed: () async {
-                onDismiss();
-                final locations = await ref.read(editorProvider.notifier).getReferences();
-                if (locations.isNotEmpty && context.mounted) {
-                  showModalBottomSheet(
-                    context: context,
-                    backgroundColor: const Color(0xFF1E2230),
-                    builder: (context) => Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Text(l10n.usages, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: locations.length,
-                            itemBuilder: (context, index) {
-                              final loc = locations[index];
-                              final fileName = p.basename(Uri.parse(loc.uri).toFilePath());
-                              return ListTile(
-                                title: Text(fileName, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                                subtitle: Text('${l10n.line} ${loc.range.start.line + 1}, ${l10n.column} ${loc.range.start.character + 1}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  ref.read(editorProvider.notifier).openFile(Uri.parse(loc.uri).toFilePath(), line: loc.range.start.line, column: loc.range.start.character);
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-              },
-            ),
-          );
-
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.rename,
-              onPressed: () async {
-                onDismiss();
-                final controller = TextEditingController();
-                final newName = await showDialog<String>(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    backgroundColor: const Color(0xFF1E2230),
-                    title: Text(l10n.rename, style: const TextStyle(color: Colors.white)),
-                    content: TextField(
-                      controller: controller,
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: l10n.rename,
-                        hintStyle: const TextStyle(color: Colors.white38),
-                      ),
-                    ),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.cancel)),
-                      TextButton(onPressed: () => Navigator.pop(context, controller.text), child: Text(l10n.ok)),
-                    ],
-                  ),
-                );
-                if (newName != null && newName.isNotEmpty) {
-                  ref.read(editorProvider.notifier).rename(newName);
-                }
-              },
-            ),
-          );
-
-          buttonItems.add(
-            ContextMenuButtonItem(
-              label: l10n.format,
-              onPressed: () {
-                onDismiss();
-                ref.read(editorProvider.notifier).formatActiveFile();
-              },
-            ),
-          );
-
-          return AdaptiveTextSelectionToolbar.buttonItems(
-            anchors: anchors,
-            buttonItems: buttonItems,
-          );
-        },
-      ),
+      toolbarController: _toolbarController,
       indicatorBuilder: (context, controller, chunkController, notifier) {
         return Stack(
           children: [
@@ -1048,6 +959,16 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         codeTheme: applyHighlighting ? _highlightTheme : null,
       ),
+    );
+
+    editorWidget = NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollStartNotification || notification is ScrollUpdateNotification) {
+          QuantumSelectionToolbarController.dismissAll();
+        }
+        return false;
+      },
+      child: editorWidget,
     );
 
     if (settings.minimap) {
@@ -1341,6 +1262,203 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           child: editorWidget,
         ),
       ),
+    );
+  }
+
+  Widget _buildToolbarMenu({
+    required BuildContext context,
+    required TextSelectionToolbarAnchors anchors,
+    required CodeLineEditingController controller,
+    required VoidCallback onDismiss,
+    required VoidCallback onRefresh,
+  }) {
+    final List<ContextMenuButtonItem> buttonItems = [];
+    final l10n = AppLocalizations.of(context)!;
+
+    if (!controller.selection.isCollapsed) {
+      buttonItems.add(
+        ContextMenuButtonItem(
+          label: l10n.cut,
+          onPressed: () {
+            controller.cut();
+            controller.cancelSelection();
+            onDismiss();
+          },
+        ),
+      );
+      buttonItems.add(
+        ContextMenuButtonItem(
+          label: l10n.copy,
+          onPressed: () {
+            controller.copy();
+            controller.cancelSelection();
+            onDismiss();
+          },
+        ),
+      );
+    }
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.paste,
+        onPressed: () {
+          controller.paste();
+          controller.cancelSelection();
+          onDismiss();
+        },
+      ),
+    );
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.selectAll,
+        onPressed: () {
+          controller.selectAll();
+          onRefresh();
+        },
+      ),
+    );
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.goToDefinition,
+        onPressed: () {
+          onDismiss();
+          ref.read(editorProvider.notifier).goToDefinition();
+        },
+      ),
+    );
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.search,
+        onPressed: () {
+          onDismiss();
+          _findController.findMode();
+          _findController.focusOnFindInput();
+        },
+      ),
+    );
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.info,
+        onPressed: () async {
+          onDismiss();
+          final hover = await ref.read(editorProvider.notifier).getHover();
+          if (hover != null && context.mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: const Color(0xFF1E2230),
+                title: Text(l10n.documentation, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                content: SingleChildScrollView(
+                  child: Text(
+                    hover.contents,
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(l10n.ok),
+                  ),
+                ],
+              ),
+            );
+          }
+        },
+      ),
+    );
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.usages,
+        onPressed: () async {
+          onDismiss();
+          final locations = await ref.read(editorProvider.notifier).getReferences();
+          if (locations.isNotEmpty && context.mounted) {
+            showModalBottomSheet(
+              context: context,
+              backgroundColor: const Color(0xFF1E2230),
+              builder: (context) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(l10n.usages, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: locations.length,
+                      itemBuilder: (context, index) {
+                        final loc = locations[index];
+                        final fileName = p.basename(Uri.parse(loc.uri).toFilePath());
+                        return ListTile(
+                          title: Text(fileName, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                          subtitle: Text('${l10n.line} ${loc.range.start.line + 1}, ${l10n.column} ${loc.range.start.character + 1}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          onTap: () {
+                            Navigator.pop(context);
+                            ref.read(editorProvider.notifier).openFile(Uri.parse(loc.uri).toFilePath(), line: loc.range.start.line, column: loc.range.start.character);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+        },
+      ),
+    );
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.rename,
+        onPressed: () async {
+          onDismiss();
+          final renameCtrl = TextEditingController();
+          final newName = await showDialog<String>(
+            context: context,
+            builder: (context) => AlertDialog(
+              backgroundColor: const Color(0xFF1E2230),
+              title: Text(l10n.rename, style: const TextStyle(color: Colors.white)),
+              content: TextField(
+                controller: renameCtrl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: l10n.rename,
+                  hintStyle: const TextStyle(color: Colors.white38),
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.cancel)),
+                TextButton(onPressed: () => Navigator.pop(context, renameCtrl.text), child: Text(l10n.ok)),
+              ],
+            ),
+          );
+          if (newName != null && newName.isNotEmpty) {
+            ref.read(editorProvider.notifier).rename(newName);
+          }
+        },
+      ),
+    );
+
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: l10n.format,
+        onPressed: () {
+          onDismiss();
+          ref.read(editorProvider.notifier).formatActiveFile();
+        },
+      ),
+    );
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: anchors,
+      buttonItems: buttonItems,
     );
   }
 

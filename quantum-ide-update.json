@@ -1,10 +1,10 @@
 {
-  "versionCode": 77,
-  "versionName": "1.2.61",
-  "notes": "QuantumIDE v1.2.61: Добавлен мониторинг загрузки видеоускорителя (GPU) в проводник файлов, боковую панель проводника, системную телеметрию на главной странице, Bento Dashboard редактора и строку состояния.",
+  "versionCode": 78,
+  "versionName": "1.2.62",
+  "notes": "QuantumIDE v1.2.62: Исправлено зависание и дублирование контекстного меню выделения (Вставить/Копировать), добавлено мгновенное закрытие тулбара по тапу мимо или при скролле.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.61/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.62/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
