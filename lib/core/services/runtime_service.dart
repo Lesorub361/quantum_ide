@@ -1741,8 +1741,12 @@ for fl_dir in "${FLUTTER_ROOT:-/root/flutter}" "$HOME/flutter" "/root/flutter"; 
         if [ -f "$ENGINE_DIR/gen_snapshot.real" ]; then
             cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
 #!/bin/bash
-DIR="$(cd "$(dirname "$0")" && pwd)"
-exec "$DIR/gen_snapshot.real" --dedup_instructions "$@"
+DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+if "\$DIR/gen_snapshot.real" --help --verbose 2>&1 | grep -q "dedup_instructions"; then
+    exec "\$DIR/gen_snapshot.real" --dedup_instructions "\$@"
+else
+    exec "\$DIR/gen_snapshot.real" "\$@"
+fi
 WRAP_GS
             chmod +x "$ENGINE_DIR/gen_snapshot"
         fi
