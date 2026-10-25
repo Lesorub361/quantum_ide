@@ -934,13 +934,13 @@ edition = "2021"
     final wrapperFile = File(p.join(projectPath, 'android', 'gradle', 'wrapper', 'gradle-wrapper.properties'));
     if (await wrapperFile.exists()) {
       String wrapperContent = await wrapperFile.readAsString();
-      if (!wrapperContent.contains('gradle-8.13')) {
+      if (!wrapperContent.contains('gradle-8.14')) {
         wrapperContent = wrapperContent.replaceAllMapped(
           RegExp(r'distributionUrl=.*'),
-          (_) => r'distributionUrl=https\://services.gradle.org/distributions/gradle-8.13-all.zip',
+          (_) => r'distributionUrl=https\://services.gradle.org/distributions/gradle-8.14-all.zip',
         );
         await wrapperFile.writeAsString(wrapperContent);
-        debugPrint('[ProjectService] Patched gradle-wrapper.properties to 8.13-all');
+        debugPrint('[ProjectService] Patched gradle-wrapper.properties to 8.14-all');
       }
     } else {
       await _copyGradleWrapper(p.join(projectPath, 'android'));
@@ -1062,7 +1062,7 @@ flutter {
 
     // ── gradle/wrapper/gradle-wrapper.properties ──
     await _createFile(p.join(androidDir, 'gradle', 'wrapper', 'gradle-wrapper.properties'),
-        'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-all.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n');
+        'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-all.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n');
 
     // ── app/src/main/AndroidManifest.xml ──
     await _createFile(p.join(appDir, 'src', 'main', 'AndroidManifest.xml'), '''<?xml version="1.0" encoding="utf-8"?>
@@ -1388,7 +1388,7 @@ public class MainActivity extends AppCompatActivity {
       if (!await propFile.exists()) {
         await _createFile(propFile.path, '''distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip
+distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-all.zip
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
 ''');
@@ -1820,8 +1820,8 @@ class MainActivity : AppCompatActivity() {
           r"sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
           r"sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
           r'''sed -i 's/id("com.android.application") version "[0-9.]*"/id("com.android.application") version "8.11.1"/g' android/settings.gradle.kts 2>/dev/null || true''',
-          r"sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true",
-          'flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons 2>&1',
+          r"sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true",
+          'flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --extra-gen-snapshot-options=--dedup_instructions 2>&1',
           '(cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)',
         ].join(' && ');
         terminal.sendCommand(patchCmd);
