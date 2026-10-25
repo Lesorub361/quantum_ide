@@ -2038,6 +2038,7 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties"
         echo "org.gradle.daemon=false" >> "$f"
         echo "org.gradle.parallel=false" >> "$f"
         echo "org.gradle.workers.max=1" >> "$f"
+        echo "extra-gen-snapshot-options=--dedup_instructions" >> "$f"
     fi
 done
 
@@ -2147,6 +2148,7 @@ android.aapt2FromMavenOverride=/usr/bin/aapt2
 org.gradle.daemon=false
 org.gradle.parallel=false
 org.gradle.workers.max=1
+extra-gen-snapshot-options=--dedup_instructions
 EOF
 if [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
     echo "org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64" >> /root/.gradle/gradle.properties
@@ -2186,6 +2188,7 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties"
         echo "org.gradle.daemon=false" >> "$f"
         echo "org.gradle.parallel=false" >> "$f"
         echo "org.gradle.workers.max=1" >> "$f"
+        echo "extra-gen-snapshot-options=--dedup_instructions" >> "$f"
     fi
     if ! grep -q "org.gradle.java.home" "$f"; then
         if [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
