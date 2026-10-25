@@ -16,6 +16,9 @@ import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/app_update_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:quantum_ide/core/services/package_service.dart';
+import 'package:quantum_ide/models/optional_package.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -29,6 +32,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   String _searchQuery = '';
   String _selectedStackFilter = 'all';
   String? _dismissedUpdateTag;
+  bool _dismissedPackagesBanner = false;
+  bool _checkedPackagesPrompt = false;
 
   bool _matchesStackFilter(Project p) {
     switch (_selectedStackFilter) {
@@ -59,6 +64,7 @@ class _HomePageState extends ConsumerState<HomePage> {
       ref.read(terminalTabsProvider.notifier).closeAllSessions();
       ref.read(runtimeServiceProvider).init();
       ref.read(appUpdateServiceProvider.notifier).checkForUpdates(silent: true);
+      _checkAndPromptEssentialPackages();
     });
   }
 
@@ -330,6 +336,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       const SizedBox(height: 18),
                       _buildAppUpdateBanner(context),
+                      _buildPackagesRecommendationBanner(context),
                       _buildQuickActionsAdaptive(context),
                       const SizedBox(height: 18),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
@@ -463,6 +470,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       _buildSearchField(),
                       const SizedBox(height: 14),
                       _buildAppUpdateBanner(context),
+                      _buildPackagesRecommendationBanner(context),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
                         _buildResumeCard(context, lastProject),
                       ],
@@ -713,6 +721,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       ),
                       const SizedBox(height: 20),
                       _buildAppUpdateBanner(context),
+                      _buildPackagesRecommendationBanner(context),
                       _buildQuickActionsAdaptive(context),
                       const SizedBox(height: 20),
                       if (lastProject != null && _searchQuery.isEmpty) ...[
@@ -1266,6 +1275,358 @@ class _HomePageState extends ConsumerState<HomePage> {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _checkAndPromptEssentialPackages() async {
+    if (_checkedPackagesPrompt || !mounted) return;
+    _checkedPackagesPrompt = true;
+
+    await Future.delayed(const Duration(milliseconds: 1500));
+    if (!mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final hasDismissed = prefs.getBool('essential_packages_prompt_dismissed') ?? false;
+    if (hasDismissed) return;
+
+    final allPackages = ref.read(packageServiceProvider);
+    const essentialIds = ['vulkan-graphics', 'box64-emulator', 'build-fix', 'apk-signing-tools'];
+    final uninstalled = allPackages.where((p) => essentialIds.contains(p.id) && !p.isInstalled).toList();
+
+    if (uninstalled.isEmpty) return;
+    if (!mounted) return;
+
+    _showEssentialPackagesDialog(context, uninstalled);
+  }
+
+  void _showEssentialPackagesDialog(BuildContext context, List<OptionalPackage> uninstalled) {
+    final theme = Theme.of(context);
+    bool doNotShowAgain = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: theme.colorScheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(
+                color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                width: 1.2,
+              ),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(LucideIcons.zap, color: Colors.amber, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Рекомендуемые компоненты',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                      Text(
+                        'Vulkan 3D, Box64 & Сборка APK',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 500,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Для максимальной скорости, аппаратного 3D-ускорения Vulkan, эмуляции x86_64 и надежной сборки APK рекомендуется установить следующие пакеты:',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      height: 1.4,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: uninstalled.map((pkg) {
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: Colors.white10,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(pkg.icon, color: Colors.cyanAccent, size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        pkg.name,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        pkg.description,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Требуется',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.orangeAccent,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: doNotShowAgain,
+                        activeColor: theme.colorScheme.primary,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            doNotShowAgain = val ?? false;
+                          });
+                        },
+                      ),
+                      Text(
+                        'Больше не показывать при запуске',
+                        style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurface.withValues(alpha: 0.7)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  if (doNotShowAgain) {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setBool('essential_packages_prompt_dismissed', true);
+                  }
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                },
+                child: Text('Позже', style: GoogleFonts.inter(color: Colors.white54)),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(LucideIcons.package, size: 16),
+                label: Text('Открыть Менеджер пакетов', style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
+                onPressed: () async {
+                  if (doNotShowAgain) {
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setBool('essential_packages_prompt_dismissed', true);
+                  }
+                  if (ctx.mounted) Navigator.of(ctx).pop();
+                  if (context.mounted) context.push('/packages');
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildPackagesRecommendationBanner(BuildContext context) {
+    if (_dismissedPackagesBanner) return const SizedBox.shrink();
+
+    final allPackages = ref.watch(packageServiceProvider);
+    const essentialIds = ['vulkan-graphics', 'box64-emulator', 'build-fix', 'apk-signing-tools'];
+    final uninstalled = allPackages.where((p) => essentialIds.contains(p.id) && !p.isInstalled).toList();
+
+    if (uninstalled.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.cyan.withValues(alpha: 0.15),
+            Colors.deepPurpleAccent.withValues(alpha: 0.1),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.cyanAccent.withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.cyanAccent.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.cyanAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(LucideIcons.zap, color: Colors.cyanAccent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Рекомендуемые компоненты окружения',
+                          style: GoogleFonts.inter(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '${uninstalled.length} доступно',
+                            style: GoogleFonts.firaCode(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.cyanAccent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Vulkan 3D, Box64, Build Environment Fix и инструменты подписи APK для работы на планшете.',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(LucideIcons.x, size: 18, color: theme.colorScheme.onSurface.withValues(alpha: 0.5)),
+                onPressed: () {
+                  setState(() {
+                    _dismissedPackagesBanner = true;
+                  });
+                },
+                tooltip: 'Скрыть',
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _dismissedPackagesBanner = true;
+                  });
+                },
+                child: Text('Позже', style: GoogleFonts.inter(color: Colors.white54, fontSize: 13)),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.cyanAccent,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(LucideIcons.package, size: 16),
+                label: Text(
+                  'Настроить пакеты',
+                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  context.push('/packages');
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );

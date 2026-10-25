@@ -84,6 +84,9 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
     final theme = Theme.of(context);
     
     final showCliAgentsHero = (tabType == 'all' || tabType == 'languages_ai') && _searchQuery.isEmpty;
+    final showVulkanHero = (tabType == 'all' || tabType == 'build_system') &&
+        allPackages.any((p) => p.id == 'vulkan-graphics' && !p.isInstalled) &&
+        _searchQuery.isEmpty;
     final showSdkHero = (tabType == 'all' || tabType == 'build_system') && 
         allPackages.any((p) => p.id == 'android-sdk' && !p.isInstalled) &&
         _searchQuery.isEmpty;
@@ -92,6 +95,9 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
         _searchQuery.isEmpty;
 
     final List<Widget> headers = [];
+    if (showVulkanHero) {
+      headers.add(_buildVulkanHeroCard(context, ref));
+    }
     if (showCliAgentsHero) {
       headers.add(_buildCliAgentsHeroCard(context, ref));
     }
@@ -821,6 +827,137 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVulkanHeroCard(BuildContext context, WidgetRef ref) {
+    final allPackages = ref.watch(packageServiceProvider);
+    OptionalPackage? vulkanPkg;
+    try {
+      vulkanPkg = allPackages.firstWhere((p) => p.id == 'vulkan-graphics');
+    } catch (_) {
+      try {
+        vulkanPkg = defaultPackages.firstWhere((p) => p.id == 'vulkan-graphics');
+      } catch (_) {
+        vulkanPkg = null;
+      }
+    }
+
+    if (vulkanPkg == null) return const SizedBox.shrink();
+
+    const cardGradient = LinearGradient(
+      colors: [Color(0xFF0B192C), Color(0xFF1E3E62), Color(0xFF000000)],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: cardGradient,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.35)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.cyanAccent.withValues(alpha: 0.12),
+            blurRadius: 25,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.cyanAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(LucideIcons.zap, color: Colors.cyanAccent, size: 26),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Vulkan 3D & Mesa Turnip',
+                          style: GoogleFonts.inter(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.cyanAccent.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Vulkan 1.4',
+                            style: GoogleFonts.firaCode(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.cyanAccent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Аппаратное GPU-ускорение графики, драйверы Turnip Adreno и Zink OpenGL',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Обеспечивает прямое аппаратное ускорение GPU планшета для PRoot Linux, поддержку Vulkan 1.4 в Box64 и высокую скорость 3D графики.',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              height: 1.4,
+              color: Colors.white.withValues(alpha: 0.75),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.cyanAccent,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(LucideIcons.download, size: 16),
+                label: Text(
+                  'Установить Vulkan 3D Stack',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                onPressed: () {
+                  PackageInstallDialog.show(context, vulkanPkg!);
+                },
+              ),
+            ],
           ),
         ],
       ),

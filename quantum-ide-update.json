@@ -1,10 +1,10 @@
 {
-  "versionCode": 75,
-  "versionName": "1.2.59",
-  "notes": "QuantumIDE v1.2.59: Полная поддержка Vulkan: активирован Impeller Vulkan 120 FPS, пакет Vulkan 3D & Mesa Turnip Drivers, поддержка Vulkan 1.4 в Box64 и GPU-ускорение локальных ИИ моделей.",
+  "versionCode": 76,
+  "versionName": "1.2.60",
+  "notes": "QuantumIDE v1.2.60: Добавлены авто-предложение и диалог установки рекомендуемых пакетов окружения при запуске (Vulkan 3D, Box64, Build Fix, APK Signer), информационный баннер на главной и Hero-карточка Vulkan в Менеджере пакетов.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.59/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.60/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
