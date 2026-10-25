@@ -139,12 +139,17 @@ build_android_apk() {
     log "INFO" "Using Android SDK: $ANDROID_SDK_ROOT"
     
     # Build APK
+    local target_opt=""
+    if [[ "$(uname -m)" == "aarch64" || "$(uname -m)" == "arm64" ]]; then
+        target_opt="--target-platform android-arm64"
+    fi
+
     if [[ "$FLUTTER_BUILD_MODE" == "release" ]]; then
-        flutter build apk --release --no-tree-shake-icons 2>&1 | tee -a "$BUILD_LOG" || {
+        flutter build apk --release --no-tree-shake-icons $target_opt 2>&1 | tee -a "$BUILD_LOG" || {
             error "Android APK release build failed"
         }
     else
-        flutter build apk --debug 2>&1 | tee -a "$BUILD_LOG" || {
+        flutter build apk --debug $target_opt 2>&1 | tee -a "$BUILD_LOG" || {
             error "Android APK debug build failed"
         }
     fi

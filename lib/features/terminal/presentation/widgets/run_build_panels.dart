@@ -785,7 +785,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --no-tree-shake-icons --android-skip-build-dependency-validation && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
+                  'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
           _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
@@ -888,7 +888,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --no-tree-shake-icons --android-skip-build-dependency-validation && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
+                  'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
           _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
