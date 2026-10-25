@@ -1218,14 +1218,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                       ),
                                       decoration: BoxDecoration(
                                         color: isSelected
-                                            ? tabColor.withValues(alpha: 0.15)
-                                            : Colors.white.withValues(alpha: 0.02),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(
-                                          color: isSelected
-                                              ? tabColor.withValues(alpha: 0.4)
-                                              : Colors.white.withValues(alpha: 0.04),
-                                          width: 0.7,
+                                            ? tabColor.withValues(alpha: 0.12)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(5),
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: isSelected ? tabColor : Colors.transparent,
+                                            width: 2.0,
+                                          ),
                                         ),
                                       ),
                                       child: Row(

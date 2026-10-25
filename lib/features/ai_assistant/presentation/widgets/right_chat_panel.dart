@@ -690,12 +690,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
         : (isCliAgent ? _getDefaultModelForAgent(agentKind) : aiSvc.selectedModel);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
       decoration: BoxDecoration(
         color: const Color(0xFF131824),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.8),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07), width: 0.6),
       ),
       child: Row(
         children: [
@@ -1078,7 +1078,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
   Widget _buildInteractionModeBar(BuildContext context, WidgetRef ref, AIState aiState) {
     final currentMode = aiState.interactionMode;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 3),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -1088,29 +1088,29 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
             final icon = _getModeIcon(mode);
             final label = _getModeLabel(mode);
             return Padding(
-              padding: const EdgeInsets.only(right: 5),
+              padding: const EdgeInsets.only(right: 4),
               child: InkWell(
-                borderRadius: BorderRadius.circular(7),
+                borderRadius: BorderRadius.circular(5),
                 onTap: () => ref.read(aiProvider.notifier).setInteractionMode(mode),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                   decoration: BoxDecoration(
                     color: isSelected ? color.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.03),
-                    borderRadius: BorderRadius.circular(7),
+                    borderRadius: BorderRadius.circular(5),
                     border: Border.all(
                       color: isSelected ? color.withValues(alpha: 0.5) : Colors.white10,
-                      width: 0.8,
+                      width: 0.5,
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 10.5, color: isSelected ? color : Colors.white54),
-                      const SizedBox(width: 4),
+                      Icon(icon, size: 10, color: isSelected ? color : Colors.white54),
+                      const SizedBox(width: 3.5),
                       Text(
                         label,
                         style: GoogleFonts.inter(
-                          fontSize: 10,
+                          fontSize: 9.5,
                           fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                           color: isSelected ? color : Colors.white60,
                         ),
@@ -1312,13 +1312,13 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
 
     return Center(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 56,
-              height: 56,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [heroColor, Colors.cyanAccent],
@@ -1328,65 +1328,65 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: heroColor.withValues(alpha: 0.35),
-                    blurRadius: 16,
-                    spreadRadius: 2,
+                    color: heroColor.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    spreadRadius: 1,
                   ),
                 ],
               ),
-              child: Icon(heroIcon, color: Colors.white, size: 28),
+              child: Icon(heroIcon, color: Colors.white, size: 20),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               heroTitle,
               style: GoogleFonts.inter(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Text(
               heroSubtitle,
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
-                fontSize: 11,
+                fontSize: 10.5,
                 color: Colors.white54,
-                height: 1.4,
+                height: 1.3,
               ),
             ),
             // Prominent Agent Selector Cards (instantly shows installed status & switch)
             _buildAgentSelectorCardGrid(context, ref, aiState),
             if (isCli) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               InkWell(
                 onTap: () => CliAgentSettingsDialog.show(context, initialKind: kind),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(16),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                   decoration: BoxDecoration(
                     color: heroColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: heroColor.withValues(alpha: 0.4), width: 0.8),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: heroColor.withValues(alpha: 0.4), width: 0.7),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(LucideIcons.sliders_horizontal, size: 11, color: heroColor),
-                      const SizedBox(width: 5),
+                      Icon(LucideIcons.sliders_horizontal, size: 10, color: heroColor),
+                      const SizedBox(width: 4),
                       Text(
                         'Настроить ${kind.title}',
-                        style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: heroColor),
+                        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: heroColor),
                       ),
                     ],
                   ),
                 ),
               ),
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             Wrap(
-              spacing: 6,
-              runSpacing: 6,
+              spacing: 5,
+              runSpacing: 5,
               alignment: WrapAlignment.center,
               children: promptChips.map((c) => _buildPromptChip(c, ref)).toList(),
             ),
@@ -1408,19 +1408,19 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
     ];
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12),
+      margin: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'Доступные ИИ-агенты:',
                   style: GoogleFonts.inter(
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.bold,
                     color: Colors.white70,
                     letterSpacing: 0.3,
@@ -1431,11 +1431,11 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(LucideIcons.sliders_horizontal, size: 11, color: Colors.cyanAccent),
+                      const Icon(LucideIcons.sliders_horizontal, size: 10, color: Colors.cyanAccent),
                       const SizedBox(width: 4),
                       Text(
                         'Настройки CLI',
-                        style: GoogleFonts.inter(fontSize: 10.5, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.inter(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -1443,7 +1443,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               ],
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 5),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -1471,27 +1471,27 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                         : (kind == AgentKind.claudeCode ? 'v2.1.296' : (kind == AgentKind.deepseekHarness ? 'v0.2.0' : null)));
 
                 return Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(right: 6),
                   child: InkWell(
                     onTap: () {
                       ref.read(aiProvider.notifier).setAgentKind(kind);
                     },
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      width: 140,
-                      padding: const EdgeInsets.all(10),
+                      width: 124,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                       decoration: BoxDecoration(
-                        color: isSelected ? color.withValues(alpha: 0.16) : const Color(0xFF161B26),
-                        borderRadius: BorderRadius.circular(12),
+                        color: isSelected ? color.withValues(alpha: 0.14) : const Color(0xFF161B26),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isSelected ? color : Colors.white.withValues(alpha: 0.08),
-                          width: isSelected ? 1.5 : 0.8,
+                          width: isSelected ? 1.2 : 0.6,
                         ),
                         boxShadow: isSelected
                             ? [
                                 BoxShadow(
-                                  color: color.withValues(alpha: 0.25),
-                                  blurRadius: 8,
+                                  color: color.withValues(alpha: 0.2),
+                                  blurRadius: 6,
                                   offset: const Offset(0, 2),
                                 ),
                               ]
@@ -1499,28 +1499,29 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.all(4),
                                 decoration: BoxDecoration(
                                   color: color.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Icon(icon, size: 14, color: color),
+                                child: Icon(icon, size: 12, color: color),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
                                 decoration: BoxDecoration(
                                   color: (isInstalled ? Colors.greenAccent : Colors.white24).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   isInstalled ? (version != null && version != 'installed' ? '✅ $version' : '✅ Готов') : '🔴 Не устан.',
                                   style: GoogleFonts.inter(
-                                    fontSize: 8.5,
+                                    fontSize: 8,
                                     fontWeight: FontWeight.bold,
                                     color: isInstalled ? Colors.greenAccent : Colors.white54,
                                   ),
@@ -1528,41 +1529,23 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 6),
                           Text(
                             title,
                             style: GoogleFonts.inter(
-                              fontSize: 11.5,
+                              fontSize: 10.5,
                               fontWeight: FontWeight.bold,
                               color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.9),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 1.5),
                           Text(
                             subtitle,
-                            style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54),
+                            style: GoogleFonts.inter(fontSize: 8.5, color: isSelected ? color.withValues(alpha: 0.8) : Colors.white54),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 6),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isSelected ? color.withValues(alpha: 0.25) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              isSelected ? '✓ Выбран' : 'Выбрать',
-                              style: GoogleFonts.inter(
-                                fontSize: 9.5,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: isSelected ? color : Colors.white38,
-                              ),
-                            ),
                           ),
                         ],
                       ),
@@ -2319,21 +2302,21 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           // Input Box
           Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF161B22),
-              borderRadius: BorderRadius.circular(isMobile ? 10 : 14),
+              color: const Color(0xFF141822),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.12),
-                width: 0.8,
+                color: Colors.white.withValues(alpha: 0.08),
+                width: 0.6,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
                 ),
               ],
             ),
-            padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8, vertical: isMobile ? 2 : 4),
+            padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8, vertical: isMobile ? 2 : 3),
             child: Column(
               children: [
                 if (_showSlashCommands) _buildSlashCommands(),
@@ -2464,7 +2447,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                                   : 'Задача для ${agentKind.title}... (#file:путь, @codebase)',
                               hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 11.5),
                               border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                             ),
                           );
                         },
@@ -2475,21 +2458,21 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     if (isBusy)
                       InkWell(
                         onTap: () => ref.read(aiProvider.notifier).stopActiveAgent(),
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         child: Container(
-                          width: 32,
-                          height: 32,
+                          width: 28,
+                          height: 28,
                           decoration: const BoxDecoration(
                             color: Colors.redAccent,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(LucideIcons.square, color: Colors.white, size: 12),
+                          child: const Icon(LucideIcons.square, color: Colors.white, size: 11),
                         ),
                       )
                     else
                       Container(
-                        width: 32,
-                        height: 32,
+                        width: 28,
+                        height: 28,
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [agentKind.brandColor, Colors.cyanAccent],
@@ -2499,14 +2482,14 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: agentKind.brandColor.withValues(alpha: 0.3),
+                              color: agentKind.brandColor.withValues(alpha: 0.25),
                               blurRadius: 4,
-                              offset: const Offset(0, 2),
+                              offset: const Offset(0, 1.5),
                             ),
                           ],
                         ),
                         child: IconButton(
-                          icon: const Icon(LucideIcons.send, color: Colors.white, size: 13),
+                          icon: const Icon(LucideIcons.send, color: Colors.white, size: 12),
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           onPressed: isBusy ? null : () => _sendMessage(context, ref),

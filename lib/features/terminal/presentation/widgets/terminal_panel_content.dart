@@ -1311,7 +1311,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   Widget _buildTerminalActionButton(IconData icon, String tooltip, VoidCallback onTap, {Color? color}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 1.5),
       child: Tooltip(
         message: tooltip,
         child: Material(
@@ -1320,11 +1320,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             onTap: onTap,
             borderRadius: BorderRadius.circular(4),
             child: Container(
-              padding: const EdgeInsets.all(4),
+              padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: (color ?? Colors.white).withValues(alpha: 0.06),
+                color: (color ?? Colors.white).withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: (color ?? Colors.white).withValues(alpha: 0.1), width: 0.5),
+                border: Border.all(color: (color ?? Colors.white).withValues(alpha: 0.08), width: 0.5),
               ),
               child: Icon(icon, size: 12, color: color ?? Colors.white70),
             ),
@@ -1550,7 +1550,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         final terminalContent = Column(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: const Color(0xFF0F1219),
                 border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
@@ -1559,19 +1559,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 children: [
                   InkWell(
                     onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(4),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                       decoration: BoxDecoration(
                         color: _isSidebarOpen 
                             ? Colors.cyanAccent.withValues(alpha: 0.15) 
                             : Colors.white.withValues(alpha: 0.04),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(4),
                         border: Border.all(
                           color: _isSidebarOpen 
                               ? Colors.cyanAccent.withValues(alpha: 0.3) 
                               : Colors.white.withValues(alpha: 0.08),
-                          width: 0.6,
+                          width: 0.5,
                         ),
                       ),
                       child: Row(
@@ -1579,7 +1579,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         children: [
                           Icon(
                             LucideIcons.terminal,
-                            size: 13,
+                            size: 12,
                             color: _isSidebarOpen ? Colors.cyanAccent : Colors.white70,
                           ),
                           if (sessions.length > 1) ...[
@@ -1677,7 +1677,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       },
                       borderRadius: BorderRadius.circular(4),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                         child: Text(
                           'CLR',
                           style: GoogleFonts.jetBrainsMono(
@@ -3102,43 +3102,43 @@ Also explain what exactly went wrong and how you fixed it.
     if (cmds.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      height: 32,
+      height: 26,
       decoration: const BoxDecoration(
-        color: Color(0xFF141721),
+        color: Color(0xFF11141C),
         border: Border(
-          top: BorderSide(color: Color(0xFF262C3D), width: 0.8),
-          bottom: BorderSide(color: Color(0xFF1A1F2C), width: 0.8),
+          top: BorderSide(color: Color(0xFF202636), width: 0.6),
+          bottom: BorderSide(color: Color(0xFF161A26), width: 0.6),
         ),
       ),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         itemCount: cmds.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 6),
+        separatorBuilder: (context, index) => const SizedBox(width: 5),
         itemBuilder: (context, index) {
           final item = cmds[index];
           return InkWell(
             onTap: () {
               session.pty.write(Uint8List.fromList(utf8.encode('${item.command}\n')));
             },
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.circular(4),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E2433),
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: const Color(0xFF333B50), width: 0.8),
+                color: const Color(0xFF1A1F2C),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(LucideIcons.terminal, size: 11, color: Color(0xFF4FC3F7)),
+                  const Icon(LucideIcons.terminal, size: 10, color: Color(0xFF4FC3F7)),
                   const SizedBox(width: 4),
                   Text(
                     item.name,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 10.5,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w500,
                       fontFamily: 'JetBrainsMono',
                     ),

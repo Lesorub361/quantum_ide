@@ -208,9 +208,9 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     }
 
     return Container(
-      height: 66,
+      height: 56,
       clipBehavior: Clip.hardEdge,
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       decoration: BoxDecoration(
         color: const Color(0xFF0D0F14).withValues(alpha: 0.98),
         border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
@@ -491,29 +491,29 @@ class _VirtualKeyButton extends StatelessWidget {
 
     final Widget btn = Material(
       color: buttonColor,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(5),
       child: InkWell(
         onTap: () {
           HapticFeedback.lightImpact();
           onTap();
         },
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(5),
         child: Container(
-          height: 28,
-          constraints: const BoxConstraints(minWidth: 32),
-          padding: const EdgeInsets.symmetric(horizontal: 7),
+          height: 24,
+          constraints: const BoxConstraints(minWidth: 28),
+          padding: const EdgeInsets.symmetric(horizontal: 6),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: borderColor, width: 0.8),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: borderColor, width: 0.6),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (keyData.icon != null) ...[
-                Icon(keyData.icon, size: 13, color: themeColor),
-                if (keyData.label.isNotEmpty && !isArrow) const SizedBox(width: 4),
+                Icon(keyData.icon, size: 12, color: themeColor),
+                if (keyData.label.isNotEmpty && !isArrow) const SizedBox(width: 3),
               ],
               if (keyData.icon == null || (keyData.label.isNotEmpty && !isArrow))
                 Flexible(
@@ -523,7 +523,7 @@ class _VirtualKeyButton extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.jetBrainsMono(
                       color: themeColor,
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
