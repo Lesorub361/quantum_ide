@@ -22,7 +22,10 @@ class AdaptiveDialogHelper {
         builder: (context) {
           return Dialog(
             backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 24,
+              vertical: 24,
+            ),
             shape: RoundedRectangleBorder(borderRadius: borderRadius),
             child: Container(
               constraints: BoxConstraints(
@@ -32,7 +35,10 @@ class AdaptiveDialogHelper {
               decoration: BoxDecoration(
                 color: backgroundColor,
                 borderRadius: borderRadius,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  width: 1,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.5),

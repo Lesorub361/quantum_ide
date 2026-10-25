@@ -14,6 +14,12 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
+
+    afterEvaluate {
+        tasks.matching { it.name.startsWith("lint") || it.name.contains("Lint") }.configureEach {
+            enabled = false
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

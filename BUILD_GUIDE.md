@@ -34,7 +34,7 @@ This guide covers building QuantumIDE on both Linux desktop and Android devices.
 
 1. **Install Flutter** (if not already installed):
    ```bash
-   git clone https://github.com/flutter/flutter.git -b stable
+   git clone --depth 1 --branch 3.44.9 https://github.com/flutter/flutter.git
    export PATH="$PATH:$HOME/flutter/bin"
    ```
 
