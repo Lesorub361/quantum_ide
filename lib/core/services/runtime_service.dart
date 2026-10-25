@@ -1726,30 +1726,48 @@ PY_EOF
     done
 done
 
-# Auto-heal Flutter ARM64 linux host gen_snapshot for release/profile builds
-# Ensures Dart VM snapshot has --dedup_instructions enabled to match release Flutter Engine in product mode
+# Auto-heal Flutter ARM64 host gen_snapshot for release/profile builds.
+# Native Android requires 'product arm64 android compressed-pointers'.
+# The official Google x64 binary matches Android VM 100% and runs seamlessly via QEMU/Box64.
 for fl_dir in "${FLUTTER_ROOT:-/root/flutter}" "$HOME/flutter" "/root/flutter"; do
     [ -d "$fl_dir/bin/cache/artifacts/engine" ] || continue
+    FLUTTER_ENGINE="$fl_dir/bin/cache/artifacts/engine"
+    ENGINE_HASH=$(cat "$fl_dir/bin/internal/engine.version" 2>/dev/null || true)
     for mode in release profile; do
-        ENGINE_DIR="$fl_dir/bin/cache/artifacts/engine/android-arm64-$mode/linux-arm64"
-        [ -d "$ENGINE_DIR" ] || continue
-        if [ ! -f "$ENGINE_DIR/gen_snapshot.real" ] && [ -f "$ENGINE_DIR/gen_snapshot" ]; then
-            if ! grep -q "gen_snapshot.real" "$ENGINE_DIR/gen_snapshot" 2>/dev/null; then
-                mv "$ENGINE_DIR/gen_snapshot" "$ENGINE_DIR/gen_snapshot.real"
-            fi
+        ENGINE_DIR="$FLUTTER_ENGINE/android-arm64-$mode/linux-arm64"
+        X64_DIR="$FLUTTER_ENGINE/android-arm64-$mode/linux-x64"
+        mkdir -p "$ENGINE_DIR" "$X64_DIR"
+
+        if [ ! -f "$X64_DIR/gen_snapshot" ] && [ -n "$ENGINE_HASH" ]; then
+            (
+                curl -sSL "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-arm64-$mode/linux-x64.zip" -o "/tmp/x64-$mode.zip" && \
+                unzip -qo "/tmp/x64-$mode.zip" gen_snapshot -d "$X64_DIR" && \
+                chmod +x "$X64_DIR/gen_snapshot" && \
+                rm -f "/tmp/x64-$mode.zip"
+            ) 2>/dev/null || true
         fi
-        if [ -f "$ENGINE_DIR/gen_snapshot.real" ]; then
-            cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
+
+        cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
-if "$DIR/gen_snapshot.real" --help --verbose 2>&1 | grep -q "dedup_instructions"; then
-    exec "$DIR/gen_snapshot.real" --dedup_instructions "$@"
-else
+X64_SNAP="$DIR/../../$(basename "$(dirname "$DIR")")/linux-x64/gen_snapshot"
+EMU=""
+if [ -x /usr/bin/qemu-x86_64-static ]; then
+    EMU="/usr/bin/qemu-x86_64-static"
+elif command -v box64 >/dev/null 2>&1; then
+    EMU="box64"
+fi
+
+if [ -n "$EMU" ] && [ -f "$X64_SNAP" ]; then
+    chmod +x "$X64_SNAP" 2>/dev/null || true
+    exec "$EMU" "$X64_SNAP" "$@"
+fi
+
+if [ -f "$DIR/gen_snapshot.real" ]; then
     exec "$DIR/gen_snapshot.real" "$@"
 fi
 WRAP_GS
-            chmod +x "$ENGINE_DIR/gen_snapshot"
-        fi
+        chmod +x "$ENGINE_DIR/gen_snapshot"
     done
 done
 ''';
@@ -2016,21 +2034,12 @@ if [ -d "/root/flutter/.git" ]; then
     fi
 fi
 
-# gen_snapshot fix:
-# Flutter AOT compilation requires gen_snapshot for the HOST architecture.
-# On ARM64 Android, Flutter looks for android-arm64-release/linux-arm64/gen_snapshot
-# but only linux-x64 is shipped by default. Copy the linux-arm64 version.
-FLUTTER_ENGINE="/root/flutter/bin/cache/artifacts/engine"
-if [ -f "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" ]; then
-    for build_type in android-arm64-release android-arm64-profile; do
-        TARGET_DIR="$FLUTTER_ENGINE/$build_type/linux-arm64"
-        mkdir -p "$TARGET_DIR"
-        if ! cmp -s "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" "$TARGET_DIR/gen_snapshot"; then
-            cp -f "$FLUTTER_ENGINE/linux-arm64/gen_snapshot" "$TARGET_DIR/gen_snapshot"
-            chmod +x "$TARGET_DIR/gen_snapshot"
-            echo "[setup-arm64] Synchronized gen_snapshot for $build_type/linux-arm64"
-        fi
-    done
+# Ensure QEMU user static is available for executing Google's official x64 Android gen_snapshot on ARM64 host
+if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
+    (apt-get update -y && apt-get install -y qemu-user-static) 2>/dev/null || true
+fi
+if [ -x /usr/local/bin/quantum-patch-ndk ]; then
+    /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
 fi
 
 # 2. Project Patching (Auto-fix common build issues on ARM64)
