@@ -436,7 +436,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   @override
   void didUpdateWidget(StableEditorWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.file.id != oldWidget.file.id) {
+    if (widget.file.path != oldWidget.file.path) {
       QuantumSelectionToolbarController.dismissAll();
     }
     // Обновляем только диагностику и маркеры — не пересоздаём CodeEditor

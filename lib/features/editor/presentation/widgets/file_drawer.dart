@@ -117,7 +117,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     return PopupMenuButton<String>(
       icon: const Icon(LucideIcons.ellipsis, size: 14, color: Colors.white60),
       padding: EdgeInsets.zero,
-      tooltip: l10n.more,
+      tooltip: l10n.actionsTooltip,
       color: const Color(0xFF1E2230),
       elevation: 8,
       shape: RoundedRectangleBorder(
