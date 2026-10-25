@@ -1085,7 +1085,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
             if (hasUpdate) ...[
               const SizedBox(width: 4),
-              const Icon(LucideIcons.arrow_up_circle, size: 12, color: Colors.amber),
+              const Icon(LucideIcons.arrow_up, size: 12, color: Colors.amber),
             ],
           ],
         ),
