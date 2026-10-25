@@ -950,7 +950,7 @@ edition = "2021"
       await _copyGradleWrapper(p.join(projectPath, 'android'));
     }
 
-    // --- android/gradle.properties (Safe memory and dedup_instructions) ---
+    // --- android/gradle.properties (Safe memory for mobile) ---
     final gradlePropsFile = File(p.join(projectPath, 'android', 'gradle.properties'));
     const safeProps = '''org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=320m
 android.useAndroidX=true
@@ -959,7 +959,6 @@ org.gradle.daemon=false
 org.gradle.parallel=false
 org.gradle.workers.max=1
 android.aapt2.daemon=false
-extra-gen-snapshot-options=--dedup_instructions
 org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
 ''';
     await gradlePropsFile.writeAsString(safeProps);
@@ -1080,7 +1079,7 @@ flutter {
 ''');
 
     // ── gradle.properties ──
-    await _createFile(p.join(androidDir, 'gradle.properties'), 'org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=320m\nandroid.useAndroidX=true\nandroid.enableJetifier=true\norg.gradle.daemon=false\norg.gradle.parallel=false\norg.gradle.workers.max=1\nextra-gen-snapshot-options=--dedup_instructions\norg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64\n');
+    await _createFile(p.join(androidDir, 'gradle.properties'), 'org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=320m\nandroid.useAndroidX=true\nandroid.enableJetifier=true\norg.gradle.daemon=false\norg.gradle.parallel=false\norg.gradle.workers.max=1\norg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64\n');
 
     // ── local.properties ──
     await _createFile(p.join(androidDir, 'local.properties'), 'flutter.sdk=/root/flutter\nflutter.buildMode=debug\nflutter.versionName=1.0.0\nflutter.versionCode=1\n');
@@ -1850,7 +1849,7 @@ class MainActivity : AppCompatActivity() {
           r"sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
           r'''sed -i 's/id("com.android.application") version "[0-9.]*"/id("com.android.application") version "8.11.1"/g' android/settings.gradle.kts 2>/dev/null || true''',
           r"sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true",
-          'flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --extra-gen-snapshot-options=--dedup_instructions 2>&1',
+          'flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons 2>&1',
           '(cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)',
         ].join(' && ');
         terminal.sendCommand(patchCmd);

@@ -569,7 +569,7 @@ alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
 alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons --extra-gen-snapshot-options=--dedup_instructions"
+alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -800,7 +800,7 @@ alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
 alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons --extra-gen-snapshot-options=--dedup_instructions"
+alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -2038,7 +2038,6 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties"
         echo "org.gradle.daemon=false" >> "$f"
         echo "org.gradle.parallel=false" >> "$f"
         echo "org.gradle.workers.max=1" >> "$f"
-        echo "extra-gen-snapshot-options=--dedup_instructions" >> "$f"
     fi
 done
 
@@ -2148,7 +2147,6 @@ android.aapt2FromMavenOverride=/usr/bin/aapt2
 org.gradle.daemon=false
 org.gradle.parallel=false
 org.gradle.workers.max=1
-extra-gen-snapshot-options=--dedup_instructions
 EOF
 if [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
     echo "org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64" >> /root/.gradle/gradle.properties
@@ -2188,7 +2186,6 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties"
         echo "org.gradle.daemon=false" >> "$f"
         echo "org.gradle.parallel=false" >> "$f"
         echo "org.gradle.workers.max=1" >> "$f"
-        echo "extra-gen-snapshot-options=--dedup_instructions" >> "$f"
     fi
     if ! grep -q "org.gradle.java.home" "$f"; then
         if [ -d "/usr/lib/jvm/java-17-openjdk-arm64" ]; then
