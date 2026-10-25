@@ -22,6 +22,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.nio.ByteBuffer
@@ -348,41 +349,53 @@ class UsbAdbBridge(
         }
 
         val usedPorts = activeBridges.values.map { it.port }.toSet()
-        var port = BASE_BRIDGE_PORT
-        while (usedPorts.contains(port)) {
-            port++
+        var sessionStarted = false
+
+        // Try ports starting from BASE_BRIDGE_PORT up to BASE_BRIDGE_PORT + 20
+        for (portOffset in 0..20) {
+            val candidatePort = BASE_BRIDGE_PORT + portOffset
+            if (usedPorts.contains(candidatePort)) continue
+
+            val session = DeviceBridgeSession(
+                device = device,
+                usbManager = manager,
+                adbInterface = adbIntf,
+                inEndpoint = inEp,
+                outEndpoint = outEp,
+                port = candidatePort,
+                onDisconnected = {
+                    activeBridges.remove(device.deviceName)
+                    syncStatusFile()
+                }
+            )
+
+            if (session.start()) {
+                activeBridges[device.deviceName] = session
+                Log.i(TAG, "Started USB-ADB bridge for ${device.deviceName} on 127.0.0.1:$candidatePort")
+                syncStatusFile()
+
+                // Auto-connect PRoot ADB server to the newly opened USB bridge
+                Thread {
+                    try {
+                        Thread.sleep(250)
+                        processManager.runInProotSync(
+                            "adb start-server >/dev/null 2>&1 || true; adb connect 127.0.0.1:$candidatePort >/dev/null 2>&1 || true",
+                            timeoutSeconds = 15
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Auto adb connect warning: ${e.message}")
+                    }
+                }.start()
+
+                sessionStarted = true
+                break
+            } else {
+                Log.w(TAG, "Port $candidatePort unavailable or failed for ${device.deviceName}, trying next port...")
+            }
         }
 
-        val session = DeviceBridgeSession(
-            device = device,
-            usbManager = manager,
-            adbInterface = adbIntf,
-            inEndpoint = inEp,
-            outEndpoint = outEp,
-            port = port,
-            onDisconnected = {
-                activeBridges.remove(device.deviceName)
-                syncStatusFile()
-            }
-        )
-
-        if (session.start()) {
-            activeBridges[device.deviceName] = session
-            Log.i(TAG, "Started USB-ADB bridge for ${device.deviceName} on 127.0.0.1:$port")
-            syncStatusFile()
-
-            // Auto-connect PRoot ADB server to the newly opened USB bridge
-            Thread {
-                try {
-                    Thread.sleep(250)
-                    processManager.runInProotSync(
-                        "adb start-server >/dev/null 2>&1 || true; adb connect 127.0.0.1:$port >/dev/null 2>&1 || true",
-                        timeoutSeconds = 15
-                    )
-                } catch (e: Exception) {
-                    Log.w(TAG, "Auto adb connect warning: ${e.message}")
-                }
-            }.start()
+        if (!sessionStarted) {
+            Log.e(TAG, "Could not start USB-ADB bridge for ${device.deviceName} on any port")
         }
     }
 
@@ -531,7 +544,10 @@ class UsbAdbBridge(
                     return false
                 }
                 usbConnection = conn
-                serverSocket = ServerSocket(port, 4, InetAddress.getByName("127.0.0.1"))
+                val s = ServerSocket()
+                s.reuseAddress = true
+                s.bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), port), 4)
+                serverSocket = s
                 active.set(true)
 
                 Thread({ acceptLoop() }, "UsbAdbAccept-$port").start()
@@ -729,7 +745,7 @@ class UsbAdbBridge(
         }
 
         fun stop() {
-            if (!active.compareAndSet(true, false)) return
+            active.set(false)
             try { currentClient?.close() } catch (_: Exception) {}
             try { serverSocket?.close() } catch (_: Exception) {}
             try {
@@ -738,6 +754,8 @@ class UsbAdbBridge(
             try {
                 usbConnection?.close()
             } catch (_: Exception) {}
+            serverSocket = null
+            currentClient = null
             usbConnection = null
         }
     }

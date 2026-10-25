@@ -18,10 +18,6 @@ void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Initialize LogService with temporary directory
-    final tempDir = await getTemporaryDirectory();
-    await LogService.init(tempDir.path);
-
     // Global error handlers
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
@@ -29,6 +25,14 @@ void main() async {
       GhostQAService.instance.recordFlutterError(details);
       TalkerService.handle(details.exception, details.stack, 'Flutter Error');
     };
+
+    // Initialize LogService with temporary directory safely
+    try {
+      final tempDir = await getTemporaryDirectory();
+      await LogService.init(tempDir.path);
+    } catch (e) {
+      debugPrint('LogService init error: $e');
+    }
 
     // Initialize Quick Actions (App Shortcuts)
     try {
@@ -58,45 +62,59 @@ void main() async {
       debugPrint('Ghost QA init error: $e');
     }
 
-    // Handle platform-specific initialization
-    try {
-      if (Platform.isAndroid) {
-        await _initializeAndroid();
-      } else if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+    // Handle desktop-specific initialization
+    if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+      try {
         await _initializeDesktop();
+      } catch (e) {
+        debugPrint('Desktop initialization failed: $e');
       }
-    } catch (e) {
-      debugPrint('Platform initialization failed: $e');
     }
 
+    // Mount and launch UI immediately to ensure the user never gets a black/frozen screen
     runApp(
       const ProviderScope(
         child: QuantumApp(),
       ),
     );
+
+    // Request Android permissions asynchronously after UI first frame is mounted
+    if (Platform.isAndroid) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initializeAndroid();
+      });
+    }
   }, (error, stack) {
     LogService.log('Uncaught Async Error: $error\n$stack');
     TalkerService.handle(error, stack, 'Uncaught Async Error');
   });
 }
 
-/// Initialize Android-specific settings
+/// Initialize Android-specific settings non-blockingly
 Future<void> _initializeAndroid() async {
   try {
-    // Request storage permissions for Android 11+
-    if (await Permission.manageExternalStorage.isDenied) {
-      final status = await Permission.manageExternalStorage.request();
-      if (status.isDenied) {
-        debugPrint('Storage permission denied by user');
-      }
-    }
     // Request notification permission for Android 13+ (POST_NOTIFICATIONS)
     // so background terminal and foreground session notifications are visible to the user
-    if (await Permission.notification.isDenied) {
-      await Permission.notification.request();
+    try {
+      if (await Permission.notification.isDenied) {
+        await Permission.notification.request();
+      }
+    } catch (e) {
+      debugPrint('Notification permission error: $e');
     }
-    // Примечание: разрешение камеры запрашивается только при реальном
-    // использовании (вставка изображения в AI), не при старте.
+
+    // Request storage permissions for Android 11+
+    try {
+      if (await Permission.manageExternalStorage.isDenied) {
+        await Permission.manageExternalStorage.request().timeout(
+          const Duration(seconds: 15),
+          onTimeout: () => PermissionStatus.denied,
+        );
+      }
+    } catch (e) {
+      debugPrint('Storage permission error: $e');
+    }
+
     debugPrint('Android initialization complete');
   } catch (e) {
     debugPrint('Android initialization error: $e');
