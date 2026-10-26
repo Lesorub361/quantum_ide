@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-enum PanelTab { terminal, run, buildLogs, appLogs, problems, git, debug, runningDevices }
+enum PanelTab { terminal, run, buildLogs, appLogs, problems, git, debug }
 
 class PanelState {
   final PanelTab selectedTab;

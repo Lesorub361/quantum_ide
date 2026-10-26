@@ -13,7 +13,6 @@ import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
-import 'package:quantum_ide/shared/widgets/device_selector_pill.dart';
 
 class StatusBar extends ConsumerStatefulWidget {
   const StatusBar({super.key});
@@ -187,8 +186,6 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                         SizedBox(width: isNarrow ? 5 : 8),
                         // CPU & RAM: adaptive (mini bars on PC, compact on phone) → tap opens system sheet
                         _SystemStatsChip(compact: isNarrow, ultraCompact: isUltraNarrow),
-                        SizedBox(width: isNarrow ? 5 : 8),
-                        DeviceSelectorPill(compact: isNarrow),
                       ],
                     ),
                   ),
