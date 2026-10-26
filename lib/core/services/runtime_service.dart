@@ -2027,10 +2027,10 @@ if [ -d "$SDK_ROOT" ]; then
     done
 fi
 
-# Flutter Version Pinning & Auto-Healing (Target: 3.44.9)
-# Guarantees that Flutter on device stays at verified 3.44.9 tag, preventing
+# Flutter Version Pinning & Auto-Healing (Target: 3.47.8)
+# Guarantees that Flutter on device stays at verified 3.47.8 tag, preventing
 # ARM64 AOT gen_snapshot errors and Vulkan Impeller black screen crashes.
-TARGET_FLUTTER_TAG="3.44.9"
+TARGET_FLUTTER_TAG="3.47.8"
 if [ -d "/root/flutter/.git" ]; then
     rm -f /root/flutter/.git/*.lock 2>/dev/null || true
     git -C /root/flutter config --global --add safe.directory /root/flutter 2>/dev/null || true

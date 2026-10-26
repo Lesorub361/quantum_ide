@@ -9,7 +9,7 @@ on:
       flutter_version:
         description: Flutter version (leave default)
         required: false
-        default: '3.44.9'
+        default: '3.47.8'
       create_release:
         description: 'Create a GitHub Release with the APK'
         required: false
@@ -77,7 +77,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: ${{ github.event.inputs.flutter_version || '3.44.9' }}
+          flutter-version: ${{ github.event.inputs.flutter_version || '3.47.8' }}
           cache: true
 
       - name: Enable Gradle cache
