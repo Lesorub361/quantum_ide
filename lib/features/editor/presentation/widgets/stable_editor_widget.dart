@@ -153,39 +153,35 @@ class QuantumSelectionToolbarController implements SelectionToolbarController {
 
     final entry = OverlayEntry(
       builder: (entryContext) {
-        return TapRegion(
-          groupId: 'quantum_selection_toolbar',
-          onTapOutside: (_) => dismissAll(),
-          child: Directionality(
-            textDirection: Directionality.of(context),
-            child: ValueListenableBuilder<bool>(
-              valueListenable: visibility,
-              builder: (ctx, isVisible, child) {
-                if (!isVisible) return const SizedBox.shrink();
-                return CompositedTransformFollower(
-                  link: layerLink,
-                  showWhenUnlinked: false,
-                  offset: renderRect != null ? -renderRect.topLeft : Offset.zero,
-                  child: builder(
-                    context: context,
-                    anchors: anchors,
-                    controller: controller,
-                    onDismiss: () => dismissAll(),
-                    onRefresh: () {
-                      dismissAll();
-                      show(
-                        context: context,
-                        controller: controller,
-                        anchors: anchors,
-                        renderRect: renderRect,
-                        layerLink: layerLink,
-                        visibility: visibility,
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
+        return Directionality(
+          textDirection: Directionality.of(context),
+          child: ValueListenableBuilder<bool>(
+            valueListenable: visibility,
+            builder: (ctx, isVisible, child) {
+              if (!isVisible) return const SizedBox.shrink();
+              return CompositedTransformFollower(
+                link: layerLink,
+                showWhenUnlinked: false,
+                offset: renderRect != null ? -renderRect.topLeft : Offset.zero,
+                child: builder(
+                  context: context,
+                  anchors: anchors,
+                  controller: controller,
+                  onDismiss: () => dismissAll(),
+                  onRefresh: () {
+                    dismissAll();
+                    show(
+                      context: context,
+                      controller: controller,
+                      anchors: anchors,
+                      renderRect: renderRect,
+                      layerLink: layerLink,
+                      visibility: visibility,
+                    );
+                  },
+                ),
+              );
+            },
           ),
         );
       },
@@ -453,28 +449,44 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     final controller = widget.file.controller;
     final selection = controller.selection;
     if (selection.isCollapsed) return '';
-    final text = controller.text;
-    final lines = text.split('\n');
-    final startLine = selection.start.index;
-    final startCol = selection.start.offset;
-    final endLine = selection.end.index;
-    final endCol = selection.end.offset;
+    final lines = controller.codeLines;
+    if (lines.isEmpty) return '';
 
-    if (startLine >= lines.length || endLine >= lines.length) return '';
+    int startLine = selection.start.index;
+    int startCol = selection.start.offset;
+    int endLine = selection.end.index;
+    int endCol = selection.end.offset;
+
+    if (startLine > endLine || (startLine == endLine && startCol > endCol)) {
+      final tL = startLine;
+      final tC = startCol;
+      startLine = endLine;
+      startCol = endCol;
+      endLine = tL;
+      endCol = tC;
+    }
+
+    if (startLine < 0 || startLine >= lines.length) return '';
+    if (endLine < 0 || endLine >= lines.length) return '';
 
     if (startLine == endLine) {
-      return lines[startLine].substring(
-        startCol.clamp(0, lines[startLine].length),
-        endCol.clamp(0, lines[startLine].length),
-      );
+      final lineText = lines[startLine].text;
+      final s = startCol.clamp(0, lineText.length);
+      final e = endCol.clamp(0, lineText.length);
+      if (s > e) return lineText.substring(e, s);
+      return lineText.substring(s, e);
     }
 
     final buffer = StringBuffer();
-    buffer.writeln(lines[startLine].substring(startCol.clamp(0, lines[startLine].length)));
+    final firstLine = lines[startLine].text;
+    buffer.writeln(firstLine.substring(startCol.clamp(0, firstLine.length)));
+
     for (int i = startLine + 1; i < endLine; i++) {
-      buffer.writeln(lines[i]);
+      buffer.writeln(lines[i].text);
     }
-    buffer.write(lines[endLine].substring(0, endCol.clamp(0, lines[endLine].length)));
+
+    final lastLine = lines[endLine].text;
+    buffer.write(lastLine.substring(0, endCol.clamp(0, lastLine.length)));
     return buffer.toString();
   }
 
@@ -624,16 +636,46 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       
       switch (value) {
         case 'cut':
-          controller.cut();
+          final cutText = _getSelectedText();
+          if (cutText.isNotEmpty) {
+            Clipboard.setData(ClipboardData(text: cutText));
+            controller.replaceSelection('');
+          }
+          try { controller.cut(); } catch (_) {}
           break;
         case 'copy':
-          controller.copy();
+          final copyText = _getSelectedText();
+          if (copyText.isNotEmpty) {
+            Clipboard.setData(ClipboardData(text: copyText));
+          } else {
+            final lineIdx = controller.selection.extentIndex;
+            if (lineIdx >= 0 && lineIdx < controller.codeLines.length) {
+              Clipboard.setData(ClipboardData(text: controller.codeLines[lineIdx].text));
+            }
+          }
+          try { controller.copy(); } catch (_) {}
           break;
         case 'paste':
-          controller.paste();
+          Clipboard.getData(Clipboard.kTextPlain).then((data) {
+            if (data?.text != null && data!.text!.isNotEmpty) {
+              controller.replaceSelection(data.text!);
+            } else {
+              try { controller.paste(); } catch (_) {}
+            }
+          });
           break;
         case 'selectAll':
-          controller.selectAll();
+          if (controller.codeLines.isNotEmpty) {
+            final lastIdx = controller.codeLines.length - 1;
+            final lastLen = controller.codeLines[lastIdx].text.length;
+            controller.selection = CodeLineSelection(
+              baseIndex: 0,
+              baseOffset: 0,
+              extentIndex: lastIdx,
+              extentOffset: lastLen,
+            );
+          }
+          try { controller.selectAll(); } catch (_) {}
           break;
         case 'aiHelp':
         case 'aiExplain':
@@ -1279,9 +1321,13 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       buttonItems.add(
         ContextMenuButtonItem(
           label: l10n.cut,
-          onPressed: () {
-            controller.cut();
-            controller.cancelSelection();
+          onPressed: () async {
+            final text = _getSelectedText();
+            if (text.isNotEmpty) {
+              await Clipboard.setData(ClipboardData(text: text));
+              controller.replaceSelection('');
+            }
+            try { controller.cut(); } catch (_) {}
             onDismiss();
           },
         ),
@@ -1289,9 +1335,17 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       buttonItems.add(
         ContextMenuButtonItem(
           label: l10n.copy,
-          onPressed: () {
-            controller.copy();
-            controller.cancelSelection();
+          onPressed: () async {
+            final text = _getSelectedText();
+            if (text.isNotEmpty) {
+              await Clipboard.setData(ClipboardData(text: text));
+            } else {
+              final lineIdx = controller.selection.extentIndex;
+              if (lineIdx >= 0 && lineIdx < controller.codeLines.length) {
+                await Clipboard.setData(ClipboardData(text: controller.codeLines[lineIdx].text));
+              }
+            }
+            try { controller.copy(); } catch (_) {}
             onDismiss();
           },
         ),
@@ -1301,9 +1355,13 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     buttonItems.add(
       ContextMenuButtonItem(
         label: l10n.paste,
-        onPressed: () {
-          controller.paste();
-          controller.cancelSelection();
+        onPressed: () async {
+          final data = await Clipboard.getData(Clipboard.kTextPlain);
+          if (data?.text != null && data!.text!.isNotEmpty) {
+            controller.replaceSelection(data.text!);
+          } else {
+            try { controller.paste(); } catch (_) {}
+          }
           onDismiss();
         },
       ),
@@ -1313,7 +1371,17 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       ContextMenuButtonItem(
         label: l10n.selectAll,
         onPressed: () {
-          controller.selectAll();
+          if (controller.codeLines.isNotEmpty) {
+            final lastIdx = controller.codeLines.length - 1;
+            final lastLen = controller.codeLines[lastIdx].text.length;
+            controller.selection = CodeLineSelection(
+              baseIndex: 0,
+              baseOffset: 0,
+              extentIndex: lastIdx,
+              extentOffset: lastLen,
+            );
+          }
+          try { controller.selectAll(); } catch (_) {}
           onRefresh();
         },
       ),

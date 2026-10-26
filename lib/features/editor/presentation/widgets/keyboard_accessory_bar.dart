@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
@@ -16,6 +17,65 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     super.key,
     required this.controller,
   });
+
+  void _copy(WidgetRef ref) async {
+    _triggerHaptic(ref);
+    final selection = controller.selection;
+    if (!selection.isCollapsed) {
+      final lines = controller.codeLines;
+      int sLine = selection.start.index;
+      int sCol = selection.start.offset;
+      int eLine = selection.end.index;
+      int eCol = selection.end.offset;
+      if (sLine > eLine || (sLine == eLine && sCol > eCol)) {
+        final tL = sLine; final tC = sCol;
+        sLine = eLine; sCol = eCol; eLine = tL; eCol = tC;
+      }
+      if (sLine >= 0 && sLine < lines.length && eLine >= 0 && eLine < lines.length) {
+        if (sLine == eLine) {
+          final text = lines[sLine].text;
+          final s = sCol.clamp(0, text.length);
+          final e = eCol.clamp(0, text.length);
+          await Clipboard.setData(ClipboardData(text: s > e ? text.substring(e, s) : text.substring(s, e)));
+        } else {
+          final buf = StringBuffer();
+          buf.writeln(lines[sLine].text.substring(sCol.clamp(0, lines[sLine].text.length)));
+          for (int i = sLine + 1; i < eLine; i++) {
+            buf.writeln(lines[i].text);
+          }
+          buf.write(lines[eLine].text.substring(0, eCol.clamp(0, lines[eLine].text.length)));
+          await Clipboard.setData(ClipboardData(text: buf.toString()));
+        }
+      }
+    } else {
+      final lineIdx = selection.extentIndex;
+      if (lineIdx >= 0 && lineIdx < controller.codeLines.length) {
+        await Clipboard.setData(ClipboardData(text: controller.codeLines[lineIdx].text));
+      }
+    }
+  }
+
+  void _paste(WidgetRef ref) async {
+    _triggerHaptic(ref);
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text != null && data!.text!.isNotEmpty) {
+      controller.replaceSelection(data.text!);
+    }
+  }
+
+  void _selectAll(WidgetRef ref) {
+    _triggerHaptic(ref);
+    if (controller.codeLines.isNotEmpty) {
+      final lastIdx = controller.codeLines.length - 1;
+      final lastLen = controller.codeLines[lastIdx].text.length;
+      controller.selection = CodeLineSelection(
+        baseIndex: 0,
+        baseOffset: 0,
+        extentIndex: lastIdx,
+        extentOffset: lastLen,
+      );
+    }
+  }
 
   void _insertText(String text, WidgetRef ref) {
     if (text == 'TAB') {
@@ -201,6 +261,21 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                     try { controller.redo(); } catch (_) {}
                   },
                 ),
+                buildBtn(
+                  icon: LucideIcons.square,
+                  tooltip: l10n.selectAll,
+                  onPressed: () => _selectAll(ref),
+                ),
+                buildBtn(
+                  icon: LucideIcons.copy,
+                  tooltip: l10n.copy,
+                  onPressed: () => _copy(ref),
+                ),
+                buildBtn(
+                  icon: LucideIcons.clipboard,
+                  tooltip: l10n.paste,
+                  onPressed: () => _paste(ref),
+                ),
               ],
             ),
             Row(
@@ -252,6 +327,21 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               _triggerHaptic(ref);
               try { controller.redo(); } catch (_) {}
             },
+          ),
+          buildBtn(
+            icon: LucideIcons.square,
+            tooltip: l10n.selectAll,
+            onPressed: () => _selectAll(ref),
+          ),
+          buildBtn(
+            icon: LucideIcons.copy,
+            tooltip: l10n.copy,
+            onPressed: () => _copy(ref),
+          ),
+          buildBtn(
+            icon: LucideIcons.clipboard,
+            tooltip: l10n.paste,
+            onPressed: () => _paste(ref),
           ),
           buildBtn(
             icon: LucideIcons.palette,
