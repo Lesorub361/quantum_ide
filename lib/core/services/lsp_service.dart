@@ -219,8 +219,8 @@ class LspService {
       } else if (key == 'cpp') {
         commandArgs = ['clangd'];
       } else {
-        // Cap Dart Analysis Server heap at 256 MB so it doesn't consume 750+ MB on mobile/tablets
-        commandArgs = ['dart', '--old_gen_heap_size=256', 'language-server', '--protocol=lsp'];
+        // Cap Dart Analysis Server heap at 128 MB for low-memory mobile/tablet environments
+        commandArgs = ['dart', '--old_gen_heap_size=128', 'language-server', '--protocol=lsp'];
       }
 
       if (!await _isBinaryAvailable(commandArgs[0])) {

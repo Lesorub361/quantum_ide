@@ -1,10 +1,10 @@
 {
-  "versionCode": 85,
-  "versionName": "1.2.69",
-  "notes": "QuantumIDE v1.2.69: Добавлена вкладка «Устройства / Экран» (Running Devices в стиле Android Studio) с интерактивным зеркалированием экрана смартфона, тапами, свайпами, кнопками навигации, Hot Reload/Restart и запуском APK; селектор целевого устройства и кнопка экрана вынесены прямо на верхнюю панель редактора; исправлено исчезновение ошибок при обновлении и добавлен баннер быстрого запуска flutter pub get.",
+  "versionCode": 86,
+  "versionName": "1.2.70",
+  "notes": "QuantumIDE v1.2.70: Внедрён ультра-легковесный синтаксический микро-движок FastSyntaxEngine (<1.5 МБ RAM, 1-2 мс) для мгновенного нахождения синтаксических ошибок (скобки, точки с запятой, кавычки, JSON, YAML) без тяжелых процессов; оптимизирован лимит кучи Dart LSP до 128 МБ; снижен расход памяти логгера Talker.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.69/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.70/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

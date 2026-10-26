@@ -5,7 +5,7 @@ import 'package:talker_flutter/talker_flutter.dart';
 class TalkerService {
   static final Talker talker = TalkerFlutter.init(
     settings: TalkerSettings(
-      maxHistoryItems: 1000,
+      maxHistoryItems: 100,
       useConsoleLogs: kDebugMode,
     ),
   );

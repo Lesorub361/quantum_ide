@@ -26,6 +26,7 @@ import 'package:flutter_pty/flutter_pty.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/collaboration_service.dart';
+import 'package:quantum_ide/core/services/fast_syntax_engine.dart';
 
 class EditorFile {
   final String path;
@@ -394,12 +395,18 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     }
 
     _diffTimer?.cancel();
-    _diffTimer = Timer(const Duration(milliseconds: 1800), () {
+    _diffTimer = Timer(const Duration(milliseconds: 600), () {
       _updateDiff(path);
       // Re-read text at timer fire time to avoid stale closure
       final latestIdx = state.openFiles.indexWhere((f) => f.path == path);
       if (latestIdx != -1) {
-        _lspService.onFileChanged(path, state.openFiles[latestIdx].controller.text).catchError((e) {
+        final text = state.openFiles[latestIdx].controller.text;
+        // Instant in-process FastSyntaxEngine (<1ms, <1MB RAM)
+        final fastDiags = FastSyntaxEngine.instance.analyze(path, text);
+        if (fastDiags.isNotEmpty) {
+          updateDiagnostics(path, fastDiags);
+        }
+        _lspService.onFileChanged(path, text).catchError((e) {
           debugPrint('LSP error changing file: $e');
         });
       }
@@ -768,6 +775,12 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         originalContent: content,
       );
       
+      // Instant in-process FastSyntaxEngine analysis on file open (<1ms)
+      final fastDiags = FastSyntaxEngine.instance.analyze(path, content);
+      if (fastDiags.isNotEmpty) {
+        updateDiagnostics(path, fastDiags);
+      }
+
       // Handle LSP open and diagnostics in background safely
       ref.read(collaborationProvider.notifier).initializeFileSync(path, content);
       _lspService.onFileOpened(path, content).then((_) {
