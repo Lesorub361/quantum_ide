@@ -12,6 +12,9 @@ import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifi
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/core/services/lsp_service.dart';
+import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 
 /// Compact, IDE-style problems list (sidebar version).
@@ -359,11 +362,19 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
                 ),
               const Spacer(),
               Tooltip(
-                message: 'Перезапустить анализ кода',
+                message: 'Обновить диагностики (LSP)',
                 child: InkWell(
                   borderRadius: BorderRadius.circular(6),
-                  onTap: () {
-                    ref.read(editorProvider.notifier).clearDiagnostics();
+                  onTap: () async {
+                    HapticFeedback.lightImpact();
+                    final lsp = ref.read(lspServiceProvider);
+                    final openFiles = ref.read(editorProvider).openFiles;
+                    for (final f in openFiles) {
+                      try {
+                        final diags = await lsp.getDiagnostics(f.path);
+                        ref.read(editorProvider.notifier).updateDiagnostics(f.path, diags);
+                      } catch (_) {}
+                    }
                     ref.read(analysisServiceProvider).triggerAnalysis(immediate: true);
                   },
                   child: Padding(
@@ -417,6 +428,50 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
             ],
           ),
         ),
+        // Missing dependencies hint banner
+        if (diagnosticsMap.values.any((list) => list.any((d) =>
+            d.message.toLowerCase().contains("target of uri doesn't exist") ||
+            d.message.toLowerCase().contains("uri") ||
+            d.message.toLowerCase().contains("pub get"))))
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.amberAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.package_search, size: 14, color: Colors.amberAccent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Не найдены зависимости проекта. Запустите:',
+                    style: GoogleFonts.inter(fontSize: 10.5, color: Colors.amberAccent, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                InkWell(
+                  onTap: () {
+                    ref.read(terminalTabsProvider.notifier).sendCommand('flutter pub get\n');
+                    ref.read(panelProvider.notifier).selectTab(PanelTab.terminal);
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.amberAccent.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'flutter pub get',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amberAccent),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         // Filter pills
         SizedBox(
           height: 28,

@@ -36,6 +36,7 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_sele
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
+import 'package:quantum_ide/shared/widgets/running_devices_panel.dart';
 import 'package:fuzzy/fuzzy.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -870,6 +871,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         return _buildGitView();
       case PanelTab.debug:
         return const DebuggerPanel(key: ValueKey('debug'));
+      case PanelTab.runningDevices:
+        return const RunningDevicesPanel(key: ValueKey('runningDevices'));
     }
   }
 

@@ -43,6 +43,8 @@ import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/project_requirements_service.dart';
 import 'package:quantum_ide/shared/widgets/project_requirements_dialog.dart';
 import 'package:quantum_ide/shared/widgets/device_manager_dialog.dart';
+import 'package:quantum_ide/shared/widgets/device_selector_pill.dart';
+import 'package:quantum_ide/core/services/adb_device_service.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 
 
@@ -742,17 +744,33 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ),
                               const SizedBox(width: 4),
                             ],
+                            const DeviceSelectorPill(compact: false),
+                            const SizedBox(width: 4),
                             ActionIconButton(
                               icon: LucideIcons.play,
                               color: Colors.greenAccent,
-                              tooltip: 'Запустить / Скомпилировать проект (F5)',
+                              tooltip: 'Запустить проект (F5)',
                               onTap: () {
+                                final adbTarget = ref.read(adbDeviceServiceProvider).selectedDevice;
                                 if (currentProject != null) {
-                                  ref.read(projectServiceProvider.notifier).runProject(currentProject);
+                                  ref.read(projectServiceProvider.notifier).runProject(currentProject, targetDevice: adbTarget?.id);
                                   panelNotifier.selectTab(PanelTab.terminal);
                                   panelNotifier.openPanel();
                                 } else {
                                   panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.smartphone,
+                              color: const Color(0xFF10B981),
+                              tooltip: 'Устройства & Экран (Running Devices)',
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.runningDevices) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.runningDevices);
                                   panelNotifier.openPanel();
                                 }
                               },
@@ -817,17 +835,33 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 },
                               ),
                             ],
+                            const DeviceSelectorPill(compact: true),
+                            const SizedBox(width: 2),
                             ActionIconButton(
                               icon: LucideIcons.play,
                               color: Colors.greenAccent,
-                              tooltip: 'Запустить / Скомпилировать проект (F5)',
+                              tooltip: 'Запустить проект (F5)',
                               onTap: () {
+                                final adbTarget = ref.read(adbDeviceServiceProvider).selectedDevice;
                                 if (currentProject != null) {
-                                  ref.read(projectServiceProvider.notifier).runProject(currentProject);
+                                  ref.read(projectServiceProvider.notifier).runProject(currentProject, targetDevice: adbTarget?.id);
                                   panelNotifier.selectTab(PanelTab.terminal);
                                   panelNotifier.openPanel();
                                 } else {
                                   panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.smartphone,
+                              color: const Color(0xFF10B981),
+                              tooltip: 'Устройства & Экран (Running Devices)',
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.runningDevices) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.runningDevices);
                                   panelNotifier.openPanel();
                                 }
                               },
@@ -1326,6 +1360,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.terminal: return LucideIcons.terminal;
       case PanelTab.appLogs: return LucideIcons.list;
       case PanelTab.run: return LucideIcons.play;
+      case PanelTab.runningDevices: return LucideIcons.smartphone;
       case PanelTab.buildLogs: return LucideIcons.hammer;
       case PanelTab.git: return LucideIcons.git_branch;
       case PanelTab.problems: return LucideIcons.circle_alert;
@@ -1338,6 +1373,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.terminal: return Colors.cyanAccent;
       case PanelTab.appLogs: return Colors.deepPurpleAccent;
       case PanelTab.run: return Colors.greenAccent;
+      case PanelTab.runningDevices: return const Color(0xFF10B981);
       case PanelTab.buildLogs: return Colors.orangeAccent;
       case PanelTab.git: return Colors.amberAccent;
       case PanelTab.problems: return Colors.redAccent;
@@ -1351,6 +1387,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.terminal: return l10n.terminal;
       case PanelTab.appLogs: return l10n.appLogs;
       case PanelTab.run: return l10n.run;
+      case PanelTab.runningDevices: return 'Устройства / Экран';
       case PanelTab.buildLogs: return l10n.build;
       case PanelTab.git: return 'Git';
       case PanelTab.problems: return l10n.problems;
