@@ -41,6 +41,8 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/project_requirements_service.dart';
+import 'package:quantum_ide/shared/widgets/project_requirements_dialog.dart';
+import 'package:quantum_ide/core/services/app_update_service.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 
 
@@ -257,6 +259,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(appUpdateServiceProvider.notifier).checkForUpdates(silent: true);
       final currentWs = ref.read(workspaceProvider).currentPath;
       if (currentWs != null) {
         _checkProjectRequirements(currentWs);
@@ -740,6 +743,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ),
                               const SizedBox(width: 4),
                             ],
+                            _buildQuickUpdatePill(ref),
                             ActionIconButton(
                               icon: LucideIcons.play,
                               color: Colors.greenAccent,
@@ -815,6 +819,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 },
                               ),
                             ],
+                            _buildQuickUpdatePill(ref),
                             ActionIconButton(
                               icon: LucideIcons.play,
                               color: Colors.greenAccent,
@@ -1305,6 +1310,74 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
 
 
+
+  Widget _buildQuickUpdatePill(WidgetRef ref) {
+    final updateState = ref.watch(appUpdateServiceProvider);
+    if (!updateState.hasUpdate && !updateState.isDownloading) return const SizedBox.shrink();
+
+    if (updateState.isDownloading) {
+      final pct = (updateState.downloadProgress * 100).toInt();
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: Colors.purpleAccent.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.purpleAccent),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$pct%',
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.purpleAccent),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final info = updateState.updateInfo!;
+    return InkWell(
+      onTap: () {
+        ref.read(appUpdateServiceProvider.notifier).downloadAndInstallUpdate(info);
+      },
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
+          ),
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.purpleAccent.withValues(alpha: 0.3),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(LucideIcons.sparkles, size: 12, color: Colors.white),
+            const SizedBox(width: 4),
+            Text(
+              'Обновить v${info.versionName}',
+              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   IconData _getTabIcon(PanelTab tab) {
     switch (tab) {

@@ -765,4 +765,13 @@ final defaultPackages = [
     icon: LucideIcons.share_2,
     category: 'Build Tools',
   ),
+  OptionalPackage(
+    id: 'quantum-ide-update',
+    name: 'Quantum IDE: Автообновление & Лекарь SDK',
+    version: '1.2.76',
+    description: 'Пакет в 1 клик: скачивает свежий релиз Quantum IDE с GitHub в Загрузки, автоматически лечит ограничения версий Dart SDK в проектах и обновляет среду разработки.',
+    command: 'curl -fsSL https://raw.githubusercontent.com/Lesorub361/quantum_ide/main/scripts/quantum-update.sh | bash',
+    icon: LucideIcons.sparkles,
+    category: 'System',
+  ),
 ];

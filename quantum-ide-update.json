@@ -1,10 +1,10 @@
 {
-  "versionCode": 87,
-  "versionName": "1.2.71",
-  "notes": "QuantumIDE v1.2.71: Исправлена ошибка импорта Project модели в панели Running Devices, починена сборка APK в GitHub Actions; добавлена поддержка динамического порта беспроводной отладки Wi-Fi ADB (Android 11+).",
+  "versionCode": 92,
+  "versionName": "1.2.76",
+  "notes": "QuantumIDE v1.2.76: Автоматическое обновление в 1 клик прямо в редакторе, пакет автообновления и исправления SDK constraints в проектах, очищенный и облегченный интерфейс.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.71/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.76/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
