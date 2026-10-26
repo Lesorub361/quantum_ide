@@ -238,6 +238,40 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
                           _statusBannerText!,
                           style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white, height: 1.35),
                         ),
+                        if (_statusBannerText!.contains('unknown command') ||
+                            _statusBannerText!.contains('устаревший ADB')) ...[
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: () async {
+                              setState(() => _statusBannerText = 'Обновление ADB до современной версии...');
+                              final res = await adbService.upgradeAdbBinary();
+                              setState(() => _statusBannerText = res);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.cyanAccent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(LucideIcons.arrow_up_circle, size: 12, color: Colors.cyanAccent),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Обновить ADB до версии 35.0.2 (поддержка pair)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.cyanAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                         if (_statusBannerText!.contains('protocol fault') ||
                             _statusBannerText!.contains('Сбой') ||
                             _statusBannerText!.contains('VPN')) ...[

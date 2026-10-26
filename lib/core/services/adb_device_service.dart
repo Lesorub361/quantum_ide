@@ -281,7 +281,32 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
           '2. Убедитесь, что оба телефона в одной Wi-Fi сети (или раздайте Wi-Fi с одного телефона на другой).\n'
           '3. Проверьте, что на втором телефоне включен экран и активна «Беспроводная отладка» (порт мог измениться).';
     }
+    if (clean.contains('unknown command pair') || clean.contains('unknown command')) {
+      return 'В системе установлен устаревший ADB (Ubuntu 20.04) без команды "pair" (Android 11+).\n'
+          'Обновите ADB кнопкой ниже или выполните команду обновления в терминале.';
+    }
     return clean;
+  }
+
+  /// Upgrades ADB binary in proot container to modern static ARM64 (Platform-Tools 35.0.2)
+  Future<String> upgradeAdbBinary() async {
+    final runtime = _ref.read(runtimeServiceProvider);
+    try {
+      await runtime.runCommand(
+        'mkdir -p /tmp/adb_up && '
+        '(curl -k -fL --retry 2 -o /tmp/adb_up/tools.zip "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" || '
+        'wget --no-check-certificate -qO /tmp/adb_up/tools.zip "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip") && '
+        'unzip -qo /tmp/adb_up/tools.zip "platform-tools/adb" -d /tmp/adb_up && '
+        'cp -f /tmp/adb_up/platform-tools/adb /usr/bin/adb && '
+        'chmod +x /usr/bin/adb && '
+        'rm -rf /tmp/adb_up && '
+        'adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true'
+      );
+      final ver = await runtime.runCommand('adb version 2>&1 || true');
+      return '✅ ADB успешно обновлён до современной версии:\n${ver.trim()}';
+    } catch (e) {
+      return 'Ошибка обновления ADB: $e';
+    }
   }
 
   /// Connect to device via Wi-Fi ADB (e.g. `192.168.1.100:5555`)
@@ -332,6 +357,20 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
         await refreshDevices();
         return '✅ Устройство успешно сопряжено! Теперь нажмите «Подключить» в блоке 1.';
       }
+
+      // If adb is too old and lacks 'pair' command (Ubuntu 20.04 default), auto-upgrade adb
+      if (res.contains('unknown command pair') || res.contains('unknown command')) {
+        try {
+          await upgradeAdbBinary();
+          final retry = await runtime.runCommand('adb pair $cleanIp $cleanCode 2>&1 || true');
+          await refreshDevices();
+          if (retry.contains('Successfully paired') || retry.contains('paired to')) {
+            return '✅ ADB обновлён и устройство успешно сопряжено! Теперь нажмите «Подключить» в блоке 1.';
+          }
+          return _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+        } catch (_) {}
+      }
+
       if (res.contains('protocol fault') || res.contains('failed')) {
         await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
         final retry = await runtime.runCommand('adb pair $cleanIp $cleanCode 2>&1 || true');
