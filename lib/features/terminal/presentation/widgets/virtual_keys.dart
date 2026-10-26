@@ -55,14 +55,13 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
   static const List<VirtualKey> _row1Keys = [
     VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
     VirtualKey(label: 'TAB', value: '\t', tooltip: 'Tab / Автодополнение'),
-    VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: ' Зажать Ctrl'),
+    VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: 'Зажать Ctrl'),
     VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: 'Зажать Alt'),
     VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true, tooltip: 'Зажать Shift'),
     VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left, tooltip: 'Влево'),
     VirtualKey(label: '↓', value: '\x1b[B', icon: LucideIcons.arrow_down, tooltip: 'Вниз'),
     VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up, tooltip: 'Вверх'),
     VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right, tooltip: 'Вправо'),
-    VirtualKey(label: 'KEYB', value: 'toggle_keyboard', icon: LucideIcons.keyboard, tooltip: 'Показать/скрыть клавиатуру'),
   ];
 
   static const List<VirtualKey> _row2Keys = [
@@ -181,6 +180,34 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
 
   @override
   Widget build(BuildContext context) {
+    final isKeybActive = widget.activeKeys.contains('KEYB') ||
+        widget.activeKeys.contains('toggle_keyboard') ||
+        widget.activeKeys.contains('Клава');
+
+    final keybButton = _VirtualKeyButton(
+      keyData: const VirtualKey(
+        label: 'Клава',
+        value: 'toggle_keyboard',
+        icon: LucideIcons.keyboard,
+        tooltip: 'Показать/скрыть клавиатуру',
+      ),
+      isActive: isKeybActive,
+      isHighlightedAction: true,
+      onTap: () => widget.onKeyTap('toggle_keyboard'),
+    );
+
+    final moreButton = _VirtualKeyButton(
+      keyData: const VirtualKey(
+        label: 'Ещё',
+        value: 'more_commands',
+        icon: LucideIcons.layout_grid,
+        tooltip: 'Все команды, сочетания клавиш и спецсимволы',
+      ),
+      isActive: false,
+      isHighlightedAction: false,
+      onTap: () => _showMoreCommandsSheet(context),
+    );
+
     if (widget.isCompact) {
       return Container(
         height: 33,
@@ -192,16 +219,13 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
         ),
         child: _buildKeyRow(
           _compactKeys,
-          trailingFixed: _VirtualKeyButton(
-            keyData: const VirtualKey(
-              label: 'Ещё',
-              value: 'more_commands',
-              icon: LucideIcons.layout_grid,
-              tooltip: 'Все команды, сочетания клавиш и спецсимволы',
-            ),
-            isActive: false,
-            isHighlightedAction: true,
-            onTap: () => _showMoreCommandsSheet(context),
+          trailingFixed: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              keybButton,
+              const SizedBox(width: 3),
+              moreButton,
+            ],
           ),
         ),
       );
@@ -218,21 +242,14 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildKeyRow(_row1Keys),
+          _buildKeyRow(
+            _row1Keys,
+            trailingFixed: keybButton,
+          ),
           const SizedBox(height: 2),
           _buildKeyRow(
             _row2Keys,
-            trailingFixed: _VirtualKeyButton(
-              keyData: const VirtualKey(
-                label: 'Ещё',
-                value: 'more_commands',
-                icon: LucideIcons.layout_grid,
-                tooltip: 'Все команды, сочетания клавиш и спецсимволы',
-              ),
-              isActive: false,
-              isHighlightedAction: true,
-              onTap: () => _showMoreCommandsSheet(context),
-            ),
+            trailingFixed: moreButton,
           ),
         ],
       ),
@@ -250,6 +267,7 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
   });
 
   static const List<VirtualKey> _controlKeys = [
+    VirtualKey(label: 'Клавиатура', value: 'toggle_keyboard', icon: LucideIcons.keyboard, tooltip: 'Показать/скрыть клавиатуру'),
     VirtualKey(label: 'Выделить всё', value: 'select_all', icon: LucideIcons.check_check),
     VirtualKey(label: 'Скопировать всё', value: 'copy_all_output', icon: LucideIcons.clipboard_copy),
     VirtualKey(label: 'Окно текста', value: 'selection_mode', icon: LucideIcons.file_text),
@@ -466,6 +484,10 @@ class _VirtualKeyButton extends StatelessWidget {
       buttonColor = Colors.cyanAccent.withValues(alpha: 0.25);
       borderColor = Colors.cyanAccent.withValues(alpha: 0.6);
       themeColor = Colors.cyanAccent;
+    } else if (keyData.value == 'toggle_keyboard') {
+      buttonColor = const Color(0xFF10B981).withValues(alpha: 0.18);
+      borderColor = const Color(0xFF34D399).withValues(alpha: 0.45);
+      themeColor = const Color(0xFF6EE7B7);
     } else if (isHighlightedAction) {
       buttonColor = const Color(0xFF0EA5E9).withValues(alpha: 0.2);
       borderColor = const Color(0xFF38BDF8).withValues(alpha: 0.45);

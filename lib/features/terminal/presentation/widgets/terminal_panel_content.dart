@@ -190,15 +190,24 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  void _openTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+  void _openTerminalKeyboard(TerminalSession session, {bool isSecondary = false, bool clearSelection = false}) {
     if (_inlineSelectionMode) return;
-    if (session.xtermViewController.selection != null) return;
+    if (session.xtermViewController.selection != null) {
+      if (clearSelection) {
+        session.xtermViewController.clearSelection();
+      } else {
+        return;
+      }
+    }
 
     final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = true;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
     focusNode.allowAutoKeyboard = true;
+    if (focusNode.hasFocus) {
+      focusNode.unfocus();
+    }
     focusNode.requestFocus();
     if (Platform.isAndroid || Platform.isIOS) {
       _getDirectInputKey(keyId).currentState?.requestKeyboard();
@@ -238,10 +247,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     if (bottomInset > 20) {
       _closeTerminalKeyboard(session, isSecondary: isSecondary);
-    } else if (_isMobileKeyboardActive && bottomInset == 0 && !Platform.isAndroid && !Platform.isIOS) {
-      _closeTerminalKeyboard(session, isSecondary: isSecondary);
     } else {
-      _openTerminalKeyboard(session, isSecondary: isSecondary);
+      _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
     }
   }
 
@@ -2049,6 +2056,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       child: _buildTerminalPinchWrapper(
                         child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
+                          onTap: () {
+                            _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
+                          },
                           onSecondaryTapDown: (details) {
                             if (session.xtermViewController.selection != null) {
                               _copySelection(session);
@@ -3156,12 +3166,17 @@ Also explain what exactly went wrong and how you fixed it.
     if (sessions.isEmpty || notifier.currentIndex >= sessions.length) return const SizedBox();
     final currentSession = sessions[notifier.currentIndex];
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final isKeyboardOpen = (bottomInset > 20) || _isMobileKeyboardActive;
+    final isKeyboardOpen = bottomInset > 20;
+    if (!isKeyboardOpen && _isMobileKeyboardActive) {
+      _isMobileKeyboardActive = false;
+    }
     return VirtualKeysView(
       isCompact: isKeyboardOpen,
       activeKeys: {
         ..._activeModifiers,
         if (isKeyboardOpen) 'KEYB',
+        if (isKeyboardOpen) 'toggle_keyboard',
+        if (isKeyboardOpen) 'Клава',
         if (_inlineSelectionMode) 'SEL',
         if (_inlineSelectionMode) 'inline_selection_mode',
       },
