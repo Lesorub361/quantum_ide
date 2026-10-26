@@ -32,7 +32,7 @@ else
 fi
 
 # 3. Лечение ограничений Dart SDK в pubspec.yaml проектов
-printf "\033[1;33m[3/3] Проверка и исправление SDK ограничений в проектах...\033[0m\n"
+printf "\033[1;33m[3/4] Проверка и исправление SDK ограничений в проектах...\033[0m\n"
 if [ -d "/root/projects" ]; then
   find /root/projects -name "pubspec.yaml" 2>/dev/null | while read -r pfile; do
     if grep -qE "sdk:\s*(\^3\.1[3-9]|>=3\.1[3-9])" "$pfile" 2>/dev/null; then
@@ -40,6 +40,23 @@ if [ -d "/root/projects" ]; then
       printf "  \033[1;32m✔ Исправлен SDK constraint в:\033[0m %s\n" "$pfile"
     fi
   done
+fi
+
+# 4. Обновление Flutter & Dart SDK до 3.47.8 (Dart 3.13+)
+printf "\033[1;33m[4/4] Проверка версии Flutter & Dart SDK...\033[0m\n"
+if [ -d "/root/flutter/.git" ]; then
+  CURR_DART=$(cat /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || echo "unknown")
+  printf "  Текущая версия Dart: \033[1;36m%s\033[0m\n" "$CURR_DART"
+  if ! echo "$CURR_DART" | grep -qE "3\.(1[3-9]|[2-9][0-9])"; then
+    printf "  \033[1;33mОбновление Flutter до 3.47.8 (Dart 3.13+)...\033[0m\n"
+    git -C /root/flutter config --global --add safe.directory '*' 2>/dev/null || true
+    (git -C /root/flutter fetch --depth 1 origin tag 3.47.8 2>/dev/null || git -C /root/flutter fetch --tags origin 2>/dev/null || true)
+    git -C /root/flutter checkout 3.47.8 -f 2>/dev/null || true
+    /root/flutter/bin/flutter precache --android 2>/dev/null || true
+    printf "  \033[1;32m✔ Flutter успешно обновлен до 3.47.8 (Dart 3.13+)!\033[0m\n"
+  else
+    printf "  \033[1;32m✔ Flutter SDK уже поддерживает Dart 3.13+\033[0m\n"
+  fi
 fi
 
 printf "\n\033[1;32m🎉 Готово! Чтобы установить обновление, откройте файл:\033[0m\n"

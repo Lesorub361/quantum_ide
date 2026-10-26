@@ -204,6 +204,15 @@ final defaultPackages = [
     category: 'Languages',
   ),
   OptionalPackage(
+    id: 'flutter-upgrade-3.47',
+    name: 'Flutter & Dart SDK (Обновление до 3.47.8 / Dart 3.13+)',
+    version: '3.47.8',
+    description: 'Обновляет Flutter до 3.47.8 и Dart SDK до 3.13.0+. Устраняет ошибку «requires SDK version ^3.13.0, version solving failed».',
+    command: '${_aptPrefix}apt install -y git curl unzip xz-utils libglu1-mesa debianutils ca-certificates && git config --global --add safe.directory \'*\' 2>/dev/null || true && rm -f /root/flutter/.git/*.lock 2>/dev/null || true && if [ -d /root/flutter/.git ]; then cd /root/flutter && (git fetch --depth 1 origin tag 3.47.8 2>/dev/null || git fetch --tags origin 2>/dev/null || true) && git checkout 3.47.8 -f && /root/flutter/bin/flutter precache --android; else rm -rf /root/flutter && git clone --depth 1 --branch 3.47.8 https://github.com/flutter/flutter.git /root/flutter && /root/flutter/bin/flutter precache --android; fi && ln -sf /root/flutter/bin/flutter /usr/local/bin/flutter 2>/dev/null || true && ln -sf /root/flutter/bin/dart /usr/local/bin/dart 2>/dev/null || true && (/bin/bash /root/setup-arm64.sh 2>/dev/null || true) && flutter --version && echo "Flutter 3.47.8 & Dart 3.13.0+ успешно установлены!"',
+    icon: LucideIcons.arrow_up,
+    category: 'Languages',
+  ),
+  OptionalPackage(
     id: 'antigravity-cli',
     name: 'Antigravity CLI (agy)',
     version: '1.3.4',
@@ -768,7 +777,7 @@ final defaultPackages = [
   OptionalPackage(
     id: 'quantum-ide-update',
     name: 'Quantum IDE: Автообновление & Лекарь SDK',
-    version: '1.2.76',
+    version: '1.2.77',
     description: 'Пакет в 1 клик: скачивает свежий релиз Quantum IDE с GitHub в Загрузки, автоматически лечит ограничения версий Dart SDK в проектах и обновляет среду разработки.',
     command: 'curl -fsSL https://raw.githubusercontent.com/Lesorub361/quantum_ide/main/scripts/quantum-update.sh | bash',
     icon: LucideIcons.sparkles,

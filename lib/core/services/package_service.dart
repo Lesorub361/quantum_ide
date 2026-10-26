@@ -307,6 +307,9 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'flutter':
               exists = await hasCmd('flutter');
               break;
+            case 'flutter-upgrade-3.47':
+              exists = installedIds.contains('flutter-upgrade-3.47');
+              break;
             case 'antigravity-cli':
               exists = await hasCmd('agy') || await hasCmd('antigravity');
               break;
@@ -455,6 +458,22 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
             case 'flutter':
               exists = await File(p.join(rootfsPath, 'root', 'flutter', 'bin', 'flutter')).exists() ||
                   await hasRootfsBin('flutter');
+              break;
+            case 'flutter-upgrade-3.47':
+              final verFile = File(p.join(rootfsPath, 'root', 'flutter', 'version'));
+              final dartVerFile = File(p.join(rootfsPath, 'root', 'flutter', 'bin', 'cache', 'dart-sdk', 'version'));
+              if (await verFile.exists()) {
+                final content = await verFile.readAsString();
+                if (content.contains('3.47') || content.contains('3.48') || content.contains('3.49')) {
+                  exists = true;
+                }
+              }
+              if (!exists && await dartVerFile.exists()) {
+                final dartContent = await dartVerFile.readAsString();
+                if (dartContent.contains('3.13') || dartContent.contains('3.14') || dartContent.contains('3.15')) {
+                  exists = true;
+                }
+              }
               break;
             case 'antigravity-cli':
               exists = await hasRootfsBin('agy') || await hasRootfsBin('antigravity');
@@ -623,7 +642,8 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
                   pkg.id == 'vulkan-graphics' ||
                   pkg.id == 'antigravity-cli' ||
                   pkg.id == 'claude-code' ||
-                  pkg.id == 'deepseek-harness')) {
+                  pkg.id == 'deepseek-harness' ||
+                  pkg.id == 'flutter-upgrade-3.47')) {
             pkg.isInstalled = true;
             newlyInstalledIds.add(pkg.id);
           } else {
