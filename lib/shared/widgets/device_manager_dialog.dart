@@ -257,7 +257,7 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(LucideIcons.arrow_up_circle, size: 12, color: Colors.cyanAccent),
+                                  const Icon(LucideIcons.arrow_up, size: 12, color: Colors.cyanAccent),
                                   const SizedBox(width: 6),
                                   Text(
                                     'Обновить ADB до версии 35.0.2 (поддержка pair)',
