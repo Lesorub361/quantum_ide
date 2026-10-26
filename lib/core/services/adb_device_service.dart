@@ -261,6 +261,29 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     state = state.copyWith(selectedDevice: device, clearSelectedDevice: device == null);
   }
 
+  String _formatAdbError(String raw) {
+    var clean = raw.replaceFirst(RegExp(r'^Exception:\s*'), '');
+    clean = clean.replaceFirst(RegExp(r'^Command failed \(exit code \d+\):\s*'), '');
+    clean = clean.trim();
+
+    if (clean.contains('protocol fault')) {
+      return 'Сбой протокола ADB (protocol fault):\n'
+          '1. Отключите VPN на телефоне (VPN на Android перехватывает локальный Wi-Fi трафик и ломает ADB сокеты).\n'
+          '2. Для Android 11+ нужно сначала выполнить «2. Сопряжение по коду» (с кодом из 6 цифр).\n'
+          '3. ADB сервер был автоматически перезапущен для восстановления.';
+    }
+    if (clean.contains('failed to connect') ||
+        clean.contains('Connection refused') ||
+        clean.contains('timed out') ||
+        clean.contains('Connection reset')) {
+      return 'Не удалось подключиться к $clean:\n'
+          '1. Отключите VPN (VPN направляет трафик на удалённый сервер вместо локальной сети Wi-Fi).\n'
+          '2. Убедитесь, что оба телефона в одной Wi-Fi сети (или раздайте Wi-Fi с одного телефона на другой).\n'
+          '3. Проверьте, что на втором телефоне включен экран и активна «Беспроводная отладка» (порт мог измениться).';
+    }
+    return clean;
+  }
+
   /// Connect to device via Wi-Fi ADB (e.g. `192.168.1.100:5555`)
   Future<String> connectWifi(String ipAndPort) async {
     final clean = ipAndPort.trim();
@@ -268,11 +291,29 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final res = await runtime.runCommand('adb connect $clean');
+      final res = await runtime.runCommand('adb connect $clean 2>&1 || true');
+      if (res.contains('connected to') || res.contains('already connected')) {
+        await refreshDevices();
+        return res.trim();
+      }
+
+      // Auto-heal on protocol fault or broken server
+      if (res.contains('protocol fault') || res.contains('cannot connect') || res.contains('failed')) {
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
+        final retry = await runtime.runCommand('adb connect $clean 2>&1 || true');
+        await refreshDevices();
+        if (retry.contains('connected to') || retry.contains('already connected')) {
+          return retry.trim();
+        }
+        return _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+      }
       await refreshDevices();
-      return res.trim();
+      return _formatAdbError(res.trim());
     } catch (e) {
-      return 'Ошибка подключения: $e';
+      try {
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
+      } catch (_) {}
+      return _formatAdbError(e.toString());
     }
   }
 
@@ -281,16 +322,32 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     final cleanIp = ipAndPort.trim();
     final cleanCode = pairingCode.trim();
     if (cleanIp.isEmpty || cleanCode.isEmpty) {
-      return 'Укажите IP:порт и код сопряжения';
+      return 'Укажите IP:порт и код сопряжения (6 цифр)';
     }
 
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final res = await runtime.runCommand('adb pair $cleanIp $cleanCode');
+      final res = await runtime.runCommand('adb pair $cleanIp $cleanCode 2>&1 || true');
+      if (res.contains('Successfully paired') || res.contains('paired to')) {
+        await refreshDevices();
+        return '✅ Устройство успешно сопряжено! Теперь нажмите «Подключить» в блоке 1.';
+      }
+      if (res.contains('protocol fault') || res.contains('failed')) {
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
+        final retry = await runtime.runCommand('adb pair $cleanIp $cleanCode 2>&1 || true');
+        await refreshDevices();
+        if (retry.contains('Successfully paired') || retry.contains('paired to')) {
+          return '✅ Устройство успешно сопряжено! Теперь нажмите «Подключить» в блоке 1.';
+        }
+        return _formatAdbError(retry.trim().isNotEmpty ? retry : res);
+      }
       await refreshDevices();
-      return res.trim();
+      return _formatAdbError(res.trim());
     } catch (e) {
-      return 'Ошибка сопряжения: $e';
+      try {
+        await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>/dev/null || true');
+      } catch (_) {}
+      return _formatAdbError(e.toString());
     }
   }
 
@@ -298,7 +355,7 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
   Future<String> disconnectWifi(String target) async {
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final res = await runtime.runCommand('adb disconnect $target');
+      final res = await runtime.runCommand('adb disconnect $target 2>&1 || true');
       await refreshDevices();
       return res.trim();
     } catch (e) {
@@ -310,7 +367,7 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
   Future<String> restartServer() async {
     final runtime = _ref.read(runtimeServiceProvider);
     try {
-      final res = await runtime.runCommand('adb kill-server && adb start-server');
+      final res = await runtime.runCommand('adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>&1 || true');
       await refreshDevices();
       return res.trim().isNotEmpty ? res.trim() : 'ADB сервер успешно перезапущен';
     } catch (e) {

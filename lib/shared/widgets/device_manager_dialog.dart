@@ -189,20 +189,91 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
           // Status message if action executed
           if (_statusBannerText != null) ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.blueAccent.withValues(alpha: 0.15),
+                color: _statusBannerText!.contains('✅')
+                    ? Colors.greenAccent.withValues(alpha: 0.15)
+                    : (_statusBannerText!.toLowerCase().contains('ошибк') ||
+                            _statusBannerText!.contains('protocol fault') ||
+                            _statusBannerText!.contains('Сбой'))
+                        ? Colors.redAccent.withValues(alpha: 0.15)
+                        : Colors.blueAccent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
+                border: Border.all(
+                  color: _statusBannerText!.contains('✅')
+                      ? Colors.greenAccent.withValues(alpha: 0.3)
+                      : (_statusBannerText!.toLowerCase().contains('ошибк') ||
+                              _statusBannerText!.contains('protocol fault') ||
+                              _statusBannerText!.contains('Сбой'))
+                          ? Colors.redAccent.withValues(alpha: 0.35)
+                          : Colors.blueAccent.withValues(alpha: 0.3),
+                ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(LucideIcons.info, size: 16, color: Colors.cyanAccent),
-                  const SizedBox(width: 8),
+                  Icon(
+                    _statusBannerText!.contains('✅')
+                        ? LucideIcons.circle_check
+                        : (_statusBannerText!.toLowerCase().contains('ошибк') ||
+                                _statusBannerText!.contains('protocol fault') ||
+                                _statusBannerText!.contains('Сбой'))
+                            ? LucideIcons.circle_alert
+                            : LucideIcons.info,
+                    size: 16,
+                    color: _statusBannerText!.contains('✅')
+                        ? Colors.greenAccent
+                        : (_statusBannerText!.toLowerCase().contains('ошибк') ||
+                                _statusBannerText!.contains('protocol fault') ||
+                                _statusBannerText!.contains('Сбой'))
+                            ? Colors.redAccent
+                            : Colors.cyanAccent,
+                  ),
+                  const SizedBox(width: 10),
                   Expanded(
-                    child: Text(
-                      _statusBannerText!,
-                      style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SelectableText(
+                          _statusBannerText!,
+                          style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white, height: 1.35),
+                        ),
+                        if (_statusBannerText!.contains('protocol fault') ||
+                            _statusBannerText!.contains('Сбой') ||
+                            _statusBannerText!.contains('VPN')) ...[
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: () async {
+                              setState(() => _statusBannerText = 'Перезапуск ADB сервера...');
+                              final res = await adbService.restartServer();
+                              setState(() => _statusBannerText = res);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.amberAccent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(5),
+                                border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.4)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(LucideIcons.refresh_cw, size: 12, color: Colors.amberAccent),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Перезапустить ADB сервер сейчас',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.amberAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   IconButton(
@@ -789,15 +860,42 @@ class _DeviceManagerDialogState extends ConsumerState<DeviceManagerDialog> with 
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.25)),
           ),
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(LucideIcons.wifi, size: 18, color: Colors.purpleAccent),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Беспроводное подключение позволяет отлаживать и тестировать приложения без кабеля. Оба телефона должны быть в одной Wi-Fi сети (или первый телефон раздает точку доступа второму).',
-                  style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.3),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(LucideIcons.wifi, size: 18, color: Colors.purpleAccent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Беспроводное подключение позволяет отлаживать и тестировать приложения без кабеля. Оба телефона должны быть в одной Wi-Fi сети (или первый телефон раздает точку доступа второму).',
+                      style: GoogleFonts.inter(fontSize: 11, color: Colors.white70, height: 1.3),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(LucideIcons.shield_alert, size: 15, color: Colors.amberAccent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Внимание: если на телефоне включён VPN, он блокирует локальную сеть (LAN). Отключите VPN или включите в его настройках «Обход локальной сети» (Bypass LAN).',
+                        style: GoogleFonts.inter(fontSize: 10.5, color: Colors.amberAccent, height: 1.3),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
