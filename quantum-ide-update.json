@@ -1,10 +1,10 @@
 {
-  "versionCode": 86,
-  "versionName": "1.2.70",
-  "notes": "QuantumIDE v1.2.70: Внедрён ультра-легковесный синтаксический микро-движок FastSyntaxEngine (<1.5 МБ RAM, 1-2 мс) для мгновенного нахождения синтаксических ошибок (скобки, точки с запятой, кавычки, JSON, YAML) без тяжелых процессов; оптимизирован лимит кучи Dart LSP до 128 МБ; снижен расход памяти логгера Talker.",
+  "versionCode": 87,
+  "versionName": "1.2.71",
+  "notes": "QuantumIDE v1.2.71: Исправлена ошибка импорта Project модели в панели Running Devices, починена сборка APK в GitHub Actions; добавлена поддержка динамического порта беспроводной отладки Wi-Fi ADB (Android 11+).",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.70/app-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.71/app-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
