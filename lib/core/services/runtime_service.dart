@@ -717,11 +717,10 @@ if [ -e /usr/share/terminfo/x/xterm-256color ] || [ -e /lib/terminfo/x/xterm-256
     export TERM=xterm-256color
 elif [ -e /usr/share/terminfo/x/xterm ] || [ -e /lib/terminfo/x/xterm ]; then
     export TERM=xterm
+elif [ -e /usr/share/terminfo/l/linux ] || [ -e /lib/terminfo/l/linux ]; then
+    export TERM=linux
 else
-    if [ -d /usr/share/terminfo/x ]; then
-        ln -sf xterm /usr/share/terminfo/x/xterm-256color 2>/dev/null || true
-    fi
-    export TERM=xterm
+    export TERM=ansi
 fi
 export COLORTERM=truecolor
 export LANG=C.UTF-8
@@ -747,13 +746,15 @@ export PS1="\[\r\e[K\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;3
 
 export FLUTTER_ALLOW_SU_ROOT=true
 export FLUTTER_SUPPRESS_ANALYTICS=true
+export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\""
 
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
-alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false"
-alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false"
+alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false -Pandroid.enableJetifier=false"
+alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false -Pandroid.enableJetifier=false"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -1333,17 +1334,16 @@ export ANDROID_HOME="/root/android-sdk"
 export ANDROID_SDK_ROOT="/root/android-sdk"
 
 export FLUTTER_ALLOW_SU_ROOT=true
-# Force IPv4 for Java/Gradle to fix UnknownHostException in Android PRoot
-# (IPv6 socket routing is broken inside PRoot on Android)
-export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
+# Force IPv4 and 2GB JVM heap for Java/Gradle to fix UnknownHostException and Java heap space
+export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
 if [ -f /usr/bin/aapt2 ]; then
-    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\" -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
 else
     BUILD_TOOLS_AAPT2=\$(find /root/android-sdk/build-tools -name "aapt2" 2>/dev/null | sort -V | tail -n 1)
     if [ -n "\$BUILD_TOOLS_AAPT2" ]; then
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\" -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
     else
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\""
     fi
 fi
 
@@ -1653,10 +1653,10 @@ fi
       'LANG': 'C.UTF-8',
       'LC_ALL': 'C.UTF-8',
       'FLUTTER_ALLOW_SU_ROOT': 'true',
-      // Force IPv4 for Java/Gradle — Android PRoot routing of IPv6 sockets is broken
-      '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true',
+      // Force IPv4 and 2GB JVM heap for Java/Gradle
+      '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m',
       'GRADLE_OPTS':
-          '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
+          '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
     };
   }
 

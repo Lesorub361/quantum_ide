@@ -109,6 +109,15 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     state = state.copyWith(isPanelVisible: false, isOutputExpanded: false);
   }
 
+  void cancelSync() {
+    _autoHideTimer?.cancel();
+    _currentHandle?.cancel();
+    _currentHandle = null;
+    if (state.isSyncing) {
+      state = state.copyWith(isSyncing: false, isPanelVisible: false);
+    }
+  }
+
   Future<void> startSync(String workspacePath, {bool force = false}) async {
     // If already syncing this path, don't restart unless forced
     if (state.isSyncing && !force && state.projectPath == workspacePath) {
@@ -143,10 +152,10 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
           'echo "==> Configuring Android & downloading Gradle dependencies..." && '
           'mkdir -p android ~/.gradle 2>/dev/null || true; '
           'sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true; '
-          '(grep -q "android.aapt2FromMaven" android/gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> android/gradle.properties 2>/dev/null || true); '
-          '(grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true); '
+          '(grep -q "org.gradle.jvmargs" android/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> android/gradle.properties 2>/dev/null || true); '
+          '(grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true); '
           '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true); '
-          'cd android && (if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info :app:dependencies 2>/dev/null || ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; else gradle --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; fi); '
+          'cd android && (if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Djava.net.preferIPv4Stack=true --info :app:dependencies 2>/dev/null || ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Djava.net.preferIPv4Stack=true --info help; else gradle --no-daemon --max-workers=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Djava.net.preferIPv4Stack=true --info help; fi); '
           'fi)';
     } else if (hasGradle) {
       detectedType = 'gradle';
@@ -154,10 +163,10 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
       command =
           '(mkdir -p ~/.gradle 2>/dev/null || true) && '
           'sed -i "/extra-gen-snapshot-options/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true; '
-          '(grep -q "android.aapt2FromMaven" gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> gradle.properties 2>/dev/null || true); '
-          '(grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true); '
+          '(grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> gradle.properties 2>/dev/null || true); '
+          '(grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true); '
           '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true); '
-          'if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info :app:dependencies 2>/dev/null || ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; else gradle --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; fi';
+          'if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Djava.net.preferIPv4Stack=true --info :app:dependencies 2>/dev/null || ./gradlew --no-daemon --max-workers=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Djava.net.preferIPv4Stack=true --info help; else gradle --no-daemon --max-workers=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Djava.net.preferIPv4Stack=true --info help; fi';
     } else if (hasPackageJson) {
       detectedType = 'node';
       initialStep = 'Resolving npm packages...';
