@@ -20,6 +20,11 @@ class KeyboardAccessoryBar extends ConsumerWidget {
 
   void _copy(WidgetRef ref) async {
     _triggerHaptic(ref);
+    final text = controller.selectedText;
+    if (text.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: text));
+      return;
+    }
     final selection = controller.selection;
     if (!selection.isCollapsed) {
       final lines = controller.codeLines;
@@ -33,10 +38,10 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       }
       if (sLine >= 0 && sLine < lines.length && eLine >= 0 && eLine < lines.length) {
         if (sLine == eLine) {
-          final text = lines[sLine].text;
-          final s = sCol.clamp(0, text.length);
-          final e = eCol.clamp(0, text.length);
-          await Clipboard.setData(ClipboardData(text: s > e ? text.substring(e, s) : text.substring(s, e)));
+          final lineText = lines[sLine].text;
+          final s = sCol.clamp(0, lineText.length);
+          final e = eCol.clamp(0, lineText.length);
+          await Clipboard.setData(ClipboardData(text: s > e ? lineText.substring(e, s) : lineText.substring(s, e)));
         } else {
           final buf = StringBuffer();
           buf.writeln(lines[sLine].text.substring(sCol.clamp(0, lines[sLine].text.length)));

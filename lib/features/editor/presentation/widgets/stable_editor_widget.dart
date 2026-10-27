@@ -143,7 +143,7 @@ class QuantumSelectionToolbarController implements SelectionToolbarController {
 
     void onVisibilityChanged() {
       if (!visibility.value) {
-        dismissAll();
+        Future.microtask(() => dismissAll());
       }
     }
 
@@ -153,35 +153,39 @@ class QuantumSelectionToolbarController implements SelectionToolbarController {
 
     final entry = OverlayEntry(
       builder: (entryContext) {
-        return Directionality(
-          textDirection: Directionality.of(context),
-          child: ValueListenableBuilder<bool>(
-            valueListenable: visibility,
-            builder: (ctx, isVisible, child) {
-              if (!isVisible) return const SizedBox.shrink();
-              return CompositedTransformFollower(
-                link: layerLink,
-                showWhenUnlinked: false,
-                offset: renderRect != null ? -renderRect.topLeft : Offset.zero,
-                child: builder(
-                  context: context,
-                  anchors: anchors,
-                  controller: controller,
-                  onDismiss: () => dismissAll(),
-                  onRefresh: () {
-                    dismissAll();
-                    show(
+        return CodeEditorTapRegion(
+          child: Directionality(
+            textDirection: Directionality.of(context),
+            child: ValueListenableBuilder<bool>(
+              valueListenable: visibility,
+              builder: (ctx, isVisible, child) {
+                if (!isVisible) return const SizedBox.shrink();
+                return CompositedTransformFollower(
+                  link: layerLink,
+                  showWhenUnlinked: false,
+                  offset: renderRect != null ? -renderRect.topLeft : Offset.zero,
+                  child: CodeEditorTapRegion(
+                    child: builder(
                       context: context,
-                      controller: controller,
                       anchors: anchors,
-                      renderRect: renderRect,
-                      layerLink: layerLink,
-                      visibility: visibility,
-                    );
-                  },
-                ),
-              );
-            },
+                      controller: controller,
+                      onDismiss: () => dismissAll(),
+                      onRefresh: () {
+                        dismissAll();
+                        show(
+                          context: context,
+                          controller: controller,
+                          anchors: anchors,
+                          renderRect: renderRect,
+                          layerLink: layerLink,
+                          visibility: visibility,
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
           ),
         );
       },
@@ -447,6 +451,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   String _getSelectedText() {
     final controller = widget.file.controller;
+    if (controller.selectedText.isNotEmpty) {
+      return controller.selectedText;
+    }
     final selection = controller.selection;
     if (selection.isCollapsed) return '';
     final lines = controller.codeLines;
@@ -1317,12 +1324,14 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     final List<ContextMenuButtonItem> buttonItems = [];
     final l10n = AppLocalizations.of(context)!;
 
-    if (!controller.selection.isCollapsed) {
+    if (!controller.selection.isCollapsed || controller.selectedText.isNotEmpty) {
       buttonItems.add(
         ContextMenuButtonItem(
           label: l10n.cut,
           onPressed: () async {
-            final text = _getSelectedText();
+            final text = controller.selectedText.isNotEmpty
+                ? controller.selectedText
+                : _getSelectedText();
             if (text.isNotEmpty) {
               await Clipboard.setData(ClipboardData(text: text));
               controller.replaceSelection('');
@@ -1336,7 +1345,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         ContextMenuButtonItem(
           label: l10n.copy,
           onPressed: () async {
-            final text = _getSelectedText();
+            final text = controller.selectedText.isNotEmpty
+                ? controller.selectedText
+                : _getSelectedText();
             if (text.isNotEmpty) {
               await Clipboard.setData(ClipboardData(text: text));
             } else {
@@ -1524,9 +1535,11 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       ),
     );
 
-    return AdaptiveTextSelectionToolbar.buttonItems(
-      anchors: anchors,
-      buttonItems: buttonItems,
+    return CodeEditorTapRegion(
+      child: AdaptiveTextSelectionToolbar.buttonItems(
+        anchors: anchors,
+        buttonItems: buttonItems,
+      ),
     );
   }
 
