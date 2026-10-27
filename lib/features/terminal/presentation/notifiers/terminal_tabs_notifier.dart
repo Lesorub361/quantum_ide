@@ -128,7 +128,8 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       Directory(sessionTmpDir).createSync(recursive: true);
 
       env['PROOT_TMP_DIR'] = sessionTmpDir;
-      env['PROOT_NO_SECCOMP'] = '1';
+      env.remove('PROOT_NO_SECCOMP');
+      env.remove('LD_PRELOAD');
       env['PWD'] = dir;
 
       if (workspace.currentPath != null) {

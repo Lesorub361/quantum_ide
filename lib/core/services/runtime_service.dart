@@ -150,9 +150,6 @@ class RuntimeService extends ChangeNotifier {
                 '-c',
                 command,
               ],
-              environment: {
-                'PROOT_NO_SECCOMP': '1',
-              },
             );
             
             final output = result.stdout.toString() + result.stderr.toString();
@@ -272,9 +269,6 @@ class RuntimeService extends ChangeNotifier {
       process = await Process.start(
         'sh',
         [initHost, _filesDir, guestCwd, '/bin/bash', '-c', command],
-        environment: {
-          'PROOT_NO_SECCOMP': '1',
-        },
       );
     } else {
       process = await Process.start(
@@ -816,7 +810,7 @@ term_fetch() {
     fi
 
     local CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "1")
-    local CPU_NAME=$(grep -m1 -E 'Hardware|model name|Processor' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs)
+    local CPU_NAME=$(grep -m1 -E 'Hardware|model name|Processor' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
     [ -z "$CPU_NAME" ] && CPU_NAME="ARM64 Processor"
 
     local MEM_USED_MB=0 MEM_TOTAL_MB=0 MEM_PERCENT=0
@@ -1114,7 +1108,7 @@ fi
 
 # 4. CPU Info
 CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "1")
-CPU_NAME=$(grep -m1 -E 'Hardware|model name|Processor' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs)
+CPU_NAME=$(grep -m1 -E 'Hardware|model name|Processor' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 [ -z "$CPU_NAME" ] && CPU_NAME="ARM64 Processor"
 
 # 5. RAM Usage
@@ -1283,12 +1277,12 @@ if [ ! -f "\$FILES_DIR/lib/libtalloc.so.2" ] && [ -f "\$PROOT_LIB_DIR/libtalloc.
     cp "\$PROOT_LIB_DIR/libtalloc.so" "\$FILES_DIR/lib/libtalloc.so.2"
 fi
 
-# Critical for Android 12+ / Linux 6.x kernels: Disable PRoot seccomp acceleration
-# to avoid "Function not implemented" (ENOSYS) errors on chmod, chdir, execve syscalls
-export PROOT_NO_SECCOMP=1
+unset LD_PRELOAD
+unset PROOT_NO_SECCOMP
 
 mkdir -p "\$TMPDIR"
 chmod 777 "\$TMPDIR" 2>/dev/null || true
+rm -rf "\$TMPDIR"/proot-* 2>/dev/null || true
 export PROOT_TMP_DIR="\$TMPDIR"
 export PROOT_LOADER="\$PROOT_LIB_DIR/libprootloader.so"
 export PROOT_LOADER_32="\$PROOT_LIB_DIR/libprootloader32.so"
@@ -1380,9 +1374,9 @@ if [ "\$GUEST_CWD" != "/root" ]; then
     esac
 fi
 
-ENV_BIN="/usr/bin/env"
-if [ ! -f "\$ROOTFS/usr/bin/env" ] && [ -f "\$ROOTFS/bin/env" ]; then
-    ENV_BIN="/bin/env"
+EXTERNAL_BIND=""
+if [ -d "/storage/emulated/0/QuantumIDE" ]; then
+    EXTERNAL_BIND="--bind=/storage/emulated/0/QuantumIDE:/root/projects/external"
 fi
 
 # shellcheck disable=SC2086
@@ -1406,15 +1400,23 @@ if [ \$# -gt 2 ]; then
         --bind="\$CONFIG/sys_fakes/empty:/sys/fs/selinux" \\
         --bind="\$FILES_DIR/projects:/root/projects" \\
         --bind="/storage/emulated/0:/sdcard" \\
-        --bind="/storage/emulated/0/QuantumIDE:/root/projects/external" \\
+        \$EXTERNAL_BIND \\
         --bind="\$FILES_DIR/tmp:/tmp" \\
         --bind="\$ROOTFS/tmp:/dev/shm" \\
-        \$BIND_OVERLAYS -0 "\$ENV_BIN" HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
-        JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
-        LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive \\
-        FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
-        LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib" \\
-        "\$@"
+        \$BIND_OVERLAYS -0 /bin/bash -c '
+            export HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp
+            export PATH="\$1" JAVA_HOME="\$2" ANDROID_HOME="\$3" ANDROID_SDK_ROOT="\$4"
+            export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+            export FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$5" _JAVA_OPTIONS="\$6"
+            export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
+            shift 6
+            if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
+                shift 2
+                eval "\$*"
+            else
+                exec "\$@"
+            fi
+        ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$GRADLE_OPTS" "\$_JAVA_OPTIONS" "\$@"
 else
     # Auto-setup ARM64 environment in background
     (
@@ -1422,8 +1424,7 @@ else
       "\$PROOT" \\
           --link2symlink -L \\
           --rootfs="\$ROOTFS" \\
-          -0 /usr/bin/env PATH="\$PATH" \\
-          /bin/bash /root/setup-arm64.sh
+          -0 /bin/bash -c 'PATH="\$1"; exec /bin/bash /root/setup-arm64.sh' dummy "\$PATH"
     ) >/dev/null 2>&1 &
 
     exec "\$PROOT" \\
@@ -1444,15 +1445,17 @@ else
         --bind="\$CONFIG/sys_fakes/empty:/sys/fs/selinux" \\
         --bind="\$FILES_DIR/projects:/root/projects" \\
         --bind="/storage/emulated/0:/sdcard" \\
-        --bind="/storage/emulated/0/QuantumIDE:/root/projects/external" \\
+        \$EXTERNAL_BIND \\
         --bind="\$FILES_DIR/tmp:/tmp" \\
         --bind="\$ROOTFS/tmp:/dev/shm" \\
-        \$BIND_OVERLAYS -0 /usr/bin/env HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
-        JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
-        LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive \\
-        FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
-        LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib" \\
-        /bin/bash --rcfile /root/.bashrc
+        \$BIND_OVERLAYS -0 /bin/bash -c '
+            export HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp
+            export PATH="\$1" JAVA_HOME="\$2" ANDROID_HOME="\$3" ANDROID_SDK_ROOT="\$4"
+            export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
+            export FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$5" _JAVA_OPTIONS="\$6"
+            export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
+            exec /bin/bash --rcfile /root/.bashrc
+        ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$GRADLE_OPTS" "\$_JAVA_OPTIONS"
 fi
 ''';
   }
@@ -1617,7 +1620,6 @@ fi
       'HOME': '/root',
       'TERM': 'xterm-256color',
       'COLORTERM': 'truecolor',
-      'PROOT_NO_SECCOMP': '1',
       'ANDROID_HOME': '/root/android-sdk',
       'ANDROID_SDK_ROOT': '/root/android-sdk',
       'PATH':

@@ -23,7 +23,6 @@ class ProcessManager(
 
     private fun prootEnv(): Map<String, String> = mapOf(
         "PROOT_TMP_DIR" to tmpDir,
-        "PROOT_NO_SECCOMP" to "1",
         "PROOT_LOADER" to "$nativeLibDir/libprootloader.so",
         "PROOT_LOADER_32" to "$nativeLibDir/libprootloader32.so",
         "LD_LIBRARY_PATH" to "$libDir:$nativeLibDir",

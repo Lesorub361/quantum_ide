@@ -32,14 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.85 - Самовосстановление Ubuntu rootfs (PRoot `Function not implemented`)
+        ## 🚀 QuantumIDE v1.2.86 - Полное устранение PRoot `ENOSYS` и прямой запуск команд через `/bin/bash`
 
-        ### 🩹 Реальная причина ошибки `execve("/usr/bin/env"): Function not implemented`:
-        - Воспроизведено на устройстве: PRoot отвечает именно так, когда в rootfs пропал ELF-интерпретатор `/lib/ld-linux-aarch64.so.1` (glibc arm64). Это происходило после прерванного `apt` с обновлением `libc6` (мультиархитектурный шаг `quantum-heal-x64` и пакет «Build Environment Fix» тянули `libc6:amd64`/`libc6`, а apt обновляет и родной arm64 libc6).
-        - **Автовосстановление при запуске**: IDE проверяет `/lib/ld-linux-aarch64.so.1` и `libc.so.6` в rootfs и, если они сломаны, скачивает официальный `libc6_2.31-0ubuntu9.18_arm64.deb` и распаковывает `/lib` на стороне Android (без запуска внутри rootfs).
-        - **Профилактика**: из `quantum-heal-x64` убран apt-multiarch (остался безопасный прямой `dpkg -x` x86_64 libc), из пакета «Build Environment Fix» убран `libc6`.
+        ### 🛡️ Устранение `Function not implemented` (ENOSYS) и `can't chmod` на Android 14 (Kernel 6.1):
+        - **Отказ от `PROOT_NO_SECCOMP=1` и очистка `LD_PRELOAD`**: Удаление принудительного отключения seccomp возвращает PRoot к штатному BPF-seccomp режиму. На Android 14 устаревший `PTRACE_SYSCALL` блокировался ядром, вызывая ошибку 38 (`ENOSYS`) на `chmod`, `chdir` и `execve`.
+        - **Автоочистка зависших сокетов PRoot (`rm -rf "$TMPDIR"/proot-*`)**: Перед стартом PRoot временная директория очищается от устаревших сокетов предыдущих сбойных сессий, исключая ошибку `proot error: can't chmod`.
+        - **Прямой запуск команд через `/bin/bash` (без `/usr/bin/env`)**: В скрипте `init-host` команды больше не оборачиваются в `/usr/bin/env`, исключая сбой вторичного `execve`. Команды `/bin/bash -c ...` исполняются напрямую внутри главного процесса оболочки без дочерних порождений.
+        - **Устранение `xargs: echo: Function not implemented`**: Команда сбора информации о процессоре в терминале переведена на `sed`, убирая ненужный вызов `xargs`.
+        - **Исправление `cd` в панелях Сборки и Запуска**: Пути проектов перед переходом теперь гарантированно нормализуются через `PathMapper.mapToGuest`, и целевая папка автоматически создаётся (`mkdir -p`), исключая сбой `bash: cd: ...: Function not implemented`.
 
-        ### (v1.2.84) PRoot ENOSYS Fix & Project Auto-Sync Reliability
+        ### (v1.2.85) Самовосстановление Ubuntu rootfs (PRoot `Function not implemented`)
 
         ### 🛡️ Устранение ошибки PRoot «Function not implemented» (ENOSYS) на Android 12/13/14 (Kernel 6.x):
         - **Отключение несовместимой SECCOMP-акселерации (`PROOT_NO_SECCOMP=1`)**: Ядро Android 14 блокирует системные вызовы через seccomp в дочерних процессах, что приводило к ошибкам `execve("/usr/bin/env"): Function not implemented`, `can't chmod: Function not implemented`, `can't chdir: Function not implemented`. Включение `PROOT_NO_SECCOMP=1` во всех точках запуска (`init-host`, `ProcessManager`, `TerminalTabs`, `DedicatedTerminal`) гарантирует стабильное выполнение системных вызовов через классический ptrace.

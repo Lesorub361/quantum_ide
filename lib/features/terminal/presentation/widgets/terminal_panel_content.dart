@@ -1218,8 +1218,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   void _runDedicatedCommand(DedicatedTerminalType type, String cmd) {
     final workspace = ref.read(workspaceProvider);
     final path = workspace.currentPath;
+    final runtime = ref.read(runtimeServiceProvider);
+    final guestPath = path != null ? PathMapper.mapToGuest(path, runtime.appDirectory) : null;
     
-    final cdCmd = path != null ? 'cd "$path"' : '';
+    final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
     final safeCmd = cmd.replaceAll('"', '\\"');
     final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m--------------------------------------------------\\033[0m\\n" "$safeCmd"';
     final fullCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';

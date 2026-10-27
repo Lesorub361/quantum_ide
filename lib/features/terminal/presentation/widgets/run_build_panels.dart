@@ -14,6 +14,8 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
 import 'package:quantum_ide/core/services/android_app_installer_service.dart';
 import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart';
+import 'package:quantum_ide/core/utils/path_mapper.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 // Standalone Sidebar Run Panel
@@ -71,7 +73,9 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
   }
 
   void _runDedicatedCommand(String? workspacePath, String cmd) {
-    final cdCmd = workspacePath != null ? 'cd "$workspacePath"' : '';
+    final runtime = ref.read(runtimeServiceProvider);
+    final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
+    final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
     final safeCmd = cmd.replaceAll('"', '\\"');
     final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
     final finalCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
@@ -577,7 +581,9 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   bool _showBeautifulLogs = false;
 
   void _runDedicatedCommand(String? workspacePath, String cmd) {
-    final cdCmd = workspacePath != null ? 'cd "$workspacePath"' : '';
+    final runtime = ref.read(runtimeServiceProvider);
+    final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
+    final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
     final safeCmd = cmd.replaceAll('"', '\\"');
     final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
     final finalCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
