@@ -32,6 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
+        ## 🚀 QuantumIDE v1.2.96 - Исправление компиляции сборки APK и импортов провайдеров
+
+        ### 🔧 Устранение ошибок компиляции в GitHub Actions:
+        - **Корректный статус `ProjectSyncStatus.idle` в `cancelSync()`**: Устранена ошибка `No named parameter with the name 'isSyncing'`.
+        - **Импорт `dart:io` в строке состояния (`StatusBar`)**: Предоставлен доступ к `pid` процесса в таблице Диспетчера задач.
+        - **Импорт `project_sync_service.dart` в панелях терминала**: Устранены ошибки `The getter 'projectSyncProvider' isn't defined` в `run_build_panels.dart` и `terminal_panel_content.dart`.
+
         ## 🚀 QuantumIDE v1.2.95 - Диспетчер задач в стиле Windows: мониторинг процессов, пакетов, нагрузки CPU и памяти ОЗУ
 
         ### 🖥️ Полноценный Диспетчер задач (Task Manager) в стиле Windows:

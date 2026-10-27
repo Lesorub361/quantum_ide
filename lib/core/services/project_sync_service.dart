@@ -114,7 +114,7 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     _currentHandle?.cancel();
     _currentHandle = null;
     if (state.isSyncing) {
-      state = state.copyWith(isSyncing: false, isPanelVisible: false);
+      state = state.copyWith(status: ProjectSyncStatus.idle, isPanelVisible: false);
     }
   }
 

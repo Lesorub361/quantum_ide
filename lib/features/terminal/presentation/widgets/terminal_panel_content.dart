@@ -10,6 +10,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/project_sync_service.dart';
 
 import 'package:xterm/xterm.dart' as xt;
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';

@@ -16,6 +16,7 @@ import 'package:quantum_ide/core/services/android_app_installer_service.dart';
 import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 // Standalone Sidebar Run Panel
