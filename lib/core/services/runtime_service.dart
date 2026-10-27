@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:archive/archive.dart' show TarDecoder, XZDecoder;
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -71,6 +72,11 @@ class RuntimeService extends ChangeNotifier {
 
         // 2. Always update scripts to ensure they have the latest fixes
         await _ensureBinaries();
+
+        // 3. Self-heal a rootfs whose arm64 glibc / ELF interpreter was destroyed
+        //    (e.g. an interrupted apt libc6 upgrade). Without it every PRoot start fails with
+        //    `execve("/usr/bin/env"): Function not implemented`.
+        await _repairGuestLibcIfBroken();
 
         final bool complete = await _channel.invokeMethod('isBootstrapComplete');
         if (complete) {
@@ -341,6 +347,147 @@ class RuntimeService extends ChangeNotifier {
     }, cancelOnError: false);
     return done.future;
   }
+
+  /// Size of [guestPath] inside the rootfs, following symlinks as the *guest* sees them
+  /// (absolute targets are resolved against the rootfs, not the Android filesystem).
+  /// Returns -1 when the file is missing or the link chain is broken.
+  int _guestFileSize(String rootfs, String guestPath) {
+    var current = guestPath;
+    for (var i = 0; i < 12; i++) {
+      final host = p.join(rootfs, current.substring(1));
+      final type = FileSystemEntity.typeSync(host, followLinks: false);
+      if (type == FileSystemEntityType.link) {
+        final target = Link(host).targetSync();
+        current = target.startsWith('/')
+            ? target
+            : p.normalize(p.join(p.dirname(current), target));
+        continue;
+      }
+      if (type == FileSystemEntityType.file) return File(host).lengthSync();
+      return -1;
+    }
+    return -1;
+  }
+
+  /// True when the native arm64 glibc of the Ubuntu rootfs is unusable. PRoot then reports
+  /// `execve("/usr/bin/env"): Function not implemented` for every command.
+  bool isGuestLibcBroken() {
+    if (!Platform.isAndroid) return false;
+    final rootfs = p.join(_filesDir, 'rootfs', 'ubuntu');
+    if (!Directory(rootfs).existsSync()) return false;
+    return _guestFileSize(rootfs, '/lib/ld-linux-aarch64.so.1') <= 0 ||
+        _guestFileSize(rootfs, '/lib/aarch64-linux-gnu/libc.so.6') <= 0;
+  }
+
+  bool _libcRepairRunning = false;
+
+  /// Restores `/lib` of the rootfs (ld-linux-aarch64.so.1, libc, libm, libpthread, …) from the
+  /// official Ubuntu 20.04 arm64 `libc6` package. Extraction is done on the Android side, so it
+  /// works even though nothing can be executed inside the broken rootfs.
+  Future<bool> _repairGuestLibcIfBroken() async {
+    if (_libcRepairRunning) return false;
+    try {
+      if (!isGuestLibcBroken()) return true;
+      _libcRepairRunning = true;
+      final rootfs = p.join(_filesDir, 'rootfs', 'ubuntu');
+      debugPrint('RuntimeService: guest glibc is broken, restoring libc6 (arm64)…');
+      _status = 'Восстановление системных библиотек (glibc)…';
+      notifyListeners();
+
+      const debName = 'libc6_2.31-0ubuntu9.18_arm64.deb';
+      final urls = [
+        'http://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/$debName',
+        'https://ports.ubuntu.com/ubuntu-ports/pool/main/g/glibc/$debName',
+        'http://mirrors.ustc.edu.cn/ubuntu-ports/pool/main/g/glibc/$debName',
+        'http://mirror.yandex.ru/ubuntu-ports/pool/main/g/glibc/$debName',
+      ];
+
+      List<int>? deb;
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(minutes: 3),
+      ));
+      for (final url in urls) {
+        try {
+          final res = await dio.get<List<int>>(
+            url,
+            options: Options(responseType: ResponseType.bytes),
+          );
+          if (res.statusCode == 200 && res.data != null && res.data!.length > 500000) {
+            deb = res.data;
+            break;
+          }
+        } catch (e) {
+          debugPrint('RuntimeService: libc6 download failed from $url: $e');
+        }
+      }
+      if (deb == null) {
+        _status = 'Не удалось скачать libc6 (нужен интернет)';
+        notifyListeners();
+        return false;
+      }
+
+      // .deb = `ar` archive: "!<arch>\n" + [60-byte header + body (+1 pad byte if odd)]…
+      List<int>? dataTarXz;
+      var pos = 8;
+      while (pos + 60 <= deb.length) {
+        final name = ascii.decode(deb.sublist(pos, pos + 16), allowInvalid: true).trim();
+        final size = int.parse(ascii.decode(deb.sublist(pos + 48, pos + 58)).trim());
+        pos += 60;
+        if (name.startsWith('data.tar.xz')) {
+          dataTarXz = deb.sublist(pos, pos + size);
+          break;
+        }
+        pos += size + (size & 1);
+      }
+      if (dataTarXz == null) {
+        debugPrint('RuntimeService: data.tar.xz not found in $debName');
+        return false;
+      }
+
+      final archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(dataTarXz));
+      var restored = 0;
+      for (final entry in archive) {
+        final rel = entry.name.replaceFirst(RegExp(r'^\./'), '');
+        if (!rel.startsWith('lib/') || rel.contains('..')) continue;
+        final dest = p.join(rootfs, rel);
+        if (!entry.isFile && !entry.isSymbolicLink) {
+          await Directory(dest).create(recursive: true);
+          continue;
+        }
+        await Directory(p.dirname(dest)).create(recursive: true);
+        if (entry.isSymbolicLink) {
+          final existing = FileSystemEntity.typeSync(dest, followLinks: false);
+          if (existing == FileSystemEntityType.link) {
+            await Link(dest).delete();
+          } else if (existing == FileSystemEntityType.file) {
+            await File(dest).delete();
+          }
+          await Link(dest).create(entry.symbolicLink!);
+        } else {
+          if (FileSystemEntity.typeSync(dest, followLinks: false) == FileSystemEntityType.link) {
+            await Link(dest).delete();
+          }
+          await File(dest).writeAsBytes(entry.content as List<int>, flush: true);
+          await Process.run('chmod', [(entry.mode & 0x40) != 0 ? '755' : '644', dest]);
+        }
+        restored++;
+      }
+      debugPrint('RuntimeService: restored $restored glibc entries');
+      final ok = !isGuestLibcBroken();
+      _status = ok ? 'Системные библиотеки восстановлены' : 'Не удалось восстановить glibc';
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      debugPrint('RuntimeService: glibc repair failed: $e');
+      return false;
+    } finally {
+      _libcRepairRunning = false;
+    }
+  }
+
+  /// Public entry point (used by the "Repair environment" action).
+  Future<bool> repairGuestLibc() => _repairGuestLibcIfBroken();
 
   Future<void> _prepareFileSystem() async {
     try {
@@ -1911,20 +2058,12 @@ if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
     done
 fi
 
-# 3. If direct extraction didn't work, configure multiarch apt
-if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
-    export DEBIAN_FRONTEND=noninteractive
-    dpkg --add-architecture amd64 2>/dev/null || true
-    if ! grep -q '\[arch=' /etc/apt/sources.list 2>/dev/null; then
-        sed -i 's/^deb http/deb [arch=arm64] http/g' /etc/apt/sources.list 2>/dev/null || true
-        sed -i 's/^deb-src http/deb-src [arch=arm64] http/g' /etc/apt/sources.list 2>/dev/null || true
-    fi
-    if ! grep -q 'archive.ubuntu.com' /etc/apt/sources.list 2>/dev/null; then
-        printf "\ndeb [arch=amd64] http://archive.ubuntu.com/ubuntu/ focal main restricted universe\ndeb [arch=amd64] http://archive.ubuntu.com/ubuntu/ focal-updates main restricted universe\ndeb [arch=amd64] http://security.ubuntu.com/ubuntu/ focal-security main restricted universe\n" >> /etc/apt/sources.list
-    fi
-    apt-get update -o Acquire::Retries=2 2>/dev/null || true
-    apt-get install -y --no-install-recommends libc6:amd64 libstdc++6:amd64 2>/dev/null || true
-fi
+# 3. NOTE: the apt multiarch route (dpkg --add-architecture amd64 + apt install libc6:amd64)
+# was removed on purpose. libc6 is Multi-Arch: same, so apt also upgrades the native arm64
+# libc6 (incl. /lib/ld-linux-aarch64.so.1). When that dpkg run is interrupted (--kill-on-exit,
+# Android LMK, closed dialog) the whole rootfs stops working:
+#   proot error: execve("/usr/bin/env"): Function not implemented
+# Direct .deb extraction above never touches the arm64 libc.
 
 # 4. Ensure QEMU user static is installed
 if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
