@@ -222,13 +222,31 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     final updatedProblems = List<String>.from(state.problems);
     final updatedAppLogs = List<String>.from(state.appLogs);
 
-    // Check for problems / errors
-    final lower = trimmed.toLowerCase();
-    if (isError ||
-        lower.contains('error:') ||
-        lower.contains('failed') ||
-        lower.contains('exception:') ||
-        lower.contains('fatal:')) {
+    // Filter out standard harmless warnings and progress spinners written to stderr
+    final isHarmlessNotice = lower.contains('woah! you appear to be trying to run flutter as root') ||
+        lower.contains('we strongly recommend running the flutter tool without superuser privileges') ||
+        lower == '/' ||
+        lower == '📎' ||
+        lower == '|' ||
+        lower == '-' ||
+        lower == '\\' ||
+        lower.contains('picked up _java_options') ||
+        lower.contains('resolving dependencies') ||
+        lower.contains('downloading') ||
+        lower.contains('got dependencies') ||
+        lower.contains('running gradle task') ||
+        lower.contains('caching disabled for');
+
+    // Only actual fatal errors and exceptions count as problems
+    final isActualError = !isHarmlessNotice &&
+        (lower.contains('error:') ||
+            lower.contains('failed:') ||
+            lower.startsWith('error ') ||
+            lower.contains('build failed') ||
+            lower.contains('exception:') ||
+            lower.contains('fatal:'));
+
+    if (isActualError) {
       updatedProblems.add(trimmed);
       updatedAppLogs.add('[Problem] $trimmed');
     }

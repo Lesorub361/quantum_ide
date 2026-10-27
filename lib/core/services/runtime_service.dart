@@ -731,7 +731,8 @@ export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
 
 # Ensure output newline translates to CR+NL (eliminates staircase prompt in terminals)
-stty sane onlcr 2>/dev/null || true
+stty sane onlcr icrnl opost 2>/dev/null || true
+shopt -s checkwinsize 2>/dev/null || true
 
 # Zero-fork pure-bash git branch prompt (avoids expensive `git status` across 3000+ files in PRoot)
 __git_info() {
@@ -739,10 +740,10 @@ __git_info() {
         local head_ref
         read -r head_ref < ".git/HEAD" 2>/dev/null || return
         local branch="${head_ref#ref: refs/heads/}"
-        printf " \001\033[35m\002git:(\001\033[1;31m\002%s\001\033[0m\033[35m\002)\001\033[0m\002" "$branch"
+        printf " \[\033[35m\]git:(\[\033[1;31m\]%s\[\033[0m\033[35m\])\[\033[0m\]" "$branch"
     fi
 }
-export PS1="\[\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;34m\]\$ \[\e[0m\]"
+export PS1="\[\r\e[K\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;34m\]\$ \[\e[0m\]"
 
 export FLUTTER_ALLOW_SU_ROOT=true
 export FLUTTER_SUPPRESS_ANALYTICS=true
