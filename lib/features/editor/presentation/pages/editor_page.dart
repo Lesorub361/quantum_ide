@@ -43,6 +43,8 @@ import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/project_requirements_service.dart';
 import 'package:quantum_ide/shared/widgets/project_requirements_dialog.dart';
 import 'package:quantum_ide/core/services/app_update_service.dart';
+import 'package:quantum_ide/core/services/project_sync_service.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/project_sync_panel.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 
 
@@ -263,6 +265,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       final currentWs = ref.read(workspaceProvider).currentPath;
       if (currentWs != null) {
         _checkProjectRequirements(currentWs);
+        ref.read(projectSyncProvider.notifier).startSync(currentWs);
       }
     });
   }
@@ -304,6 +307,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
     // Автопроверка необходимых пакетов для проекта
     _checkProjectRequirements(workspacePath);
+
+    // Авто-синхронизация проекта при открытии (как на скриншотах)
+    ref.read(projectSyncProvider.notifier).startSync(workspacePath);
 
     // Показываем уведомление об автонастройке .gitignore
     if (mounted) {
@@ -628,6 +634,22 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     )
                   : const SizedBox.shrink(),
             ),
+
+            // ── Плавающий баннер синхронизации проекта (Синхронизация проекта...) ────
+            const Positioned(
+              top: 14,
+              left: 0,
+              right: 0,
+              child: ProjectSyncFloatingBanner(),
+            ),
+
+            // ── Панель синхронизации проекта снизу (Вывод / Проблемы / Логи) ────
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: ProjectSyncOutputPanel(),
+            ),
           ],
         );
       },
@@ -885,6 +907,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ),
                               onSelected: (value) async {
                                 switch (value) {
+                                  case 'sync':
+                                    final currentWs = ref.read(workspaceProvider).currentPath;
+                                    if (currentWs != null) {
+                                      ref.read(projectSyncProvider.notifier).startSync(currentWs, force: true);
+                                    }
+                                    break;
                                   case 'chat':
                                     ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                                     break;
@@ -897,6 +925,17 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 }
                               },
                               itemBuilder: (context) => [
+                                const PopupMenuItem(
+                                  value: 'sync',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
+                                      SizedBox(width: 10),
+                                      Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
                                 PopupMenuItem(
                                   value: 'chat',
                                   child: Row(
