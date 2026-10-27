@@ -134,14 +134,20 @@ class RuntimeService extends ChangeNotifier {
                 ? PathMapper.mapToGuest(workingDirectory, _filesDir)
                 : '/root';
             debugPrint('RuntimeService: Running command via init-host: $command in $guestCwd');
-            final result = await Process.run('sh', [
-              initHost,
-              _filesDir,
-              guestCwd,
-              '/bin/bash',
-              '-c',
-              command,
-            ]);
+            final result = await Process.run(
+              'sh',
+              [
+                initHost,
+                _filesDir,
+                guestCwd,
+                '/bin/bash',
+                '-c',
+                command,
+              ],
+              environment: {
+                'PROOT_NO_SECCOMP': '1',
+              },
+            );
             
             final output = result.stdout.toString() + result.stderr.toString();
             if (result.exitCode != 0) {
@@ -257,7 +263,13 @@ class RuntimeService extends ChangeNotifier {
       final guestCwd = workingDirectory != null
           ? PathMapper.mapToGuest(workingDirectory, _filesDir)
           : '/root';
-      process = await Process.start('sh', [initHost, _filesDir, guestCwd, '/bin/bash', '-c', command]);
+      process = await Process.start(
+        'sh',
+        [initHost, _filesDir, guestCwd, '/bin/bash', '-c', command],
+        environment: {
+          'PROOT_NO_SECCOMP': '1',
+        },
+      );
     } else {
       process = await Process.start(
         Platform.isWindows ? 'cmd' : 'bash',
@@ -1124,7 +1136,12 @@ if [ ! -f "\$FILES_DIR/lib/libtalloc.so.2" ] && [ -f "\$PROOT_LIB_DIR/libtalloc.
     cp "\$PROOT_LIB_DIR/libtalloc.so" "\$FILES_DIR/lib/libtalloc.so.2"
 fi
 
+# Critical for Android 12+ / Linux 6.x kernels: Disable PRoot seccomp acceleration
+# to avoid "Function not implemented" (ENOSYS) errors on chmod, chdir, execve syscalls
+export PROOT_NO_SECCOMP=1
+
 mkdir -p "\$TMPDIR"
+chmod 777 "\$TMPDIR" 2>/dev/null || true
 export PROOT_TMP_DIR="\$TMPDIR"
 export PROOT_LOADER="\$PROOT_LIB_DIR/libprootloader.so"
 export PROOT_LOADER_32="\$PROOT_LIB_DIR/libprootloader32.so"
@@ -1190,6 +1207,37 @@ if [ -d /proc/self/fd ]; then
     FD_BINDS="--bind=/proc/self/fd:/dev/fd"
 fi
 
+# Ensure guest cwd exists on host or fallback to /root
+if [ "\$GUEST_CWD" != "/root" ]; then
+    case "\$GUEST_CWD" in
+        /root/projects/*)
+            REL_P="\${GUEST_CWD#/root/projects/}"
+            mkdir -p "\$FILES_DIR/projects/\$REL_P" 2>/dev/null || true
+            ;;
+        /root/projects)
+            mkdir -p "\$FILES_DIR/projects" 2>/dev/null || true
+            ;;
+        /sdcard/*)
+            REL_S="\${GUEST_CWD#/sdcard/}"
+            mkdir -p "/storage/emulated/0/\$REL_S" 2>/dev/null || true
+            ;;
+        /root/projects/external/*)
+            REL_E="\${GUEST_CWD#/root/projects/external/}"
+            mkdir -p "/storage/emulated/0/QuantumIDE/\$REL_E" 2>/dev/null || true
+            ;;
+        *)
+            if [ ! -d "\$ROOTFS\$GUEST_CWD" ]; then
+                GUEST_CWD="/root"
+            fi
+            ;;
+    esac
+fi
+
+ENV_BIN="/usr/bin/env"
+if [ ! -f "\$ROOTFS/usr/bin/env" ] && [ -f "\$ROOTFS/bin/env" ]; then
+    ENV_BIN="/bin/env"
+fi
+
 # shellcheck disable=SC2086
 if [ \$# -gt 2 ]; then
     shift 2
@@ -1214,7 +1262,7 @@ if [ \$# -gt 2 ]; then
         --bind="/storage/emulated/0/QuantumIDE:/root/projects/external" \\
         --bind="\$FILES_DIR/tmp:/tmp" \\
         --bind="\$ROOTFS/tmp:/dev/shm" \\
-        \$BIND_OVERLAYS -0 /usr/bin/env HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
+        \$BIND_OVERLAYS -0 "\$ENV_BIN" HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp PATH="\$PATH" \\
         JAVA_HOME="\$JAVA_HOME" ANDROID_HOME="\$ANDROID_HOME" ANDROID_SDK_ROOT="\$ANDROID_SDK_ROOT" \\
         LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive \\
         FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$GRADLE_OPTS" _JAVA_OPTIONS="\$_JAVA_OPTIONS" \\
@@ -1422,6 +1470,7 @@ fi
       'HOME': '/root',
       'TERM': 'xterm-256color',
       'COLORTERM': 'truecolor',
+      'PROOT_NO_SECCOMP': '1',
       'ANDROID_HOME': '/root/android-sdk',
       'ANDROID_SDK_ROOT': '/root/android-sdk',
       'PATH':

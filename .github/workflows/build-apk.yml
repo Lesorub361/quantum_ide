@@ -32,7 +32,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.82 - Flutter AOT Release Fix (x86_64 GLIBC), Project Auto-Sync & Editor Selection Fixes
+        ## 🚀 QuantumIDE v1.2.84 - PRoot ENOSYS (Function not implemented) Fix & Project Auto-Sync Reliability
+
+        ### 🛡️ Устранение ошибки PRoot «Function not implemented» (ENOSYS) на Android 12/13/14 (Kernel 6.x):
+        - **Отключение несовместимой SECCOMP-акселерации (`PROOT_NO_SECCOMP=1`)**: Ядро Android 14 блокирует системные вызовы через seccomp в дочерних процессах, что приводило к ошибкам `execve("/usr/bin/env"): Function not implemented`, `can't chmod: Function not implemented`, `can't chdir: Function not implemented`. Включение `PROOT_NO_SECCOMP=1` во всех точках запуска (`init-host`, `ProcessManager`, `TerminalTabs`, `DedicatedTerminal`) гарантирует стабильное выполнение системных вызовов через классический ptrace.
+        - **Гарантированное создание рабочих директорий перед `chdir`**: В `init-host` добавлена авто-проверка и создание путей (`/root/projects/...`, `/sdcard/...`) до передачи управления PRoot `--cwd`.
+        - **Авто-определение пути к `env`**: Динамический выбор `/usr/bin/env` или `/bin/env` для надежности запуска фоновых команд и скриптов.
+
+        ### 🔄 Надежность авто-синхронизации проектов (Auto-Sync) и Gradle:
+        - **Устранение «Ошибка синхронизации (код -9)»**: Отмена предыдущего процесса или смена вкладки больше не выдает ложное сообщение об ошибке.
+        - **Безопасные параметры запуска Gradle**: В команду проверки Gradle добавлены `--no-daemon -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1` для предотвращения вылета по памяти (OOM / SIGKILL -9).
+        - **Стабильная установка исправлений из менеджера пакетов**: Установка «Flutter Release APK Fix (x86_64 GLIBC)» и «Build Environment Fix» теперь отрабатывает штатно.
 
         ### 🛠 Исправление ошибки Release сборки Flutter (`/lib64/ld-linux-x86-64.so.2: No such file or directory`):
         - **Автоматическая установка x86_64 glibc и динамического загрузчика (`quantum-heal-x64`)**: Настроена мультиархитектурная поддержка `amd64` и автоматическая распаковка `libc6:amd64` и `libstdc++6:amd64` для QEMU.

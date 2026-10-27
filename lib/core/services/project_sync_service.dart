@@ -129,7 +129,8 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     } else if (hasGradle) {
       detectedType = 'gradle';
       initialStep = 'Синхронизация Gradle и плагинов...';
-      command = 'if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --dry-run; else gradle --dry-run; fi';
+      command =
+          'if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 --dry-run; else gradle --no-daemon -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 --dry-run; fi';
     } else if (hasPackageJson) {
       detectedType = 'node';
       initialStep = 'Проверка npm зависимостей...';
@@ -229,6 +230,12 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
 
   void _onSyncFinished(int exitCode) {
     if (!mounted) return;
+
+    // Ignore cancelled syncs (e.g. project switched, sync retriggered, or SIGKILL/SIGINT)
+    if (_currentHandle?.isCancelled == true || exitCode == -9 || exitCode == 130) {
+      LogService.log('ProjectSync: ignored exit code $exitCode (cancelled)');
+      return;
+    }
 
     final isSuccess = exitCode == 0;
     final finishMsg = isSuccess
