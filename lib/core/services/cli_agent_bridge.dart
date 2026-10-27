@@ -102,16 +102,18 @@ class CliAgentBridge {
         final f = File(candidate);
         if (f.existsSync()) return candidate;
       } else {
-        try {
-          final res = Process.runSync(
-            PlatformUtils.whichCommand,
-            [candidate],
-            runInShell: Platform.isWindows,
-          );
-          if (res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty) {
-            return res.stdout.toString().trim().split('\n').first.trim();
-          }
-        } catch (_) {}
+        if (!Platform.isAndroid && !Platform.isIOS) {
+          try {
+            final res = Process.runSync(
+              PlatformUtils.whichCommand,
+              [candidate],
+              runInShell: Platform.isWindows,
+            );
+            if (res.exitCode == 0 && res.stdout.toString().trim().isNotEmpty) {
+              return res.stdout.toString().trim().split('\n').first.trim();
+            }
+          } catch (_) {}
+        }
       }
     }
 

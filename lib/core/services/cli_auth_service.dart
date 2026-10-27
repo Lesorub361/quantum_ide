@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
+import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
 enum AntigravityAuthStatus {
   signedOut,
@@ -164,6 +166,8 @@ String? _extractSignedInEmail(String output) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class CliAuthNotifier extends StateNotifier<CliAuthState> {
+  final RuntimeService _runtime;
+  final Ref _ref;
   Process? _authProcess;
   StreamSubscription? _authStdoutSub;
   StreamSubscription? _authStderrSub;
@@ -177,18 +181,23 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
   bool _privacyScreenCompleted = false;
   bool _workspaceTrustCompleted = false;
 
-  CliAuthNotifier() : super(const CliAuthState()) {
+  CliAuthNotifier(this._runtime, this._ref) : super(const CliAuthState()) {
     loadAuthInfo();
   }
 
   List<String> get _candidateHomeDirs {
     final dirs = <String>{};
+    if (_runtime.filesDir.isNotEmpty) {
+      dirs.add(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'root'));
+      dirs.add(_runtime.filesDir);
+    }
     if (Platform.environment['HOME'] != null && Platform.environment['HOME']!.isNotEmpty) {
       dirs.add(Platform.environment['HOME']!);
     }
     dirs.add('/root');
     dirs.add('/data/user/0/com.example.quantum_ide/files/rootfs/ubuntu/root');
     dirs.add('/data/data/com.example.quantum_ide/files/rootfs/ubuntu/root');
+    dirs.add('/data/user/0/com.example.quantum_ide/files');
     dirs.add('/data/user/0/com.example.quantum_ide');
     dirs.add('/data/data/com.example.quantum_ide');
     dirs.add('/sdcard');
@@ -399,7 +408,7 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
 
       // On Linux/Desktop: try launching interactive desktop terminal where browser OAuth works natively
       bool launchedDesktopTerminal = false;
-      if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+      if (!Platform.isAndroid && !Platform.isIOS && (Platform.isLinux || Platform.isMacOS || Platform.isWindows)) {
         final termCmds = [
           ['deepin-terminal', '-e', agyPath],
           ['x-terminal-emulator', '-e', agyPath],
@@ -436,11 +445,35 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
       env['TERM'] = 'xterm-256color';
       env['NO_COLOR'] = '1';
 
-      _authProcess = await Process.start(
-        agyPath,
-        [],
-        environment: env,
-      );
+      if (Platform.isAndroid || Platform.isIOS) {
+        final initHost = p.join(_runtime.filesDir, 'bin', 'init-host');
+        if (Platform.isAndroid && File(initHost).existsSync()) {
+          _authProcess = await Process.start(
+            'sh',
+            [
+              initHost,
+              _runtime.filesDir,
+              '/root',
+              '/bin/bash',
+              '-c',
+              'export SSH_CONNECTION="127.0.0.1 1 127.0.0.1 1" TERM="xterm-256color" NO_COLOR="1"; agy',
+            ],
+            environment: env,
+          );
+        } else {
+          _authProcess = await Process.start(
+            agyPath,
+            [],
+            environment: env,
+          );
+        }
+      } else {
+        _authProcess = await Process.start(
+          agyPath,
+          [],
+          environment: env,
+        );
+      }
 
       final outputBuffer = StringBuffer();
 
@@ -589,6 +622,12 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
   }
 
   Future<void> launchInteractiveTerminal() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      _ref.read(terminalTabsProvider.notifier).sendCommand('agy', createNewTab: true);
+      _startGoogleAccountsPolling();
+      return;
+    }
+
     final candidates = [
       p.join(_homeDir, '.local', 'bin', 'agy'),
       '/usr/local/bin/agy',
@@ -739,22 +778,33 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
   Future<void> syncAntigravityModels() async {
     state = state.copyWith(isAntigravityModelsLoading: true);
     try {
-      final candidates = [
-        p.join(_homeDir, '.local', 'bin', 'agy'),
-        '/usr/local/bin/agy',
-        'agy',
-      ];
-      String agyPath = 'agy';
-      for (final c in candidates) {
-        if (File(c).existsSync()) {
-          agyPath = c;
-          break;
+      String stdoutOutput = '';
+      if (Platform.isAndroid || Platform.isIOS) {
+        try {
+          stdoutOutput = await _runtime.runCommand('agy models');
+        } catch (_) {}
+      } else {
+        final candidates = [
+          p.join(_homeDir, '.local', 'bin', 'agy'),
+          '/usr/local/bin/agy',
+          'agy',
+        ];
+        String agyPath = 'agy';
+        for (final c in candidates) {
+          if (File(c).existsSync()) {
+            agyPath = c;
+            break;
+          }
+        }
+
+        final res = await Process.run(agyPath, ['models']);
+        if (res.exitCode == 0) {
+          stdoutOutput = res.stdout.toString();
         }
       }
 
-      final res = await Process.run(agyPath, ['models']);
-      if (res.exitCode == 0 && res.stdout.toString().isNotEmpty) {
-        final lines = res.stdout.toString().split('\n');
+      if (stdoutOutput.isNotEmpty) {
+        final lines = stdoutOutput.split('\n');
         final models = <String>[];
         for (final l in lines) {
           final trimmed = l.trim();
@@ -826,5 +876,6 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
 
 final cliAuthProvider =
     StateNotifierProvider<CliAuthNotifier, CliAuthState>((ref) {
-  return CliAuthNotifier();
+  final runtime = ref.watch(runtimeServiceProvider);
+  return CliAuthNotifier(runtime, ref);
 });

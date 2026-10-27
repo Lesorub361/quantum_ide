@@ -616,6 +616,9 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
                     children: [
                       OutlinedButton.icon(
                         onPressed: () {
+                          if (Platform.isAndroid || Platform.isIOS) {
+                            Navigator.of(context).pop();
+                          }
                           ref.read(cliAuthProvider.notifier).launchInteractiveTerminal();
                         },
                         icon: const Icon(LucideIcons.terminal, size: 14),
@@ -744,6 +747,9 @@ class _CliAgentSettingsDialogState extends ConsumerState<CliAgentSettingsDialog>
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
                         onPressed: () {
+                          if (Platform.isAndroid || Platform.isIOS) {
+                            Navigator.of(context).pop();
+                          }
                           ref.read(cliAuthProvider.notifier).launchInteractiveTerminal();
                         },
                         icon: const Icon(LucideIcons.terminal, size: 14),

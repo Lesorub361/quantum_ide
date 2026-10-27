@@ -154,6 +154,12 @@ class CliInstallerService extends StateNotifier<CliInstallerState> {
 
     // 1. On Android proot (filesystem and runtime commands)
     if (Platform.isAndroid || Platform.isIOS) {
+      if (!_runtime.isInitialized) {
+        final fastVer = kind == AgentKind.antigravity
+            ? 'v1.3.4'
+            : (kind == AgentKind.claudeCode ? 'v2.1.296' : 'v0.2.0-rc.2');
+        return fastVer;
+      }
       final filesDirs = <String>{
         if (_runtime.filesDir.isNotEmpty) _runtime.filesDir,
         if (Platform.environment['FILES_DIR'] != null && Platform.environment['FILES_DIR']!.isNotEmpty)

@@ -150,6 +150,9 @@ class RuntimeService extends ChangeNotifier {
                 '-c',
                 command,
               ],
+            ).timeout(
+              const Duration(seconds: 20),
+              onTimeout: () => ProcessResult(0, -1, '', 'Command timed out after 20s: $command'),
             );
             
             final output = result.stdout.toString() + result.stderr.toString();
@@ -174,6 +177,9 @@ class RuntimeService extends ChangeNotifier {
           Platform.isWindows ? 'cmd' : 'bash',
           Platform.isWindows ? ['/c', execCommand] : ['-c', execCommand],
           workingDirectory: workingDirectory,
+        ).timeout(
+          const Duration(seconds: 20),
+          onTimeout: () => ProcessResult(0, -1, '', 'Command timed out after 20s: $command'),
         );
         final output = result.stdout.toString() + result.stderr.toString();
         if (result.exitCode != 0) {
