@@ -2074,6 +2074,8 @@ mkdir -p /lib64 2>/dev/null || true
 
 # 1. Quick check: already functional?
 if [ -f /lib/x86_64-linux-gnu/libc.so.6 ] && [ -f /lib64/ld-linux-x86-64.so.2 ]; then
+    echo "[quantum-heal-x64] ✓ x86_64 dynamic linker and glibc runtime already configured."
+    touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
     exit 0
 fi
 
@@ -2119,6 +2121,7 @@ fi
 
 if [ -f /lib64/ld-linux-x86-64.so.2 ]; then
     ln -sf /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 2>/dev/null || true
+    touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
     echo "[quantum-heal-x64] ✓ x86_64 dynamic linker and glibc runtime successfully ready."
 else
     echo "[quantum-heal-x64] Warning: /lib64/ld-linux-x86-64.so.2 still missing."

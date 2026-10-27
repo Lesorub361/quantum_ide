@@ -363,6 +363,14 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               final hasAapt = await hasCmd('aapt') || await hasCmd('aapt2');
               exists = await marker.exists() || await rootMarker.exists() || hasAapt || installedIds.contains('build-fix');
               break;
+            case 'flutter-release-fix':
+              final homeDir = Platform.environment['HOME'] ?? '/root';
+              final marker = File(p.join(homeDir, '.quantum_flutter_release_fix_installed'));
+              final rootMarker = File('/root/.quantum_flutter_release_fix_installed');
+              final hasLd = await File('/lib64/ld-linux-x86-64.so.2').exists() ||
+                  await File('/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2').exists();
+              exists = await marker.exists() || await rootMarker.exists() || hasLd || installedIds.contains('flutter-release-fix');
+              break;
             case 'box64-emulator':
               exists = await hasCmd('box64') ||
                   await File('/usr/local/bin/box64').exists() ||
@@ -544,6 +552,13 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               final hasAapt = await hasRootfsBin('aapt') || await hasRootfsBin('aapt2');
               exists = (await marker.exists()) || hasAapt || installedIds.contains('build-fix');
               break;
+            case 'flutter-release-fix':
+              final marker = File(p.join(rootfsPath, 'root', '.quantum_flutter_release_fix_installed'));
+              final hasLd = await hasRootfsEntity(p.join('lib64', 'ld-linux-x86-64.so.2')) ||
+                  await hasRootfsEntity(p.join('lib', 'x86_64-linux-gnu', 'ld-linux-x86-64.so.2')) ||
+                  await hasRootfsEntity(p.join('lib', 'x86_64-linux-gnu', 'libc.so.6'));
+              exists = (await marker.exists()) || hasLd || installedIds.contains('flutter-release-fix');
+              break;
             case 'box64-emulator':
               exists = await hasRootfsBin('box64') ||
                   await File(p.join(rootfsPath, 'usr', 'local', 'bin', 'box64')).exists() ||
@@ -638,6 +653,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
           if (installedIds.contains(pkg.id) &&
               (pkg.id == 'build-clean' ||
                   pkg.id == 'build-fix' ||
+                  pkg.id == 'flutter-release-fix' ||
                   pkg.id == 'box64-emulator' ||
                   pkg.id == 'vulkan-graphics' ||
                   pkg.id == 'antigravity-cli' ||
