@@ -462,8 +462,24 @@ class RuntimeService extends ChangeNotifier {
           }
         } catch (_) {}
       }
+      final healX64Script = _generateQuantumHealX64Script().replaceAll('\r', '');
+      final healX64Targets = [
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'quantum-heal-x64'),
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'quantum-heal-x64'),
+        '/usr/local/bin/quantum-heal-x64',
+        '/usr/bin/quantum-heal-x64',
+      ];
+      for (final targetPath in healX64Targets) {
+        try {
+          final f = File(targetPath);
+          if (await f.parent.exists()) {
+            await f.writeAsString(healX64Script);
+            await Process.run('chmod', ['755', targetPath]);
+          }
+        } catch (_) {}
+      }
     } catch (e) {
-      debugPrint('Warning: Failed to write setup-arm64.sh / quantum-patch-ndk: $e');
+      debugPrint('Warning: Failed to write setup-arm64.sh / quantum-patch-ndk / quantum-heal-x64: $e');
     }
 
     try {
@@ -1748,10 +1764,34 @@ for fl_dir in "${FLUTTER_ROOT:-/root/flutter}" "$HOME/flutter" "/root/flutter"; 
             ) 2>/dev/null || true
         fi
 
+        # Auto-heal x86_64 glibc if missing
+        if [ ! -f /lib64/ld-linux-x86-64.so.2 ] && [ ! -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+            if [ -x /usr/local/bin/quantum-heal-x64 ]; then
+                /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+            fi
+        fi
+
         cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
 X64_SNAP="$DIR/../../$(basename "$(dirname "$DIR")")/linux-x64/gen_snapshot"
+
+# Fast sanity check for ld-linux-x86-64.so.2
+if [ ! -f /lib64/ld-linux-x86-64.so.2 ] && [ ! -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+    if [ -x /usr/local/bin/quantum-heal-x64 ]; then
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+    fi
+fi
+
+if [ ! -f /lib64/ld-linux-x86-64.so.2 ]; then
+    mkdir -p /lib64 2>/dev/null || true
+    if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+        ln -sf /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
+    elif [ -f /lib/x86_64-linux-gnu/ld-2.31.so ]; then
+        ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
+    fi
+fi
+
 EMU=""
 if [ -x /usr/bin/qemu-x86_64-static ]; then
     EMU="/usr/bin/qemu-x86_64-static"
@@ -1772,7 +1812,12 @@ done
 
 if [ -n "$EMU" ] && [ -f "$X64_SNAP" ]; then
     chmod +x "$X64_SNAP" 2>/dev/null || true
-    exec "$EMU" "$X64_SNAP" "${ARGS[@]}"
+    export QEMU_LD_PREFIX=/
+    if [[ "$EMU" == *"qemu-x86_64-static"* ]]; then
+        exec "$EMU" -L / "$X64_SNAP" "${ARGS[@]}"
+    else
+        exec "$EMU" "$X64_SNAP" "${ARGS[@]}"
+    fi
 fi
 
 if [ -f "$DIR/gen_snapshot.real" ]; then
@@ -1782,6 +1827,76 @@ WRAP_GS
         chmod +x "$ENGINE_DIR/gen_snapshot"
     done
 done
+''';
+
+  }
+
+  String _generateQuantumHealX64Script() {
+    return r'''#!/bin/bash
+# quantum-heal-x64: Auto-heals x86_64 glibc libraries and ld-linux-x86-64.so.2 dynamic linker
+# on ARM64 Linux / PRoot so QEMU / Box64 can execute Flutter's official gen_snapshot for release APKs.
+
+mkdir -p /lib64 2>/dev/null || true
+
+# 1. Quick check: already functional?
+if [ -f /lib/x86_64-linux-gnu/libc.so.6 ] && [ -f /lib64/ld-linux-x86-64.so.2 ]; then
+    exit 0
+fi
+
+echo "[quantum-heal-x64] Setting up x86_64 dynamic linker & glibc runtime for Flutter release builds..."
+
+# 2. Try fast direct deb extraction of libc6:amd64 if missing
+if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
+    DEB_DIR="/tmp/libc6_x64_download"
+    mkdir -p "$DEB_DIR" 2>/dev/null || true
+    for deb_url in \
+        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9.18_amd64.deb" \
+        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9_amd64.deb" \
+        "http://security.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9.18_amd64.deb"; do
+        if curl -fsSL --retry 2 "$deb_url" -o "$DEB_DIR/libc6.deb" 2>/dev/null || \
+           wget -qO "$DEB_DIR/libc6.deb" "$deb_url" 2>/dev/null; then
+            dpkg -x "$DEB_DIR/libc6.deb" / 2>/dev/null || true
+            rm -rf "$DEB_DIR"
+            break
+        fi
+    done
+fi
+
+# 3. If direct extraction didn't work, configure multiarch apt
+if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    dpkg --add-architecture amd64 2>/dev/null || true
+    if ! grep -q '\[arch=' /etc/apt/sources.list 2>/dev/null; then
+        sed -i 's/^deb http/deb [arch=arm64] http/g' /etc/apt/sources.list 2>/dev/null || true
+        sed -i 's/^deb-src http/deb-src [arch=arm64] http/g' /etc/apt/sources.list 2>/dev/null || true
+    fi
+    if ! grep -q 'archive.ubuntu.com' /etc/apt/sources.list 2>/dev/null; then
+        printf "\ndeb [arch=amd64] http://archive.ubuntu.com/ubuntu/ focal main restricted universe\ndeb [arch=amd64] http://archive.ubuntu.com/ubuntu/ focal-updates main restricted universe\ndeb [arch=amd64] http://security.ubuntu.com/ubuntu/ focal-security main restricted universe\n" >> /etc/apt/sources.list
+    fi
+    apt-get update -o Acquire::Retries=2 2>/dev/null || true
+    apt-get install -y --no-install-recommends libc6:amd64 libstdc++6:amd64 2>/dev/null || true
+fi
+
+# 4. Ensure QEMU user static is installed
+if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
+    apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true
+fi
+
+# 5. Fix symlinks for ld-linux-x86-64.so.2
+mkdir -p /lib64 2>/dev/null || true
+if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+    ln -sf /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
+elif [ -f /lib/x86_64-linux-gnu/ld-2.31.so ]; then
+    ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 2>/dev/null || true
+    ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
+fi
+
+if [ -f /lib64/ld-linux-x86-64.so.2 ]; then
+    ln -sf /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 2>/dev/null || true
+    echo "[quantum-heal-x64] ✓ x86_64 dynamic linker and glibc runtime successfully ready."
+else
+    echo "[quantum-heal-x64] Warning: /lib64/ld-linux-x86-64.so.2 still missing."
+fi
 ''';
 
   }
@@ -2046,8 +2161,10 @@ if [ -d "/root/flutter/.git" ]; then
     fi
 fi
 
-# Ensure QEMU user static is available for executing Google's official x64 Android gen_snapshot on ARM64 host
-if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
+# Ensure QEMU user static & x86_64 glibc dynamic linker are available for Flutter release builds
+if [ -x /usr/local/bin/quantum-heal-x64 ]; then
+    /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+elif [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
     (apt-get update -y && apt-get install -y qemu-user-static) 2>/dev/null || true
 fi
 if [ -x /usr/local/bin/quantum-patch-ndk ]; then

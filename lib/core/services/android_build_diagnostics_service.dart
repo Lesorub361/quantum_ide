@@ -301,6 +301,8 @@ class AndroidBuildDiagnosticsService {
       suggestion = 'Ошибка ресурсов XML / AAPT2. Проверьте названия файлов в res/ и синтаксис XML.';
     } else if (lower.contains('minimum supported gradle version') || lower.contains('incompatible')) {
       suggestion = 'Несовместимость версии Gradle и Android Gradle Plugin (AGP).';
+    } else if (lower.contains('ld-linux-x86-64.so.2')) {
+      suggestion = 'Для работы AOT компилятора gen_snapshot в Release сборке требуется x86_64 динамический загрузчик. Запустите "quantum-heal-x64" в терминале.';
     } else if (lower.contains('gen_snapshot') || lower.contains('android_aot_release')) {
       suggestion = 'В Linux aarch64 (на телефоне) доступна только целевая архитектура android-arm64. Запустите: flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons';
     } else if (lower.contains('cxx1429') || lower.contains('check for working c compiler') || lower.contains('prebuilt/linux-x86_64/bin/clang')) {
@@ -344,6 +346,9 @@ class AndroidBuildDiagnosticsService {
     }
     if (lower.contains('minimum supported gradle version') || lower.contains('maximum supported gradle')) {
       return 'Версии Gradle и Android Gradle Plugin в проекте несовместимы.';
+    }
+    if (lower.contains('ld-linux-x86-64.so.2')) {
+      return 'Отсутствует x86_64 динамический загрузчик ld-linux-x86-64.so.2 для Flutter AOT gen_snapshot. Запустите quantum-heal-x64 в терминале.';
     }
     if (lower.contains('gen_snapshot') || lower.contains('android_aot_release')) {
       return 'В Linux ARM64 отсутствует AOT компилятор gen_snapshot для 32-bit ARM/x86. Требуется флаг --target-platform android-arm64.';

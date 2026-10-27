@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/runtime_service.dart';
-import 'package:quantum_ide/core/utils/log_service.dart';
+import 'package:quantum_ide/core/services/log_service.dart';
 
 enum ProjectSyncStatus {
   idle,
