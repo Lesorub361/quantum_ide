@@ -221,6 +221,7 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     final updatedLogs = List<String>.from(state.logs)..add(trimmed);
     final updatedProblems = List<String>.from(state.problems);
     final updatedAppLogs = List<String>.from(state.appLogs);
+    final lower = trimmed.toLowerCase();
 
     // Filter out standard harmless warnings and progress spinners written to stderr
     final isHarmlessNotice = lower.contains('woah! you appear to be trying to run flutter as root') ||
