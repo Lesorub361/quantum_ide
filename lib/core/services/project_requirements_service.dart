@@ -91,19 +91,14 @@ class ProjectRequirementsService {
             }
           }
           if (!hasAnyAndroidBuildTools()) {
-            if (compileSdk >= 36) {
-              requiredPackageIds.add('build-tools-36.0.0');
-            } else if (compileSdk == 35) {
-              requiredPackageIds.add('build-tools-35.0.0');
-            } else {
-              requiredPackageIds.add('build-tools-34.0.0');
-            }
+            requiredPackageIds.add('android-sdk-tools-arm64');
           }
 
           // Check if C++/CMake is used
           if (await _hasNativeCmake(projectPath)) {
-            if (!(packageMap['cmake-3.31']?.isInstalled ?? false)) {
-              requiredPackageIds.add('cmake-3.22');
+            if (!(packageMap['cmake-3.31']?.isInstalled ?? false) &&
+                !(packageMap['cmake-3.22']?.isInstalled ?? false)) {
+              requiredPackageIds.add('cmake-3.31');
             }
           }
         }
@@ -144,11 +139,7 @@ class ProjectRequirementsService {
           }
         }
         if (!hasAnyAndroidBuildTools()) {
-          if (compileSdk >= 36) {
-            requiredPackageIds.add('build-tools-36.0.0');
-          } else {
-            requiredPackageIds.add('build-tools-35.0.0');
-          }
+          requiredPackageIds.add('android-sdk-tools-arm64');
         }
         break;
 

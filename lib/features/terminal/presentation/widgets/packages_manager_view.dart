@@ -24,14 +24,32 @@ class _PackagesManagerViewState extends ConsumerState<PackagesManagerView> {
     final l10n = AppLocalizations.of(context)!;
     final installedCount = packages.where((p) => p.isInstalled).length;
 
-    // Get unique categories
-    final categories = ['All', ...packages.map((p) => p.category).toSet()];
+    // Get categories with fixed logical order and Installed tab
+    final availableCategories = packages.map((p) => p.category).toSet();
+    const orderedCategories = [
+      'All',
+      'Installed',
+      'Build Tools',
+      'Languages',
+      'AI Tools',
+      'IDE Plugins',
+      'Tools',
+      'SDK Platforms',
+    ];
+    final categories = [
+      'All',
+      'Installed',
+      ...orderedCategories.where((c) => c != 'All' && c != 'Installed' && availableCategories.contains(c)),
+      ...availableCategories.where((c) => !orderedCategories.contains(c)),
+    ];
 
     // Filter packages
     final filteredPackages = packages.where((pkg) {
       final matchesSearch = pkg.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           pkg.description.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesCategory = _selectedCategory == 'All' || pkg.category == _selectedCategory;
+      final matchesCategory = _selectedCategory == 'All'
+          ? true
+          : (_selectedCategory == 'Installed' ? pkg.isInstalled : pkg.category == _selectedCategory);
       return matchesSearch && matchesCategory;
     }).toList();
 
@@ -150,7 +168,7 @@ class _PackagesManagerViewState extends ConsumerState<PackagesManagerView> {
                     ),
                     child: Center(
                       child: Text(
-                        cat,
+                        cat == 'Installed' ? '$cat ($installedCount)' : cat,
                         style: GoogleFonts.inter(
                           color: isSelected ? Colors.white : Colors.white60,
                           fontSize: 10,
@@ -346,12 +364,16 @@ class _PackagesManagerViewState extends ConsumerState<PackagesManagerView> {
         return Colors.purpleAccent;
       case 'Languages':
         return Colors.greenAccent;
-      case 'Web':
-        return Colors.blueAccent;
       case 'Build Tools':
         return Colors.orangeAccent;
       case 'SDK Platforms':
         return Colors.amberAccent;
+      case 'IDE Plugins':
+        return Colors.tealAccent;
+      case 'Tools':
+        return Colors.blueAccent;
+      case 'Web':
+        return Colors.blueAccent;
       case 'System':
         return Colors.redAccent;
       default:

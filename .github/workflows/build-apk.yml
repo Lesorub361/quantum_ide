@@ -32,6 +32,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
+        ## 🚀 QuantumIDE v1.2.87 - Наведение полного порядка в панели «Пакеты» и умная категоризация
+
+        ### 📦 Кардинальная очистка и реорганизация раздела пакетов:
+        - **Ликвидация дубликатов пакетов**: Удалены повторяющиеся записи (объединены дубли Flutter SDK 3.47, устранены 5 дублирующих пакетов `build-tools-34/35/36`, объединены дубли `rust-arm64` и `rust-lsp`).
+        - **Очистка устаревших и неактуальных пакетов**: Удалены древние неиспользуемые SDK Platform (API 21, 24, 26, 28, 29, 37), а также нерабочие пакеты (`kilocode-cli`, `opencode-ai`, `ndk-r29`).
+        - **6 упорядоченных категорий с цветовым кодированием**:
+          - 🌐 `Languages` (Flutter & Dart SDK, Node.js, Python, Go, Rust, Java OpenJDK 21)
+          - 🤖 `AI Tools` (Antigravity CLI, Claude Code, DeepSeek Harness, Ollama CLI, Local AI Qwen)
+          - ⚙️ `Build Tools` (Android SDK, Build Tools & Platform Tools ARM64, CMake, NDK, Mold Linker, Box64, Vulkan, Gradle, APK Signing)
+          - 📱 `SDK Platforms` (Android 11 API 30 до Android 16 API 36)
+          - 🧩 `IDE Plugins` (Clangd, Rust Analyzer, Gopls, Pyright, TypeScript, HTML/CSS, YAML/JSON, Marksman, Java JDTLS, Kotlin LS)
+          - 🛠 `Tools` (Git, Git LFS, Ripgrep, GitHub CLI, Bun, UV, PNPM, SQLite, Protobuf Compiler)
+        - **Фильтр «Installed» с динамическим счетчиком**: Во вкладке пакетов терминала добавлен удобный фильтр установленных пакетов `Installed (X)`.
+        - **Синхронизация с проверкой требований проекта**: `ProjectRequirementsService` обновлен для бесшовной работы с очищенными идентификаторами пакетов.
+
         ## 🚀 QuantumIDE v1.2.86 - Полное устранение PRoot `ENOSYS` и прямой запуск команд через `/bin/bash`
 
         ### 🛡️ Устранение `Function not implemented` (ENOSYS) и `can't chmod` на Android 14 (Kernel 6.1):

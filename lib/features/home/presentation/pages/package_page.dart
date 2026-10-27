@@ -67,7 +67,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
           matchesTab = pkg.category == 'Languages' || pkg.category == 'AI Tools';
           break;
         case 'tools':
-          matchesTab = pkg.category == 'Tools' || pkg.category == 'Frameworks' || pkg.category == 'Web';
+          matchesTab = pkg.category == 'Tools' || pkg.category == 'Frameworks' || pkg.category == 'Web' || pkg.category == 'IDE Plugins';
           break;
         case 'build_system':
           matchesTab = pkg.category == 'System' || pkg.category == 'Build Tools';
