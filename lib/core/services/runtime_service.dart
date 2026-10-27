@@ -2505,6 +2505,9 @@ class StreamingCommand {
 
   bool get isCancelled => _cancelled;
 
+  /// Alias for cancel()
+  Future<void> kill() => cancel();
+
   /// Stops the command, including child processes (apt, npm, curl…).
   Future<void> cancel() async {
     _cancelled = true;

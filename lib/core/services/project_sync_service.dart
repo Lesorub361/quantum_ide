@@ -104,7 +104,7 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     }
 
     _autoHideTimer?.cancel();
-    _currentHandle?.kill();
+    _currentHandle?.cancel();
 
     final dir = Directory(workspacePath);
     if (!await dir.exists()) return;
@@ -266,7 +266,7 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
   @override
   void dispose() {
     _autoHideTimer?.cancel();
-    _currentHandle?.kill();
+    _currentHandle?.cancel();
     super.dispose();
   }
 }
