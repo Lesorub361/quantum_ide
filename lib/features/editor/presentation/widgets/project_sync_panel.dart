@@ -4,6 +4,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:share_plus/share_plus.dart';
 
 class ProjectSyncFloatingBanner extends ConsumerWidget {
@@ -14,20 +15,27 @@ class ProjectSyncFloatingBanner extends ConsumerWidget {
     final syncState = ref.watch(projectSyncProvider);
     if (!syncState.isPanelVisible) return const SizedBox.shrink();
 
+    final l10n = AppLocalizations.of(context);
     final isSyncing = syncState.isSyncing;
     final isSuccess = syncState.status == ProjectSyncStatus.success;
     final isError = syncState.status == ProjectSyncStatus.error;
 
     Color accentColor = Colors.cyanAccent;
-    if (isSuccess) accentColor = Colors.greenAccent;
-    if (isError) accentColor = Colors.redAccent;
+    String displayTitle = l10n?.projectSync ?? 'Project Sync';
+    if (isSuccess) {
+      accentColor = Colors.greenAccent;
+      displayTitle = l10n?.projectSynced ?? 'Project Synced';
+    } else if (isError) {
+      accentColor = Colors.redAccent;
+      displayTitle = l10n?.syncFailed ?? 'Sync Failed';
+    }
 
     return Material(
       color: Colors.transparent,
       child: Center(
         child: InkWell(
           onTap: () {
-            ref.read(projectSyncProvider.notifier).setActiveTab(0);
+            ref.read(projectSyncProvider.notifier).toggleOutputExpanded();
           },
           borderRadius: BorderRadius.circular(16),
           child: Container(
@@ -70,7 +78,7 @@ class ProjectSyncFloatingBanner extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        syncState.title,
+                        displayTitle,
                         style: GoogleFonts.inter(
                           color: Colors.white,
                           fontSize: 13,
@@ -90,7 +98,13 @@ class ProjectSyncFloatingBanner extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
+                Icon(
+                  syncState.isOutputExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down,
+                  size: 16,
+                  color: Colors.white60,
+                ),
+                const SizedBox(width: 6),
                 IconButton(
                   icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
                   padding: EdgeInsets.zero,
@@ -135,7 +149,10 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
   @override
   Widget build(BuildContext context) {
     final syncState = ref.watch(projectSyncProvider);
-    if (!syncState.isPanelVisible) return const SizedBox.shrink();
+    // Only show the detailed output panel if user explicitly expanded it or if error occurred
+    if (!syncState.isOutputExpanded) return const SizedBox.shrink();
+
+    final l10n = AppLocalizations.of(context);
 
     // Auto-scroll when logs change
     ref.listen<List<String>>(
@@ -176,21 +193,21 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── 1. Вкладки: Вывод / Проблемы / Логи приложения ──────────────
+              // ── 1. Вкладки: Output / Problems / App Logs ──────────────
               Padding(
                 padding: const EdgeInsets.only(left: 12, top: 10, right: 12),
                 child: Row(
                   children: [
                     _buildTab(
                       index: 0,
-                      title: 'Вывод',
+                      title: l10n?.output ?? 'Output',
                       isActive: activeTab == 0,
                       onTap: () => ref.read(projectSyncProvider.notifier).setActiveTab(0),
                     ),
                     const SizedBox(width: 8),
                     _buildTab(
                       index: 1,
-                      title: 'Проблемы',
+                      title: l10n?.problems ?? 'Problems',
                       badge: syncState.problems.isNotEmpty ? '${syncState.problems.length}' : null,
                       isActive: activeTab == 1,
                       onTap: () => ref.read(projectSyncProvider.notifier).setActiveTab(1),
@@ -198,7 +215,7 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
                     const SizedBox(width: 8),
                     _buildTab(
                       index: 2,
-                      title: 'Логи приложения',
+                      title: l10n?.appLogs ?? 'App Logs',
                       isActive: activeTab == 2,
                       onTap: () => ref.read(projectSyncProvider.notifier).setActiveTab(2),
                     ),
@@ -216,7 +233,7 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
                             ),
                             const SizedBox(width: 6),
                             Text(
-                              'Синхронизация...',
+                              l10n?.syncing ?? 'Syncing...',
                               style: GoogleFonts.inter(fontSize: 11, color: Colors.cyanAccent),
                             ),
                           ],
@@ -254,7 +271,7 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
                           : Container(
                               height: 2.5,
                               color: syncState.status == ProjectSyncStatus.success
-                                  ? Colors.greenAccent
+                                   ? Colors.greenAccent
                                   : Colors.redAccent,
                             ),
                     ),
@@ -269,7 +286,9 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
                   child: currentLines.isEmpty
                       ? Center(
                           child: Text(
-                            activeTab == 1 ? 'Проблем не обнаружено' : 'Ожидание вывода...',
+                            activeTab == 1
+                                ? (l10n?.noProblemsFound ?? 'No problems found')
+                                : (l10n?.noOutput ?? 'Waiting for output...'),
                             style: GoogleFonts.jetBrainsMono(color: Colors.white38, fontSize: 12),
                           ),
                         )
@@ -318,14 +337,14 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
             ],
           ),
 
-          // ── 4. Плавающие кнопки справа внизу: Поделиться и Закрыть ─────────
+          // ── 4. Плавающие кнопки справа внизу: Поделиться и Свернуть ─────────
           Positioned(
             right: 14,
             bottom: 14,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Кнопка Share (фиолетовая)
+                // Кнопка Share
                 FloatingActionButton.small(
                   heroTag: 'sync_share_button',
                   backgroundColor: const Color(0xFF8B5CF6),
@@ -334,22 +353,25 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
                   onPressed: () {
                     final logText = currentLines.join('\n');
                     if (logText.isNotEmpty) {
-                      Share.share(logText, subject: 'Quantum IDE - Лог синхронизации проекта');
+                      Share.share(
+                        logText,
+                        subject: l10n?.shareProjectSyncLogs ?? 'Quantum IDE - Project sync log',
+                      );
                     }
                   },
                   child: const Icon(LucideIcons.share_2, size: 18),
                 ),
                 const SizedBox(height: 8),
-                // Кнопка Close (тёмно-синяя с крестиком)
+                // Кнопка Collapse (свернуть панель логов)
                 FloatingActionButton.small(
                   heroTag: 'sync_close_button',
                   backgroundColor: const Color(0xFF253049),
                   foregroundColor: Colors.white,
                   elevation: 6,
                   onPressed: () {
-                    ref.read(projectSyncProvider.notifier).dismiss();
+                    ref.read(projectSyncProvider.notifier).setOutputExpanded(false);
                   },
-                  child: const Icon(LucideIcons.x, size: 18),
+                  child: const Icon(LucideIcons.chevron_down, size: 18),
                 ),
               ],
             ),
@@ -421,9 +443,12 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
     if (lower.contains('warning:')) {
       return Colors.amberAccent;
     }
-    if (lower.contains('resolved plugin') ||
+    if (lower.contains('downloading') ||
+        lower.contains('transform') ||
+        lower.contains('resolved plugin') ||
         lower.contains('starting build') ||
         lower.contains('got dependencies') ||
+        lower.contains('configure successful') ||
         lower.contains('✓')) {
       return Colors.cyanAccent;
     }

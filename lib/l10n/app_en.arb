@@ -1893,5 +1893,10 @@
   "closeSelection": "Close ✕",
   "keypadKb": "KB",
   "keypadMore": "More",
-  "installApk": "Install APK"
+  "installApk": "Install APK",
+  "projectSync": "Project Sync",
+  "projectSynced": "Project Synced",
+  "syncFailed": "Sync Failed",
+  "syncing": "Syncing...",
+  "shareProjectSyncLogs": "Quantum IDE - Project sync log"
 }

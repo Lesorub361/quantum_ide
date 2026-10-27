@@ -3021,4 +3021,19 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get installApk => 'Установить APK';
+
+  @override
+  String get projectSync => 'Синхронизация проекта';
+
+  @override
+  String get projectSynced => 'Проект синхронизирован';
+
+  @override
+  String get syncFailed => 'Ошибка синхронизации';
+
+  @override
+  String get syncing => 'Синхронизация...';
+
+  @override
+  String get shareProjectSyncLogs => 'Quantum IDE - Лог синхронизации проекта';
 }

@@ -1316,5 +1316,10 @@
   "closeSelection": "Fermer ✕",
   "keypadKb": "Clavier",
   "keypadMore": "Plus",
-  "installApk": "Installer l'APK"
+  "installApk": "Installer l'APK",
+  "projectSync": "Synchronisation du projet",
+  "projectSynced": "Projet synchronisé",
+  "syncFailed": "Échec de la synchronisation",
+  "syncing": "Synchronisation...",
+  "shareProjectSyncLogs": "Quantum IDE - Journal de synchronisation"
 }

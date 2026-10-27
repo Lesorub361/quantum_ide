@@ -5304,6 +5304,11 @@ abstract class AppLocalizations {
   String get keypadKb;
   String get keypadMore;
   String get installApk;
+  String get projectSync;
+  String get projectSynced;
+  String get syncFailed;
+  String get syncing;
+  String get shareProjectSyncLogs;
 }
 
 class _AppLocalizationsDelegate

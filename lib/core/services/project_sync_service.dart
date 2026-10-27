@@ -21,19 +21,21 @@ class ProjectSyncState {
   final List<String> problems;
   final List<String> appLogs;
   final bool isPanelVisible;
-  final int activeTab; // 0: Вывод, 1: Проблемы, 2: Логи приложения
+  final bool isOutputExpanded;
+  final int activeTab; // 0: Output, 1: Problems, 2: App Logs
   final double? progress;
   final String? projectPath;
   final String? projectType;
 
   const ProjectSyncState({
     this.status = ProjectSyncStatus.idle,
-    this.title = 'Синхронизация проекта...',
-    this.currentStep = 'Инициализация синхронизации...',
+    this.title = 'Project Sync',
+    this.currentStep = 'Initializing synchronization...',
     this.logs = const [],
     this.problems = const [],
     this.appLogs = const [],
     this.isPanelVisible = false,
+    this.isOutputExpanded = false,
     this.activeTab = 0,
     this.progress,
     this.projectPath,
@@ -51,6 +53,7 @@ class ProjectSyncState {
     List<String>? problems,
     List<String>? appLogs,
     bool? isPanelVisible,
+    bool? isOutputExpanded,
     int? activeTab,
     double? progress,
     bool clearProgress = false,
@@ -65,6 +68,7 @@ class ProjectSyncState {
       problems: problems ?? this.problems,
       appLogs: appLogs ?? this.appLogs,
       isPanelVisible: isPanelVisible ?? this.isPanelVisible,
+      isOutputExpanded: isOutputExpanded ?? this.isOutputExpanded,
       activeTab: activeTab ?? this.activeTab,
       progress: clearProgress ? null : (progress ?? this.progress),
       projectPath: projectPath ?? this.projectPath,
@@ -84,6 +88,14 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     state = state.copyWith(isPanelVisible: visible);
   }
 
+  void setOutputExpanded(bool expanded) {
+    state = state.copyWith(isOutputExpanded: expanded);
+  }
+
+  void toggleOutputExpanded() {
+    state = state.copyWith(isOutputExpanded: !state.isOutputExpanded);
+  }
+
   void togglePanel() {
     state = state.copyWith(isPanelVisible: !state.isPanelVisible);
   }
@@ -94,7 +106,7 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
 
   void dismiss() {
     _autoHideTimer?.cancel();
-    state = state.copyWith(isPanelVisible: false);
+    state = state.copyWith(isPanelVisible: false, isOutputExpanded: false);
   }
 
   Future<void> startSync(String workspacePath, {bool force = false}) async {
@@ -112,7 +124,7 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     // Detect project type
     String detectedType = 'generic';
     String command = '';
-    String initialStep = 'Определение структуры проекта...';
+    String initialStep = 'Analyzing project structure...';
 
     final hasPubspec = await File(p.join(workspacePath, 'pubspec.yaml')).exists();
     final hasGradle = await File(p.join(workspacePath, 'build.gradle')).exists() ||
@@ -123,22 +135,37 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
 
     if (hasPubspec) {
       detectedType = 'flutter';
-      initialStep = 'Выполняется Flutter pub get...';
+      initialStep = 'Resolving Flutter packages (pub get)...';
       command =
-          '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get';
+          '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && '
+          'flutter pub get && '
+          '(if [ -d android ]; then '
+          'echo "==> Configuring Android & downloading Gradle dependencies..." && '
+          'mkdir -p android ~/.gradle 2>/dev/null || true; '
+          'sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true; '
+          '(grep -q "android.aapt2FromMaven" android/gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> android/gradle.properties 2>/dev/null || true); '
+          '(grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true); '
+          '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true); '
+          'cd android && (if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info :app:dependencies 2>/dev/null || ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; else gradle --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; fi); '
+          'fi)';
     } else if (hasGradle) {
       detectedType = 'gradle';
-      initialStep = 'Синхронизация Gradle и плагинов...';
+      initialStep = 'Resolving Gradle dependencies & plugins...';
       command =
-          'if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 --dry-run; else gradle --no-daemon -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 --dry-run; fi';
+          '(mkdir -p ~/.gradle 2>/dev/null || true) && '
+          'sed -i "/extra-gen-snapshot-options/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true; '
+          '(grep -q "android.aapt2FromMaven" gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> gradle.properties 2>/dev/null || true); '
+          '(grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true); '
+          '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true); '
+          'if [ -f gradlew ]; then chmod +x gradlew && ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info :app:dependencies 2>/dev/null || ./gradlew --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; else gradle --no-daemon --max-workers=2 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Djava.net.preferIPv4Stack=true --info help; fi';
     } else if (hasPackageJson) {
       detectedType = 'node';
-      initialStep = 'Проверка npm зависимостей...';
-      command = 'npm install --dry-run 2>/dev/null || npm list --depth=0';
+      initialStep = 'Resolving npm packages...';
+      command = 'npm install';
     } else if (hasRequirements) {
       detectedType = 'python';
-      initialStep = 'Проверка зависимостей Python (pip)...';
-      command = 'pip check 2>/dev/null || pip list';
+      initialStep = 'Resolving Python dependencies (pip)...';
+      command = 'pip install -r requirements.txt';
     } else {
       // Nothing to sync for raw directory
       return;
@@ -153,12 +180,13 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
 
     state = ProjectSyncState(
       status: ProjectSyncStatus.syncing,
-      title: 'Синхронизация проекта...',
+      title: 'Project Sync',
       currentStep: initialStep,
       logs: initialLogs,
       problems: [],
       appLogs: ['[Sync] Project sync started for $workspacePath ($detectedType)'],
       isPanelVisible: true,
+      isOutputExpanded: false,
       activeTab: 0,
       progress: null,
       projectPath: workspacePath,
@@ -179,7 +207,7 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
       final exitCode = await _currentHandle!.exitCode;
       _onSyncFinished(exitCode);
     } catch (e) {
-      _processOutputLine('Ошибка запуска синхронизации: $e', isError: true);
+      _processOutputLine('Sync start error: $e', isError: true);
       _onSyncFinished(1);
     }
   }
@@ -205,10 +233,28 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
       updatedAppLogs.add('[Problem] $trimmed');
     }
 
-    // Try to extract dynamic step information
+    // Dynamic step extraction for downloads, transforms and model evaluation
     String newStep = state.currentStep;
-    if (trimmed.startsWith('Resolving dependencies') ||
-        trimmed.startsWith('Downloading') ||
+    if (trimmed.startsWith('Downloading https://')) {
+      final parts = trimmed.split('/');
+      if (parts.isNotEmpty) {
+        final lastPart = parts.last.split(' ').first;
+        newStep = 'Downloading: $lastPart';
+      }
+    } else if (trimmed.contains('AarTransform:') || trimmed.contains('JetifyTransform:')) {
+      final match = RegExp(r'jetified-([^/\s]+)').firstMatch(trimmed);
+      if (match != null) {
+        newStep = 'Transforming: ${match.group(1)}';
+      } else {
+        newStep = 'Transforming AAR libraries...';
+      }
+    } else if (trimmed.contains('VariantDependencies')) {
+      newStep = 'Fetching variant dependencies...';
+    } else if (trimmed.contains('Selected build variant')) {
+      newStep = trimmed;
+    } else if (trimmed.contains('CONFIGURE SUCCESSFUL')) {
+      newStep = '✓ Gradle configure successful';
+    } else if (trimmed.startsWith('Resolving dependencies') ||
         trimmed.startsWith('Got dependencies') ||
         trimmed.startsWith('Running') ||
         trimmed.contains('Starting build') ||
@@ -216,7 +262,8 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
         trimmed.contains('Resolved plugin') ||
         trimmed.contains('Apply plugin') ||
         trimmed.contains('Creating ClassLoader') ||
-        trimmed.contains('Run init scripts')) {
+        trimmed.contains('Run init scripts') ||
+        trimmed.contains('Configuring Android')) {
       newStep = trimmed;
     }
 
@@ -239,8 +286,8 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
 
     final isSuccess = exitCode == 0;
     final finishMsg = isSuccess
-        ? '✓ Синхронизация проекта завершена успешно!'
-        : '⚠️ Ошибка синхронизации (код $exitCode)';
+        ? '✓ Project synchronization completed successfully'
+        : '⚠️ Sync failed (exit code $exitCode)';
 
     final updatedLogs = List<String>.from(state.logs)
       ..add('--------------------------------------------------')
@@ -251,19 +298,20 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
 
     state = state.copyWith(
       status: isSuccess ? ProjectSyncStatus.success : ProjectSyncStatus.error,
-      title: isSuccess ? 'Проект синхронизирован' : 'Синхронизация с ошибками',
+      title: isSuccess ? 'Project Synced' : 'Sync Failed',
       currentStep: finishMsg,
       logs: updatedLogs,
       appLogs: updatedAppLogs,
       activeTab: isSuccess ? state.activeTab : (state.problems.isNotEmpty ? 1 : 0),
+      isOutputExpanded: !isSuccess, // Auto-expand details on error
     );
 
     LogService.log('ProjectSync finished with exit code: $exitCode');
 
-    // Auto-dismiss floating banner after success in 4 seconds
+    // Auto-dismiss floating banner after success in 4 seconds if not expanded
     if (isSuccess) {
       _autoHideTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted && state.status == ProjectSyncStatus.success) {
+        if (mounted && state.status == ProjectSyncStatus.success && !state.isOutputExpanded) {
           state = state.copyWith(isPanelVisible: false);
         }
       });

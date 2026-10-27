@@ -3017,4 +3017,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get installApk => 'Install APK';
+
+  @override
+  String get projectSync => 'Project Sync';
+
+  @override
+  String get projectSynced => 'Project Synced';
+
+  @override
+  String get syncFailed => 'Sync Failed';
+
+  @override
+  String get syncing => 'Syncing...';
+
+  @override
+  String get shareProjectSyncLogs => 'Quantum IDE - Project sync log';
 }

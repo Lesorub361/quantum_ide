@@ -1316,5 +1316,10 @@
   "closeSelection": "Cerrar ✕",
   "keypadKb": "Teclado",
   "keypadMore": "Más",
-  "installApk": "Instalar APK"
+  "installApk": "Instalar APK",
+  "projectSync": "Sincronización del proyecto",
+  "projectSynced": "Proyecto sincronizado",
+  "syncFailed": "Error de sincronización",
+  "syncing": "Sincronizando...",
+  "shareProjectSyncLogs": "Quantum IDE - Registro de sincronización"
 }

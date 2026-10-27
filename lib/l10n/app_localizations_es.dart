@@ -3029,4 +3029,19 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get installApk => 'Instalar APK';
+
+  @override
+  String get projectSync => 'Sincronización del proyecto';
+
+  @override
+  String get projectSynced => 'Proyecto sincronizado';
+
+  @override
+  String get syncFailed => 'Error de sincronización';
+
+  @override
+  String get syncing => 'Sincronizando...';
+
+  @override
+  String get shareProjectSyncLogs => 'Quantum IDE - Registro de sincronización';
 }

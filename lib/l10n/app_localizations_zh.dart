@@ -2939,4 +2939,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get installApk => '安装 APK';
+
+  @override
+  String get projectSync => '项目同步';
+
+  @override
+  String get projectSynced => '项目已同步';
+
+  @override
+  String get syncFailed => '同步失败';
+
+  @override
+  String get syncing => '同步中...';
+
+  @override
+  String get shareProjectSyncLogs => 'Quantum IDE - 项目同步日志';
 }

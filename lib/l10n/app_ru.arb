@@ -1644,5 +1644,10 @@
   "closeSelection": "К вводу ✕",
   "keypadKb": "Клава",
   "keypadMore": "Ещё",
-  "installApk": "Установить APK"
+  "installApk": "Установить APK",
+  "projectSync": "Синхронизация проекта",
+  "projectSynced": "Проект синхронизирован",
+  "syncFailed": "Ошибка синхронизации",
+  "syncing": "Синхронизация...",
+  "shareProjectSyncLogs": "Quantum IDE - Лог синхронизации проекта"
 }

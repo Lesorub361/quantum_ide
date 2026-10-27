@@ -944,5 +944,10 @@
   "closeSelection": "关闭 ✕",
   "keypadKb": "键盘",
   "keypadMore": "更多",
-  "installApk": "安装 APK"
+  "installApk": "安装 APK",
+  "projectSync": "项目同步",
+  "projectSynced": "项目已同步",
+  "syncFailed": "同步失败",
+  "syncing": "同步中...",
+  "shareProjectSyncLogs": "Quantum IDE - 项目同步日志"
 }
