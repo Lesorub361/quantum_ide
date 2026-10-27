@@ -739,16 +739,20 @@ export HISTCONTROL=ignoredups:erasedups
 stty sane onlcr icrnl opost 2>/dev/null || true
 shopt -s checkwinsize 2>/dev/null || true
 
-# Zero-fork pure-bash git branch prompt (avoids expensive `git status` across 3000+ files in PRoot)
-__git_info() {
+# Zero-fork pure-bash git branch prompt using PROMPT_COMMAND for 100% precise readline cursor tracking
+__update_quantum_ps1() {
+    local git_str=""
     if [ -f ".git/HEAD" ]; then
         local head_ref
-        read -r head_ref < ".git/HEAD" 2>/dev/null || return
+        read -r head_ref < ".git/HEAD" 2>/dev/null
         local branch="${head_ref#ref: refs/heads/}"
-        printf " \[\033[35m\]git:(\[\033[1;31m\]%s\[\033[0m\033[35m\])\[\033[0m\]" "$branch"
+        if [ -n "$branch" ]; then
+            git_str=" \[\033[35m\]git:(\[\033[1;31m\]$branch\[\033[0m\033[35m\])\[\033[0m\]"
+        fi
     fi
+    PS1="\[\033[1;36m\]➜ \[\033[1;32m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
 }
-export PS1="\[\r\e[K\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;34m\]\$ \[\e[0m\]"
+PROMPT_COMMAND="__update_quantum_ps1"
 
 export FLUTTER_ALLOW_SU_ROOT=true
 export FLUTTER_SUPPRESS_ANALYTICS=true
@@ -909,7 +913,7 @@ term_fetch() {
 
 # Ubuntu Greeting & Cyberpunk Banner
 if [ -z "$VTE_VERSION" ]; then
-    clear
+    clear 2>/dev/null || printf '\033[2J\033[H'
     term_fetch
     echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
     echo -e '    \e[38;5;141mll\e[0m             → ls -la'

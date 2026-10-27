@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class SystemProcessItem {
@@ -121,17 +122,26 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   Future<void> refreshNow() => _updateStats();
 
-  /// Останавливает зависшие фоновые демоны сборки (Gradle, Kotlin, Java),
-  /// которые могут держать гигабайты ОЗУ в фоне после сборки APK.
+  /// Останавливает зависшие фоновые демоны сборки (AAPT2, Gradle, Kotlin, Java, Dart),
+  /// которые могут держать гигабайты ОЗУ и грузить CPU в фоне после сборки APK.
   Future<void> freeBackgroundMemory() async {
+    try {
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    } catch (_) {}
     try {
       if (!Platform.isWindows) {
         await Process.run('sh', [
           '-c',
-          'pkill -f GradleDaemon 2>/dev/null || true; '
-              'pkill -f KotlinCompileDaemon 2>/dev/null || true; '
-              'pkill -f "dart analysis_server" 2>/dev/null || true'
+          'pkill -9 -f aapt2 2>/dev/null || true; '
+              'pkill -9 -f GradleDaemon 2>/dev/null || true; '
+              'pkill -9 -f KotlinCompileDaemon 2>/dev/null || true; '
+              'pkill -9 -f "dart analysis_server" 2>/dev/null || true; '
+              'pkill -9 -f "flutter_tools.snapshot" 2>/dev/null || true'
         ]);
+      } else {
+        await Process.run('taskkill', ['/F', '/IM', 'aapt2.exe']).catchError((_) => ProcessResult(0, 0, '', ''));
+        await Process.run('taskkill', ['/F', '/IM', 'java.exe']).catchError((_) => ProcessResult(0, 0, '', ''));
       }
     } catch (_) {}
     await Future.delayed(const Duration(milliseconds: 300));
@@ -235,17 +245,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   Future<List<SystemProcessItem>> _fetchProcessList(int appRssBytes, double totalCpu) async {
     final list = <SystemProcessItem>[];
-
-    // 1. Всегда добавляем само приложение Quantum IDE
-    list.add(SystemProcessItem(
-      pid: pid,
-      name: 'Quantum IDE',
-      description: 'Основное приложение IDE (Flutter UI & Engine)',
-      category: 'IDE',
-      cpuPercent: (totalCpu * 100).clamp(0.2, 99.0),
-      rssBytes: appRssBytes > 0 ? appRssBytes : 180 * 1024 * 1024,
-      command: 'quantum_ide (PID: $pid)',
-    ));
+    double ideCpu = 1.2;
 
     try {
       if (!Platform.isWindows) {
@@ -266,7 +266,11 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
               final rssKb = int.tryParse(parts[2]) ?? 0;
               final fullArgs = parts.sublist(3).join(' ');
 
-              if (procPid == null || procPid == pid) continue; // пропускаем себя
+              if (procPid == null) continue;
+              if (procPid == pid) {
+                ideCpu = cpuVal > 0 ? cpuVal : 1.2;
+                continue; // пропускаем добавление дубликата, добавим ниже
+              }
               if (fullArgs.contains('ps -eo') || fullArgs.contains('ps -o')) continue; // пропускаем сам ps
 
               final parsed = _classifyProcess(procPid, cpuVal, rssKb * 1024, fullArgs);
@@ -278,6 +282,17 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         }
       }
     } catch (_) {}
+
+    // 1. Всегда добавляем само приложение Quantum IDE с его РЕАЛЬНЫМ процентом CPU
+    list.add(SystemProcessItem(
+      pid: pid,
+      name: 'Quantum IDE',
+      description: 'Основное приложение IDE (Flutter UI & Engine)',
+      category: 'IDE',
+      cpuPercent: ideCpu,
+      rssBytes: appRssBytes > 0 ? appRssBytes : 180 * 1024 * 1024,
+      command: 'quantum_ide (PID: $pid)',
+    ));
 
     // Сортировка: сначала самые прожорливые по CPU, затем по памяти
     list.sort((a, b) {
@@ -460,7 +475,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       );
     }
 
-    if (lower.contains('bash') || lower.contains('sh') || lower.contains('zsh')) {
+    final isShell = RegExp(r'(^|[\s/])(bash|zsh)(\s|$)|(^|[\s/])(sh|mksh|dash)(\s+[^-]|\s*$)').hasMatch(lower);
+    if (isShell &&
+        !lower.contains('ps -e') &&
+        !lower.contains('ps -o') &&
+        !lower.contains('which') &&
+        !lower.contains('grep') &&
+        !lower.contains('pkill')) {
       return SystemProcessItem(
         pid: procPid,
         name: 'Terminal Session',
