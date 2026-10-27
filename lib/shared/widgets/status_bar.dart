@@ -885,6 +885,15 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               ),
             ] else ...[
               // Tab 1: Производительность (Hardware gauges)
+              final toolsRamBytes = stats.processes
+                  .where((p) => p.pid != pid)
+                  .fold<int>(0, (sum, p) => sum + p.rssBytes);
+              final toolsRamMB = toolsRamBytes ~/ (1024 * 1024);
+              final toolsRamFormatted = toolsRamMB >= 1024
+                  ? '${(toolsRamMB / 1024.0).toStringAsFixed(1)} GB'
+                  : '$toolsRamMB MB';
+              final toolsRamUsage = (toolsRamMB / (stats.ramTotalGB * 1024.0)).clamp(0.0, 1.0);
+
               _row('Процессор (CPU)', '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', stats.cpuUsage, LucideIcons.cpu),
               _row(
                 'Видеоускоритель (${stats.gpuName})',
@@ -893,11 +902,18 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                 LucideIcons.zap,
               ),
               _row(
-                'Память Quantum IDE (App RAM)',
-                stats.appRamFormatted,
+                'Память Quantum IDE (Интерфейс)',
+                '${stats.appRamFormatted} (${(stats.ramUsage * 100).toStringAsFixed(1)}% ОЗУ)',
                 stats.ramUsage,
                 LucideIcons.memory_stick,
               ),
+              if (toolsRamMB > 50)
+                _row(
+                  'Память сборщика (Gradle, AAPT2, PRoot)',
+                  '$toolsRamFormatted (${(toolsRamUsage * 100).toStringAsFixed(1)}% ОЗУ)',
+                  toolsRamUsage,
+                  LucideIcons.package,
+                ),
               _row(
                 'Память устройства (Свободно / Всего)',
                 'Свободно ${stats.deviceRamAvailableGB.toStringAsFixed(1)} / ${stats.ramTotalGB.toStringAsFixed(1)} GB',
@@ -908,19 +924,29 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (high ? const Color(0xFFFF6B6B) : Colors.greenAccent).withValues(alpha: 0.07),
+                  color: (high ? const Color(0xFFFF6B6B) : (toolsRamMB > 250 ? Colors.amberAccent : Colors.greenAccent))
+                      .withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
                   children: [
-                    Icon(high ? LucideIcons.triangle_alert : LucideIcons.circle_check,
-                        size: 14, color: high ? const Color(0xFFFF6B6B) : Colors.greenAccent),
+                    Icon(
+                      high
+                          ? LucideIcons.triangle_alert
+                          : (toolsRamMB > 250 ? LucideIcons.info : LucideIcons.circle_check),
+                      size: 14,
+                      color: high
+                          ? const Color(0xFFFF6B6B)
+                          : (toolsRamMB > 250 ? Colors.amberAccent : Colors.greenAccent),
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         high
                             ? 'Высокая нагрузка на процессор или память. Перейдите во вкладку «Процессы и пакеты» выше, чтобы увидеть или завершить нагружающий процесс.'
-                            : 'Система работает стабильно. Quantum IDE потребляет всего ${stats.appRamFormatted}. Остальная память распределена между ОС Android и системными сервисами.',
+                            : (toolsRamMB > 250
+                                ? 'Фоновые демоны сборки (Gradle/AAPT2) удерживают $toolsRamFormatted ОЗУ. Нажмите «Очистить ОЗУ» вверху справа, чтобы мгновенно освободить память.'
+                                : 'Система работает стабильно. Quantum IDE потребляет всего ${stats.appRamFormatted}. Остальная память распределена между ОС Android и приложениями.'),
                         style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70, height: 1.35),
                       ),
                     ),
