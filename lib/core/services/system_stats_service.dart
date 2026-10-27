@@ -2,6 +2,34 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+class SystemProcessItem {
+  final int pid;
+  final String name;
+  final String description;
+  final String category;
+  final double cpuPercent;
+  final int rssBytes;
+  final String command;
+
+  const SystemProcessItem({
+    required this.pid,
+    required this.name,
+    required this.description,
+    required this.category,
+    required this.cpuPercent,
+    required this.rssBytes,
+    required this.command,
+  });
+
+  String get ramFormatted {
+    final mb = rssBytes / (1024 * 1024);
+    if (mb >= 1024) {
+      return '${(mb / 1024).toStringAsFixed(1)} GB';
+    }
+    return '${mb.toStringAsFixed(0)} MB';
+  }
+}
+
 class SystemStats {
   final double cpuUsage;
   /// Доля использования видеоускорителя GPU (0.0 .. 1.0)
@@ -21,6 +49,8 @@ class SystemStats {
   final double deviceRamUsedGB;
   /// Доля занятой памяти всей системы (0.0 .. 1.0)
   final double deviceRamUsage;
+  /// Список активных процессов и пакетов (как в Диспетчере задач Windows)
+  final List<SystemProcessItem> processes;
 
   SystemStats({
     this.cpuUsage = 0.0,
@@ -33,6 +63,7 @@ class SystemStats {
     this.deviceRamAvailableGB = 4.0,
     this.deviceRamUsedGB = 4.0,
     this.deviceRamUsage = 0.5,
+    this.processes = const [],
   });
 
   /// Удобное форматирование памяти приложения ("184 МБ" или "1.2 ГБ")
@@ -54,6 +85,7 @@ class SystemStats {
     double? deviceRamAvailableGB,
     double? deviceRamUsedGB,
     double? deviceRamUsage,
+    List<SystemProcessItem>? processes,
   }) {
     return SystemStats(
       cpuUsage: cpuUsage ?? this.cpuUsage,
@@ -66,6 +98,7 @@ class SystemStats {
       deviceRamAvailableGB: deviceRamAvailableGB ?? this.deviceRamAvailableGB,
       deviceRamUsedGB: deviceRamUsedGB ?? this.deviceRamUsedGB,
       deviceRamUsage: deviceRamUsage ?? this.deviceRamUsage,
+      processes: processes ?? this.processes,
     );
   }
 }
@@ -103,6 +136,21 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     } catch (_) {}
     await Future.delayed(const Duration(milliseconds: 300));
     await _updateStats();
+  }
+
+  /// Завершает выбранный процесс (по аналогии с Диспетчером задач Windows)
+  Future<void> killProcess(int targetPid) async {
+    try {
+      if (!Platform.isWindows) {
+        await Process.run('kill', ['-15', '$targetPid']).timeout(const Duration(seconds: 2));
+        await Future.delayed(const Duration(milliseconds: 200));
+        await Process.run('kill', ['-9', '$targetPid']).timeout(const Duration(seconds: 2));
+      } else {
+        await Process.run('taskkill', ['/F', '/PID', '$targetPid']).timeout(const Duration(seconds: 2));
+      }
+    } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 300));
+    await refreshNow();
   }
 
   Future<void> _updateStats() async {
@@ -165,6 +213,9 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     final double gpu = await _parseGpuUsage(cpu);
     final String gpuName = await _detectGpuName();
 
+    // 4. Получаем список активных процессов и пакетов (как в Диспетчере задач Windows)
+    final List<SystemProcessItem> processes = await _fetchProcessList(appRssBytes, cpu);
+
     if (mounted) {
       state = SystemStats(
         cpuUsage: cpu,
@@ -177,8 +228,264 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         deviceRamAvailableGB: deviceAvailableGB,
         deviceRamUsedGB: deviceUsedGB,
         deviceRamUsage: deviceUsage,
+        processes: processes,
       );
     }
+  }
+
+  Future<List<SystemProcessItem>> _fetchProcessList(int appRssBytes, double totalCpu) async {
+    final list = <SystemProcessItem>[];
+
+    // 1. Всегда добавляем само приложение Quantum IDE
+    list.add(SystemProcessItem(
+      pid: pid,
+      name: 'Quantum IDE',
+      description: 'Основное приложение IDE (Flutter UI & Engine)',
+      category: 'IDE',
+      cpuPercent: (totalCpu * 100).clamp(0.2, 99.0),
+      rssBytes: appRssBytes > 0 ? appRssBytes : 180 * 1024 * 1024,
+      command: 'quantum_ide (PID: $pid)',
+    ));
+
+    try {
+      if (!Platform.isWindows) {
+        final res = await Process.run('sh', [
+          '-c',
+          'ps -eo pid,%cpu,rss,args 2>/dev/null || ps -o pid,%cpu,rss,args 2>/dev/null',
+        ]).timeout(const Duration(seconds: 3));
+
+        if (res.exitCode == 0) {
+          final lines = res.stdout.toString().split('\n');
+          for (final line in lines.skip(1)) {
+            final trimmed = line.trim();
+            if (trimmed.isEmpty) continue;
+            final parts = trimmed.split(RegExp(r'\s+'));
+            if (parts.length >= 4) {
+              final procPid = int.tryParse(parts[0]);
+              final cpuVal = double.tryParse(parts[1]) ?? 0.0;
+              final rssKb = int.tryParse(parts[2]) ?? 0;
+              final fullArgs = parts.sublist(3).join(' ');
+
+              if (procPid == null || procPid == pid) continue; // пропускаем себя
+              if (fullArgs.contains('ps -eo') || fullArgs.contains('ps -o')) continue; // пропускаем сам ps
+
+              final parsed = _classifyProcess(procPid, cpuVal, rssKb * 1024, fullArgs);
+              if (parsed != null) {
+                list.add(parsed);
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Сортировка: сначала самые прожорливые по CPU, затем по памяти
+    list.sort((a, b) {
+      final cpuCmp = b.cpuPercent.compareTo(a.cpuPercent);
+      if (cpuCmp != 0) return cpuCmp;
+      return b.rssBytes.compareTo(a.rssBytes);
+    });
+
+    return list;
+  }
+
+  SystemProcessItem? _classifyProcess(int procPid, double cpu, int rssBytes, String args) {
+    final lower = args.toLowerCase();
+
+    if (lower.contains('gradledaemon') || lower.contains('gradlew') || lower.contains('gradle-launcher')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Gradle Daemon',
+        description: 'Фоновый сборщик APK и пакетов Gradle',
+        category: 'Сборка',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('kotlincompiledaemon') || lower.contains('kotlinc')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Kotlin Compiler Daemon',
+        description: 'Компилятор Kotlin для сборщика Android',
+        category: 'Компилятор',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('analysis_server') || (lower.contains('dart') && lower.contains('analysis'))) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Dart Analysis Server',
+        description: 'Анализатор кода, автодополнение и линтер Dart/Flutter',
+        category: 'Языковой сервер',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('flutter_tools') || (lower.contains('flutter') && lower.contains('build'))) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Flutter Build Tool',
+        description: 'Утилита сборки и упаковки Flutter',
+        category: 'Сборка',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('proot')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'PRoot Container',
+        description: 'Гостевая изолированная среда Linux / Ubuntu rootfs',
+        category: 'Песочница',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('java') || lower.contains('openjdk')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Java Virtual Machine (JVM)',
+        description: 'Среда исполнения Java (Gradle / Android SDK)',
+        category: 'Среда выполнения',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('aapt2') || lower.contains('zipalign') || lower.contains('apksigner')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'AAPT2 / Packaging Tool',
+        description: 'Упаковщик ресурсов Android APK',
+        category: 'Упаковка',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('clang') || lower.contains('gcc') || lower.contains('ninja') || lower.contains('cmake')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'C/C++ Build Tool (Clang/Ninja)',
+        description: 'Компилятор нативного кода C/C++/NDK',
+        category: 'Компилятор',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('agy') || lower.contains('antigravity')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Antigravity CLI Agent',
+        description: 'Автономный агент Google Antigravity',
+        category: 'ИИ / Агент',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('claude')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Claude Code CLI',
+        description: 'Автономный агент Claude Code',
+        category: 'ИИ / Агент',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('dsh') || lower.contains('deepseek')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'DeepSeek Harness CLI',
+        description: 'Автономный агент DeepSeek Harness',
+        category: 'ИИ / Агент',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('llama') || lower.contains('ollama')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Local AI Inference (Llama)',
+        description: 'Локальная нейросеть / движок инференса',
+        category: 'ИИ / Нейросеть',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('node') || lower.contains('npm') || lower.contains('npx')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Node.js Engine',
+        description: 'Среда исполнения Node.js / NPM пакеты',
+        category: 'Среда выполнения',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('python') || lower.contains('python3')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Python Runtime',
+        description: 'Интерпретатор Python',
+        category: 'Среда выполнения',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (lower.contains('bash') || lower.contains('sh') || lower.contains('zsh')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Terminal Session',
+        description: 'Командная оболочка терминала (Bash/SH)',
+        category: 'Терминал',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (cpu > 0.5 || rssBytes > 15 * 1024 * 1024) {
+      final binaryName = args.split(' ').first.split('/').last;
+      return SystemProcessItem(
+        pid: procPid,
+        name: binaryName,
+        description: 'Системный фоновый процесс: $binaryName',
+        category: 'Процесс',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    return null;
   }
 
   String? _cachedGpuName;
