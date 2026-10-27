@@ -77,7 +77,9 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
     final safeCmd = cmd.replaceAll('"', '\\"');
-    final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
+    final l10n = AppLocalizations.of(context);
+    final bannerTitle = l10n?.runningCommand ?? 'RUNNING COMMAND';
+    final banner = 'printf "\\033[1;36m▶ $bannerTitle:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
     final finalCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.run, finalCmd, interrupt: true, clear: false);
   }
@@ -89,14 +91,15 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
   Future<void> _installBuiltApk(String? workspacePath) async {
     if (workspacePath == null) return;
 
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
     final diagnostics = ref.read(androidBuildDiagnosticsServiceProvider);
     final apkInfo = diagnostics.findDebugApk(workspacePath);
 
     if (apkInfo == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('APK еще не собран. Сначала нажмите Build APK.'),
+          SnackBar(
+            content: Text(isRu ? 'APK еще не собран. Сначала нажмите Build APK.' : 'APK is not built yet. Click Build APK first.'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -109,27 +112,28 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF1E222D),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(LucideIcons.triangle_alert, color: Colors.amberAccent, size: 20),
-              SizedBox(width: 8),
-              Text('APK устарел', style: TextStyle(color: Colors.white, fontSize: 16)),
+              const Icon(LucideIcons.triangle_alert, color: Colors.amberAccent, size: 20),
+              const SizedBox(width: 8),
+              Text(isRu ? 'APK устарел' : 'APK Outdated', style: const TextStyle(color: Colors.white, fontSize: 16)),
             ],
           ),
           content: Text(
-            'Исходные файлы проекта были изменены после последней сборки APK (${apkInfo.fileName}).\n\n'
-            'Рекомендуется пересобрать проект. Установить имеющийся файл прямо сейчас?',
+            isRu
+                ? 'Исходные файлы проекта были изменены после последней сборки APK (${apkInfo.fileName}).\n\nРекомендуется пересобрать проект. Установить имеющийся файл прямо сейчас?'
+                : 'Project files were modified since the last APK build (${apkInfo.fileName}).\n\nRebuilding is recommended. Install existing APK anyway?',
             style: const TextStyle(color: Colors.white70, fontSize: 13),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Отмена', style: TextStyle(color: Colors.white60)),
+              child: Text(isRu ? 'Отмена' : 'Cancel', style: const TextStyle(color: Colors.white60)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Все равно установить', style: TextStyle(color: Colors.white)),
+              child: Text(isRu ? 'Все равно установить' : 'Install anyway', style: const TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -140,7 +144,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Установка ${apkInfo.fileName} (${apkInfo.formattedSize}) без ADB...'),
+          content: Text(isRu ? 'Установка ${apkInfo.fileName} (${apkInfo.formattedSize}) без ADB...' : 'Installing ${apkInfo.fileName} (${apkInfo.formattedSize}) without ADB...'),
           backgroundColor: Colors.blueAccent,
         ),
       );
@@ -153,8 +157,8 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(res.success
-              ? 'Установка запущена нативно (${res.method ?? "PackageInstaller"})'
-              : 'Ошибка установки: ${res.message}'),
+              ? (isRu ? 'Установка запущена нативно (${res.method ?? "PackageInstaller"})' : 'Installation started natively (${res.method ?? "PackageInstaller"})')
+              : (isRu ? 'Ошибка установки: ${res.message}' : 'Installation error: ${res.message}')),
           backgroundColor: res.success ? Colors.green : Colors.red,
         ),
       );
@@ -261,7 +265,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
           actions.addAll([
             _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
                 () => _runDedicatedCommand(workspaceState.currentPath, 'flutter run -d web-server --web-port 8080')),
-            _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.cyanAccent, 
+            _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.cyanAccent, 
                 () => _installBuiltApk(workspaceState.currentPath)),
             _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
                 () => _sendRawKeyToDedicatedTerminal('r')),
@@ -330,7 +334,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         actions.addAll([
           _buildActionButton(l10n.buildAPK, LucideIcons.box, Colors.greenAccent, 
               () => _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=2 assembleDebug')),
-          _buildActionButton(Platform.isAndroid ? 'Установить APK' : l10n.install, LucideIcons.smartphone, Colors.cyanAccent, 
+          _buildActionButton(Platform.isAndroid ? l10n.installApk : l10n.install, LucideIcons.smartphone, Colors.cyanAccent, 
               () => Platform.isAndroid 
                   ? _installBuiltApk(workspaceState.currentPath) 
                   : _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=2 installDebug')),
@@ -585,20 +589,23 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
     final safeCmd = cmd.replaceAll('"', '\\"');
-    final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
+    final l10n = AppLocalizations.of(context);
+    final bannerTitle = l10n?.runningCommand ?? 'RUNNING COMMAND';
+    final banner = 'printf "\\033[1;36m▶ $bannerTitle:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeCmd"';
     final finalCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.build, finalCmd, interrupt: true, clear: false);
   }
 
   Future<void> _installBuiltApk(String? workspacePath) async {
     if (workspacePath == null) return;
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
     final diagnostics = ref.read(androidBuildDiagnosticsServiceProvider);
     final apkInfo = diagnostics.findDebugApk(workspacePath);
     if (apkInfo == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('APK еще не собран. Сначала нажмите кнопку сборки APK.'),
+          SnackBar(
+            content: Text(isRu ? 'APK еще не собран. Сначала нажмите кнопку сборки APK.' : 'APK is not built yet. Click Build APK first.'),
             backgroundColor: Colors.orange,
           ),
         );
@@ -609,7 +616,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Установка ${apkInfo.fileName} (${apkInfo.formattedSize})...'),
+          content: Text(isRu ? 'Установка ${apkInfo.fileName} (${apkInfo.formattedSize})...' : 'Installing ${apkInfo.fileName} (${apkInfo.formattedSize})...'),
           backgroundColor: Colors.blueAccent,
         ),
       );
@@ -622,8 +629,8 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(res.success
-              ? 'Установка запущена (${res.method ?? "PackageInstaller"})'
-              : 'Ошибка установки: ${res.message}'),
+              ? (isRu ? 'Установка запущена (${res.method ?? "PackageInstaller"})' : 'Installation started (${res.method ?? "PackageInstaller"})')
+              : (isRu ? 'Ошибка установки: ${res.message}' : 'Installation error: ${res.message}')),
           backgroundColor: res.success ? Colors.green : Colors.red,
         ),
       );
@@ -785,17 +792,18 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     final projectType = _detectProjectType(workspaceState.currentPath, currentProject.type);
 
     // Build actions depending on project type
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
     List<Widget> buildActions = [];
     switch (projectType) {
       case ProjectType.flutter:
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
+                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && (mkdir -p android ~/.gradle 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" android/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> android/gradle.properties 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
           _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && (sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
-          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && (mkdir -p android ~/.gradle 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" android/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> android/gradle.properties 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && flutter pub get && (sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
+          _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get')),
@@ -813,7 +821,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
           _buildActionButton('Release APK', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=2 assembleRelease && echo "✓ Release APK: app/build/outputs/apk/release/"')),
-          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+          _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath,
@@ -826,9 +834,9 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
       case ProjectType.web:
         buildActions = [
-          _buildActionButton('Собрать APK (Web→APK)', LucideIcons.package, Colors.orange,
+          _buildActionButton(isRu ? 'Собрать APK (Web→APK)' : 'Build APK (Web→APK)', LucideIcons.package, Colors.orange,
               () => _buildWebApkInDedicatedTerminal(workspaceState.currentPath, currentProject.name)),
-          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+          _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
         ];
         break;
@@ -866,7 +874,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                   'pip3 install -r requirements.txt 2>/dev/null || pip install -r requirements.txt 2>/dev/null || echo "No requirements.txt found"')),
           _buildActionButton('Build APK (Flet)', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'flet build apk 2>/dev/null || buildozer android debug 2>/dev/null || echo "Установите flet (pip3 install flet) для сборки Python-приложения в APK"')),
+                  'flet build apk 2>/dev/null || buildozer android debug 2>/dev/null || echo "${isRu ? "Установите flet (pip3 install flet) для сборки Python-приложения в APK" : "Install flet (pip3 install flet) to build Python app to APK"}"')),
           _buildActionButton('Freeze', LucideIcons.file_text, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'pip3 freeze > requirements.txt && echo "requirements.txt updated"')),
@@ -875,9 +883,9 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
       case ProjectType.nodejs:
         buildActions = [
-          _buildActionButton('Собрать APK (Web→APK)', LucideIcons.package, Colors.orange,
+          _buildActionButton(isRu ? 'Собрать APK (Web→APK)' : 'Build APK (Web→APK)', LucideIcons.package, Colors.orange,
               () => _buildWebApkInDedicatedTerminal(workspaceState.currentPath, currentProject.name)),
-          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+          _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('npm install', LucideIcons.download, Colors.cyanAccent,
               () => _runDedicatedCommand(workspaceState.currentPath, 'npm install')),
@@ -894,11 +902,11 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
+                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && (mkdir -p android ~/.gradle 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" android/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> android/gradle.properties 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && flutter pub get && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk')),
           _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && (sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
-          _buildActionButton('Установить APK', LucideIcons.smartphone, Colors.greenAccent,
+                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && (mkdir -p android ~/.gradle 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" android/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> android/gradle.properties 2>/dev/null || true) && (grep -q "android.aapt2FromMaven" ~/.gradle/gradle.properties 2>/dev/null || printf "\nandroid.aapt2FromMaven=false\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\nandroid.aapt2.daemon=false\norg.gradle.daemon=false\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && flutter pub get && (sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)')),
+          _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get')),

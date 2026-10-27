@@ -1300,5 +1300,21 @@
     }
   },
   "setupCiCdWorkflow": "Agregar flujo CI/CD de compilación en la nube",
-  "setupCiCdWorkflowSuccess": "¡Flujo de trabajo de APK de GitHub Actions agregado (.github/workflows/build-apk.yml)!"
+  "setupCiCdWorkflowSuccess": "¡Flujo de trabajo de APK de GitHub Actions agregado (.github/workflows/build-apk.yml)!",
+  "sessionsTitle": "SESIONES",
+  "sessionRunning": "En ejecución",
+  "sessionExited": "Detenido",
+  "newSession": "Nueva sesión",
+  "terminalMenu": "Menú de terminal",
+  "splitScreen": "Dividir pantalla",
+  "mergeScreen": "Unir pantalla",
+  "keepScreenOn": "Mantener pantalla encendida",
+  "keepScreenOnActive": "Pantalla encendida (activo)",
+  "interruptProcess": "Interrumpir (Ctrl+C)",
+  "selectTextInTerminal": "Seleccionar texto en terminal",
+  "runningCommand": "EJECUTANDO COMANDO",
+  "closeSelection": "Cerrar ✕",
+  "keypadKb": "Teclado",
+  "keypadMore": "Más",
+  "installApk": "Instalar APK"
 }

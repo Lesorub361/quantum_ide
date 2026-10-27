@@ -2981,4 +2981,52 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get setupCiCdWorkflowSuccess =>
       'Workflow APK GitHub Actions ajouté (.github/workflows/build-apk.yml) !';
+
+  @override
+  String get sessionsTitle => 'SESSIONS';
+
+  @override
+  String get sessionRunning => 'En cours';
+
+  @override
+  String get sessionExited => 'Arrêté';
+
+  @override
+  String get newSession => 'Nouvelle session';
+
+  @override
+  String get terminalMenu => 'Menu du terminal';
+
+  @override
+  String get splitScreen => 'Diviser l\'écran';
+
+  @override
+  String get mergeScreen => 'Fusionner l\'écran';
+
+  @override
+  String get keepScreenOn => 'Garder l\'écran allumé';
+
+  @override
+  String get keepScreenOnActive => 'Écran allumé (actif)';
+
+  @override
+  String get interruptProcess => 'Interrompre (Ctrl+C)';
+
+  @override
+  String get selectTextInTerminal => 'Sélectionner du texte dans le terminal';
+
+  @override
+  String get runningCommand => 'EXÉCUTION DE LA COMMANDE';
+
+  @override
+  String get closeSelection => 'Fermer ✕';
+
+  @override
+  String get keypadKb => 'Clavier';
+
+  @override
+  String get keypadMore => 'Plus';
+
+  @override
+  String get installApk => 'Installer l\'APK';
 }

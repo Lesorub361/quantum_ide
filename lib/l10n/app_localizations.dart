@@ -5287,6 +5287,23 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'GitHub Actions APK workflow added (.github/workflows/build-apk.yml)!'**
   String get setupCiCdWorkflowSuccess;
+
+  String get sessionsTitle;
+  String get sessionRunning;
+  String get sessionExited;
+  String get newSession;
+  String get terminalMenu;
+  String get splitScreen;
+  String get mergeScreen;
+  String get keepScreenOn;
+  String get keepScreenOnActive;
+  String get interruptProcess;
+  String get selectTextInTerminal;
+  String get runningCommand;
+  String get closeSelection;
+  String get keypadKb;
+  String get keypadMore;
+  String get installApk;
 }
 
 class _AppLocalizationsDelegate

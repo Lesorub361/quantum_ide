@@ -1877,5 +1877,21 @@
     }
   },
   "setupCiCdWorkflow": "Add Cloud Build CI/CD Workflow",
-  "setupCiCdWorkflowSuccess": "GitHub Actions APK workflow added (.github/workflows/build-apk.yml)!"
+  "setupCiCdWorkflowSuccess": "GitHub Actions APK workflow added (.github/workflows/build-apk.yml)!",
+  "sessionsTitle": "SESSIONS",
+  "sessionRunning": "Running",
+  "sessionExited": "Exited",
+  "newSession": "New Session",
+  "terminalMenu": "Terminal Menu",
+  "splitScreen": "Split Screen",
+  "mergeScreen": "Merge Screen",
+  "keepScreenOn": "Keep Screen On (Wakelock)",
+  "keepScreenOnActive": "Keep Screen On (Active)",
+  "interruptProcess": "Interrupt (Ctrl+C)",
+  "selectTextInTerminal": "Select Text in Terminal",
+  "runningCommand": "RUNNING COMMAND",
+  "closeSelection": "Close ✕",
+  "keypadKb": "KB",
+  "keypadMore": "More",
+  "installApk": "Install APK"
 }

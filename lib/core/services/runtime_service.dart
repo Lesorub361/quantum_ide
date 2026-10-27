@@ -648,7 +648,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '16';
+    const bashrcVersion = '17';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -686,7 +686,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=16
+# BASHRC_VERSION=17
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -711,13 +711,27 @@ if [ -d "$JAVA_HOME" ] && ! grep -q "$JAVA_HOME" /root/.config/flutter/settings 
     fi
 fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
-export TERM=xterm-256color
+
+# Auto-detect terminal capability and heal missing terminfo
+if [ -e /usr/share/terminfo/x/xterm-256color ] || [ -e /lib/terminfo/x/xterm-256color ] || [ -e /etc/terminfo/x/xterm-256color ]; then
+    export TERM=xterm-256color
+elif [ -e /usr/share/terminfo/x/xterm ] || [ -e /lib/terminfo/x/xterm ]; then
+    export TERM=xterm
+else
+    if [ -d /usr/share/terminfo/x ]; then
+        ln -sf xterm /usr/share/terminfo/x/xterm-256color 2>/dev/null || true
+    fi
+    export TERM=xterm
+fi
 export COLORTERM=truecolor
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 export HISTSIZE=5000
 export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
+
+# Ensure output newline translates to CR+NL (eliminates staircase prompt in terminals)
+stty sane onlcr 2>/dev/null || true
 
 # Zero-fork pure-bash git branch prompt (avoids expensive `git status` across 3000+ files in PRoot)
 __git_info() {
@@ -737,8 +751,8 @@ alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
-alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --android-skip-build-dependency-validation"
-alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false"
+alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -1052,8 +1066,9 @@ fi
 # QuantumIDE Cyberpunk System Fetch (term-fetch)
 # ==============================================================================
 
-COLS=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
-[ -z "$COLS" ] && COLS=80
+COLS=$(tput cols 2>/dev/null)
+[ -z "$COLS" ] && COLS="${COLUMNS:-80}"
+[ "$COLS" -le 0 ] 2>/dev/null && COLS=80
 
 # ANSI Escape Colors
 C_RESET="\033[0m"
@@ -1282,8 +1297,14 @@ unset PROOT_NO_SECCOMP
 
 mkdir -p "\$TMPDIR"
 chmod 777 "\$TMPDIR" 2>/dev/null || true
-rm -rf "\$TMPDIR"/proot-* 2>/dev/null || true
-export PROOT_TMP_DIR="\$TMPDIR"
+
+if [ -z "\$PROOT_TMP_DIR" ] || [ ! -d "\$PROOT_TMP_DIR" ]; then
+    PROOT_RUN_TMP="\$FILES_DIR/proot_tmp/p_\$\$"
+    mkdir -p "\$PROOT_RUN_TMP"
+    chmod 700 "\$PROOT_RUN_TMP" 2>/dev/null || true
+    export PROOT_TMP_DIR="\$PROOT_RUN_TMP"
+    trap 'rm -rf "\$PROOT_RUN_TMP" 2>/dev/null || true' EXIT INT TERM
+fi
 export PROOT_LOADER="\$PROOT_LIB_DIR/libprootloader.so"
 export PROOT_LOADER_32="\$PROOT_LIB_DIR/libprootloader32.so"
 export LD_LIBRARY_PATH="\$FILES_DIR/lib:\$PROOT_LIB_DIR"
@@ -1454,6 +1475,7 @@ else
             export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
             export FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$5" _JAVA_OPTIONS="\$6"
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
+            stty sane onlcr 2>/dev/null || true
             exec /bin/bash --rcfile /root/.bashrc
         ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$GRADLE_OPTS" "\$_JAVA_OPTIONS"
 fi
@@ -2025,6 +2047,20 @@ WRAP_GS
         chmod +x "$ENGINE_DIR/gen_snapshot"
     done
 done
+
+# Auto-heal AAPT2 daemons and force native aapt2 on ARM64 PRoot
+mkdir -p ~/.gradle 2>/dev/null || true
+if ! grep -q "android.aapt2.daemon=false" ~/.gradle/gradle.properties 2>/dev/null; then
+    printf "\nandroid.aapt2.daemon=false\nandroid.aapt2FromMaven=false\n" >> ~/.gradle/gradle.properties 2>/dev/null || true
+fi
+
+if [ -x /usr/bin/aapt2 ]; then
+    find ~/.gradle/caches -name "aapt2" -type f 2>/dev/null | while read -r maven_aapt2; do
+        if [ ! -L "$maven_aapt2" ]; then
+            ln -sf /usr/bin/aapt2 "$maven_aapt2" 2>/dev/null || true
+        fi
+    done
+fi
 ''';
 
   }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class VirtualKey {
   final String label;
@@ -39,34 +40,30 @@ class VirtualKeysView extends ConsumerStatefulWidget {
 }
 
 class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
-  static const List<VirtualKey> _compactKeys = [
+  List<VirtualKey> _getCompactKeys(bool isRu) => [
     VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
-    VirtualKey(label: 'TAB', value: '\t', tooltip: 'Tab / Автодополнение'),
-    VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: 'Зажать Ctrl'),
-    VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: 'Зажать Alt'),
-    VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: 'Прервать процесс (Ctrl+C)'),
-    VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: 'Вставить из буфера'),
-    VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left, tooltip: 'Влево'),
-    VirtualKey(label: '↓', value: '\x1b[B', icon: LucideIcons.arrow_down, tooltip: 'Вниз'),
-    VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up, tooltip: 'Вверх'),
-    VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right, tooltip: 'Вправо'),
+    VirtualKey(label: 'TAB', value: '\t', tooltip: isRu ? 'Tab / Автодополнение' : 'Tab / Autocomplete'),
+    VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: isRu ? 'Зажать Ctrl' : 'Toggle Ctrl'),
+    VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: isRu ? 'Зажать Alt' : 'Toggle Alt'),
+    VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: isRu ? 'Прервать процесс (Ctrl+C)' : 'Interrupt process (Ctrl+C)'),
+    VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: isRu ? 'Вставить из буфера' : 'Paste from clipboard'),
+    VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left, tooltip: isRu ? 'Влево' : 'Left'),
+    VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up, tooltip: isRu ? 'Вверх' : 'Up'),
+    VirtualKey(label: '↓', value: '\x1b[B', icon: LucideIcons.arrow_down, tooltip: isRu ? 'Вниз' : 'Down'),
+    VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right, tooltip: isRu ? 'Вправо' : 'Right'),
   ];
 
-  static const List<VirtualKey> _row1Keys = [
+  List<VirtualKey> _getRow1Keys(bool isRu) => [
     VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
-    VirtualKey(label: 'TAB', value: '\t', tooltip: 'Tab / Автодополнение'),
-    VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: 'Зажать Ctrl'),
-    VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: 'Зажать Alt'),
-    VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true, tooltip: 'Зажать Shift'),
-    VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left, tooltip: 'Влево'),
-    VirtualKey(label: '↓', value: '\x1b[B', icon: LucideIcons.arrow_down, tooltip: 'Вниз'),
-    VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up, tooltip: 'Вверх'),
-    VirtualKey(label: '→', value: '\x1b[C', icon: LucideIcons.arrow_right, tooltip: 'Вправо'),
+    VirtualKey(label: 'TAB', value: '\t', tooltip: isRu ? 'Tab / Автодополнение' : 'Tab / Autocomplete'),
+    VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: isRu ? 'Зажать Ctrl' : 'Toggle Ctrl'),
+    VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: isRu ? 'Зажать Alt' : 'Toggle Alt'),
+    VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true, tooltip: isRu ? 'Зажать Shift' : 'Toggle Shift'),
+    VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: isRu ? 'Вставить из буфера' : 'Paste from clipboard'),
+    VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: isRu ? 'Прервать процесс (Ctrl+C)' : 'Interrupt process (Ctrl+C)'),
   ];
 
   static const List<VirtualKey> _row2Keys = [
-    VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: 'Вставить из буфера'),
-    VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: 'Прервать процесс (Ctrl+C)'),
     VirtualKey(label: '~', value: '~'),
     VirtualKey(label: '/', value: '/'),
     VirtualKey(label: '-', value: '-'),
@@ -76,10 +73,12 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     VirtualKey(label: '"', value: '"'),
     VirtualKey(label: '\'', value: '\''),
     VirtualKey(label: ':', value: ':'),
+    VirtualKey(label: ';', value: ';'),
+    VirtualKey(label: '=', value: '='),
     VirtualKey(label: '.', value: '.'),
   ];
 
-  void _showMoreCommandsSheet(BuildContext context) {
+  void _showMoreCommandsSheet(BuildContext context, bool isRu) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
       context: context,
@@ -90,12 +89,13 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       ),
       builder: (ctx) {
         return DraggableScrollableSheet(
-          initialChildSize: 0.56,
+          initialChildSize: 0.58,
           minChildSize: 0.35,
-          maxChildSize: 0.85,
+          maxChildSize: 0.88,
           expand: false,
           builder: (_, scrollController) {
             return _MoreTerminalCommandsSheet(
+              isRu: isRu,
               scrollController: scrollController,
               onKeyTap: (val) {
                 Navigator.of(ctx).pop();
@@ -116,7 +116,6 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // On wider screens stretch keys evenly; on compact screens allow smooth horizontal scroll
                 final minTotalWidth = rowKeys.length * 44.0;
                 final shouldExpandEvenly = constraints.maxWidth >= minTotalWidth;
 
@@ -165,7 +164,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
             Container(
               width: 1,
               height: 20,
-              margin: const EdgeInsets.symmetric(horizontal: 2),
+              margin: const EdgeInsets.symmetric(horizontal: 3),
               color: Colors.white.withValues(alpha: 0.1),
             ),
             Padding(
@@ -180,16 +179,22 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
 
   @override
   Widget build(BuildContext context) {
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final l10n = AppLocalizations.of(context);
+    final kbLabel = l10n?.keypadKb ?? 'KB';
     final isKeybActive = widget.activeKeys.contains('KEYB') ||
         widget.activeKeys.contains('toggle_keyboard') ||
-        widget.activeKeys.contains('Клава');
+        widget.activeKeys.contains('Клава') ||
+        widget.activeKeys.contains('KB') ||
+        widget.activeKeys.contains(kbLabel);
 
     final keybButton = _VirtualKeyButton(
-      keyData: const VirtualKey(
-        label: 'Клава',
+      fixedWidth: 50,
+      keyData: VirtualKey(
+        label: kbLabel,
         value: 'toggle_keyboard',
         icon: LucideIcons.keyboard,
-        tooltip: 'Показать/скрыть клавиатуру',
+        tooltip: isRu ? 'Показать/скрыть клавиатуру' : 'Show/hide software keyboard',
       ),
       isActive: isKeybActive,
       isHighlightedAction: true,
@@ -197,101 +202,194 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     );
 
     final moreButton = _VirtualKeyButton(
-      keyData: const VirtualKey(
-        label: 'Ещё',
+      fixedWidth: 50,
+      keyData: VirtualKey(
+        label: l10n?.keypadMore ?? 'More',
         value: 'more_commands',
         icon: LucideIcons.layout_grid,
-        tooltip: 'Все команды, сочетания клавиш и спецсимволы',
+        tooltip: isRu ? 'Все команды, сочетания клавиш и спецсимволы' : 'All commands, shortcuts & symbols',
       ),
       isActive: false,
       isHighlightedAction: false,
-      onTap: () => _showMoreCommandsSheet(context),
+      onTap: () => _showMoreCommandsSheet(context, isRu),
     );
 
     if (widget.isCompact) {
-      return Container(
-        height: 33,
-        clipBehavior: Clip.hardEdge,
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        decoration: BoxDecoration(
-          color: const Color(0xFF0D0F14).withValues(alpha: 0.98),
-          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
-        ),
-        child: _buildKeyRow(
-          _compactKeys,
-          trailingFixed: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              keybButton,
-              const SizedBox(width: 3),
-              moreButton,
-            ],
+      return SafeArea(
+        top: false,
+        bottom: false,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0F14).withValues(alpha: 0.98),
+            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
+          ),
+          child: _buildKeyRow(
+            _getCompactKeys(isRu),
+            trailingFixed: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                keybButton,
+                const SizedBox(width: 3),
+                moreButton,
+              ],
+            ),
           ),
         ),
       );
     }
 
-    return Container(
-      height: 56,
-      clipBehavior: Clip.hardEdge,
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0F14).withValues(alpha: 0.98),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildKeyRow(
-            _row1Keys,
-            trailingFixed: keybButton,
+    // Classic standard Inverted-T Arrow Cluster + Delete & End + Actions
+    final trailingRow1 = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _VirtualKeyButton(
+          fixedWidth: 34,
+          keyData: VirtualKey(
+            label: 'DEL',
+            value: '\x7f',
+            icon: LucideIcons.delete,
+            tooltip: isRu ? 'Удалить символ (Backspace / Delete)' : 'Delete character (Backspace / Delete)',
           ),
-          const SizedBox(height: 2),
-          _buildKeyRow(
-            _row2Keys,
-            trailingFixed: moreButton,
+          isActive: false,
+          onTap: () => widget.onKeyTap('\x7f'),
+        ),
+        const SizedBox(width: 3),
+        _VirtualKeyButton(
+          fixedWidth: 34,
+          keyData: VirtualKey(
+            label: '↑',
+            value: '\x1b[A',
+            icon: LucideIcons.arrow_up,
+            tooltip: isRu ? 'Вверх (история команд)' : 'Up (Command history)',
           ),
-        ],
+          isActive: false,
+          onTap: () => widget.onKeyTap('\x1b[A'),
+        ),
+        const SizedBox(width: 3),
+        _VirtualKeyButton(
+          fixedWidth: 34,
+          keyData: VirtualKey(
+            label: 'END',
+            value: '\x1b[F',
+            tooltip: isRu ? 'В конец строки (End)' : 'End of line (End)',
+          ),
+          isActive: false,
+          onTap: () => widget.onKeyTap('\x1b[F'),
+        ),
+        const SizedBox(width: 4),
+        keybButton,
+      ],
+    );
+
+    final trailingRow2 = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _VirtualKeyButton(
+          fixedWidth: 34,
+          keyData: VirtualKey(
+            label: '←',
+            value: '\x1b[D',
+            icon: LucideIcons.arrow_left,
+            tooltip: isRu ? 'Влево' : 'Left',
+          ),
+          isActive: false,
+          onTap: () => widget.onKeyTap('\x1b[D'),
+        ),
+        const SizedBox(width: 3),
+        _VirtualKeyButton(
+          fixedWidth: 34,
+          keyData: VirtualKey(
+            label: '↓',
+            value: '\x1b[B',
+            icon: LucideIcons.arrow_down,
+            tooltip: isRu ? 'Вниз' : 'Down',
+          ),
+          isActive: false,
+          onTap: () => widget.onKeyTap('\x1b[B'),
+        ),
+        const SizedBox(width: 3),
+        _VirtualKeyButton(
+          fixedWidth: 34,
+          keyData: VirtualKey(
+            label: '→',
+            value: '\x1b[C',
+            icon: LucideIcons.arrow_right,
+            tooltip: isRu ? 'Вправо' : 'Right',
+          ),
+          isActive: false,
+          onTap: () => widget.onKeyTap('\x1b[C'),
+        ),
+        const SizedBox(width: 4),
+        moreButton,
+      ],
+    );
+
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0F14).withValues(alpha: 0.98),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildKeyRow(
+              _getRow1Keys(isRu),
+              trailingFixed: trailingRow1,
+            ),
+            const SizedBox(height: 3),
+            _buildKeyRow(
+              _row2Keys,
+              trailingFixed: trailingRow2,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _MoreTerminalCommandsSheet extends StatelessWidget {
+  final bool isRu;
   final ScrollController scrollController;
   final Function(String) onKeyTap;
 
   const _MoreTerminalCommandsSheet({
+    required this.isRu,
     required this.scrollController,
     required this.onKeyTap,
   });
 
-  static const List<VirtualKey> _controlKeys = [
-    VirtualKey(label: 'Клавиатура', value: 'toggle_keyboard', icon: LucideIcons.keyboard, tooltip: 'Показать/скрыть клавиатуру'),
-    VirtualKey(label: 'Выделить всё', value: 'select_all', icon: LucideIcons.check_check),
-    VirtualKey(label: 'Скопировать всё', value: 'copy_all_output', icon: LucideIcons.clipboard_copy),
-    VirtualKey(label: 'Окно текста', value: 'selection_mode', icon: LucideIcons.file_text),
-    VirtualKey(label: 'Очистить (C-L)', value: 'ctrl+l', icon: LucideIcons.eraser),
-    VirtualKey(label: 'C-D (EOF)', value: 'ctrl+d'),
-    VirtualKey(label: 'C-Z (Пауза)', value: 'ctrl+z'),
-    VirtualKey(label: 'HOME', value: '\x1b[H'),
-    VirtualKey(label: 'END', value: '\x1b[F'),
-    VirtualKey(label: 'PGUP', value: '\x1b[5~'),
-    VirtualKey(label: 'PGDN', value: '\x1b[6~'),
-    VirtualKey(label: 'C-A (В начало)', value: '\x01'),
-    VirtualKey(label: 'C-E (В конец)', value: '\x05'),
-    VirtualKey(label: 'C-U (Стереть строку)', value: '\x15'),
-    VirtualKey(label: 'C-W (Стереть слово)', value: '\x17'),
+  List<VirtualKey> _getControlKeys() => [
+    VirtualKey(label: isRu ? 'Клавиатура' : 'Keyboard', value: 'toggle_keyboard', icon: LucideIcons.keyboard, tooltip: isRu ? 'Показать/скрыть клавиатуру' : 'Toggle keyboard'),
+    VirtualKey(label: isRu ? 'Выделить всё' : 'Select All', value: 'select_all', icon: LucideIcons.check_check),
+    VirtualKey(label: isRu ? 'Скопировать всё' : 'Copy All', value: 'copy_all_output', icon: LucideIcons.clipboard_copy),
+    VirtualKey(label: isRu ? 'Окно текста' : 'Text Selection', value: 'selection_mode', icon: LucideIcons.file_text),
+    VirtualKey(label: isRu ? 'Очистить (C-L)' : 'Clear (C-L)', value: 'ctrl+l', icon: LucideIcons.eraser),
+    const VirtualKey(label: 'C-D (EOF)', value: 'ctrl+d'),
+    VirtualKey(label: isRu ? 'C-Z (Пауза)' : 'C-Z (Suspend)', value: 'ctrl+z'),
+    const VirtualKey(label: 'HOME', value: '\x1b[H'),
+    const VirtualKey(label: 'END', value: '\x1b[F'),
+    const VirtualKey(label: 'PGUP', value: '\x1b[5~'),
+    const VirtualKey(label: 'PGDN', value: '\x1b[6~'),
+    VirtualKey(label: isRu ? 'C-A (В начало)' : 'C-A (Line Start)', value: '\x01'),
+    VirtualKey(label: isRu ? 'C-E (В конец)' : 'C-E (Line End)', value: '\x05'),
+    VirtualKey(label: isRu ? 'C-U (Стереть строку)' : 'C-U (Erase Line)', value: '\x15'),
+    VirtualKey(label: isRu ? 'C-W (Стереть слово)' : 'C-W (Erase Word)', value: '\x17'),
   ];
 
-  static const List<Map<String, String>> _quickSnippets = [
+  List<Map<String, String>> _getQuickSnippets() => [
     {'label': 'flutter pub get', 'cmd': 'flutter pub get\n', 'badge': 'Flutter'},
     {'label': 'flutter run', 'cmd': 'flutter run\n', 'badge': 'Flutter'},
     {'label': 'flutter build apk', 'cmd': 'flutter build apk --release --target-platform android-arm64\n', 'badge': 'Build'},
     {'label': 'flutter analyze', 'cmd': 'flutter analyze\n', 'badge': 'Check'},
     {'label': 'flutter clean', 'cmd': 'flutter clean\n', 'badge': 'Clean'},
     {'label': 'git status', 'cmd': 'git status\n', 'badge': 'Git'},
-    {'label': 'git log (граф)', 'cmd': 'git log --oneline --graph --decorate -n 20\n', 'badge': 'Git'},
+    {'label': isRu ? 'git log (граф)' : 'git log (graph)', 'cmd': 'git log --oneline --graph --decorate -n 20\n', 'badge': 'Git'},
     {'label': 'git pull', 'cmd': 'git pull\n', 'badge': 'Git'},
     {'label': 'git push', 'cmd': 'git push\n', 'badge': 'Git'},
     {'label': 'ls -la', 'cmd': 'ls -la\n', 'badge': 'Shell'},
@@ -331,7 +429,7 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
                 const Icon(LucideIcons.terminal, size: 16, color: Colors.cyanAccent),
                 const SizedBox(width: 8),
                 Text(
-                  'Дополнительные клавиши и команды',
+                  isRu ? 'Дополнительные клавиши и команды' : 'Additional Keys & Commands',
                   style: GoogleFonts.inter(
                     color: Colors.white,
                     fontSize: 13,
@@ -353,12 +451,12 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
               controller: scrollController,
               padding: const EdgeInsets.all(14),
               children: [
-                _buildSectionHeader('УПРАВЛЕНИЕ И ВЫДЕЛЕНИЕ', LucideIcons.sliders_horizontal),
+                _buildSectionHeader(isRu ? 'УПРАВЛЕНИЕ И ВЫДЕЛЕНИЕ' : 'NAVIGATION & SELECTION', LucideIcons.sliders_horizontal),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: _controlKeys.map((k) {
+                  children: _getControlKeys().map((k) {
                     return _VirtualKeyButton(
                       keyData: k,
                       isActive: false,
@@ -367,12 +465,12 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
                   }).toList(),
                 ),
                 const SizedBox(height: 16),
-                _buildSectionHeader('БЫСТРЫЕ КОМАНДЫ В ТЕРМИНАЛ', LucideIcons.zap),
+                _buildSectionHeader(isRu ? 'БЫСТРЫЕ КОМАНДЫ В ТЕРМИНАЛ' : 'QUICK COMMANDS', LucideIcons.zap),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: _quickSnippets.map((item) {
+                  children: _getQuickSnippets().map((item) {
                     return InkWell(
                       onTap: () {
                         HapticFeedback.lightImpact();
@@ -420,7 +518,7 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
                   }).toList(),
                 ),
                 const SizedBox(height: 16),
-                _buildSectionHeader('СПЕЦСИМВОЛЫ', LucideIcons.code),
+                _buildSectionHeader(isRu ? 'СПЕЦСИМВОЛЫ' : 'SPECIAL SYMBOLS', LucideIcons.code),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
@@ -450,10 +548,10 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
         Text(
           title,
           style: GoogleFonts.inter(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.8,
             color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
           ),
         ),
       ],
@@ -465,12 +563,14 @@ class _VirtualKeyButton extends StatelessWidget {
   final VirtualKey keyData;
   final bool isActive;
   final bool isHighlightedAction;
+  final double? fixedWidth;
   final VoidCallback onTap;
 
   const _VirtualKeyButton({
     required this.keyData,
     required this.isActive,
     this.isHighlightedAction = false,
+    this.fixedWidth,
     required this.onTap,
   });
 
@@ -522,8 +622,9 @@ class _VirtualKeyButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(5),
         child: Container(
           height: 24,
-          constraints: const BoxConstraints(minWidth: 28),
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          width: fixedWidth,
+          constraints: fixedWidth == null ? const BoxConstraints(minWidth: 28) : null,
+          padding: EdgeInsets.symmetric(horizontal: fixedWidth != null ? 2 : 6),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(5),
@@ -535,7 +636,7 @@ class _VirtualKeyButton extends StatelessWidget {
             children: [
               if (keyData.icon != null) ...[
                 Icon(keyData.icon, size: 12, color: themeColor),
-                if (keyData.label.isNotEmpty && !isArrow) const SizedBox(width: 3),
+                if (keyData.label.isNotEmpty && !isArrow && fixedWidth == null) const SizedBox(width: 3),
               ],
               if (keyData.icon == null || (keyData.label.isNotEmpty && !isArrow))
                 Flexible(
@@ -559,11 +660,10 @@ class _VirtualKeyButton extends StatelessWidget {
     if (keyData.tooltip != null && keyData.tooltip!.isNotEmpty) {
       return Tooltip(
         message: keyData.tooltip!,
-        waitDuration: const Duration(milliseconds: 500),
+        waitDuration: const Duration(milliseconds: 400),
         child: btn,
       );
     }
     return btn;
   }
 }
-

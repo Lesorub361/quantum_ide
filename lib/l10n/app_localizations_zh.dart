@@ -2891,4 +2891,52 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get setupCiCdWorkflowSuccess =>
       '已添加 GitHub Actions APK 构建工作流 (.github/workflows/build-apk.yml)！';
+
+  @override
+  String get sessionsTitle => '会话';
+
+  @override
+  String get sessionRunning => '运行中';
+
+  @override
+  String get sessionExited => '已停止';
+
+  @override
+  String get newSession => '新建会话';
+
+  @override
+  String get terminalMenu => '终端菜单';
+
+  @override
+  String get splitScreen => '分屏';
+
+  @override
+  String get mergeScreen => '合并屏幕';
+
+  @override
+  String get keepScreenOn => '保持屏幕常亮';
+
+  @override
+  String get keepScreenOnActive => '屏幕常亮（已开启）';
+
+  @override
+  String get interruptProcess => '中断 (Ctrl+C)';
+
+  @override
+  String get selectTextInTerminal => '在终端中选择文本';
+
+  @override
+  String get runningCommand => '执行命令';
+
+  @override
+  String get closeSelection => '关闭 ✕';
+
+  @override
+  String get keypadKb => '键盘';
+
+  @override
+  String get keypadMore => '更多';
+
+  @override
+  String get installApk => '安装 APK';
 }

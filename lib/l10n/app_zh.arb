@@ -928,5 +928,21 @@
     }
   },
   "setupCiCdWorkflow": "添加云端构建 CI/CD 工作流",
-  "setupCiCdWorkflowSuccess": "已添加 GitHub Actions APK 构建工作流 (.github/workflows/build-apk.yml)！"
+  "setupCiCdWorkflowSuccess": "已添加 GitHub Actions APK 构建工作流 (.github/workflows/build-apk.yml)！",
+  "sessionsTitle": "会话",
+  "sessionRunning": "运行中",
+  "sessionExited": "已停止",
+  "newSession": "新建会话",
+  "terminalMenu": "终端菜单",
+  "splitScreen": "分屏",
+  "mergeScreen": "合并屏幕",
+  "keepScreenOn": "保持屏幕常亮",
+  "keepScreenOnActive": "屏幕常亮（已开启）",
+  "interruptProcess": "中断 (Ctrl+C)",
+  "selectTextInTerminal": "在终端中选择文本",
+  "runningCommand": "执行命令",
+  "closeSelection": "关闭 ✕",
+  "keypadKb": "键盘",
+  "keypadMore": "更多",
+  "installApk": "安装 APK"
 }

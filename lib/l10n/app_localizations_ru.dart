@@ -2973,4 +2973,52 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get setupCiCdWorkflowSuccess =>
       'Сценарий сборки APK добавлен (.github/workflows/build-apk.yml)!';
+
+  @override
+  String get sessionsTitle => 'СЕССИИ';
+
+  @override
+  String get sessionRunning => 'Работает';
+
+  @override
+  String get sessionExited => 'Остановлен';
+
+  @override
+  String get newSession => 'Новая сессия';
+
+  @override
+  String get terminalMenu => 'Меню терминала';
+
+  @override
+  String get splitScreen => 'Разделить экран';
+
+  @override
+  String get mergeScreen => 'Объединить экран';
+
+  @override
+  String get keepScreenOn => 'Не гасить экран (Wakelock)';
+
+  @override
+  String get keepScreenOnActive => 'Экран не гаснет (активно)';
+
+  @override
+  String get interruptProcess => 'Прервать (Ctrl+C)';
+
+  @override
+  String get selectTextInTerminal => 'Выделить текст в терминале';
+
+  @override
+  String get runningCommand => 'ЗАПУСК КОМАНДЫ';
+
+  @override
+  String get closeSelection => 'К вводу ✕';
+
+  @override
+  String get keypadKb => 'Клава';
+
+  @override
+  String get keypadMore => 'Ещё';
+
+  @override
+  String get installApk => 'Установить APK';
 }

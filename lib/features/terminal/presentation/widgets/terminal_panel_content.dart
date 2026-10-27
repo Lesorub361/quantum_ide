@@ -1223,7 +1223,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
     final safeCmd = cmd.replaceAll('"', '\\"');
-    final banner = 'printf "\\033[1;36m▶ ЗАПУСК КОМАНДЫ:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m--------------------------------------------------\\033[0m\\n" "$safeCmd"';
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    final bannerTitle = isRu ? 'ЗАПУСК КОМАНДЫ' : 'RUNNING COMMAND';
+    final banner = 'printf "\\033[1;36m▶ $bannerTitle:\\033[0m \\033[1;33m%s\\033[0m\\n\\033[0;34m--------------------------------------------------\\033[0m\\n" "$safeCmd"';
     final fullCmd = cdCmd.isNotEmpty ? '$cdCmd && $banner && $cmd' : '$banner && $cmd';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(type, fullCmd, interrupt: true, clear: false);
   }
@@ -1361,7 +1363,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 const Icon(LucideIcons.terminal, size: 14, color: Colors.cyanAccent),
                 const SizedBox(width: 8),
                 Text(
-                  'СЕССИИ',
+                  AppLocalizations.of(context)!.sessionsTitle,
                   style: GoogleFonts.inter(
                     color: Colors.white70,
                     fontSize: 10,
@@ -1490,7 +1492,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   ),
                                   const SizedBox(height: 1),
                                   Text(
-                                    isExited ? 'Остановлен' : 'Работает',
+                                    isExited
+                                        ? AppLocalizations.of(context)!.sessionExited
+                                        : AppLocalizations.of(context)!.sessionRunning,
                                     style: GoogleFonts.inter(
                                       fontSize: 8.5,
                                       color: statusColor.withValues(alpha: 0.7),
@@ -1555,6 +1559,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       key: key,
       builder: (context, constraints) {
         final isCompact = constraints.maxWidth < 650;
+        final l10n = AppLocalizations.of(context)!;
 
         final terminalContent = Column(
           children: [
@@ -1650,7 +1655,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   if (!isCompact) ...[
                     _buildTerminalActionButton(
                       _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
-                      _isTerminalSplit ? 'Объединить' : 'Разделить экран',
+                      _isTerminalSplit ? l10n.mergeScreen : l10n.splitScreen,
                       () {
                         setState(() {
                           _isTerminalSplit = !_isTerminalSplit;
@@ -1663,7 +1668,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     const SizedBox(width: 3),
                     _buildTerminalActionButton(
                       LucideIcons.coffee,
-                      _isWakelockEnabled ? 'Экран не гаснет (активно)' : 'Не гасить экран (Wakelock)',
+                      _isWakelockEnabled ? l10n.keepScreenOnActive : l10n.keepScreenOn,
                       _toggleWakelock,
                       color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
                     ),
@@ -1671,7 +1676,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   ],
                   _buildTerminalActionButton(
                     LucideIcons.plus,
-                    'Новая сессия',
+                    l10n.newSession,
                     () => notifier.createNewSession(),
                     color: Colors.cyanAccent,
                   ),
@@ -1701,7 +1706,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   const SizedBox(width: 2),
                   _buildTerminalActionButton(
                     LucideIcons.ellipsis_vertical,
-                    'Меню терминала',
+                    l10n.terminalMenu,
                     () => _showTerminalContextMenu(context, Offset.zero, currentSession, fromToolbar: true),
                   ),
                 ],
@@ -1919,7 +1924,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: Text(
-                      'Копировать всё',
+                      l10n.copyAll,
                       style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white70),
                     ),
                   ),
@@ -1938,7 +1943,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: Text(
-                      'К вводу ✕',
+                      l10n.closeSelection,
                       style: GoogleFonts.inter(
                         fontSize: 10.5,
                         fontWeight: FontWeight.bold,
@@ -2736,6 +2741,7 @@ Also explain what exactly went wrong and how you fixed it.
 
     final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final hasSelection = session.xtermViewController.selection != null;
+    final l10n = AppLocalizations.of(context)!;
 
     final result = await showMenu<String>(
       context: context,
@@ -2753,14 +2759,14 @@ Also explain what exactly went wrong and how you fixed it.
         side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
       ),
       items: [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'inline_selection',
           height: 38,
           child: Row(
             children: [
-              Icon(LucideIcons.mouse_pointer_click, size: 15, color: Colors.cyanAccent),
-              SizedBox(width: 10),
-              Text('Выделить текст в терминале', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
+              const Icon(LucideIcons.mouse_pointer_click, size: 15, color: Colors.cyanAccent),
+              const SizedBox(width: 10),
+              Text(l10n.selectTextInTerminal, style: const TextStyle(color: Colors.cyanAccent, fontSize: 13)),
             ],
           ),
         ),
@@ -2772,7 +2778,7 @@ Also explain what exactly went wrong and how you fixed it.
               children: [
                 const Icon(LucideIcons.copy, size: 15, color: Colors.white70),
                 const SizedBox(width: 10),
-                Text(AppLocalizations.of(context)!.copy, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                Text(l10n.copy, style: const TextStyle(color: Colors.white, fontSize: 13)),
               ],
             ),
           ),
@@ -2783,7 +2789,7 @@ Also explain what exactly went wrong and how you fixed it.
             children: [
               const Icon(LucideIcons.files, size: 15, color: Colors.white70),
               const SizedBox(width: 10),
-              Text(AppLocalizations.of(context)!.copyAll, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              Text(l10n.copyAll, style: const TextStyle(color: Colors.white, fontSize: 13)),
             ],
           ),
         ),
@@ -2794,7 +2800,7 @@ Also explain what exactly went wrong and how you fixed it.
             children: [
               const Icon(LucideIcons.clipboard_paste, size: 15, color: Colors.white70),
               const SizedBox(width: 10),
-              Text(AppLocalizations.of(context)!.paste, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              Text(l10n.paste, style: const TextStyle(color: Colors.white, fontSize: 13)),
             ],
           ),
         ),
@@ -2805,7 +2811,7 @@ Also explain what exactly went wrong and how you fixed it.
             children: [
               Icon(_isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2, size: 15, color: Colors.cyanAccent),
               const SizedBox(width: 10),
-              Text(_isTerminalSplit ? 'Объединить экран' : 'Разделить экран', style: const TextStyle(color: Colors.white, fontSize: 13)),
+              Text(_isTerminalSplit ? l10n.mergeScreen : l10n.splitScreen, style: const TextStyle(color: Colors.white, fontSize: 13)),
             ],
           ),
         ),
@@ -2816,19 +2822,19 @@ Also explain what exactly went wrong and how you fixed it.
             children: [
               Icon(LucideIcons.coffee, size: 15, color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white70),
               const SizedBox(width: 10),
-              Text(_isWakelockEnabled ? 'Не гасить экран (Вкл)' : 'Не гасить экран (Wakelock)', style: TextStyle(color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white, fontSize: 13)),
+              Text(_isWakelockEnabled ? l10n.keepScreenOnActive : l10n.keepScreenOn, style: TextStyle(color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white, fontSize: 13)),
             ],
           ),
         ),
         const PopupMenuDivider(height: 1),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'ctrl_c',
           height: 38,
           child: Row(
             children: [
-              Icon(LucideIcons.square, size: 15, color: Colors.redAccent),
-              SizedBox(width: 10),
-              Text('Прервать (Ctrl+C)', style: TextStyle(color: Colors.redAccent, fontSize: 13)),
+              const Icon(LucideIcons.square, size: 15, color: Colors.redAccent),
+              const SizedBox(width: 10),
+              Text(l10n.interruptProcess, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
             ],
           ),
         ),
@@ -2839,7 +2845,7 @@ Also explain what exactly went wrong and how you fixed it.
             children: [
               const Icon(LucideIcons.trash_2, size: 15, color: Colors.orangeAccent),
               const SizedBox(width: 10),
-              Text(AppLocalizations.of(context)!.clearTerminal, style: const TextStyle(color: Colors.orangeAccent, fontSize: 13)),
+              Text(l10n.clearTerminal, style: const TextStyle(color: Colors.orangeAccent, fontSize: 13)),
             ],
           ),
         ),
@@ -2894,6 +2900,7 @@ Also explain what exactly went wrong and how you fixed it.
   }
 
   void _showMobileTerminalBottomSheet(BuildContext context, TerminalSession session) {
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2957,8 +2964,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: LucideIcons.mouse_pointer_click,
                   iconColor: Colors.cyanAccent,
-                  title: _inlineSelectionMode ? 'Выйти из выделения в терминале' : 'Выделение прямо в терминале',
-                  subtitle: 'Удобное выделение текста курсорами и копирование без лишних окон',
+                  title: _inlineSelectionMode ? l10n.closeSelection : l10n.selectTextInTerminal,
+                  subtitle: l10n.selectTextInTerminal,
                   onTap: () {
                     Navigator.pop(ctx);
                     _toggleInlineSelectionMode(session);
@@ -2967,8 +2974,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: LucideIcons.copy,
                   iconColor: Colors.greenAccent,
-                  title: 'Копировать всё',
-                  subtitle: 'Скопировать весь вывод терминала в буфер',
+                  title: l10n.copyAll,
+                  subtitle: l10n.copyAll,
                   onTap: () {
                     Navigator.pop(ctx);
                     _copyTerminalOutputDirect(session);
@@ -2977,8 +2984,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: LucideIcons.clipboard_paste,
                   iconColor: Colors.blueAccent,
-                  title: 'Вставить',
-                  subtitle: 'Вставить текст из буфера обмена в терминал',
+                  title: l10n.paste,
+                  subtitle: l10n.paste,
                   onTap: () {
                     Navigator.pop(ctx);
                     _pasteToTerminal(session);
@@ -2987,8 +2994,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: LucideIcons.square,
                   iconColor: Colors.redAccent,
-                  title: 'Прервать процесс (Ctrl+C)',
-                  subtitle: 'Отправить сигнал SIGINT активной программе',
+                  title: l10n.interruptProcess,
+                  subtitle: l10n.interruptProcess,
                   onTap: () {
                     Navigator.pop(ctx);
                     session.pty.write(Uint8List.fromList([3]));
@@ -2997,8 +3004,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: LucideIcons.trash_2,
                   iconColor: Colors.orangeAccent,
-                  title: 'Очистить экран (Clear)',
-                  subtitle: 'Очистить видимый экран и буфер прокрутки',
+                  title: l10n.clearTerminal,
+                  subtitle: l10n.clearTerminal,
                   onTap: () {
                     Navigator.pop(ctx);
                     session.xtermTerminal.eraseDisplay();
@@ -3008,8 +3015,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: LucideIcons.refresh_cw,
                   iconColor: Colors.purpleAccent,
-                  title: 'Перезапустить сессию',
-                  subtitle: 'Перезапустить оболочку терминала',
+                  title: l10n.newSession,
+                  subtitle: session.title,
                   onTap: () {
                     Navigator.pop(ctx);
                     final tabsNotifier = ref.read(terminalTabsProvider.notifier);
@@ -3022,8 +3029,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
                   iconColor: Colors.cyanAccent,
-                  title: _isTerminalSplit ? 'Объединить экран' : 'Разделить экран (Split)',
-                  subtitle: 'Разделить терминал на два параллельных окна',
+                  title: _isTerminalSplit ? l10n.mergeScreen : l10n.splitScreen,
+                  subtitle: l10n.splitScreen,
                   onTap: () {
                     Navigator.pop(ctx);
                     setState(() {
@@ -3038,8 +3045,8 @@ Also explain what exactly went wrong and how you fixed it.
                 _buildMenuTile(
                   icon: LucideIcons.coffee,
                   iconColor: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
-                  title: _isWakelockEnabled ? 'Не гасить экран (Активно)' : 'Держать экран включенным (Wakelock)',
-                  subtitle: 'Предотвратить засыпание экрана и завершение сборки/терминала',
+                  title: _isWakelockEnabled ? l10n.keepScreenOnActive : l10n.keepScreenOn,
+                  subtitle: l10n.keepScreenOn,
                   onTap: () {
                     Navigator.pop(ctx);
                     _toggleWakelock();
@@ -3179,6 +3186,7 @@ Also explain what exactly went wrong and how you fixed it.
         if (isKeyboardOpen) 'KEYB',
         if (isKeyboardOpen) 'toggle_keyboard',
         if (isKeyboardOpen) 'Клава',
+        if (isKeyboardOpen) 'KB',
         if (_inlineSelectionMode) 'SEL',
         if (_inlineSelectionMode) 'inline_selection_mode',
       },

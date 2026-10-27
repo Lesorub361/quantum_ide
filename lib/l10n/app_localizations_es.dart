@@ -2981,4 +2981,52 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get setupCiCdWorkflowSuccess =>
       '¡Flujo de trabajo de APK de GitHub Actions agregado (.github/workflows/build-apk.yml)!';
+
+  @override
+  String get sessionsTitle => 'SESIONES';
+
+  @override
+  String get sessionRunning => 'En ejecución';
+
+  @override
+  String get sessionExited => 'Detenido';
+
+  @override
+  String get newSession => 'Nueva sesión';
+
+  @override
+  String get terminalMenu => 'Menú de terminal';
+
+  @override
+  String get splitScreen => 'Dividir pantalla';
+
+  @override
+  String get mergeScreen => 'Unir pantalla';
+
+  @override
+  String get keepScreenOn => 'Mantener pantalla encendida';
+
+  @override
+  String get keepScreenOnActive => 'Pantalla encendida (activo)';
+
+  @override
+  String get interruptProcess => 'Interrumpir (Ctrl+C)';
+
+  @override
+  String get selectTextInTerminal => 'Seleccionar texto en terminal';
+
+  @override
+  String get runningCommand => 'EJECUTANDO COMANDO';
+
+  @override
+  String get closeSelection => 'Cerrar ✕';
+
+  @override
+  String get keypadKb => 'Teclado';
+
+  @override
+  String get keypadMore => 'Más';
+
+  @override
+  String get installApk => 'Instalar APK';
 }

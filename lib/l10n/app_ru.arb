@@ -1628,5 +1628,21 @@
     }
   },
   "setupCiCdWorkflow": "Добавить CI/CD сценарий облачной сборки",
-  "setupCiCdWorkflowSuccess": "Сценарий сборки APK добавлен (.github/workflows/build-apk.yml)!"
+  "setupCiCdWorkflowSuccess": "Сценарий сборки APK добавлен (.github/workflows/build-apk.yml)!",
+  "sessionsTitle": "СЕССИИ",
+  "sessionRunning": "Работает",
+  "sessionExited": "Остановлен",
+  "newSession": "Новая сессия",
+  "terminalMenu": "Меню терминала",
+  "splitScreen": "Разделить экран",
+  "mergeScreen": "Объединить экран",
+  "keepScreenOn": "Не гасить экран (Wakelock)",
+  "keepScreenOnActive": "Экран не гаснет (активно)",
+  "interruptProcess": "Прервать (Ctrl+C)",
+  "selectTextInTerminal": "Выделить текст в терминале",
+  "runningCommand": "ЗАПУСК КОМАНДЫ",
+  "closeSelection": "К вводу ✕",
+  "keypadKb": "Клава",
+  "keypadMore": "Ещё",
+  "installApk": "Установить APK"
 }
