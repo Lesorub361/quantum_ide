@@ -518,6 +518,15 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
       return p.category == _selectedCategory;
     }).toList();
 
+    final toolsRamBytes = stats.processes
+        .where((p) => p.pid != pid)
+        .fold<int>(0, (sum, p) => sum + p.rssBytes);
+    final toolsRamMB = toolsRamBytes ~/ (1024 * 1024);
+    final toolsRamFormatted = toolsRamMB >= 1024
+        ? '${(toolsRamMB / 1024.0).toStringAsFixed(1)} GB'
+        : '$toolsRamMB MB';
+    final toolsRamUsage = (toolsRamMB / (stats.ramTotalGB * 1024.0)).clamp(0.0, 1.0);
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
@@ -885,14 +894,6 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               ),
             ] else ...[
               // Tab 1: Производительность (Hardware gauges)
-              final toolsRamBytes = stats.processes
-                  .where((p) => p.pid != pid)
-                  .fold<int>(0, (sum, p) => sum + p.rssBytes);
-              final toolsRamMB = toolsRamBytes ~/ (1024 * 1024);
-              final toolsRamFormatted = toolsRamMB >= 1024
-                  ? '${(toolsRamMB / 1024.0).toStringAsFixed(1)} GB'
-                  : '$toolsRamMB MB';
-              final toolsRamUsage = (toolsRamMB / (stats.ramTotalGB * 1024.0)).clamp(0.0, 1.0);
 
               _row('Процессор (CPU)', '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', stats.cpuUsage, LucideIcons.cpu),
               _row(
