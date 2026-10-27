@@ -752,8 +752,10 @@ export PS1="\[\r\e[K\e[1;36m\]➜ \[\e[1;32m\]\W\[\e[0m\]\$(__git_info) \[\e[1;3
 
 export FLUTTER_ALLOW_SU_ROOT=true
 export FLUTTER_SUPPRESS_ANALYTICS=true
-export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
-export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\""
+_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+export _JAVA_OPTIONS
+GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
+export GRADLE_OPTS
 
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
@@ -1339,19 +1341,22 @@ fi
 export ANDROID_HOME="/root/android-sdk"
 export ANDROID_SDK_ROOT="/root/android-sdk"
 
-export FLUTTER_ALLOW_SU_ROOT=true
+FLUTTER_ALLOW_SU_ROOT=true
+export FLUTTER_ALLOW_SU_ROOT
 # Force IPv4 and 2GB JVM heap for Java/Gradle to fix UnknownHostException and Java heap space
-export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+export _JAVA_OPTIONS
 if [ -f /usr/bin/aapt2 ]; then
-    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\" -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+    GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
 else
     BUILD_TOOLS_AAPT2=\$(find /root/android-sdk/build-tools -name "aapt2" 2>/dev/null | sort -V | tail -n 1)
     if [ -n "\$BUILD_TOOLS_AAPT2" ]; then
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\" -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
+        GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
     else
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs=\"-Xmx2048m -XX:MaxMetaspaceSize=512m\""
+        GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
     fi
 fi
+export GRADLE_OPTS
 
 # Auto-fix resolv.conf: if it is a broken symlink (e.g. -> stub-resolv.conf that
 # does not exist on Android), replace it with a real file containing working DNS.
@@ -1435,7 +1440,10 @@ if [ \$# -gt 2 ]; then
             export HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp
             export PATH="\$1" JAVA_HOME="\$2" ANDROID_HOME="\$3" ANDROID_SDK_ROOT="\$4"
             export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
-            export FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$5" _JAVA_OPTIONS="\$6"
+            FLUTTER_ALLOW_SU_ROOT=true
+            GRADLE_OPTS="\$5"
+            _JAVA_OPTIONS="\$6"
+            export FLUTTER_ALLOW_SU_ROOT GRADLE_OPTS _JAVA_OPTIONS
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             shift 6
             if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
@@ -1480,7 +1488,10 @@ else
             export HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp
             export PATH="\$1" JAVA_HOME="\$2" ANDROID_HOME="\$3" ANDROID_SDK_ROOT="\$4"
             export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
-            export FLUTTER_ALLOW_SU_ROOT=true GRADLE_OPTS="\$5" _JAVA_OPTIONS="\$6"
+            FLUTTER_ALLOW_SU_ROOT=true
+            GRADLE_OPTS="\$5"
+            _JAVA_OPTIONS="\$6"
+            export FLUTTER_ALLOW_SU_ROOT GRADLE_OPTS _JAVA_OPTIONS
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             stty sane onlcr 2>/dev/null || true
             exec /bin/bash --rcfile /root/.bashrc
@@ -1662,7 +1673,7 @@ fi
       // Force IPv4 and 2GB JVM heap for Java/Gradle
       '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m',
       'GRADLE_OPTS':
-          '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m" -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
+          '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
     };
   }
 

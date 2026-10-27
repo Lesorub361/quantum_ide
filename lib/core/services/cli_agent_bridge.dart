@@ -519,7 +519,8 @@ agent-default-model:
       }
 
       // Mobile-Harness Guards: Ensure child compilers/tools do not spawn unbounded daemons or cause OOM
-      env['GRADLE_OPTS'] = '-Dorg.gradle.workers.max=2 -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs="-Xmx1024m -XX:MaxMetaspaceSize=256m"';
+      env['GRADLE_OPTS'] = '-Dorg.gradle.workers.max=2 -Dorg.gradle.daemon=false';
+      env['_JAVA_OPTIONS'] = '-Djava.net.preferIPv4Stack=true -Xmx1024m -XX:MaxMetaspaceSize=256m';
       env['ANDROID_AAPT2_NO_DAEMON'] = '1';
       env['CI'] = '1';
 
