@@ -154,6 +154,63 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
     return PathMapper.mapToGuest(hostPath, runtime.appDirectory);
   }
 
+  Future<void> _applyKeystoreToProject() async {
+    final workspacePath = ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null) {
+      _addLog('Рабочая директория не выбрана', isError: true);
+      return;
+    }
+
+    final ksPath = _selectedKeystore == 'custom' 
+        ? _customKeystoreController.text.trim()
+        : (_selectedKeystore ?? _customKeystoreController.text.trim());
+
+    if (ksPath.isEmpty || !File(ksPath).existsSync()) {
+      _addLog('Выберите корректный файл ключа (.jks)', isError: true);
+      return;
+    }
+
+    try {
+      final androidDir = Directory(p.join(workspacePath, 'android'));
+      final appDir = Directory(p.join(workspacePath, 'android', 'app'));
+      if (!androidDir.existsSync()) {
+        androidDir.createSync(recursive: true);
+      }
+      if (!appDir.existsSync()) {
+        appDir.createSync(recursive: true);
+      }
+
+      final ksFileName = p.basename(ksPath);
+      final destKs = File(p.join(appDir.path, ksFileName));
+      final rootKs = File(p.join(androidDir.path, ksFileName));
+      File(ksPath).copySync(destKs.path);
+      File(ksPath).copySync(rootKs.path);
+
+      final keyPropContent = 'storePassword=${_ksPasswordController.text.trim()}\\n'
+          'keyPassword=${_keyPasswordController.text.trim()}\\n'
+          'keyAlias=${_keyAliasController.text.trim()}\\n'
+          'storeFile=$ksFileName\\n';
+
+      final keyPropsFile = File(p.join(androidDir.path, 'key.properties'));
+      keyPropsFile.writeAsStringSync(keyPropContent.replaceAll('\\\\n', '\\n'));
+
+      _addLog('✓ Ключ $ksFileName скопирован в android/ и android/app/', isSuccess: true);
+      _addLog('✓ Создан файл android/key.properties с вашими паролями', isSuccess: true);
+      _addLog('✓ Проект готов к автоматической сборке Release APK!', isSuccess: true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: Colors.green,
+            content: Text('✓ Ключ $ksFileName успешно настроен в проекте!'),
+          ),
+        );
+      }
+    } catch (e) {
+      _addLog('Ошибка настройки ключа: $e', isError: true);
+    }
+  }
+
   Future<void> _pickFile({required bool isApk}) async {
     final l10n = AppLocalizations.of(context)!;
     try {
@@ -592,6 +649,18 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
                 ),
               ],
             ],
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _isLoading ? null : _applyKeystoreToProject,
+            icon: const Icon(LucideIcons.key, size: 14, color: Colors.orangeAccent),
+            label: Text('Применить ключ к проекту (Настроить key.properties)',
+                style: GoogleFonts.inter(fontSize: 11, color: Colors.orangeAccent, fontWeight: FontWeight.w600)),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
           ),
           const SizedBox(height: 10),
           ElevatedButton.icon(

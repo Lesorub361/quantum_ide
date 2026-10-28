@@ -815,6 +815,10 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                   displayCmd: 'flutter pub get')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter clean', displayCmd: 'flutter clean')),
+          _buildActionButton('Deep Clean', LucideIcons.eraser, Colors.redAccent,
+              () => _runDedicatedCommand(workspaceState.currentPath,
+                  'rm -rf .dart_tool/flutter_build build/app/intermediates build/app/outputs ~/.gradle/caches/build-cache-* 2>/dev/null ; flutter clean && flutter pub get',
+                  displayCmd: 'Deep Clean (Reset Caches & Flutter)')),
         ];
         break;
 

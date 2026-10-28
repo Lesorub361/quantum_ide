@@ -32,12 +32,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.105 - Автоматический ARM64 таргет для Flutter и защита от ошибок dpkg
+        ## 🚀 QuantumIDE v1.2.106 - Мастер подписи релизов и глубокая очистка кэша сборки
 
-        ### 🔧 Ключевые улучшения:
-        - **Автоматический ARM64 таргет при сборке Flutter**: Встроенная функция `flutter()` и быстрые команды (`fb-apk`, `fb-apk-release`) автоматически подставляют `--target-platform android-arm64 --android-skip-build-dependency-validation`, предотвращая сбои из-за отсутствия `gen_snapshot` под 32-битные и x86 платформы на мобильном процессоре.
-        - **Защита от ошибки dpkg `linux-libc-dev`**: При установке пакетов через `optional_package.dart` повреждённые заголовки `linux-libc-dev` теперь принудительно очищаются, устраняя ошибку `dpkg returned error code (1)`.
-        - **Команда `fb-apk-release` в терминале**: В приветственный баннер терминала добавлена быстрая команда для сборки подписанного релизного APK.
+        ### ✨ Новые возможности:
+        - **Мастер настройки Release Keystore в 1 клик**: Во вкладке *Sign APK* добавлена кнопка *«Применить ключ к проекту»*. Выбираете файл `.jks`, вводите пароли — Quantum IDE сама копирует ключ в проект и создаёт `android/key.properties`. Больше не нужно копировать файлы вручную!
+        - **Кнопка «Deep Clean» (Сброс кэша сборки)**: В панель сборки Flutter добавлена кнопка для полной очистки повреждённых артефактов `.dart_tool/flutter_build`, промежуточных файлов Gradle и вызова `flutter clean && flutter pub get`.
+        - **Автоматический ARM64 таргет**: Встроена защита от сбоев компилятора Dart `gen_snapshot` и ошибок `linux-libc-dev`.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
