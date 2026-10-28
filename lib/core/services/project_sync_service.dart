@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum ProjectSyncStatus {
   idle,
@@ -118,6 +119,80 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     }
   }
 
+  String? _getManifestPath(String workspacePath, String detectedType) {
+    switch (detectedType) {
+      case 'flutter':
+        return p.join(workspacePath, 'pubspec.yaml');
+      case 'node':
+        return p.join(workspacePath, 'package.json');
+      case 'python':
+        return p.join(workspacePath, 'requirements.txt');
+      case 'gradle':
+        final kts = File(p.join(workspacePath, 'build.gradle.kts'));
+        if (kts.existsSync()) return kts.path;
+        return p.join(workspacePath, 'build.gradle');
+      default:
+        return null;
+    }
+  }
+
+  Future<bool> _checkIfAlreadySynced(String workspacePath, String detectedType) async {
+    try {
+      final manifestPath = _getManifestPath(workspacePath, detectedType);
+      if (manifestPath == null) return false;
+
+      final manifestFile = File(manifestPath);
+      if (!await manifestFile.exists()) return false;
+
+      // 1. Verify that target dependencies artifact actually exists
+      if (detectedType == 'flutter') {
+        final packageConfig = File(p.join(workspacePath, '.dart_tool', 'package_config.json'));
+        if (!await packageConfig.exists()) {
+          // Never synced before on this machine / directory
+          return false;
+        }
+      } else if (detectedType == 'node') {
+        final nodeModules = Directory(p.join(workspacePath, 'node_modules'));
+        if (!await nodeModules.exists()) return false;
+      }
+
+      // 2. Check if manifest has changed since the last recorded sync
+      final prefs = await SharedPreferences.getInstance();
+      final lastSyncKey = 'project_sync_last_mtime_$workspacePath';
+      final lastRecordedMTime = prefs.getInt(lastSyncKey);
+      if (lastRecordedMTime == null) {
+        // No record of a prior sync in this IDE installation
+        return false;
+      }
+
+      final stat = await manifestFile.stat();
+      final currentMTime = stat.modified.millisecondsSinceEpoch;
+
+      // If manifest was modified after last sync, it needs sync!
+      if (currentMTime > lastRecordedMTime) {
+        return false;
+      }
+
+      // Everything is up-to-date!
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> _recordSyncTimestamp(String workspacePath, String detectedType) async {
+    try {
+      final manifestPath = _getManifestPath(workspacePath, detectedType);
+      if (manifestPath == null) return;
+      final manifestFile = File(manifestPath);
+      if (await manifestFile.exists()) {
+        final stat = await manifestFile.stat();
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('project_sync_last_mtime_$workspacePath', stat.modified.millisecondsSinceEpoch);
+      }
+    } catch (_) {}
+  }
+
   Future<void> startSync(String workspacePath, {bool force = false}) async {
     // If already syncing this path, don't restart unless forced
     if (state.isSyncing && !force && state.projectPath == workspacePath) {
@@ -178,6 +253,16 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
     } else {
       // Nothing to sync for raw directory
       return;
+    }
+
+    // Check if project is already synced and does NOT need sync
+    if (!force) {
+      final isAlreadySynced = await _checkIfAlreadySynced(workspacePath, detectedType);
+      if (isAlreadySynced) {
+        LogService.log('ProjectSync: $workspacePath ($detectedType) is already up-to-date, skipping auto-sync.');
+        state = state.copyWith(status: ProjectSyncStatus.idle, isPanelVisible: false);
+        return;
+      }
     }
 
     final initialLogs = [
@@ -338,6 +423,9 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
 
     // Auto-dismiss floating banner after success in 4 seconds if not expanded
     if (isSuccess) {
+      if (state.projectPath != null && state.projectType != null) {
+        _recordSyncTimestamp(state.projectPath!, state.projectType!);
+      }
       _autoHideTimer = Timer(const Duration(seconds: 4), () {
         if (mounted && state.status == ProjectSyncStatus.success && !state.isOutputExpanded) {
           state = state.copyWith(isPanelVisible: false);

@@ -27,6 +27,7 @@ import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/collaboration_service.dart';
 import 'package:quantum_ide/core/services/fast_syntax_engine.dart';
+import 'package:quantum_ide/core/services/project_sync_service.dart';
 
 class EditorFile {
   final String path;
@@ -580,6 +581,15 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       ref.read(analysisServiceProvider).triggerAnalysis(immediate: true);
       ref.read(gitProvider.notifier).refreshStatus();
       ref.read(symbolIndexerProvider.notifier).indexFile(path);
+
+      // Trigger automatic sync if dependencies manifest was edited
+      final baseName = p.basename(path);
+      if (baseName == 'pubspec.yaml' || baseName == 'package.json' || baseName == 'requirements.txt') {
+        final ws = ref.read(workspaceProvider).currentPath;
+        if (ws != null) {
+          ref.read(projectSyncProvider.notifier).startSync(ws, force: true);
+        }
+      }
     } catch (e) {
       debugPrint('Error saving file $path: $e');
     }
