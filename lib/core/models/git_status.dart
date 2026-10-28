@@ -115,4 +115,26 @@ class GitStatus {
 
   int get workingTreeChangesCount =>
       modifiedFiles.length + untrackedFiles.length + conflictedFiles.length;
+
+  late final Set<String> modifiedSet = modifiedFiles.toSet();
+  late final Set<String> stagedSet = stagedFiles.toSet();
+  late final Set<String> untrackedSet = untrackedFiles.toSet();
+  late final Set<String> conflictedSet = conflictedFiles.toSet();
+
+  late final Set<String> modifiedDirPrefixes = _computeDirPrefixes(modifiedFiles);
+  late final Set<String> stagedDirPrefixes = _computeDirPrefixes(stagedFiles);
+  late final Set<String> untrackedDirPrefixes = _computeDirPrefixes(untrackedFiles);
+
+  static Set<String> _computeDirPrefixes(List<String> files) {
+    final dirs = <String>{};
+    for (final file in files) {
+      final parts = file.split('/');
+      var current = '';
+      for (int i = 0; i < parts.length - 1; i++) {
+        current = current.isEmpty ? parts[i] : '$current/${parts[i]}';
+        dirs.add(current);
+      }
+    }
+    return dirs;
+  }
 }

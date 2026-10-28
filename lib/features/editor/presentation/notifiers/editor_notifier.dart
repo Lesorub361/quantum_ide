@@ -598,7 +598,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   void setActiveTab(int index) {
     if (index < 0 || index >= state.openFiles.length) return;
     state = state.copyWith(activeTabIndex: index);
-    ref.read(gitProvider.notifier).refreshStatus();
     _persistWorkspaceFiles();
 
     // Notify collaboration about active tab change

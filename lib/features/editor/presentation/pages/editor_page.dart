@@ -302,6 +302,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       ref.read(terminalTabsProvider.notifier).createNewSession(workingDir: workspacePath);
     }
     
+    // Очищаем старые фоновые демоны сборщика при смене проекта, чтобы они не грели процессор
+    ref.read(systemStatsProvider.notifier).freeBackgroundMemory();
+
     // Событийный запрос Git статуса при смене рабочего пространства
     ref.read(gitProvider.notifier).refreshStatus();
 

@@ -398,13 +398,13 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     final relativePath = p.relative(widget.path, from: currentWorkspace);
     
     if (widget.isDirectory) {
-      if (status.modifiedFiles.any((f) => f.startsWith('$relativePath/'))) return Colors.blueAccent;
-      if (status.stagedFiles.any((f) => f.startsWith('$relativePath/'))) return Colors.greenAccent;
-      if (status.untrackedFiles.any((f) => f.startsWith('$relativePath/'))) return Colors.orangeAccent;
+      if (status.modifiedDirPrefixes.contains(relativePath)) return Colors.blueAccent;
+      if (status.stagedDirPrefixes.contains(relativePath)) return Colors.greenAccent;
+      if (status.untrackedDirPrefixes.contains(relativePath)) return Colors.orangeAccent;
     } else {
-      if (status.modifiedFiles.contains(relativePath)) return Colors.blueAccent;
-      if (status.stagedFiles.contains(relativePath)) return Colors.greenAccent;
-      if (status.untrackedFiles.contains(relativePath)) return Colors.orangeAccent;
+      if (status.modifiedSet.contains(relativePath)) return Colors.blueAccent;
+      if (status.stagedSet.contains(relativePath)) return Colors.greenAccent;
+      if (status.untrackedSet.contains(relativePath)) return Colors.orangeAccent;
     }
     
     return Colors.white70;
@@ -553,25 +553,19 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     int deletions = 0;
     
     if (widget.isDirectory) {
-      if (status.modifiedFiles.any((f) => f.startsWith('$relativePath/'))) {
+      if (status.modifiedDirPrefixes.contains(relativePath)) {
         letter = 'M';
-      } else if (status.stagedFiles.any((f) => f.startsWith('$relativePath/'))) {
+      } else if (status.stagedDirPrefixes.contains(relativePath)) {
         letter = 'A';
-      } else if (status.untrackedFiles.any((f) => f.startsWith('$relativePath/'))) {
+      } else if (status.untrackedDirPrefixes.contains(relativePath)) {
         letter = 'U';
       }
-      for (final entry in status.diffStats.entries) {
-        if (entry.key.startsWith('$relativePath/')) {
-          additions += entry.value.additions;
-          deletions += entry.value.deletions;
-        }
-      }
     } else {
-      if (status.modifiedFiles.contains(relativePath)) {
+      if (status.modifiedSet.contains(relativePath)) {
         letter = 'M';
-      } else if (status.stagedFiles.contains(relativePath)) {
+      } else if (status.stagedSet.contains(relativePath)) {
         letter = 'A';
-      } else if (status.untrackedFiles.contains(relativePath)) {
+      } else if (status.untrackedSet.contains(relativePath)) {
         letter = 'U';
       }
       final stat = status.diffStats[relativePath];

@@ -137,7 +137,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
               'pkill -9 -f GradleDaemon 2>/dev/null || true; '
               'pkill -9 -f KotlinCompileDaemon 2>/dev/null || true; '
               'pkill -9 -f "dart analysis_server" 2>/dev/null || true; '
-              'pkill -9 -f "flutter_tools.snapshot" 2>/dev/null || true'
+              'pkill -9 -f "flutter_tools.snapshot" 2>/dev/null || true; '
+              'pkill -9 -f git 2>/dev/null || true'
         ]);
       } else {
         await Process.run('taskkill', ['/F', '/IM', 'aapt2.exe']).catchError((_) => ProcessResult(0, 0, '', ''));

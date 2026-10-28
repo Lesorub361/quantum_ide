@@ -19,7 +19,7 @@ class GitService {
   static GitStatus? _cachedStatus;
   static String? _cachedPath;
   static DateTime? _lastStatusTime;
-  static const Duration _statusCacheTtl = Duration(seconds: 3);
+  static const Duration _statusCacheTtl = Duration(seconds: 15);
 
   String? _resolveRepoHostPath() {
     final workspace = ref.read(workspaceProvider);
@@ -118,7 +118,7 @@ class GitService {
         'echo "__SECTION_AHEAD_BEHIND__"',
         '(git rev-list --left-right --count HEAD...@{u} 2>/dev/null || echo "0\t0")',
         'echo "__SECTION_STATUS__"',
-        'git status --porcelain -uall 2>/dev/null',
+        'git status --porcelain -unormal 2>/dev/null',
         'echo "__SECTION_NUMSTAT__"',
         '(git diff --numstat 2>/dev/null || true; git diff --cached --numstat 2>/dev/null || true)',
         'echo "__SECTION_COMMITS__"',
