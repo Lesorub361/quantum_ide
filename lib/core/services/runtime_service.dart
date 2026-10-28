@@ -781,6 +781,23 @@ gradlew() {
     fi
 }
 
+# Flutter wrapper to auto-ensure ARM64 target on native Android host
+flutter() {
+    if [ "$1" = "build" ] && [ "$2" = "apk" ]; then
+        local has_plat=false
+        for a in "$@"; do
+            case "$a" in
+                *target-platform*|*--split-per-abi*) has_plat=true ;;
+            esac
+        done
+        if [ "$has_plat" = "false" ]; then
+            command flutter "$@" --target-platform android-arm64 --android-skip-build-dependency-validation
+            return $?
+        fi
+    fi
+    command flutter "$@"
+}
+
 # Create which shim if missing (inside guest)
 if ! command -v which > /dev/null 2>&1; then
     mkdir -p /usr/bin
@@ -918,6 +935,7 @@ if [ -z "$VTE_VERSION" ]; then
     echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
     echo -e '    \e[38;5;141mll\e[0m             → ls -la'
     echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
+    echo -e '    \e[38;5;141mfb-apk-release\e[0m → flutter build apk (release arm64)'
     echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
     echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
     echo
@@ -996,7 +1014,7 @@ alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
-alias fb-apk="flutter build apk --debug --android-skip-build-dependency-validation"
+alias fb-apk="flutter build apk --debug --target-platform android-arm64 --android-skip-build-dependency-validation"
 alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"

@@ -28,6 +28,7 @@ class OptionalPackage {
 const String _aptPrefix = 'export HOME=/root ; export USER=root ; export DEBIAN_FRONTEND=noninteractive ; '
     'kill -9 \$(pgrep -x "apt|apt-get|dpkg|dpkg-deb" 2>/dev/null) 2>/dev/null ; '
     'rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend 2>/dev/null ; '
+    'dpkg --remove --force-all linux-libc-dev 2>/dev/null || true ; '
     'dpkg --configure -a 2>/dev/null || true ; '
     'apt-get install -f -y 2>/dev/null || true ; '
     '(apt-get update -o Acquire::Retries=1 2>/dev/null || apt update 2>/dev/null || true) ; '
@@ -35,6 +36,7 @@ const String _aptPrefix = 'export HOME=/root ; export USER=root ; export DEBIAN_
 
 const String _ensureCmdlineTools = '(if [ ! -f /root/android-sdk/cmdline-tools/latest/bin/sdkmanager ]; then '
     'mkdir -p /root/android-sdk/cmdline-tools /tmp/cmdline-extracted && '
+    'dpkg --remove --force-all linux-libc-dev 2>/dev/null || true ; '
     'dpkg --configure -a 2>/dev/null || true ; '
     'apt-get install -f -y 2>/dev/null || true ; '
     '(which wget >/dev/null 2>&1 && which curl >/dev/null 2>&1 && which unzip >/dev/null 2>&1 || (apt-get update 2>/dev/null && apt-get install -y --no-install-recommends wget curl unzip openjdk-17-jdk-headless ca-certificates 2>/dev/null || true)) && '

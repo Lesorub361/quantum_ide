@@ -385,7 +385,7 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
   List<Map<String, String>> _getQuickSnippets() => [
     {'label': 'flutter pub get', 'cmd': 'flutter pub get\n', 'badge': 'Flutter'},
     {'label': 'flutter run', 'cmd': 'flutter run\n', 'badge': 'Flutter'},
-    {'label': 'flutter build apk', 'cmd': 'flutter build apk --release --target-platform android-arm64\n', 'badge': 'Build'},
+    {'label': 'flutter build apk', 'cmd': 'flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation\n', 'badge': 'Build'},
     {'label': 'flutter analyze', 'cmd': 'flutter analyze\n', 'badge': 'Check'},
     {'label': 'flutter clean', 'cmd': 'flutter clean\n', 'badge': 'Clean'},
     {'label': 'git status', 'cmd': 'git status\n', 'badge': 'Git'},
