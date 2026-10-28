@@ -277,8 +277,17 @@ class FindReplaceNotifier extends StateNotifier<FindReplaceState> {
 
   bool _isSkippableFile(String relPath) {
     return relPath.startsWith('.git/') ||
+        relPath.contains('/.git/') ||
+        relPath.startsWith('.gradle/') ||
+        relPath.contains('/.gradle/') ||
         relPath.startsWith('.dart_tool/') ||
+        relPath.contains('/.dart_tool/') ||
         relPath.startsWith('build/') ||
+        relPath.contains('/build/') ||
+        relPath.startsWith('.cxx/') ||
+        relPath.contains('/.cxx/') ||
+        relPath.startsWith('node_modules/') ||
+        relPath.contains('/node_modules/') ||
         relPath.contains('.flutter-plugins') ||
         relPath.endsWith('.png') ||
         relPath.endsWith('.jpg') ||

@@ -21,6 +21,30 @@ import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_e
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/bookmarks_notifier.dart';
 import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+
+class FileTreeFilter {
+  static const Set<String> ignoredDirNames = {
+    '.git',
+    '.gradle',
+    '.dart_tool',
+    '.idea',
+    '.vscode',
+    '.cache',
+    '.cxx',
+    'node_modules',
+    '.pub-cache',
+    'Pods',
+  };
+
+  static bool isIgnoredPath(String path) {
+    final parts = p.split(path);
+    for (final part in parts) {
+      if (ignoredDirNames.contains(part)) return true;
+    }
+    return false;
+  }
+}
 
 enum FileSortMode { name, size, date }
 
@@ -48,13 +72,18 @@ class ExpandedFoldersNotifier extends StateNotifier<Set<String>> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final list = prefs.getStringList('expanded_folders_$path') ?? [];
-      state = list.toSet();
+      final cleaned = list.where((folder) => !FileTreeFilter.isIgnoredPath(folder)).toSet();
+      state = cleaned;
+      if (cleaned.length != list.length) {
+        await prefs.setStringList('expanded_folders_$path', cleaned.toList());
+      }
     } catch (e) {
       state = {};
     }
   }
 
   Future<void> toggleExpanded(String folderPath) async {
+    if (FileTreeFilter.isIgnoredPath(folderPath)) return;
     final newSet = {...state};
     if (newSet.contains(folderPath)) {
       newSet.remove(folderPath);
@@ -75,12 +104,13 @@ class ExpandedFoldersNotifier extends StateNotifier<Set<String>> {
   }
   
   Future<void> setExpanded(Set<String> newSet) async {
-    state = newSet;
+    final cleaned = newSet.where((folder) => !FileTreeFilter.isIgnoredPath(folder)).toSet();
+    state = cleaned;
     final path = _currentWorkspacePath;
     if (path != null) {
       try {
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setStringList('expanded_folders_$path', newSet.toList());
+        await prefs.setStringList('expanded_folders_$path', cleaned.toList());
       } catch (e) {
         // Ignore
       }
@@ -110,24 +140,24 @@ final fileSearchWatcher = Provider<void>((ref) {
     if (!await dir.exists()) return;
 
     final matchingParents = <String>{};
+    int matchedCount = 0;
     try {
       await for (final entity in dir.list(recursive: true, followLinks: false)) {
-        final name = p.basename(entity.path);
-        if (name == '.git' || name == 'node_modules' || name == '.dart_tool') continue;
-        if (entity.path.contains('/.git/') ||
-            entity.path.contains('/node_modules/') ||
-            entity.path.contains('/.dart_tool/')) {
-          continue;
-        }
+        if (FileTreeFilter.isIgnoredPath(entity.path)) continue;
 
+        final name = p.basename(entity.path);
         if (name.toLowerCase().contains(query.toLowerCase())) {
           final parent = entity.parent.path;
           var current = parent;
           while (current.startsWith(workspace) && current.length >= workspace.length) {
-            matchingParents.add(current);
+            if (!FileTreeFilter.isIgnoredPath(current)) {
+              matchingParents.add(current);
+            }
             if (current == workspace) break;
             current = p.dirname(current);
           }
+          matchedCount++;
+          if (matchedCount >= 50) break; // Strict safety threshold to prevent OOM
         }
       }
     } catch (_) {
@@ -212,6 +242,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
 
   void _startWatching() {
     if (_watcherSubscription != null || !widget.isDirectory) return;
+    if (FileTreeFilter.isIgnoredPath(widget.path)) return;
     try {
       // Use lightweight non-recursive watcher for this single directory,
       // avoiding package:watcher's recursive tree crawling and infinite scan cascades
@@ -238,18 +269,22 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
   }
 
   Future<void> _loadChildren() async {
-    if (!widget.isDirectory) return;
+    if (!widget.isDirectory || FileTreeFilter.isIgnoredPath(widget.path)) return;
     try {
       final dir = Directory(widget.path);
       if (!await dir.exists()) return;
       
       final entities = <FileSystemEntity>[];
       final sortMode = ref.read(fileSortModeProvider);
+      final showHidden = ref.read(settingsProvider).showHiddenFiles;
 
       await for (final entity in dir.list()) {
         final name = p.basename(entity.path);
-        // Simple filter for common noise
-        if (name == '.git' || name == 'node_modules' || name == '.dart_tool') continue;
+        if (FileTreeFilter.ignoredDirNames.contains(name)) continue;
+        if (FileTreeFilter.isIgnoredPath(entity.path)) continue;
+        if (name.startsWith('.') && name != '.gitignore' && name != '.env' && name != '.editorconfig') {
+          if (!showHidden) continue;
+        }
         
         entities.add(entity);
       }
@@ -260,13 +295,19 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
         if (entity is Directory) {
           var currentDir = entity;
           var visualName = p.basename(entity.path);
-          while (true) {
+          int compactDepth = 0;
+          while (compactDepth < 10) {
+            compactDepth++;
             try {
               final list = await currentDir.list().toList();
-              // Filter out noise
               final filteredList = list.where((e) {
                 final name = p.basename(e.path);
-                return name != '.git' && name != 'node_modules' && name != '.dart_tool';
+                if (FileTreeFilter.ignoredDirNames.contains(name)) return false;
+                if (FileTreeFilter.isIgnoredPath(e.path)) return false;
+                if (name.startsWith('.') && name != '.gitignore' && name != '.env' && name != '.editorconfig') {
+                  if (!showHidden) return false;
+                }
+                return true;
               }).toList();
               
               final subdirs = filteredList.whereType<Directory>().toList();
@@ -1486,6 +1527,10 @@ Please fulfill this request. If you need to modify the file, create a new one, d
 
   @override
   Widget build(BuildContext context) {
+    if (FileTreeFilter.isIgnoredPath(widget.path)) {
+      return const SizedBox.shrink();
+    }
+
     final expandedFolders = ref.watch(expandedFoldersProvider);
     final isExpanded = expandedFolders.contains(widget.path);
 

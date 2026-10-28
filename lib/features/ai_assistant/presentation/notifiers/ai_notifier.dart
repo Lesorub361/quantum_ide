@@ -51,9 +51,13 @@ List<String> _grepSearchIsolate(List<String> args) {
       final path = file.path;
       // Игнорируем бинарные и служебные директории
       if (path.contains('/.git/') ||
+          path.contains('/.gradle/') ||
           path.contains('/.dart_tool/') ||
           path.contains('/build/') ||
           path.contains('/.idea/') ||
+          path.contains('/.cxx/') ||
+          path.contains('/.cache/') ||
+          path.contains('/node_modules/') ||
           path.contains('/ios/Pods/') ||
           path.endsWith('.png') ||
           path.endsWith('.jpg') ||
@@ -3127,9 +3131,10 @@ $history
         return;
       }
 
-      final dir = Directory(workspacePath);
-      final entries = dir.listSync(recursive: true, followLinks: false);
-      final libDirs = entries.whereType<Directory>().map((d) => p.relative(d.path, from: workspacePath)).where((p) => p.startsWith('lib/')).toList();
+      final libDir = Directory(p.join(workspacePath, 'lib'));
+      final libDirs = libDir.existsSync()
+          ? libDir.listSync(recursive: true, followLinks: false).whereType<Directory>().map((d) => p.relative(d.path, from: workspacePath)).toList()
+          : <String>[];
       final hasPubspec = File(p.join(workspacePath, 'pubspec.yaml')).existsSync();
       final hasAndroid = Directory(p.join(workspacePath, 'android')).existsSync();
       final hasIos = Directory(p.join(workspacePath, 'ios')).existsSync();
