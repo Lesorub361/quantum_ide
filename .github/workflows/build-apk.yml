@@ -32,6 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
+        ## 🚀 QuantumIDE v1.2.104 - Исправление установки Android SDK (sdkmanager / cmdline-tools) и самовосстановление dpkg
+
+        ### 🔧 Надёжная установка пакетов и сборка проектов:
+        - **Самовосстановление dpkg и apt**: Добавлена автоматическая починка незавершённых и прерванных пакетов (`dpkg --configure -a` и `apt-get install -f -y`) перед установкой любого инструмента. Ошибки вида `linux-libc-dev:arm64 returned error code (1)` больше не блокируют установку SDK и компиляторов.
+        - **Гарантированное скачивание Android cmdline-tools (sdkmanager)**: Установка Android SDK и cmdline-tools больше не обрывается из-за предупреждений apt. Пакеты загружаются и распаковываются в `/root/android-sdk/cmdline-tools/latest` с автоматической генерацией символических ссылок.
+        - **Готовность к релизной сборке `lesorub_pro`**: Релизные ключи (`key.properties` и `lesorub.jks`) автоматически подхватываются сборщиком для подписания Release APK.
+
         ## 🚀 QuantumIDE v1.2.103 - Оптимизация Git и файлового дерева для больших проектов, ликвидация фоновой нагрузки CPU (Git 30% / Gradle Daemon 50%)
 
         ### ⚡ Устранение нагрузки и тормозов на больших проектах:
