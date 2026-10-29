@@ -2201,6 +2201,34 @@ if [ -f /lib64/ld-linux-x86-64.so.2 ] || command -v box64 >/dev/null 2>&1; then
 else
     echo "[quantum-heal-x64] Warning: /lib64/ld-linux-x86-64.so.2 still missing."
 fi
+
+# 6. Auto-heal AAPT2 to modern ARM64 binary with --source-path support (required for AGP 8+)
+if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
+    echo "[quantum-heal-x64] Upgrading AAPT2 to modern ARM64 binary with --source-path support..."
+    TMP_ZIP="${TMPDIR:-/tmp}/sdk-tools-$$.zip"
+    TMP_DIR="${TMPDIR:-/tmp}/sdk_tools_$$"
+    mkdir -p "$TMP_DIR" 2>/dev/null || true
+    if curl -k -fsSL --retry 3 "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null || \
+       wget --no-check-certificate -qO "$TMP_ZIP" "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" 2>/dev/null || \
+       curl -k -fsSL --retry 3 "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null; then
+        unzip -qo "$TMP_ZIP" "build-tools/aapt2" -d "$TMP_DIR" 2>/dev/null || unzip -qo "$TMP_ZIP" -d "$TMP_DIR" 2>/dev/null
+        if [ -f "$TMP_DIR/build-tools/aapt2" ]; then
+            cp -f "$TMP_DIR/build-tools/aapt2" /usr/bin/aapt2
+            chmod +x /usr/bin/aapt2
+            echo "[quantum-heal-x64] ✓ Modern AAPT2 successfully installed to /usr/bin/aapt2."
+        fi
+        rm -rf "$TMP_ZIP" "$TMP_DIR" 2>/dev/null || true
+    fi
+fi
+
+# Ensure SDK build-tools has working modern aapt2
+if /usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'; then
+    for bt in /root/android-sdk/build-tools/*; do
+        if [ -d "$bt" ]; then
+            ln -sf /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
+        fi
+    done
+fi
 ''';
 
   }
@@ -2680,11 +2708,13 @@ fi
 
 # 7. Run one-time auto-heal for AAPT2 / SDK toolchain binaries & patch projects
 SDK_ROOT="/root/android-sdk"
-# Symlink SDK build-tools to native tools on the fly
+# Symlink SDK build-tools to native tools on the fly only if aapt2 supports modern flags
 if [ -d "$SDK_ROOT/build-tools" ]; then
     for bt in "$SDK_ROOT/build-tools/"*; do
         if [ -d "$bt" ] && [ "$bt" != "$SDK_ROOT/build-tools/debian" ]; then
-            [ -f /usr/bin/aapt2 ] && [ ! -L /usr/bin/aapt2 ] && ln -sf /usr/bin/aapt2 "$bt/aapt2"
+            if [ -f /usr/bin/aapt2 ] && [ ! -L /usr/bin/aapt2 ] && (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
+                ln -sf /usr/bin/aapt2 "$bt/aapt2"
+            fi
             [ -f /usr/bin/aapt ] && [ ! -L /usr/bin/aapt ] && ln -sf /usr/bin/aapt "$bt/aapt"
             [ -f /usr/bin/zipalign ] && [ ! -L /usr/bin/zipalign ] && ln -sf /usr/bin/zipalign "$bt/zipalign"
             [ -f /usr/bin/apksigner ] && [ ! -L /usr/bin/apksigner ] && ln -sf /usr/bin/apksigner "$bt/apksigner"
@@ -2693,7 +2723,7 @@ if [ -d "$SDK_ROOT/build-tools" ]; then
 fi
 
 # Symlink newly downloaded Gradle cached AAPT2 binaries
-if [ -d "/root/.gradle" ] && [ -f "/usr/bin/aapt2" ]; then
+if [ -d "/root/.gradle" ] && [ -f "/usr/bin/aapt2" ] && (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
     find /root/.gradle -name "aapt2" 2>/dev/null | while read -r gp; do
         if [ -f "$gp" ] && [ ! -L "$gp" ]; then
             cp -f /usr/bin/aapt2 "$gp" 2>/dev/null
