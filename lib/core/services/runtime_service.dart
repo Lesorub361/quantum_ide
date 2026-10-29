@@ -2055,6 +2055,12 @@ fi
 EMU=""
 if [ -x /usr/bin/qemu-x86_64-static ]; then
     EMU="/usr/bin/qemu-x86_64-static"
+elif [ -x /usr/local/bin/qemu-x86_64-static ]; then
+    EMU="/usr/local/bin/qemu-x86_64-static"
+elif [ -f /sdcard/qemu-x86_64-static ]; then
+    cp -f /sdcard/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true
+    chmod +x /usr/bin/qemu-x86_64-static 2>/dev/null || true
+    EMU="/usr/bin/qemu-x86_64-static"
 elif command -v box64 >/dev/null 2>&1; then
     EMU="box64"
 fi
@@ -2083,6 +2089,12 @@ fi
 if [ -f "$DIR/gen_snapshot.real" ]; then
     exec "$DIR/gen_snapshot.real" "${ARGS[@]}"
 fi
+
+if [ -z "$EMU" ]; then
+    echo "ERROR: Flutter Release build requires QEMU x86_64 or Box64 emulator to execute gen_snapshot!" >&2
+    echo "Please install 'Flutter Release Build Engine' from the Packages tab in Quantum IDE." >&2
+    exit 1
+fi
 WRAP_GS
         chmod +x "$ENGINE_DIR/gen_snapshot"
     done
@@ -2091,7 +2103,7 @@ done
 # Auto-heal AAPT2 daemons and force native aapt2 on ARM64 PRoot
 mkdir -p ~/.gradle 2>/dev/null || true
 if ! grep -q "android.aapt2.daemon=false" ~/.gradle/gradle.properties 2>/dev/null; then
-    printf "\nandroid.aapt2.daemon=false\nandroid.aapt2FromMaven=false\n" >> ~/.gradle/gradle.properties 2>/dev/null || true
+    printf "\nandroid.aapt2.daemon=false\nandroid.aapt2FromMaven=false\nandroid.useAndroidX=true\nandroid.enableJetifier=true\n" >> ~/.gradle/gradle.properties 2>/dev/null || true
 fi
 
 if [ -x /usr/bin/aapt2 ]; then
@@ -2147,7 +2159,22 @@ fi
 
 # 4. Ensure QEMU user static is installed
 if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
+    if [ -f /sdcard/qemu-x86_64-static ]; then
+        cp -f /sdcard/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true
+        chmod +x /usr/bin/qemu-x86_64-static 2>/dev/null || true
+    elif [ -f /sdcard/qemu.deb ]; then
+        mkdir -p /tmp/qemu_deb_ext 2>/dev/null || true
+        dpkg -x /sdcard/qemu.deb /tmp/qemu_deb_ext 2>/dev/null || true
+        cp -f /tmp/qemu_deb_ext/usr/bin/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true
+        chmod +x /usr/bin/qemu-x86_64-static 2>/dev/null || true
+        rm -rf /tmp/qemu_deb_ext 2>/dev/null || true
+    fi
+fi
+if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
     apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true
+fi
+if [ -x /usr/bin/qemu-x86_64-static ]; then
+    ln -sf /usr/bin/qemu-x86_64-static /usr/local/bin/qemu-x86_64-static 2>/dev/null || true
 fi
 
 # 5. Fix symlinks for ld-linux-x86-64.so.2

@@ -79,6 +79,9 @@ class ProjectRequirementsService {
         final androidDir = Directory(p.join(projectPath, 'android'));
         if (await androidDir.exists()) {
           requiredPackageIds.add('android-sdk');
+          if (Platform.isAndroid) {
+            requiredPackageIds.add('flutter-release-engine');
+          }
 
           final compileSdk = await _detectCompileSdk(androidDir.path);
           if (!hasAnyAndroidPlatform()) {
@@ -92,6 +95,18 @@ class ProjectRequirementsService {
           }
           if (!hasAnyAndroidBuildTools()) {
             requiredPackageIds.add('android-sdk-tools-arm64');
+          }
+
+          final pubspecFile = File(p.join(projectPath, 'pubspec.yaml'));
+          if (await pubspecFile.exists()) {
+            try {
+              final content = await pubspecFile.readAsString();
+              if (content.contains('speech_to_text') || content.contains('ndkVersion') || content.contains('28.')) {
+                if (!(packageMap['ndk-r28b']?.isInstalled ?? false) && !(packageMap['ndk-r28']?.isInstalled ?? false)) {
+                  requiredPackageIds.add('ndk-r28b');
+                }
+              }
+            } catch (_) {}
           }
 
           // Check if C++/CMake is used

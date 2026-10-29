@@ -101,10 +101,50 @@ String _ndkArm64Command({
       'fi) && '
       'chmod +x /root/android-sdk/ndk/$versionDir/ndk-build /root/android-sdk/ndk/$versionDir/toolchains/llvm/prebuilt/*/bin/* 2>/dev/null || true && '
       'ln -sfn "$versionDir" "/root/android-sdk/ndk/$aliasName" 2>/dev/null || true && '
+      '(if [ "$aliasName" = "r28" ] || [ "$aliasName" = "r28b" ] || [ "$versionDir" = "28.0.12433547" ] || [ "$versionDir" = "28.2.13676358" ]; then '
+      'ln -sfn "$versionDir" "/root/android-sdk/ndk/28.2.13676358" 2>/dev/null || true; '
+      'ln -sfn "$versionDir" "/root/android-sdk/ndk/28.0.12433547" 2>/dev/null || true; '
+      'ln -sfn "$versionDir" "/root/android-sdk/ndk/r28" 2>/dev/null || true; '
+      'ln -sfn "$versionDir" "/root/android-sdk/ndk/r28b" 2>/dev/null || true; '
+      'fi) && '
       '(if [ ! -f "/root/android-sdk/ndk/$versionDir/source.properties" ]; then '
       'printf "Pkg.Desc = Android NDK\\nPkg.Revision = $versionDir\\n" > "/root/android-sdk/ndk/$versionDir/source.properties"; '
       'fi) && '
       'echo "Android NDK ($versionDir ARM64) successfully installed!"';
+}
+
+String _releaseEngineArm64Command() {
+  return '${_aptPrefix}mkdir -p /tmp/qemu_inst /usr/bin /usr/local/bin && '
+      'echo "==> [Quantum IDE] Configuring Flutter Release Build Engine (QEMU x86_64 + GLIBC)..." && '
+      '(if [ -f /sdcard/qemu-x86_64-static ]; then '
+      'echo "Found /sdcard/qemu-x86_64-static, copying to /usr/bin..." && '
+      'cp -f /sdcard/qemu-x86_64-static /usr/bin/qemu-x86_64-static && '
+      'chmod +x /usr/bin/qemu-x86_64-static; '
+      'elif [ -f /sdcard/qemu.deb ]; then '
+      'echo "Found /sdcard/qemu.deb, extracting to /usr/bin..." && '
+      'dpkg -x /sdcard/qemu.deb /tmp/qemu_inst 2>/dev/null || true; '
+      'cp -f /tmp/qemu_inst/usr/bin/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true; '
+      'chmod +x /usr/bin/qemu-x86_64-static; '
+      'else '
+      'echo "Downloading QEMU x86_64 static binary..." && '
+      '(curl -k -fL --retry 3 -o /tmp/qemu-x86_64-static "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/qemu-x86_64-static" 2>/dev/null || '
+      'wget --no-check-certificate -qO /tmp/qemu-x86_64-static "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/qemu-x86_64-static" 2>/dev/null || '
+      'curl -k -fL --retry 3 -o /tmp/qemu-x86_64-static "https://github.com/multiarch/qemu-user-static/releases/download/v7.2.0-1/qemu-x86_64-static" 2>/dev/null || '
+      'wget --no-check-certificate -qO /tmp/qemu-x86_64-static "https://github.com/multiarch/qemu-user-static/releases/download/v7.2.0-1/qemu-x86_64-static" 2>/dev/null || '
+      '(apt-get update 2>/dev/null && apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true)) && '
+      '( [ -f /tmp/qemu-x86_64-static ] && cp -f /tmp/qemu-x86_64-static /usr/bin/qemu-x86_64-static && chmod +x /usr/bin/qemu-x86_64-static || true ); '
+      'fi) && '
+      'ln -sf /usr/bin/qemu-x86_64-static /usr/local/bin/qemu-x86_64-static 2>/dev/null || true && '
+      'chmod +x /usr/bin/qemu-x86_64-static /usr/local/bin/qemu-x86_64-static 2>/dev/null || true && '
+      'rm -rf /tmp/qemu_inst /tmp/qemu-x86_64-static && '
+      'echo "Configuring x86_64 GLIBC runtime..." && '
+      '(/usr/local/bin/quantum-heal-x64 2>/dev/null || true) && '
+      '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && '
+      'mkdir -p ~/.gradle /root/.gradle && '
+      '(grep -q "android.useAndroidX" ~/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.useAndroidX=true\\nandroid.enableJetifier=true\\n" >> ~/.gradle/gradle.properties) && '
+      '(grep -q "android.useAndroidX" /root/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.useAndroidX=true\\nandroid.enableJetifier=true\\n" >> /root/.gradle/gradle.properties) && '
+      'touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed /root/.quantum_flutter_release_engine_installed ~/.quantum_flutter_release_engine_installed 2>/dev/null || true && '
+      'echo "✓ Flutter Release APK Build Engine (QEMU x86_64 + GLIBC) successfully configured!"';
 }
 
 String _sdkToolsArm64Command() {
@@ -322,17 +362,26 @@ final defaultPackages = [
     id: 'build-fix',
     name: 'Build Environment Fix',
     version: 'v2.6 ARM64',
-    description: 'Fixes AAPT2 daemon errors, repairs AAPT/zipalign binaries, cleans legacy VM flags, and applies NDK & IPv4 Gradle patches',
-    command: '${_aptPrefix}apt update && apt install --reinstall -y aapt zipalign && apt install -y adb apksigner clang lld cmake ninja-build openjdk-21-jdk pkg-config libgtk-3-dev libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 && chown -R root:root /root/projects 2>/dev/null || true && chmod -R 755 /root/projects 2>/dev/null || true && git config --global --add safe.directory \'*\' 2>/dev/null || true && mkdir -p ~/.gradle && sed -i \'/extra-gen-snapshot-options/d\' ~/.gradle/gradle.properties /root/.gradle/gradle.properties 2>/dev/null || true && echo "systemProp.java.net.preferIPv4Stack=true" > ~/.gradle/gradle.properties && echo "android.aapt2.daemon=false" >> ~/.gradle/gradle.properties && echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties && echo "org.gradle.parallel=false" >> ~/.gradle/gradle.properties && echo "org.gradle.workers.max=1" >> ~/.gradle/gradle.properties && echo "android.aapt2FromMaven=false" >> ~/.gradle/gradle.properties && echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> ~/.gradle/gradle.properties && ( if [ -f /usr/bin/aapt2 ] && /usr/bin/aapt2 version 2>/dev/null | grep -q "debian"; then echo "Upgrading aapt2 to modern ARM64 binary..." && mkdir -p /tmp/aapt2_download && ( curl -L -o /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a || wget -O /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a ) && chmod +x /tmp/aapt2_download/aapt2 && mv /tmp/aapt2_download/aapt2 /usr/bin/aapt2 && rm -rf /tmp/aapt2_download && echo "aapt2 successfully upgraded."; fi ) && rm -rf ~/.gradle/caches && ( find /root/android-sdk -name "aapt2" -exec cp /usr/bin/aapt2 {} \\; 2>/dev/null || true ) && ( find /root/.gradle -name "aapt2" -exec cp /usr/bin/aapt2 {} \\; 2>/dev/null || true ) && ( for bt in /root/android-sdk/build-tools/*; do if [ -d "\$bt" ]; then ln -sf /usr/bin/aapt "\$bt/aapt" 2>/dev/null || true; ln -sf /usr/bin/zipalign "\$bt/zipalign" 2>/dev/null || true; ln -sf /usr/bin/aapt2 "\$bt/aapt2" 2>/dev/null || true; fi; done ) && (/usr/local/bin/quantum-heal-x64 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && touch /root/.quantum_build_fix_installed ~/.quantum_build_fix_installed /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true && echo "Fixed global build environment, C++ dependencies, Git directories, disabled AAPT2 daemon, upgraded aapt2 binary, and cleared Gradle cache"',
+    description: 'Fixes AAPT2 daemon errors, repairs AAPT/zipalign binaries, cleans legacy VM flags, enables AndroidX/Jetifier, and applies NDK & IPv4 Gradle patches',
+    command: '${_aptPrefix}apt update && apt install --reinstall -y aapt zipalign && apt install -y adb apksigner clang lld cmake ninja-build openjdk-21-jdk pkg-config libgtk-3-dev libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 && chown -R root:root /root/projects 2>/dev/null || true && chmod -R 755 /root/projects 2>/dev/null || true && git config --global --add safe.directory \'*\' 2>/dev/null || true && mkdir -p ~/.gradle /root/.gradle && sed -i \'/extra-gen-snapshot-options/d\' ~/.gradle/gradle.properties /root/.gradle/gradle.properties 2>/dev/null || true && echo "systemProp.java.net.preferIPv4Stack=true" > ~/.gradle/gradle.properties && echo "android.aapt2.daemon=false" >> ~/.gradle/gradle.properties && echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties && echo "org.gradle.parallel=false" >> ~/.gradle/gradle.properties && echo "org.gradle.workers.max=1" >> ~/.gradle/gradle.properties && echo "android.aapt2FromMaven=false" >> ~/.gradle/gradle.properties && echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> ~/.gradle/gradle.properties && echo "android.useAndroidX=true" >> ~/.gradle/gradle.properties && echo "android.enableJetifier=true" >> ~/.gradle/gradle.properties && cp -f ~/.gradle/gradle.properties /root/.gradle/gradle.properties 2>/dev/null || true && ( if [ -f /usr/bin/aapt2 ] && /usr/bin/aapt2 version 2>/dev/null | grep -q "debian"; then echo "Upgrading aapt2 to modern ARM64 binary..." && mkdir -p /tmp/aapt2_download && ( curl -L -o /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a || wget -O /tmp/aapt2_download/aapt2 https://github.com/ReVanced/aapt2/releases/download/v1.1.0/aapt2-arm64-v8a ) && chmod +x /tmp/aapt2_download/aapt2 && mv /tmp/aapt2_download/aapt2 /usr/bin/aapt2 && rm -rf /tmp/aapt2_download && echo "aapt2 successfully upgraded."; fi ) && rm -rf ~/.gradle/caches && ( find /root/android-sdk -name "aapt2" -exec cp /usr/bin/aapt2 {} \\; 2>/dev/null || true ) && ( find /root/.gradle -name "aapt2" -exec cp /usr/bin/aapt2 {} \\; 2>/dev/null || true ) && ( for bt in /root/android-sdk/build-tools/*; do if [ -d "\$bt" ]; then ln -sf /usr/bin/aapt "\$bt/aapt" 2>/dev/null || true; ln -sf /usr/bin/zipalign "\$bt/zipalign" 2>/dev/null || true; ln -sf /usr/bin/aapt2 "\$bt/aapt2" 2>/dev/null || true; fi; done ) && (/usr/local/bin/quantum-heal-x64 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && touch /root/.quantum_build_fix_installed ~/.quantum_build_fix_installed /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true && echo "Fixed global build environment, C++ dependencies, Git directories, disabled AAPT2 daemon, upgraded aapt2 binary, and cleared Gradle cache"',
     icon: LucideIcons.wrench,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'flutter-release-engine',
+    name: 'Flutter Release Build Engine (QEMU x86_64)',
+    version: 'v2.0 ARM64',
+    description: 'Enables Flutter Release APK builds on ARM64 by running gen_snapshot through QEMU x86_64 emulator and x64 GLIBC runtime. Prevents app.so missing errors.',
+    command: _releaseEngineArm64Command(),
+    icon: LucideIcons.rocket,
     category: 'Build Tools',
   ),
   OptionalPackage(
     id: 'flutter-release-fix',
     name: 'Flutter Release APK Fix (x86_64 GLIBC)',
-    version: 'v1.0 ARM64',
-    description: 'Installs x86_64 glibc and dynamic linker (/lib64/ld-linux-x86-64.so.2) required by QEMU to execute Flutter release gen_snapshot',
-    command: 'echo "==> Configuring Flutter Release APK Fix (x86_64 GLIBC)..." && /usr/local/bin/quantum-heal-x64 && /usr/local/bin/quantum-patch-ndk && touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true && echo "✓ Flutter Release APK AOT environment ready!"',
+    version: 'v2.0 ARM64',
+    description: 'Installs QEMU x86_64 emulator, x86_64 glibc, and dynamic linker (/lib64/ld-linux-x86-64.so.2) required to execute Flutter release gen_snapshot',
+    command: _releaseEngineArm64Command(),
     icon: LucideIcons.hammer,
     category: 'Build Tools',
   ),
@@ -364,6 +413,20 @@ final defaultPackages = [
       aliasName: 'r27b',
       primaryUrl: 'https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-ndk-r27-aarch64-linux-android.tar.xz',
       fallbackUrl: 'https://github.com/HomuHomu833/android-ndk-custom/releases/download/r27/android-ndk-r27-aarch64-linux-android.tar.xz',
+    ),
+    icon: LucideIcons.cpu,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'ndk-r28b',
+    name: 'NDK r28b (28.2.13676358 LTS)',
+    version: '28.2.13676358',
+    description: 'Android Native Development Kit r28b with 16KB page alignment. Required by Speech-to-Text, Camera, and modern Flutter plugins.',
+    command: _ndkArm64Command(
+      versionDir: '28.2.13676358',
+      aliasName: 'r28b',
+      primaryUrl: 'https://github.com/HomuHomu833/android-ndk-custom/releases/download/r28/android-ndk-r28-aarch64-linux-android.tar.xz',
+      fallbackUrl: 'https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-ndk-r27-aarch64-linux-android.tar.xz',
     ),
     icon: LucideIcons.cpu,
     category: 'Build Tools',

@@ -363,6 +363,9 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               final hasAapt = await hasCmd('aapt') || await hasCmd('aapt2');
               exists = await marker.exists() || await rootMarker.exists() || hasAapt || installedIds.contains('build-fix');
               break;
+            case 'flutter-release-engine':
+              exists = true;
+              break;
             case 'flutter-release-fix':
               final homeDir = Platform.environment['HOME'] ?? '/root';
               final marker = File(p.join(homeDir, '.quantum_flutter_release_fix_installed'));
@@ -552,6 +555,16 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
               final hasAapt = await hasRootfsBin('aapt') || await hasRootfsBin('aapt2');
               exists = (await marker.exists()) || hasAapt || installedIds.contains('build-fix');
               break;
+            case 'flutter-release-engine':
+              final marker = File(p.join(rootfsPath, 'root', '.quantum_flutter_release_engine_installed'));
+              final hasQemu = await hasRootfsBin('qemu-x86_64-static') ||
+                  await hasRootfsEntity(p.join('usr', 'bin', 'qemu-x86_64-static')) ||
+                  await hasRootfsEntity(p.join('usr', 'local', 'bin', 'qemu-x86_64-static'));
+              final hasLd = await hasRootfsEntity(p.join('lib64', 'ld-linux-x86-64.so.2')) ||
+                  await hasRootfsEntity(p.join('lib', 'x86_64-linux-gnu', 'ld-linux-x86-64.so.2')) ||
+                  await hasRootfsEntity(p.join('lib', 'x86_64-linux-gnu', 'libc.so.6'));
+              exists = (await marker.exists()) || (hasQemu && hasLd) || installedIds.contains('flutter-release-engine');
+              break;
             case 'flutter-release-fix':
               final marker = File(p.join(rootfsPath, 'root', '.quantum_flutter_release_fix_installed'));
               final hasLd = await hasRootfsEntity(p.join('lib64', 'ld-linux-x86-64.so.2')) ||
@@ -653,7 +666,9 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
           if (installedIds.contains(pkg.id) &&
               (pkg.id == 'build-clean' ||
                   pkg.id == 'build-fix' ||
+                  pkg.id == 'flutter-release-engine' ||
                   pkg.id == 'flutter-release-fix' ||
+                  pkg.id == 'ndk-r28b' ||
                   pkg.id == 'box64-emulator' ||
                   pkg.id == 'vulkan-graphics' ||
                   pkg.id == 'antigravity-cli' ||

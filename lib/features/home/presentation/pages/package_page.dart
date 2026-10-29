@@ -93,8 +93,14 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
     final showFixHero = (tabType == 'all' || tabType == 'build_system') &&
         allPackages.any((p) => p.id == 'build-fix' && !p.isInstalled) &&
         _searchQuery.isEmpty;
+    final showReleaseEngineHero = (tabType == 'all' || tabType == 'build_system') &&
+        allPackages.any((p) => (p.id == 'flutter-release-engine' || p.id == 'flutter-release-fix') && !p.isInstalled) &&
+        _searchQuery.isEmpty;
 
     final List<Widget> headers = [];
+    if (showReleaseEngineHero) {
+      headers.add(_buildReleaseEngineHeroCard(context, ref));
+    }
     if (showVulkanHero) {
       headers.add(_buildVulkanHeroCard(context, ref));
     }
@@ -1079,6 +1085,134 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
               ),
               child: Text(
                 AppLocalizations.of(context)!.startWrenchFix,
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReleaseEngineHeroCard(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final allPackages = ref.watch(packageServiceProvider);
+    OptionalPackage? enginePkg;
+    try {
+      enginePkg = allPackages.firstWhere((p) => p.id == 'flutter-release-engine');
+    } catch (_) {
+      try {
+        enginePkg = defaultPackages.firstWhere((p) => p.id == 'flutter-release-engine');
+      } catch (_) {
+        enginePkg = null;
+      }
+    }
+
+    if (enginePkg == null || enginePkg.isInstalled) return const SizedBox.shrink();
+
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    const cardColor = Color(0xFF1E1B4B); // Deep indigo
+    const accentColor = Color(0xFF818CF8); // Indigo accent
+    const onCardColor = Colors.white;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.2),
+            blurRadius: 25,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(LucideIcons.rocket, color: accentColor, size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isRu ? 'Сборка Release APK (Flutter Engine)' : 'Flutter Release Build Engine',
+                      style: GoogleFonts.outfit(
+                        color: onCardColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 19,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isRu ? 'QEMU x86_64 + x64 GLIBC для gen_snapshot' : 'QEMU x86_64 + x64 GLIBC runtime for gen_snapshot',
+                      style: GoogleFonts.inter(
+                        color: accentColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text(
+            isRu
+                ? 'Для компиляции Release APK на ARM64 Android устройствах необходим эмулятор QEMU x86_64 и glibc библиотеки для запуска официального компилятора gen_snapshot. Устраняет ошибку "Cannot open file app.so (No such file or directory)".'
+                : 'Enables Flutter Release APK builds on ARM64 Android devices by running Flutter\'s official gen_snapshot via QEMU x86_64 emulator and x64 GLIBC runtime. Prevents app.so missing errors.',
+            style: GoogleFonts.inter(
+              color: onCardColor.withValues(alpha: 0.85),
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                ref.read(packageServiceProvider.notifier).installPackage(enginePkg!);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    content: Text(
+                      isRu ? 'Настройка Flutter Release Build Engine...' : 'Configuring Flutter Release Build Engine...',
+                      style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w500),
+                    ),
+                    action: SnackBarAction(
+                      label: AppLocalizations.of(context)!.viewAction,
+                      textColor: theme.colorScheme.primary,
+                      onPressed: () => context.push('/terminal'),
+                    ),
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: Text(
+                isRu ? 'Установить движок Release APK (1-Click)' : 'Install Release APK Engine (1-Click)',
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
