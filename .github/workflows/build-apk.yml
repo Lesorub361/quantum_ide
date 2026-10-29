@@ -32,12 +32,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.106 - Мастер подписи релизов и глубокая очистка кэша сборки
-
-        ### ✨ Новые возможности:
-        - **Мастер настройки Release Keystore в 1 клик**: Во вкладке *Sign APK* добавлена кнопка *«Применить ключ к проекту»*. Выбираете файл `.jks`, вводите пароли — Quantum IDE сама копирует ключ в проект и создаёт `android/key.properties`. Больше не нужно копировать файлы вручную!
-        - **Кнопка «Deep Clean» (Сброс кэша сборки)**: В панель сборки Flutter добавлена кнопка для полной очистки повреждённых артефактов `.dart_tool/flutter_build`, промежуточных файлов Gradle и вызова `flutter clean && flutter pub get`.
-        - **Автоматический ARM64 таргет**: Встроена защита от сбоев компилятора Dart `gen_snapshot` и ошибок `linux-libc-dev`.
+        ## 🚀 QuantumIDE v1.2.108 - Исправление генератора AOT gen_snapshot (app.so) и Box64
+        
+        ### ✨ Что нового:
+        - **Исправление генератора AOT app.so на ARM64**: Устранена рекурсивная перезапись `gen_snapshot`, приводящая к сбоям создания `app.so`.
+        - **Нативная эмуляция Box64**: Встроен приоритет Box64 с флагами MMAP32 и Dynarec для работы AOT на любых ядрах Android.
+        - **Автоисправление перед сборкой**: В кнопки сборки Release APK добавлена автоматическая проверка и настройка runtime AOT.
+        - **Автоопределение Android SDK**: Поддержка путей `$HOME/android-sdk` и `/root/android-sdk` в сценариях сборки.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
