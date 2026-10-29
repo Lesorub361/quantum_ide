@@ -91,27 +91,61 @@ Here are the features currently in development or planned:
 - [ ] **Remote SSH Development**: Connect to and edit files on remote servers directly from the IDE.
 - [ ] **Themes & Plugins Marketplace**: Discover and install community-developed themes and extension plugins.
 
+---
+
+## 📥 Download QuantumIDE (Pre-built APKs)
+
+Pre-built Release APKs for Android devices are available on the **[Releases](https://github.com/Lesorub361/quantum_ide/releases)** page:
+* 📱 **[Download Latest APK (v1.2.108)](https://github.com/Lesorub361/quantum_ide/releases/latest)**
+* For modern smartphones and tablets (ARM64): download **`app-arm64-v8a-release.apk`**
+* For all other architectures or universal installation: download **`app-universal-release.apk`**
 
 ---
 
-## 🤝 Join the Development! (We welcome contributors)
+## 🚀 Setup & Build Guide for Contributors
 
-We are actively looking for developers, designers, and open-source enthusiasts to join our project! Whether you want to fix bugs, write documentation, implement features from the roadmap, or test the IDE on different devices, you are very welcome.
+The project is completely **Open Source under the MIT License**. Anyone is welcome to clone, run, modify, and improve QuantumIDE!
 
-### How to Contribute:
-1. **Fork** the repository and clone it locally.
-2. Check out the roadmap above or browse open GitHub Issues.
-3. Set up the development environment:
-   ```bash
-   flutter pub get
-   flutter run
-   ```
-4. Create a feature branch, commit your changes, and submit a **Pull Request**.
+### 1. Clone the repository
+```bash
+git clone https://github.com/Lesorub361/quantum_ide.git
+cd quantum_ide
+```
 
-If you have questions or want to discuss architecture, feel free to join our chat/discussions or open an issue!
+### 2. Install dependencies
+```bash
+flutter pub get
+```
+
+### 3. Build the app
+* **Build Android Debug APK**:
+  ```bash
+  flutter build apk --debug
+  ```
+* **Build Android Release APK**:
+  ```bash
+  flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons
+  ```
+* **Build Linux Desktop**:
+  ```bash
+  flutter build linux --release
+  ```
+
+---
+
+## 🤝 Join the Development! (How to Contribute)
+
+We warmly welcome all contributions from the community:
+
+1. **Fork** the repository on GitHub.
+2. Create your feature branch: `git checkout -b feature/amazing-feature`.
+3. Make your changes and test them: `flutter test` or `flutter analyze`.
+4. Commit your changes: `git commit -m 'feat: add amazing feature'`.
+5. Push to the branch: `git push origin feature/amazing-feature`.
+6. Open a **Pull Request** — we will review and merge it!
 
 ---
 
 ## 📜 License
 
-This project is licensed under the MIT License - see the `LICENSE` file for details.
+This project is licensed under the **MIT License** - see the `LICENSE` file for details. Free for personal, educational, and commercial use.
