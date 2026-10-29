@@ -2004,65 +2004,62 @@ done
 
 # Auto-heal Flutter ARM64 host gen_snapshot for release/profile builds.
 # Native Android requires 'product arm64 android compressed-pointers'.
-# The official Google x64 binary matches Android VM 100% and runs seamlessly via QEMU/Box64.
-for fl_dir in "${FLUTTER_ROOT:-/root/flutter}" "$HOME/flutter" "/root/flutter"; do
-    [ -d "$fl_dir/bin/cache/artifacts/engine" ] || continue
+# Box64 runs official Google x64 gen_snapshot with native dynarec on ARM64.
+for fl_dir in "${FLUTTER_ROOT:-}" "/root/flutter" "$HOME/flutter" "/data/data/com.acside/files/home/flutter"; do
+    [ -n "$fl_dir" ] && [ -d "$fl_dir/bin/cache/artifacts/engine" ] || continue
     FLUTTER_ENGINE="$fl_dir/bin/cache/artifacts/engine"
     ENGINE_HASH=$(cat "$fl_dir/bin/internal/engine.version" 2>/dev/null || true)
     for mode in release profile; do
-        ENGINE_DIR="$FLUTTER_ENGINE/android-arm64-$mode/linux-arm64"
-        X64_DIR="$FLUTTER_ENGINE/android-arm64-$mode/linux-x64"
-        mkdir -p "$ENGINE_DIR" "$X64_DIR"
+        for arch in arm64 arm; do
+            TARGET_PARENT="$FLUTTER_ENGINE/android-$arch-$mode"
+            [ -d "$TARGET_PARENT" ] || mkdir -p "$TARGET_PARENT" 2>/dev/null || true
+            ENGINE_DIR="$TARGET_PARENT/linux-arm64"
+            X64_DIR="$TARGET_PARENT/linux-x64"
+            mkdir -p "$ENGINE_DIR" "$X64_DIR" 2>/dev/null || true
 
-        if [ ! -f "$X64_DIR/gen_snapshot" ] && [ -n "$ENGINE_HASH" ]; then
-            (
-                (curl -k -fsSL "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-arm64-$mode/linux-x64.zip" -o "/tmp/x64-$mode.zip" || \
-                 wget --no-check-certificate -qO "/tmp/x64-$mode.zip" "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-arm64-$mode/linux-x64.zip") && \
-                unzip -qo "/tmp/x64-$mode.zip" gen_snapshot -d "$X64_DIR" && \
-                chmod +x "$X64_DIR/gen_snapshot" && \
-                rm -f "/tmp/x64-$mode.zip"
-            ) 2>/dev/null || true
-        fi
-
-        # Auto-heal x86_64 glibc if missing
-        if [ ! -f /lib64/ld-linux-x86-64.so.2 ] && [ ! -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
-            if [ -x /usr/local/bin/quantum-heal-x64 ]; then
-                /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+            # Download official x64 gen_snapshot if neither real bin nor snapshot exists
+            if [ ! -s "$X64_DIR/gen_snapshot.real" ] && [ ! -s "$X64_DIR/gen_snapshot" ] && [ -n "$ENGINE_HASH" ]; then
+                TMP_DL="${TMPDIR:-/tmp}/x64-$arch-$mode-$$.zip"
+                (
+                    curl -k -fsSL --retry 2 "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-$arch-$mode/linux-x64.zip" -o "$TMP_DL" || \
+                    wget --no-check-certificate -qO "$TMP_DL" "https://storage.googleapis.com/flutter_infra_release/flutter/$ENGINE_HASH/android-$arch-$mode/linux-x64.zip"
+                ) 2>/dev/null || true
+                if [ -s "$TMP_DL" ]; then
+                    unzip -qo "$TMP_DL" gen_snapshot -d "$X64_DIR" 2>/dev/null || true
+                    rm -f "$TMP_DL" 2>/dev/null || true
+                fi
             fi
-        fi
 
-        cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
+            # Check if gen_snapshot in X64_DIR or ENGINE_DIR is an ELF binary (not a script)
+            # If so, preserve it as gen_snapshot.real
+            for chk_dir in "$X64_DIR" "$ENGINE_DIR"; do
+                if [ -f "$chk_dir/gen_snapshot" ] && [ ! -f "$chk_dir/gen_snapshot.real" ]; then
+                    if head -c 4 "$chk_dir/gen_snapshot" 2>/dev/null | grep -q "ELF"; then
+                        mv "$chk_dir/gen_snapshot" "$chk_dir/gen_snapshot.real"
+                    fi
+                fi
+            done
+
+            # Ensure gen_snapshot.real exists in at least one location
+            if [ ! -f "$ENGINE_DIR/gen_snapshot.real" ] && [ -f "$X64_DIR/gen_snapshot.real" ]; then
+                cp -f "$X64_DIR/gen_snapshot.real" "$ENGINE_DIR/gen_snapshot.real" 2>/dev/null || true
+            elif [ -f "$ENGINE_DIR/gen_snapshot.real" ] && [ ! -f "$X64_DIR/gen_snapshot.real" ]; then
+                cp -f "$ENGINE_DIR/gen_snapshot.real" "$X64_DIR/gen_snapshot.real" 2>/dev/null || true
+            fi
+
+            # Write the universal wrapper
+            cat << 'WRAP_GS' > "$ENGINE_DIR/gen_snapshot"
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")" && pwd)"
-X64_SNAP="$DIR/../../$(basename "$(dirname "$DIR")")/linux-x64/gen_snapshot"
-
-# Fast sanity check for ld-linux-x86-64.so.2
-if [ ! -f /lib64/ld-linux-x86-64.so.2 ] && [ ! -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
-    if [ -x /usr/local/bin/quantum-heal-x64 ]; then
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
-    fi
-fi
-
-if [ ! -f /lib64/ld-linux-x86-64.so.2 ]; then
-    mkdir -p /lib64 2>/dev/null || true
-    if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
-        ln -sf /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
-    elif [ -f /lib/x86_64-linux-gnu/ld-2.31.so ]; then
-        ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
-    fi
-fi
-
-EMU=""
-if [ -x /usr/bin/qemu-x86_64-static ]; then
-    EMU="/usr/bin/qemu-x86_64-static"
-elif [ -x /usr/local/bin/qemu-x86_64-static ]; then
-    EMU="/usr/local/bin/qemu-x86_64-static"
-elif [ -f /sdcard/qemu-x86_64-static ]; then
-    cp -f /sdcard/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true
-    chmod +x /usr/bin/qemu-x86_64-static 2>/dev/null || true
-    EMU="/usr/bin/qemu-x86_64-static"
-elif command -v box64 >/dev/null 2>&1; then
-    EMU="box64"
+REAL_BIN=""
+if [ -f "$DIR/gen_snapshot.real" ]; then
+    REAL_BIN="$DIR/gen_snapshot.real"
+elif [ -f "$DIR/../linux-x64/gen_snapshot.real" ]; then
+    REAL_BIN="$DIR/../linux-x64/gen_snapshot.real"
+elif [ -f "$DIR/../linux-x64/gen_snapshot" ] && head -c 4 "$DIR/../linux-x64/gen_snapshot" 2>/dev/null | grep -q "ELF"; then
+    REAL_BIN="$DIR/../linux-x64/gen_snapshot"
+elif [ -f "$DIR/gen_snapshot" ] && head -c 4 "$DIR/gen_snapshot" 2>/dev/null | grep -q "ELF"; then
+    REAL_BIN="$DIR/gen_snapshot"
 fi
 
 ARGS=()
@@ -2076,27 +2073,48 @@ for arg in "$@"; do
     esac
 done
 
-if [ -n "$EMU" ] && [ -f "$X64_SNAP" ]; then
-    chmod +x "$X64_SNAP" 2>/dev/null || true
+# 1. Box64 (Fastest, native Dynarec, built-in wrapped libc/libm/libdl)
+if command -v box64 >/dev/null 2>&1 && [ -n "$REAL_BIN" ]; then
+    export BOX64_NOBANNER=1
+    export BOX64_DYNAREC=1
+    export BOX64_MMAP32=1
+    export BOX64_LOG=0
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    exec box64 "$REAL_BIN" "${ARGS[@]}"
+fi
+
+# 2. QEMU user static fallback
+EMU=""
+if [ -x /usr/bin/qemu-x86_64-static ]; then
+    EMU="/usr/bin/qemu-x86_64-static"
+elif [ -x /usr/local/bin/qemu-x86_64-static ]; then
+    EMU="/usr/local/bin/qemu-x86_64-static"
+elif [ -f /sdcard/qemu-x86_64-static ]; then
+    EMU="/sdcard/qemu-x86_64-static"
+fi
+
+if [ -n "$EMU" ] && [ -n "$REAL_BIN" ]; then
+    chmod +x "$REAL_BIN" 2>/dev/null || true
     export QEMU_LD_PREFIX=/
-    if [[ "$EMU" == *"qemu-x86_64-static"* ]]; then
-        exec "$EMU" -L / "$X64_SNAP" "${ARGS[@]}"
-    else
-        exec "$EMU" "$X64_SNAP" "${ARGS[@]}"
-    fi
+    exec "$EMU" -L / "$REAL_BIN" "${ARGS[@]}"
 fi
 
-if [ -f "$DIR/gen_snapshot.real" ]; then
-    exec "$DIR/gen_snapshot.real" "${ARGS[@]}"
+# 3. Direct execution fallback (if running on x86_64 PC or native)
+if [ -n "$REAL_BIN" ]; then
+    chmod +x "$REAL_BIN" 2>/dev/null || true
+    exec "$REAL_BIN" "${ARGS[@]}"
 fi
 
-if [ -z "$EMU" ]; then
-    echo "ERROR: Flutter Release build requires QEMU x86_64 or Box64 emulator to execute gen_snapshot!" >&2
-    echo "Please install 'Flutter Release Build Engine' from the Packages tab in Quantum IDE." >&2
-    exit 1
-fi
+echo "ERROR: Flutter Release build requires Box64 or QEMU x86_64 emulator to execute gen_snapshot on ARM64!" >&2
+echo "Please install 'box64-emulator' or 'Flutter Release Build Engine' from the Packages tab in Quantum IDE." >&2
+exit 1
 WRAP_GS
-        chmod +x "$ENGINE_DIR/gen_snapshot"
+            chmod +x "$ENGINE_DIR/gen_snapshot" 2>/dev/null || true
+            if [ "$ENGINE_DIR" != "$X64_DIR" ] && [ ! -L "$TARGET_PARENT/linux-arm64" ]; then
+                cp -f "$ENGINE_DIR/gen_snapshot" "$X64_DIR/gen_snapshot" 2>/dev/null || true
+                chmod +x "$X64_DIR/gen_snapshot" 2>/dev/null || true
+            fi
+        done
     done
 done
 
@@ -2120,11 +2138,17 @@ fi
   String _generateQuantumHealX64Script() {
     return r'''#!/bin/bash
 # quantum-heal-x64: Auto-heals x86_64 glibc libraries and ld-linux-x86-64.so.2 dynamic linker
-# on ARM64 Linux / PRoot so QEMU / Box64 can execute Flutter's official gen_snapshot for release APKs.
+# on ARM64 Linux / PRoot so Box64 / QEMU can execute Flutter's official gen_snapshot for release APKs.
 
 mkdir -p /lib64 2>/dev/null || true
 
-# 1. Quick check: already functional?
+# 1. Box64 provides full native glibc emulation out of the box
+if command -v box64 >/dev/null 2>&1; then
+    echo "[quantum-heal-x64] ✓ Box64 emulator is active with native glibc wrapping."
+    touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
+fi
+
+# 2. Quick check: already functional?
 if [ -f /lib/x86_64-linux-gnu/libc.so.6 ] && [ -f /lib64/ld-linux-x86-64.so.2 ]; then
     echo "[quantum-heal-x64] ✓ x86_64 dynamic linker and glibc runtime already configured."
     touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
@@ -2133,44 +2157,28 @@ fi
 
 echo "[quantum-heal-x64] Setting up x86_64 dynamic linker & glibc runtime for Flutter release builds..."
 
-# 2. Try fast direct deb extraction of libc6:amd64 if missing
+# 3. Try fast direct deb extraction of libc6:amd64 if missing
 if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
-    DEB_DIR="/tmp/libc6_x64_download"
+    DEB_DIR="${TMPDIR:-/tmp}/libc6_x64_download_$$"
     mkdir -p "$DEB_DIR" 2>/dev/null || true
     for deb_url in \
+        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3.8_amd64.deb" \
+        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.3_amd64.deb" \
         "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9.18_amd64.deb" \
-        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9_amd64.deb" \
-        "http://security.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9.18_amd64.deb"; do
+        "http://security.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3_amd64.deb"; do
         if curl -fsSL --retry 2 "$deb_url" -o "$DEB_DIR/libc6.deb" 2>/dev/null || \
            wget -qO "$DEB_DIR/libc6.deb" "$deb_url" 2>/dev/null; then
             dpkg -x "$DEB_DIR/libc6.deb" / 2>/dev/null || true
-            rm -rf "$DEB_DIR"
+            rm -rf "$DEB_DIR" 2>/dev/null || true
             break
         fi
     done
+    rm -rf "$DEB_DIR" 2>/dev/null || true
 fi
 
-# 3. NOTE: the apt multiarch route (dpkg --add-architecture amd64 + apt install libc6:amd64)
-# was removed on purpose. libc6 is Multi-Arch: same, so apt also upgrades the native arm64
-# libc6 (incl. /lib/ld-linux-aarch64.so.1). When that dpkg run is interrupted (--kill-on-exit,
-# Android LMK, closed dialog) the whole rootfs stops working:
-#   proot error: execve("/usr/bin/env"): Function not implemented
-# Direct .deb extraction above never touches the arm64 libc.
-
-# 4. Ensure QEMU user static is installed
-if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
-    if [ -f /sdcard/qemu-x86_64-static ]; then
-        cp -f /sdcard/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true
-        chmod +x /usr/bin/qemu-x86_64-static 2>/dev/null || true
-    elif [ -f /sdcard/qemu.deb ]; then
-        mkdir -p /tmp/qemu_deb_ext 2>/dev/null || true
-        dpkg -x /sdcard/qemu.deb /tmp/qemu_deb_ext 2>/dev/null || true
-        cp -f /tmp/qemu_deb_ext/usr/bin/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true
-        chmod +x /usr/bin/qemu-x86_64-static 2>/dev/null || true
-        rm -rf /tmp/qemu_deb_ext 2>/dev/null || true
-    fi
-fi
-if [ ! -x /usr/bin/qemu-x86_64-static ] && ! command -v box64 >/dev/null 2>&1; then
+# 4. Ensure Box64 or QEMU user static is installed
+if ! command -v box64 >/dev/null 2>&1 && [ ! -x /usr/bin/qemu-x86_64-static ]; then
+    apt-get install -y --no-install-recommends box64 2>/dev/null || \
     apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true
 fi
 if [ -x /usr/bin/qemu-x86_64-static ]; then
@@ -2186,10 +2194,10 @@ elif [ -f /lib/x86_64-linux-gnu/ld-2.31.so ]; then
     ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
 fi
 
-if [ -f /lib64/ld-linux-x86-64.so.2 ]; then
-    ln -sf /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 2>/dev/null || true
+if [ -f /lib64/ld-linux-x86-64.so.2 ] || command -v box64 >/dev/null 2>&1; then
+    [ -f /lib64/ld-linux-x86-64.so.2 ] && ln -sf /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 2>/dev/null || true
     touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
-    echo "[quantum-heal-x64] ✓ x86_64 dynamic linker and glibc runtime successfully ready."
+    echo "[quantum-heal-x64] ✓ x86_64 AOT runtime successfully ready."
 else
     echo "[quantum-heal-x64] Warning: /lib64/ld-linux-x86-64.so.2 still missing."
 fi

@@ -1097,7 +1097,7 @@ abstract class AppLocalizations {
   /// No description provided for @runningCommand.
   ///
   /// In en, this message translates to:
-  /// **'Running command: {command}...'**
+  /// **'RUNNING COMMAND'**
   String runningCommand(String command);
 
   /// No description provided for @applyingChange.
@@ -5288,26 +5288,124 @@ abstract class AppLocalizations {
   /// **'GitHub Actions APK workflow added (.github/workflows/build-apk.yml)!'**
   String get setupCiCdWorkflowSuccess;
 
+  /// No description provided for @sessionsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'SESSIONS'**
   String get sessionsTitle;
+
+  /// No description provided for @sessionRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
   String get sessionRunning;
+
+  /// No description provided for @sessionExited.
+  ///
+  /// In en, this message translates to:
+  /// **'Exited'**
   String get sessionExited;
+
+  /// No description provided for @newSession.
+  ///
+  /// In en, this message translates to:
+  /// **'New Session'**
   String get newSession;
+
+  /// No description provided for @terminalMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal Menu'**
   String get terminalMenu;
+
+  /// No description provided for @splitScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Split Screen'**
   String get splitScreen;
+
+  /// No description provided for @mergeScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge Screen'**
   String get mergeScreen;
+
+  /// No description provided for @keepScreenOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Screen On (Wakelock)'**
   String get keepScreenOn;
+
+  /// No description provided for @keepScreenOnActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Screen On (Active)'**
   String get keepScreenOnActive;
+
+  /// No description provided for @interruptProcess.
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupt (Ctrl+C)'**
   String get interruptProcess;
+
+  /// No description provided for @selectTextInTerminal.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Text in Terminal'**
   String get selectTextInTerminal;
-  String get runningCommand;
+
+  /// No description provided for @closeSelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Close ✕'**
   String get closeSelection;
+
+  /// No description provided for @keypadKb.
+  ///
+  /// In en, this message translates to:
+  /// **'KB'**
   String get keypadKb;
+
+  /// No description provided for @keypadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
   String get keypadMore;
+
+  /// No description provided for @installApk.
+  ///
+  /// In en, this message translates to:
+  /// **'Install APK'**
   String get installApk;
+
+  /// No description provided for @projectSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Project Sync'**
   String get projectSync;
+
+  /// No description provided for @projectSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Project Synced'**
   String get projectSynced;
+
+  /// No description provided for @syncFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync Failed'**
   String get syncFailed;
+
+  /// No description provided for @syncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing...'**
   String get syncing;
+
+  /// No description provided for @shareProjectSyncLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Quantum IDE - Project sync log'**
   String get shareProjectSyncLogs;
 }
 

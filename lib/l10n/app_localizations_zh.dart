@@ -537,7 +537,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String runningCommand(String command) {
-    return '正在运行命令: $command...';
+    return '执行命令';
   }
 
   @override
@@ -2924,9 +2924,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get selectTextInTerminal => '在终端中选择文本';
-
-  @override
-  String get runningCommand => '执行命令';
 
   @override
   String get closeSelection => '关闭 ✕';

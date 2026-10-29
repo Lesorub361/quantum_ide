@@ -541,7 +541,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String runningCommand(String command) {
-    return 'Running command: $command...';
+    return 'RUNNING COMMAND';
   }
 
   @override
@@ -3002,9 +3002,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get selectTextInTerminal => 'Select Text in Terminal';
-
-  @override
-  String get runningCommand => 'RUNNING COMMAND';
 
   @override
   String get closeSelection => 'Close ✕';

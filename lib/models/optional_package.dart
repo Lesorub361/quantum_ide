@@ -115,7 +115,8 @@ String _ndkArm64Command({
 
 String _releaseEngineArm64Command() {
   return '${_aptPrefix}mkdir -p /tmp/qemu_inst /usr/bin /usr/local/bin && '
-      'echo "==> [Quantum IDE] Configuring Flutter Release Build Engine (QEMU x86_64 + GLIBC)..." && '
+      'echo "==> [Quantum IDE] Configuring Flutter Release Build Engine (Box64 + QEMU x86_64)..." && '
+      '(which box64 >/dev/null 2>&1 || (apt-get update 2>/dev/null && apt-get install -y box64 2>/dev/null) || true) && '
       '(if [ -f /sdcard/qemu-x86_64-static ]; then '
       'echo "Found /sdcard/qemu-x86_64-static, copying to /usr/bin..." && '
       'cp -f /sdcard/qemu-x86_64-static /usr/bin/qemu-x86_64-static && '
@@ -126,13 +127,7 @@ String _releaseEngineArm64Command() {
       'cp -f /tmp/qemu_inst/usr/bin/qemu-x86_64-static /usr/bin/qemu-x86_64-static 2>/dev/null || true; '
       'chmod +x /usr/bin/qemu-x86_64-static; '
       'else '
-      'echo "Downloading QEMU x86_64 static binary..." && '
-      '(curl -k -fL --retry 3 -o /tmp/qemu-x86_64-static "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.107/qemu-x86_64-static" 2>/dev/null || '
-      'wget --no-check-certificate -qO /tmp/qemu-x86_64-static "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.107/qemu-x86_64-static" 2>/dev/null || '
-      'curl -k -fL --retry 3 -o /tmp/qemu-x86_64-static "https://github.com/multiarch/qemu-user-static/releases/download/v7.2.0-1/qemu-x86_64-static" 2>/dev/null || '
-      'wget --no-check-certificate -qO /tmp/qemu-x86_64-static "https://github.com/multiarch/qemu-user-static/releases/download/v7.2.0-1/qemu-x86_64-static" 2>/dev/null || '
-      '(apt-get update 2>/dev/null && apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true)) && '
-      '( [ -f /tmp/qemu-x86_64-static ] && cp -f /tmp/qemu-x86_64-static /usr/bin/qemu-x86_64-static && chmod +x /usr/bin/qemu-x86_64-static || true ); '
+      '(which box64 >/dev/null 2>&1 || which qemu-x86_64-static >/dev/null 2>&1 || apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true); '
       'fi) && '
       'ln -sf /usr/bin/qemu-x86_64-static /usr/local/bin/qemu-x86_64-static 2>/dev/null || true && '
       'chmod +x /usr/bin/qemu-x86_64-static /usr/local/bin/qemu-x86_64-static 2>/dev/null || true && '
@@ -140,11 +135,12 @@ String _releaseEngineArm64Command() {
       'echo "Configuring x86_64 GLIBC runtime..." && '
       '(/usr/local/bin/quantum-heal-x64 2>/dev/null || true) && '
       '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && '
+      '([ -x /root/setup-arm64.sh ] && /root/setup-arm64.sh --force 2>/dev/null || true) && '
       'mkdir -p ~/.gradle /root/.gradle && '
       '(grep -q "android.useAndroidX" ~/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.useAndroidX=true\\nandroid.enableJetifier=true\\n" >> ~/.gradle/gradle.properties) && '
       '(grep -q "android.useAndroidX" /root/.gradle/gradle.properties 2>/dev/null || printf "\\nandroid.useAndroidX=true\\nandroid.enableJetifier=true\\n" >> /root/.gradle/gradle.properties) && '
       'touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed /root/.quantum_flutter_release_engine_installed ~/.quantum_flutter_release_engine_installed 2>/dev/null || true && '
-      'echo "✓ Flutter Release APK Build Engine (QEMU x86_64 + GLIBC) successfully configured!"';
+      'echo "✓ Flutter Release APK Build Engine (Box64/QEMU) successfully configured!"';
 }
 
 String _sdkToolsArm64Command() {

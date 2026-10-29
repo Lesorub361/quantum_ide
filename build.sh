@@ -125,7 +125,11 @@ build_android_apk() {
     # Ensure Android SDK is configured
     if [[ ! -d "$ANDROID_SDK_ROOT" ]]; then
         warning "ANDROID_SDK_ROOT not set or invalid, attempting to auto-detect..."
-        if [[ -d "$HOME/Android/Sdk" ]]; then
+        if [[ -d "$HOME/android-sdk" ]]; then
+            export ANDROID_SDK_ROOT="$HOME/android-sdk"
+        elif [[ -d "/root/android-sdk" ]]; then
+            export ANDROID_SDK_ROOT="/root/android-sdk"
+        elif [[ -d "$HOME/Android/Sdk" ]]; then
             export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
         elif [[ -d "$HOME/Android/sdk" ]]; then
             export ANDROID_SDK_ROOT="$HOME/Android/sdk"

@@ -540,7 +540,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String runningCommand(String command) {
-    return 'Exécution de la commande : $command...';
+    return 'EXÉCUTION DE LA COMMANDE';
   }
 
   @override
@@ -3014,9 +3014,6 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get selectTextInTerminal => 'Sélectionner du texte dans le terminal';
-
-  @override
-  String get runningCommand => 'EXÉCUTION DE LA COMMANDE';
 
   @override
   String get closeSelection => 'Fermer ✕';

@@ -542,7 +542,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String runningCommand(String command) {
-    return 'Выполняю команду: $command...';
+    return 'ЗАПУСК КОМАНДЫ';
   }
 
   @override
@@ -3006,9 +3006,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get selectTextInTerminal => 'Выделить текст в терминале';
-
-  @override
-  String get runningCommand => 'ЗАПУСК КОМАНДЫ';
 
   @override
   String get closeSelection => 'К вводу ✕';
