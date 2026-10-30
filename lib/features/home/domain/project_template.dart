@@ -531,14 +531,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         compose = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.15"
+    }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -673,6 +676,19 @@ if [ -f "\$DIR/gradle.properties" ]; then
     grep -q "android.aapt2FromMavenOverride" "\$DIR/gradle.properties" 2>/dev/null || printf "\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.useAndroidX=true\\nandroid.enableJetifier=false\\nandroid.aapt2.daemon=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\norg.gradle.daemon=false\\norg.gradle.parallel=false\\norg.gradle.workers.max=1\\n" >> "\$DIR/gradle.properties"
 fi
 
+# Auto-repair deprecated kotlinOptions in app/build.gradle.kts
+if [ -f "\$DIR/app/build.gradle.kts" ] && grep -q "kotlinOptions" "\$DIR/app/build.gradle.kts" 2>/dev/null; then
+    python3 -c 'import re, os
+p = "'"\$DIR/app/build.gradle.kts"'"
+if os.path.exists(p):
+    with open(p, "r") as f: c = f.read()
+    if "kotlinOptions" in c:
+        c = re.sub(r"[ \t]*kotlinOptions\\s*[{][^}]*[}]", "\n", c)
+        if "compilerOptions" not in c:
+            c += "\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n"
+        with open(p, "w") as f: f.write(c)' 2>/dev/null || true
+fi
+
 GRADLE_BIN=""
 if [ -x "/opt/gradle/gradle-8.13/bin/gradle" ]; then
     GRADLE_BIN="/opt/gradle/gradle-8.13/bin/gradle"
@@ -724,8 +740,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -874,6 +893,19 @@ DIR="\$(cd "\$(dirname "\$0")" && pwd)"
 # Ensure AAPT2 modern override and IPv4 in gradle.properties
 if [ -f "\$DIR/gradle.properties" ]; then
     grep -q "android.aapt2FromMavenOverride" "\$DIR/gradle.properties" 2>/dev/null || printf "\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.useAndroidX=true\\nandroid.enableJetifier=false\\nandroid.aapt2.daemon=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\norg.gradle.daemon=false\\norg.gradle.parallel=false\\norg.gradle.workers.max=1\\n" >> "\$DIR/gradle.properties"
+fi
+
+# Auto-repair deprecated kotlinOptions in app/build.gradle.kts
+if [ -f "\$DIR/app/build.gradle.kts" ] && grep -q "kotlinOptions" "\$DIR/app/build.gradle.kts" 2>/dev/null; then
+    python3 -c 'import re, os
+p = "'"\$DIR/app/build.gradle.kts"'"
+if os.path.exists(p):
+    with open(p, "r") as f: c = f.read()
+    if "kotlinOptions" in c:
+        c = re.sub(r"[ \t]*kotlinOptions\\s*[{][^}]*[}]", "\n", c)
+        if "compilerOptions" not in c:
+            c += "\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n"
+        with open(p, "w") as f: f.write(c)' 2>/dev/null || true
 fi
 
 GRADLE_BIN=""

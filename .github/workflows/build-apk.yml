@@ -32,16 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.114 - Адаптация интерфейса редактора под телефоны и планшеты (горизонталь/вертикаль)
+        ## 🚀 QuantumIDE v1.2.115 - Fix сборки Android Kotlin проектов и поддержка modern Kotlin DSL compilerOptions
 
         ### ✨ Что нового:
-        - **Фикс вылета верхних кнопок за экран на телефонах**:
-          - На телефонах в вертикальной ориентации дублирующие кнопки «Отменить / Повторить» (Undo/Redo) убраны из верхней панели, так как они уже всегда под рукой на нижней панели клавиатуры (`KeyboardAccessoryBar`).
-          - Верхний ряд кнопок обернут в адаптивный скроллируемый контейнер `SingleChildScrollView`, поэтому ни одна кнопка больше не обрезается и не заходит за пределы экрана даже на самых узких телефонах.
-        - **Фикс пропадания кнопок на планшетах в горизонтальном положении**:
-          - В горизонтальном режиме (`isDesktop = true`) на Android-планшетах возвращена нижняя панель быстрого доступа (`KeyboardAccessoryBar`) с кнопками Undo, Redo, Select All, Copy, Paste, быстрыми символами и скобками.
-          - В верхнюю панель на планшетах и широких экранах добавлено выпадающее меню действий `...` (Синхронизация, ИИ-чат, На главную).
-        - **Готовые шаблоны и команды сборки Debug/Release**: полная поддержка проектов Flutter, Kotlin, Java, Rust, Node.js, Python, Web и Dart.
+        - **Исправлена сборка Android Kotlin проектов (`build.gradle.kts`)**:
+          - Устаревший блок `kotlinOptions { jvmTarget = "17" }` внутри `android { }` заменен на официальный DSL Kotlin 2.x `compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }` через `tasks.withType<KotlinCompile>()` вне блока `android`. Это устраняет ошибку `receiver type mismatch: public fun BaseAppModuleExtension.kotlinOptions`.
+          - Добавлено автоматическое авто-исправление (auto-repair) устаревших файлов `app/build.gradle.kts` прямо в скрипт `gradlew` и во все кнопки сборки Debug / Release APK в терминале и боковой панели.
+          - Обновлены генераторы и шаблоны создания проектов Kotlin и Android Compose.
+        - **Адаптация интерфейса редактора под телефоны и планшеты (v1.2.114)**:
+          - Горизонтальный режим на планшетах с панелью `KeyboardAccessoryBar`.
+          - Скроллируемая верхняя панель инструментов без обрезания кнопок на телефонах.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
