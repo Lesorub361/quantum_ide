@@ -586,7 +586,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     _suggestionsNotifier.value = null;
   }
 
-  String _sanitizeTerminalInput(String text) {
+  static String _sanitizeTerminalInput(String text) {
     return text
         .replaceAll('“', '"')
         .replaceAll('”', '"')
@@ -595,7 +595,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         .replaceAll('‘', "'")
         .replaceAll('’', "'")
         .replaceAll('—', '--')
-        .replaceAll('–', '-');
+        .replaceAll('–', '-')
+        .replaceAll('\u200B', '')
+        .replaceAll('\u200C', '')
+        .replaceAll('\u200D', '')
+        .replaceAll('\uFEFF', '')
+        .replaceAll('\u00A0', ' ')
+        .replaceAll('\u202F', ' ')
+        .replaceAll(RegExp(r'\\\r?\n\s*'), ' ');
   }
 
   void _attachTerminalOutputListener(TerminalSession session) {
@@ -1227,7 +1234,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
     final shown = displayCmd ?? cmd;
     final safeLabel = shown.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll(r'$', r'\$');
-    final clearScreen = 'printf "\\033[2J\\033[H\\033[3J"';
+    const clearScreen = 'printf "\\033[2J\\033[H\\033[3J"';
     final banner = 'printf "\\033[1;36m▶ %s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeLabel"';
     final fullCmd = cdCmd.isNotEmpty ? '$clearScreen && $cdCmd && $banner && $cmd' : '$clearScreen && $banner && $cmd';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(type, fullCmd, interrupt: true, clear: false);
@@ -3255,7 +3262,8 @@ Also explain what exactly went wrong and how you fixed it.
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text != null && text.isNotEmpty) {
-      final sanitized = _sanitizeTerminalInput(text);
+      final sanitized = _sanitizeTerminalInput(text).replaceAll(RegExp(r'[\r\n]+$'), '');
+      if (sanitized.isEmpty) return;
       if (session.xtermTerminal.bracketedPasteMode) {
         session.xtermTerminal.paste(sanitized);
       } else {
@@ -3635,18 +3643,47 @@ class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput
   DateTime? _lastEnterSentAt;
 
   void _sendText(String delta) {
-    for (int i = 0; i < delta.length; i++) {
-      final ch = delta[i];
-      if (ch == '\n' || ch == '\r') {
-        _lastEnterSentAt = DateTime.now();
-        widget.terminal.keyInput(xt.TerminalKey.enter);
-      } else if (ch == '\t') {
-        widget.terminal.keyInput(xt.TerminalKey.tab);
-      } else if (ch == '\x7f' || ch == '\b') {
-        widget.terminal.keyInput(xt.TerminalKey.backspace);
+    if (delta.isEmpty) return;
+
+    final sanitized = _TerminalPanelContentState._sanitizeTerminalInput(delta);
+
+    // If multi-character input (pasted, IME predictive text, autocompletion)
+    if (sanitized.length > 1) {
+      // Strip trailing newlines so pasted commands don't auto-execute before review
+      final trimmed = sanitized.replaceAll(RegExp(r'[\r\n]+$'), '');
+      if (trimmed.isEmpty) return;
+
+      if (widget.terminal.bracketedPasteMode) {
+        widget.terminal.paste(trimmed);
       } else {
-        widget.terminal.textInput(ch);
+        if (!trimmed.contains('\n') && !trimmed.contains('\r')) {
+          widget.terminal.textInput(trimmed);
+        } else {
+          final lines = trimmed.split(RegExp(r'\r?\n'));
+          for (int i = 0; i < lines.length; i++) {
+            if (lines[i].isNotEmpty) {
+              widget.terminal.textInput(lines[i]);
+            }
+            if (i < lines.length - 1) {
+              _lastEnterSentAt = DateTime.now();
+              widget.terminal.keyInput(xt.TerminalKey.enter);
+            }
+          }
+        }
       }
+      return;
+    }
+
+    final ch = sanitized;
+    if (ch == '\n' || ch == '\r') {
+      _lastEnterSentAt = DateTime.now();
+      widget.terminal.keyInput(xt.TerminalKey.enter);
+    } else if (ch == '\t') {
+      widget.terminal.keyInput(xt.TerminalKey.tab);
+    } else if (ch == '\x7f' || ch == '\b') {
+      widget.terminal.keyInput(xt.TerminalKey.backspace);
+    } else {
+      widget.terminal.textInput(ch);
     }
   }
 

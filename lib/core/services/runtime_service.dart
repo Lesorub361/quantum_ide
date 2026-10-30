@@ -654,18 +654,14 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '17';
+    const bashrcVersion = '18';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
     if (await bashrc.exists()) {
       try {
-        final firstLine = await bashrc
-            .openRead()
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())
-            .first;
-        needsWrite = firstLine.trim() != bashrcVersionLine;
+        final content = await bashrc.readAsString();
+        needsWrite = !content.contains(bashrcVersionLine);
       } catch (_) {
         needsWrite = true;
       }
@@ -692,7 +688,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=17
+# BASHRC_VERSION=18
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -719,14 +715,15 @@ fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 
 # Auto-detect terminal capability and heal missing terminfo
+export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
 if [ -e /usr/share/terminfo/x/xterm-256color ] || [ -e /lib/terminfo/x/xterm-256color ] || [ -e /etc/terminfo/x/xterm-256color ]; then
     export TERM=xterm-256color
-elif [ -e /usr/share/terminfo/x/xterm ] || [ -e /lib/terminfo/x/xterm ]; then
+elif [ -e /usr/share/terminfo/x/xterm ] || [ -e /lib/terminfo/x/xterm ] || [ -e /etc/terminfo/x/xterm ]; then
     export TERM=xterm
 elif [ -e /usr/share/terminfo/l/linux ] || [ -e /lib/terminfo/l/linux ]; then
     export TERM=linux
 else
-    export TERM=ansi
+    export TERM=xterm-256color
 fi
 export COLORTERM=truecolor
 export LANG=C.UTF-8
@@ -770,10 +767,14 @@ alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && 
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
-alias cls='clear'
+alias cls="printf '\033[2J\033[H'"
+alias clear="printf '\033[2J\033[H'"
 
-# gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage
+# gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
 gradlew() {
+    if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+    fi
     if [ -f "./gradlew" ]; then
         bash ./gradlew "$@"
     else
@@ -781,9 +782,12 @@ gradlew() {
     fi
 }
 
-# Flutter wrapper to auto-ensure ARM64 target on native Android host
+# Flutter wrapper to auto-ensure ARM64 target on native Android host and modern AAPT2
 flutter() {
     if [ "$1" = "build" ] && [ "$2" = "apk" ]; then
+        if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
+            /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+        fi
         local has_plat=false
         for a in "$@"; do
             case "$a" in
@@ -928,10 +932,11 @@ term_fetch() {
     echo
 }
 
-# Ubuntu Greeting & Cyberpunk Banner
-if [ -z "$VTE_VERSION" ]; then
-    clear 2>/dev/null || printf '\033[2J\033[H'
-    term_fetch
+# Ubuntu Greeting & Cyberpunk Banner (shown cleanly once per session)
+if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
+    export _QUANTUM_GREETING_SHOWN=1
+    printf '\033[2J\033[H'
+    term_fetch 2>/dev/null || true
     echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
     echo -e '    \e[38;5;141mll\e[0m             → ls -la'
     echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
@@ -1043,8 +1048,8 @@ fi
         ];
         for (final inputrc in inputrcTargets) {
           try {
-            if (!await inputrc.exists() && await inputrc.parent.exists()) {
-              await inputrc.writeAsString('set input-meta on\nset output-meta on\nset convert-meta off\n');
+            if (await inputrc.parent.exists()) {
+              await inputrc.writeAsString('set input-meta on\nset output-meta on\nset convert-meta off\nset enable-bracketed-paste on\n');
             }
           } catch (_) {}
         }
@@ -1467,6 +1472,8 @@ if [ \$# -gt 2 ]; then
             _JAVA_OPTIONS="\$6"
             export FLUTTER_ALLOW_SU_ROOT GRADLE_OPTS _JAVA_OPTIONS
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
+            export TERM=xterm-256color COLORTERM=truecolor
+            export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
             shift 6
             if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
                 shift 2
@@ -1515,6 +1522,8 @@ else
             _JAVA_OPTIONS="\$6"
             export FLUTTER_ALLOW_SU_ROOT GRADLE_OPTS _JAVA_OPTIONS
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
+            export TERM=xterm-256color COLORTERM=truecolor
+            export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
             stty sane onlcr 2>/dev/null || true
             exec /bin/bash --rcfile /root/.bashrc
         ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$GRADLE_OPTS" "\$_JAVA_OPTIONS"
@@ -2243,6 +2252,13 @@ if [ -x /usr/local/bin/quantum-patch-ndk ]; then
     /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
 fi
 
+# Always auto-heal AAPT2 to modern binary with --source-path support
+if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
+    if [ -x /usr/local/bin/quantum-heal-x64 ]; then
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+    fi
+fi
+
 # Prevent multiple instances of setup-arm64.sh running at once or re-running unnecessarily
 DONE_FLAG="/tmp/setup_arm64_done.flag"
 if [ -f "$DONE_FLAG" ] && [ "$1" != "--force" ]; then
@@ -2258,6 +2274,27 @@ if [ -f "$LOCKFILE" ]; then
 fi
 echo "$$" > "$LOCKFILE"
 touch "$DONE_FLAG"
+
+# Ensure terminfo database is installed and linked so clear/nano/htop never fail
+if [ ! -d /usr/share/terminfo/x ] && [ ! -d /lib/terminfo/x ] && [ ! -d /etc/terminfo/x ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
+    apt-get install -y --no-install-recommends ncurses-base ncurses-bin ncurses-term >/dev/null 2>&1 || true
+fi
+if [ -d /usr/share/terminfo ] && [ ! -e /lib/terminfo ]; then
+    ln -sf /usr/share/terminfo /lib/terminfo 2>/dev/null || true
+fi
+if [ -d /lib/terminfo ] && [ ! -e /usr/share/terminfo ]; then
+    mkdir -p /usr/share 2>/dev/null || true
+    ln -sf /lib/terminfo /usr/share/terminfo 2>/dev/null || true
+fi
+
+# Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail
+if ! python3 -c 'import ntpath, pathlib' 2>/dev/null; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
+    apt-get install -y --no-install-recommends python3 python3-minimal libpython3-stdlib >/dev/null 2>&1 || true
+fi
 
 # Ensure native ARM64 CMake 3.22.1+ and Clang-18 / LLD-18 / LLVM-18 are installed for C++/NDK builds
 if ! command -v clang >/dev/null 2>&1 && ! ls /usr/bin/clang-[0-9]* >/dev/null 2>&1; then

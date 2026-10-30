@@ -294,12 +294,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       ref.read(expandedFoldersProvider.notifier).setExpanded({workspacePath});
     }
 
-    // Создаём терминальную сессию если нужно
+    // Синхронизируем терминальную вкладку с рабочей директорией проекта
     final runtime = ref.read(runtimeServiceProvider);
     final guestPath = PathMapper.mapToGuest(workspacePath, runtime.appDirectory);
-    final hasProjectSession = ref.read(terminalTabsProvider).any((s) => s.workingDir == guestPath);
-    if (!hasProjectSession) {
-      ref.read(terminalTabsProvider.notifier).createNewSession(workingDir: workspacePath);
+    final sessions = ref.read(terminalTabsProvider);
+    final sessionIndex = sessions.indexWhere((s) => s.workingDir == guestPath);
+    if (sessionIndex != -1) {
+      ref.read(terminalTabsProvider.notifier).currentIndex = sessionIndex;
     }
     
     // Очищаем старые фоновые демоны сборщика при смене проекта, чтобы они не грели процессор
