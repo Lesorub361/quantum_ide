@@ -354,6 +354,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final panelNotifier = ref.read(panelProvider.notifier);
     
     final isDesktop = MediaQuery.of(context).size.width > 800;
+    final isCompactPhone = MediaQuery.of(context).size.width < 620;
     final l10n = AppLocalizations.of(context)!;
 
     // Слушаем смену workspace ОДИН РАЗ — не на каждый build()
@@ -610,7 +611,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       ),
                     ),
                   ),
-                  if (!isDesktop) KeyboardAccessoryBar(controller: activeFile.controller),
+                  if (Platform.isAndroid || Platform.isIOS || !isDesktop) KeyboardAccessoryBar(controller: activeFile.controller),
                 ],
               ),
             ),
@@ -748,224 +749,184 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       const Expanded(
                         child: EditorAppBarTitle(),
                       ),
-                      if (isDesktop)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (activeFile != null) ...[
+                      Flexible(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // На планшетах и широких экранах кнопки Undo/Redo наверху доступны.
+                              // На узких телефонах в вертикали они скрыты сверху, т.к. уже есть внизу в KeyboardAccessoryBar.
+                              if (!isCompactPhone && activeFile != null) ...[
+                                ActionIconButton(
+                                  icon: LucideIcons.undo_2,
+                                  tooltip: 'Отменить (Undo / Ctrl+Z)',
+                                  onTap: () {
+                                    try { activeFile.controller.undo(); } catch (_) {}
+                                  },
+                                ),
+                                ActionIconButton(
+                                  icon: LucideIcons.redo_2,
+                                  tooltip: 'Повторить (Redo / Ctrl+Y)',
+                                  onTap: () {
+                                    try { activeFile.controller.redo(); } catch (_) {}
+                                  },
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              _buildQuickUpdatePill(ref),
                               ActionIconButton(
-                                icon: LucideIcons.undo_2,
-                                tooltip: 'Отменить (Undo / Ctrl+Z)',
+                                icon: LucideIcons.play,
+                                color: Colors.greenAccent,
+                                tooltip: 'Запустить проект (F5)',
                                 onTap: () {
-                                  try { activeFile.controller.undo(); } catch (_) {}
+                                  if (currentProject != null) {
+                                    ref.read(projectServiceProvider.notifier).runProject(currentProject);
+                                    panelNotifier.selectTab(PanelTab.terminal);
+                                    panelNotifier.openPanel();
+                                  } else {
+                                    panelNotifier.selectTab(PanelTab.terminal);
+                                    panelNotifier.openPanel();
+                                  }
                                 },
                               ),
                               ActionIconButton(
-                                icon: LucideIcons.redo_2,
-                                tooltip: 'Повторить (Redo / Ctrl+Y)',
+                                icon: LucideIcons.save,
+                                tooltip: AppLocalizations.of(context)!.saveTooltip,
+                                onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                              ),
+                              ActionIconButton(
+                                icon: LucideIcons.git_branch,
+                                color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent,
+                                tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
                                 onTap: () {
-                                  try { activeFile.controller.redo(); } catch (_) {}
+                                  if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
+                                    panelNotifier.closePanel();
+                                  } else {
+                                    panelNotifier.selectTab(PanelTab.git);
+                                    panelNotifier.openPanel();
+                                  }
                                 },
+                              ),
+                              ActionIconButton(
+                                icon: LucideIcons.terminal,
+                                tooltip: AppLocalizations.of(context)!.terminal,
+                                onTap: () {
+                                  if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
+                                    panelNotifier.closePanel();
+                                  } else {
+                                    panelNotifier.selectTab(PanelTab.terminal);
+                                    panelNotifier.openPanel();
+                                  }
+                                },
+                              ),
+                              ActionIconButton(
+                                icon: LucideIcons.sparkles,
+                                color: Colors.purpleAccent,
+                                tooltip: AppLocalizations.of(context)!.aiChat,
+                                onTap: () {
+                                  ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
+                                },
+                              ),
+                              PopupMenuButton<String>(
+                                icon: const Icon(Icons.more_vert, size: 20, color: Colors.white70),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                color: const Color(0xFF1E1E2E),
+                                elevation: 8,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                                ),
+                                onSelected: (value) async {
+                                  switch (value) {
+                                    case 'undo':
+                                      try { activeFile?.controller.undo(); } catch (_) {}
+                                      break;
+                                    case 'redo':
+                                      try { activeFile?.controller.redo(); } catch (_) {}
+                                      break;
+                                    case 'sync':
+                                      final currentWs = ref.read(workspaceProvider).currentPath;
+                                      if (currentWs != null) {
+                                        ref.read(projectSyncProvider.notifier).startSync(currentWs, force: true);
+                                      }
+                                      break;
+                                    case 'chat':
+                                      ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
+                                      break;
+                                    case 'home':
+                                      await ref.read(workspaceProvider.notifier).closeWorkspace();
+                                      if (context.mounted) {
+                                        context.go('/');
+                                      }
+                                      break;
+                                  }
+                                },
+                                itemBuilder: (context) => [
+                                  if (isCompactPhone && activeFile != null) ...[
+                                    const PopupMenuItem(
+                                      value: 'undo',
+                                      child: Row(
+                                        children: [
+                                          Icon(LucideIcons.undo_2, size: 16, color: Colors.white70),
+                                          SizedBox(width: 10),
+                                          Text('Отменить (Undo)', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'redo',
+                                      child: Row(
+                                        children: [
+                                          Icon(LucideIcons.redo_2, size: 16, color: Colors.white70),
+                                          SizedBox(width: 10),
+                                          Text('Повторить (Redo)', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuDivider(),
+                                  ],
+                                  const PopupMenuItem(
+                                    value: 'sync',
+                                    child: Row(
+                                      children: [
+                                        Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
+                                        SizedBox(width: 10),
+                                        Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuDivider(),
+                                  PopupMenuItem(
+                                    value: 'chat',
+                                    child: Row(
+                                      children: [
+                                        const Icon(LucideIcons.message_square, size: 16, color: Colors.cyanAccent),
+                                        const SizedBox(width: 10),
+                                        Text(AppLocalizations.of(context)!.aiChat, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                      ],
+                                    ),
+                                  ),
+                                  const PopupMenuDivider(),
+                                  PopupMenuItem(
+                                    value: 'home',
+                                    child: Row(
+                                      children: [
+                                        const Icon(LucideIcons.house, size: 16, color: Colors.white70),
+                                        const SizedBox(width: 10),
+                                        Text(l10n.home, style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(width: 4),
                             ],
-                            _buildQuickUpdatePill(ref),
-                            ActionIconButton(
-                              icon: LucideIcons.play,
-                              color: Colors.greenAccent,
-                              tooltip: 'Запустить проект (F5)',
-                              onTap: () {
-                                if (currentProject != null) {
-                                  ref.read(projectServiceProvider.notifier).runProject(currentProject);
-                                  panelNotifier.selectTab(PanelTab.terminal);
-                                  panelNotifier.openPanel();
-                                } else {
-                                  panelNotifier.selectTab(PanelTab.terminal);
-                                  panelNotifier.openPanel();
-                                }
-                              },
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.save,
-                              tooltip: AppLocalizations.of(context)!.saveTooltip,
-                              onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.git_branch,
-                              color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent,
-                              tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
-                              onTap: () {
-                                if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
-                                  panelNotifier.closePanel();
-                                } else {
-                                  panelNotifier.selectTab(PanelTab.git);
-                                  panelNotifier.openPanel();
-                                }
-                              },
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.terminal,
-                              tooltip: AppLocalizations.of(context)!.terminal,
-                              onTap: () {
-                                if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
-                                  panelNotifier.closePanel();
-                                } else {
-                                  panelNotifier.selectTab(PanelTab.terminal);
-                                  panelNotifier.openPanel();
-                                }
-                              },
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.message_square,
-                              tooltip: AppLocalizations.of(context)!.aiChat,
-                              onTap: () {
-                                ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                        )
-                      else
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (activeFile != null) ...[
-                              ActionIconButton(
-                                icon: LucideIcons.undo_2,
-                                tooltip: 'Отменить',
-                                onTap: () {
-                                  try { activeFile.controller.undo(); } catch (_) {}
-                                },
-                              ),
-                              ActionIconButton(
-                                icon: LucideIcons.redo_2,
-                                tooltip: 'Повторить',
-                                onTap: () {
-                                  try { activeFile.controller.redo(); } catch (_) {}
-                                },
-                              ),
-                            ],
-                            _buildQuickUpdatePill(ref),
-                            ActionIconButton(
-                              icon: LucideIcons.play,
-                              color: Colors.greenAccent,
-                              tooltip: 'Запустить проект (F5)',
-                              onTap: () {
-                                if (currentProject != null) {
-                                  ref.read(projectServiceProvider.notifier).runProject(currentProject);
-                                  panelNotifier.selectTab(PanelTab.terminal);
-                                  panelNotifier.openPanel();
-                                } else {
-                                  panelNotifier.selectTab(PanelTab.terminal);
-                                  panelNotifier.openPanel();
-                                }
-                              },
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.save,
-                              tooltip: AppLocalizations.of(context)!.saveTooltip,
-                              onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.git_branch,
-                              color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent,
-                              tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
-                              onTap: () {
-                                if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
-                                  panelNotifier.closePanel();
-                                } else {
-                                  panelNotifier.selectTab(PanelTab.git);
-                                  panelNotifier.openPanel();
-                                }
-                              },
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.terminal,
-                              tooltip: AppLocalizations.of(context)!.terminal,
-                              onTap: () {
-                                if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
-                                  panelNotifier.closePanel();
-                                } else {
-                                  panelNotifier.selectTab(PanelTab.terminal);
-                                  panelNotifier.openPanel();
-                                }
-                              },
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.sparkles,
-                              color: Colors.purpleAccent,
-                              tooltip: AppLocalizations.of(context)!.aiChat,
-                              onTap: () {
-                                ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                              },
-                            ),
-                            PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_vert, size: 20, color: Colors.white70),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              color: const Color(0xFF1E1E2E),
-                              elevation: 8,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-                              ),
-                              onSelected: (value) async {
-                                switch (value) {
-                                  case 'sync':
-                                    final currentWs = ref.read(workspaceProvider).currentPath;
-                                    if (currentWs != null) {
-                                      ref.read(projectSyncProvider.notifier).startSync(currentWs, force: true);
-                                    }
-                                    break;
-                                  case 'chat':
-                                    ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                                    break;
-                                  case 'home':
-                                    await ref.read(workspaceProvider.notifier).closeWorkspace();
-                                    if (context.mounted) {
-                                      context.go('/');
-                                    }
-                                    break;
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                const PopupMenuItem(
-                                  value: 'sync',
-                                  child: Row(
-                                    children: [
-                                      Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
-                                      SizedBox(width: 10),
-                                      Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                                PopupMenuItem(
-                                  value: 'chat',
-                                  child: Row(
-                                    children: [
-                                      const Icon(LucideIcons.message_square, size: 16, color: Colors.cyanAccent),
-                                      const SizedBox(width: 10),
-                                      Text(AppLocalizations.of(context)!.aiChat, style: const TextStyle(fontSize: 13, color: Colors.white)),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                                PopupMenuItem(
-                                  value: 'home',
-                                  child: Row(
-                                    children: [
-                                      const Icon(LucideIcons.house, size: 16, color: Colors.white70),
-                                      const SizedBox(width: 10),
-                                      Text(l10n.home, style: const TextStyle(fontSize: 13, color: Colors.white70)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 4),
-                          ],
+                          ),
                         ),
+                      ),
                     ],
                   ),
                 ),

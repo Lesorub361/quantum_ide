@@ -32,21 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.113 - Полная поддержка шаблонов и кнопок запуска/сборки для всех проектов
+        ## 🚀 QuantumIDE v1.2.114 - Адаптация интерфейса редактора под телефоны и планшеты (горизонталь/вертикаль)
 
         ### ✨ Что нового:
-        - **Готовые шаблоны проектов для всех языков**: Добавлены полностью настроенные шаблоны для Kotlin (KT) и Java с интерактивным UI (счётчик кликов), готовыми `settings.gradle.kts`, `build.gradle.kts`, `AndroidManifest.xml` и smart Gradle wrapper (`gradlew`).
-        - **Встроенный `gradle-wrapper.jar`**: Автономная работа и оффлайн-сборка без загрузки jar-файлов из сети.
-        - **Индивидуальные кнопки запуска и сборки для всех типов проектов**:
-          - **Flutter**: `Debug APK`, `Release APK`, `Pub Get`, `Build PC`, `Clean`.
-          - **Kotlin**: `Debug APK (KT)`, `Release APK (KT)`, `Install (KT)`, `Clean (KT)`, `Sync (KT)`.
-          - **Java**: `Debug APK (Java)`, `Release APK (Java)`, `Install (Java)`, `Clean (Java)`, `Sync (Java)`.
-          - **Rust**: `Cargo Run`, `Cargo Build`, `Release`, `Check`, `Test`, `Clean`.
-          - **Node.js**: `Node Run`, `npm install`, `npm build`, `Web→APK`, `Clean`.
-          - **Python**: `Python Run`, `Install deps`, `Freeze`, `Build APK (Flet)`.
-          - **Web (HTML/React)**: `Start Server`, `Web→APK`.
-          - **Dart**: `Dart Run`, `Compile Exe`, `Analyze`, `Pub Get`.
-        - **Защита от OOM и оверрайд ARM64 AAPT2**: авто-инъекция параметров в `gradle.properties` для сборки на мобильных процессорах.
+        - **Фикс вылета верхних кнопок за экран на телефонах**:
+          - На телефонах в вертикальной ориентации дублирующие кнопки «Отменить / Повторить» (Undo/Redo) убраны из верхней панели, так как они уже всегда под рукой на нижней панели клавиатуры (`KeyboardAccessoryBar`).
+          - Верхний ряд кнопок обернут в адаптивный скроллируемый контейнер `SingleChildScrollView`, поэтому ни одна кнопка больше не обрезается и не заходит за пределы экрана даже на самых узких телефонах.
+        - **Фикс пропадания кнопок на планшетах в горизонтальном положении**:
+          - В горизонтальном режиме (`isDesktop = true`) на Android-планшетах возвращена нижняя панель быстрого доступа (`KeyboardAccessoryBar`) с кнопками Undo, Redo, Select All, Copy, Paste, быстрыми символами и скобками.
+          - В верхнюю панель на планшетах и широких экранах добавлено выпадающее меню действий `...` (Синхронизация, ИИ-чат, На главную).
+        - **Готовые шаблоны и команды сборки Debug/Release**: полная поддержка проектов Flutter, Kotlin, Java, Rust, Node.js, Python, Web и Dart.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
