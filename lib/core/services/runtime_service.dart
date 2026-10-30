@@ -647,6 +647,12 @@ class RuntimeService extends ChangeNotifier {
       debugPrint('Warning: Failed to ensure android licenses: $e');
     }
 
+    try {
+      await _ensureBundledAapt2();
+    } catch (e) {
+      debugPrint('Warning: Failed to ensure bundled aapt2: $e');
+    }
+
       // Enhanced .bashrc with robust PATH, Ubuntu prompt and greeting
       // Written if missing OR if version tag has changed (to push updates to users)
     final bashrc = File(
@@ -654,7 +660,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '18';
+    const bashrcVersion = '19';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -1094,6 +1100,87 @@ fi
           }
         }
       } catch (_) {}
+    }
+  }
+
+  /// Extracts the pre-bundled native ARM64 static aapt2 binary to the system
+  /// and Android SDK build-tools to ensure AGP 8+ builds never fail with '--source-path'.
+  Future<void> _ensureBundledAapt2() async {
+    try {
+      final aapt2Targets = [
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'aapt2'),
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'aapt2-arm64'),
+        p.join(_filesDir, 'bin', 'aapt2'),
+        '/usr/bin/aapt2',
+        '/usr/local/bin/aapt2-arm64',
+      ];
+
+      final primaryAapt2 = File(aapt2Targets.first);
+      bool needsExtract = true;
+      if (await primaryAapt2.exists()) {
+        try {
+          final res = await Process.run(primaryAapt2.path, ['compile', '--help']);
+          final out = '${res.stdout} ${res.stderr}';
+          if (out.contains('--source-path')) {
+            needsExtract = false;
+          }
+        } catch (_) {}
+      }
+
+      if (needsExtract) {
+        debugPrint('[AAPT2] Extracting bundled modern ARM64 aapt2 from assets...');
+        final byteData = await rootBundle.load('assets/bin/aapt2-arm64.gz');
+        final compressedBytes = byteData.buffer.asUint8List(
+          byteData.offsetInBytes,
+          byteData.lengthInBytes,
+        );
+        final decompressedBytes = gzip.decode(compressedBytes);
+
+        for (final targetPath in aapt2Targets) {
+          try {
+            final f = File(targetPath);
+            if (await f.parent.exists()) {
+              if (await f.exists()) await f.delete();
+              await f.writeAsBytes(decompressedBytes, flush: true);
+              await Process.run('chmod', ['755', targetPath]);
+              debugPrint('[AAPT2] Installed modern aapt2 at $targetPath');
+            }
+          } catch (_) {}
+        }
+
+        final buildToolsDir = Directory(
+          p.join(_filesDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'build-tools'),
+        );
+        if (await buildToolsDir.exists()) {
+          await for (final entity in buildToolsDir.list()) {
+            if (entity is Directory) {
+              final btAapt2 = File(p.join(entity.path, 'aapt2'));
+              try {
+                if (await btAapt2.exists()) await btAapt2.delete();
+                await btAapt2.writeAsBytes(decompressedBytes, flush: true);
+                await Process.run('chmod', ['755', btAapt2.path]);
+                debugPrint('[AAPT2] Updated build-tools aapt2 at ${btAapt2.path}');
+              } catch (_) {}
+            }
+          }
+        }
+
+        final globalBuildTools = Directory('/root/android-sdk/build-tools');
+        if (await globalBuildTools.exists()) {
+          await for (final entity in globalBuildTools.list()) {
+            if (entity is Directory) {
+              final btAapt2 = File(p.join(entity.path, 'aapt2'));
+              try {
+                if (await btAapt2.exists()) await btAapt2.delete();
+                await btAapt2.writeAsBytes(decompressedBytes, flush: true);
+                await Process.run('chmod', ['755', btAapt2.path]);
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[AAPT2] Warning: Failed to extract bundled aapt2: $e');
     }
   }
 
@@ -2161,72 +2248,77 @@ fi
 if [ -f /lib/x86_64-linux-gnu/libc.so.6 ] && [ -f /lib64/ld-linux-x86-64.so.2 ]; then
     echo "[quantum-heal-x64] ✓ x86_64 dynamic linker and glibc runtime already configured."
     touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
-    exit 0
-fi
-
-echo "[quantum-heal-x64] Setting up x86_64 dynamic linker & glibc runtime for Flutter release builds..."
-
-# 3. Try fast direct deb extraction of libc6:amd64 if missing
-if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
-    DEB_DIR="${TMPDIR:-/tmp}/libc6_x64_download_$$"
-    mkdir -p "$DEB_DIR" 2>/dev/null || true
-    for deb_url in \
-        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3.8_amd64.deb" \
-        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.3_amd64.deb" \
-        "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9.18_amd64.deb" \
-        "http://security.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3_amd64.deb"; do
-        if curl -fsSL --retry 2 "$deb_url" -o "$DEB_DIR/libc6.deb" 2>/dev/null || \
-           wget -qO "$DEB_DIR/libc6.deb" "$deb_url" 2>/dev/null; then
-            dpkg -x "$DEB_DIR/libc6.deb" / 2>/dev/null || true
-            rm -rf "$DEB_DIR" 2>/dev/null || true
-            break
-        fi
-    done
-    rm -rf "$DEB_DIR" 2>/dev/null || true
-fi
-
-# 4. Ensure Box64 or QEMU user static is installed
-if ! command -v box64 >/dev/null 2>&1 && [ ! -x /usr/bin/qemu-x86_64-static ]; then
-    apt-get install -y --no-install-recommends box64 2>/dev/null || \
-    apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true
-fi
-if [ -x /usr/bin/qemu-x86_64-static ]; then
-    ln -sf /usr/bin/qemu-x86_64-static /usr/local/bin/qemu-x86_64-static 2>/dev/null || true
-fi
-
-# 5. Fix symlinks for ld-linux-x86-64.so.2
-mkdir -p /lib64 2>/dev/null || true
-if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
-    ln -sf /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
-elif [ -f /lib/x86_64-linux-gnu/ld-2.31.so ]; then
-    ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 2>/dev/null || true
-    ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
-fi
-
-if [ -f /lib64/ld-linux-x86-64.so.2 ] || command -v box64 >/dev/null 2>&1; then
-    [ -f /lib64/ld-linux-x86-64.so.2 ] && ln -sf /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 2>/dev/null || true
-    touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
-    echo "[quantum-heal-x64] ✓ x86_64 AOT runtime successfully ready."
 else
-    echo "[quantum-heal-x64] Warning: /lib64/ld-linux-x86-64.so.2 still missing."
+    echo "[quantum-heal-x64] Setting up x86_64 dynamic linker & glibc runtime for Flutter release builds..."
+
+    # 3. Try fast direct deb extraction of libc6:amd64 if missing
+    if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
+        DEB_DIR="${TMPDIR:-/tmp}/libc6_x64_download_$$"
+        mkdir -p "$DEB_DIR" 2>/dev/null || true
+        for deb_url in \
+            "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3.8_amd64.deb" \
+            "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.3_amd64.deb" \
+            "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9.18_amd64.deb" \
+            "http://security.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3_amd64.deb"; do
+            if curl -fsSL --retry 2 "$deb_url" -o "$DEB_DIR/libc6.deb" 2>/dev/null || \
+               wget -qO "$DEB_DIR/libc6.deb" "$deb_url" 2>/dev/null; then
+                dpkg -x "$DEB_DIR/libc6.deb" / 2>/dev/null || true
+                rm -rf "$DEB_DIR" 2>/dev/null || true
+                break
+            fi
+        done
+        rm -rf "$DEB_DIR" 2>/dev/null || true
+    fi
+
+    # 4. Ensure Box64 or QEMU user static is installed
+    if ! command -v box64 >/dev/null 2>&1 && [ ! -x /usr/bin/qemu-x86_64-static ]; then
+        apt-get install -y --no-install-recommends box64 2>/dev/null || \
+        apt-get install -y --no-install-recommends qemu-user-static 2>/dev/null || true
+    fi
+    if [ -x /usr/bin/qemu-x86_64-static ]; then
+        ln -sf /usr/bin/qemu-x86_64-static /usr/local/bin/qemu-x86_64-static 2>/dev/null || true
+    fi
+
+    # 5. Fix symlinks for ld-linux-x86-64.so.2
+    mkdir -p /lib64 2>/dev/null || true
+    if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+        ln -sf /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
+    elif [ -f /lib/x86_64-linux-gnu/ld-2.31.so ]; then
+        ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 2>/dev/null || true
+        ln -sf /lib/x86_64-linux-gnu/ld-2.31.so /lib64/ld-linux-x86-64.so.2 2>/dev/null || true
+    fi
+
+    if [ -f /lib64/ld-linux-x86-64.so.2 ] || command -v box64 >/dev/null 2>&1; then
+        [ -f /lib64/ld-linux-x86-64.so.2 ] && ln -sf /lib64/ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 2>/dev/null || true
+        touch /root/.quantum_flutter_release_fix_installed ~/.quantum_flutter_release_fix_installed 2>/dev/null || true
+        echo "[quantum-heal-x64] ✓ x86_64 AOT runtime successfully ready."
+    else
+        echo "[quantum-heal-x64] Warning: /lib64/ld-linux-x86-64.so.2 still missing."
+    fi
 fi
 
 # 6. Auto-heal AAPT2 to modern ARM64 binary with --source-path support (required for AGP 8+)
 if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
-    echo "[quantum-heal-x64] Upgrading AAPT2 to modern ARM64 binary with --source-path support..."
-    TMP_ZIP="${TMPDIR:-/tmp}/sdk-tools-$$.zip"
-    TMP_DIR="${TMPDIR:-/tmp}/sdk_tools_$$"
-    mkdir -p "$TMP_DIR" 2>/dev/null || true
-    if curl -k -fsSL --retry 3 "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null || \
-       wget --no-check-certificate -qO "$TMP_ZIP" "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" 2>/dev/null || \
-       curl -k -fsSL --retry 3 "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null; then
-        unzip -qo "$TMP_ZIP" "build-tools/aapt2" -d "$TMP_DIR" 2>/dev/null || unzip -qo "$TMP_ZIP" -d "$TMP_DIR" 2>/dev/null
-        if [ -f "$TMP_DIR/build-tools/aapt2" ]; then
-            cp -f "$TMP_DIR/build-tools/aapt2" /usr/bin/aapt2
-            chmod +x /usr/bin/aapt2
-            echo "[quantum-heal-x64] ✓ Modern AAPT2 successfully installed to /usr/bin/aapt2."
+    if [ -x /usr/local/bin/aapt2-arm64 ] && (/usr/local/bin/aapt2-arm64 compile --help 2>&1 | grep -q -- '--source-path'); then
+        cp -f /usr/local/bin/aapt2-arm64 /usr/bin/aapt2
+        chmod +x /usr/bin/aapt2
+        echo "[quantum-heal-x64] ✓ Modern AAPT2 restored from /usr/local/bin/aapt2-arm64."
+    else
+        echo "[quantum-heal-x64] Upgrading AAPT2 to modern ARM64 binary with --source-path support..."
+        TMP_ZIP="${TMPDIR:-/tmp}/sdk-tools-$$.zip"
+        TMP_DIR="${TMPDIR:-/tmp}/sdk_tools_$$"
+        mkdir -p "$TMP_DIR" 2>/dev/null || true
+        if curl -k -fsSL --retry 3 "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null || \
+           wget --no-check-certificate -qO "$TMP_ZIP" "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" 2>/dev/null || \
+           curl -k -fsSL --retry 3 "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null; then
+            unzip -qo "$TMP_ZIP" "build-tools/aapt2" -d "$TMP_DIR" 2>/dev/null || unzip -qo "$TMP_ZIP" -d "$TMP_DIR" 2>/dev/null
+            if [ -f "$TMP_DIR/build-tools/aapt2" ]; then
+                cp -f "$TMP_DIR/build-tools/aapt2" /usr/bin/aapt2
+                chmod +x /usr/bin/aapt2
+                echo "[quantum-heal-x64] ✓ Modern AAPT2 successfully installed to /usr/bin/aapt2."
+            fi
+            rm -rf "$TMP_ZIP" "$TMP_DIR" 2>/dev/null || true
         fi
-        rm -rf "$TMP_ZIP" "$TMP_DIR" 2>/dev/null || true
     fi
 fi
 
@@ -2235,6 +2327,7 @@ if /usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'; then
     for bt in /root/android-sdk/build-tools/*; do
         if [ -d "$bt" ]; then
             ln -sf /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
+            cp -f /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
         fi
     done
 fi
@@ -2254,7 +2347,10 @@ fi
 
 # Always auto-heal AAPT2 to modern binary with --source-path support
 if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
-    if [ -x /usr/local/bin/quantum-heal-x64 ]; then
+    if [ -x /usr/local/bin/aapt2-arm64 ] && (/usr/local/bin/aapt2-arm64 compile --help 2>&1 | grep -q -- '--source-path'); then
+        cp -f /usr/local/bin/aapt2-arm64 /usr/bin/aapt2
+        chmod +x /usr/bin/aapt2
+    elif [ -x /usr/local/bin/quantum-heal-x64 ]; then
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
     fi
 fi
