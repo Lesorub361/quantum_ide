@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/runtime_service.dart';
@@ -237,6 +236,9 @@ class ProjectSyncNotifier extends StateNotifier<ProjectSyncState> {
       initialStep = 'Resolving Gradle wrapper & properties...';
       command =
           '(mkdir -p ~/.gradle 2>/dev/null || true) && '
+          '(if [ -f app/build.gradle.kts ] && grep -q "kotlinOptions" app/build.gradle.kts 2>/dev/null; then python3 -c "import re; p=\'app/build.gradle.kts\'; c=open(p).read(); c=re.sub(r\'[ \\t]*kotlinOptions\\s*[{][^}]*[}]\', \'\\n\', c); c+=\'\\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\\n    compilerOptions {\\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\\n    }\\n}\\n\' if \'compilerOptions\' not in c else \'\'; open(p,\'w\').write(c)" 2>/dev/null || true; fi) && '
+          '(if [ -f app/src/main/AndroidManifest.xml ] && grep -q "@mipmap/ic_launcher" app/src/main/AndroidManifest.xml 2>/dev/null; then sed -i "s/@mipmap\\/ic_launcher_round/@android:drawable\\/sym_def_app_icon/g; s/@mipmap\\/ic_launcher/@android:drawable\\/sym_def_app_icon/g" app/src/main/AndroidManifest.xml 2>/dev/null || true; mkdir -p app/src/main/res/mipmap-anydpi-v26 2>/dev/null || true; printf \'<?xml version="1.0" encoding="utf-8"?>\\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\\n    <background android:color="@android:color/holo_blue_dark"/>\\n    <foreground android:drawable="@android:drawable/sym_def_app_icon"/>\\n</adaptive-icon>\\n\' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml 2>/dev/null || true; cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml 2>/dev/null || true; fi) && '
+          '([ -d /root/android-sdk ] && printf "sdk.dir=/root/android-sdk\\n" > local.properties 2>/dev/null || true) && '
           'sed -i "/extra-gen-snapshot-options/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true; '
           '(grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> gradle.properties 2>/dev/null || true); '
           '(grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true); '

@@ -32,16 +32,17 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.116 - Обновление системы проверки релизов в 1 клик и фикс показа обновлений
+        ## 🚀 QuantumIDE v1.2.117 - Исправление сборки Android ресурсов (AAPT ic_launcher) и SDK пути
 
         ### ✨ Что нового:
-        - **Исправлена проверка обновлений по клику на версию**:
-          - Переход на асинхронную проверку с индикатором загрузки и автоматическим открытием диалога обновления при тапе на чип версии в шапке.
-          - Добавлен надежный механизм проверки релизов через GitHub Web Redirect (`/releases/latest`), не подверженный лимитам неавторизованных запросов GitHub API (403 Rate Limit Exceeded).
-          - Обновлен манифест обновлений `quantum-ide-update.json` с прямой ссылкой на ARM64 APK.
-        - **Исправлена сборка Android Kotlin проектов (v1.2.115)**:
-          - Синтаксис `build.gradle.kts` переведен на Kotlin 2.x `compilerOptions`.
-          - Добавлен встроенный авто-патчер устаревших файлов проекта.
+        - **Исправлена ошибка сборки ресурсов AAPT `:app:processDebugResources`**:
+          - В `AndroidManifest.xml` для проектов Kotlin и Java иконка переведена на гарантированно существующую системную иконку `@android:drawable/sym_def_app_icon`.
+          - Добавлена автоматическая генерация адаптивных иконок `res/mipmap-anydpi-v26/ic_launcher.xml` и `ic_launcher_round.xml`.
+          - Ошибка `resource mipmap/ic_launcher not found` полностью устранена.
+        - **Исправлен путь `sdk.dir` в `local.properties`**:
+          - `local.properties` теперь корректно указывает на гостевой путь `/root/android-sdk` внутри контейнера PRoot, предотвращая предупреждение `sdk.dir directory does not exist`.
+        - **Авто-лечение при синхронизации (`ProjectSyncService`) и сборке**:
+          - Скрипты сборки и синхронизации автоматически приводят `build.gradle.kts`, `local.properties` и `AndroidManifest.xml` в рабочее состояние.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

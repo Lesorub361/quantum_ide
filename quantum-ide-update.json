@@ -1,10 +1,10 @@
 {
-  "versionCode": 133,
-  "versionName": "1.2.116",
-  "notes": "QuantumIDE v1.2.116: Обновление системы проверки релизов в 1 клик без лимитов GitHub API, авто-диалог обновления при нажатии на версию, фикс сборки Kotlin DSL compilerOptions и адаптация UI.",
+  "versionCode": 134,
+  "versionName": "1.2.117",
+  "notes": "QuantumIDE v1.2.117: Fix ошибки сборки ресурсов Android Manifest (mipmap/ic_launcher not found), исправление sdk.dir для local.properties в PRoot, авто-исправление при синхронизации проекта и сборке.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.116/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.117/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }

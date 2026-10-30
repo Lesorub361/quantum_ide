@@ -689,6 +689,19 @@ if os.path.exists(p):
         with open(p, "w") as f: f.write(c)' 2>/dev/null || true
 fi
 
+# Auto-repair local.properties SDK path
+if [ -d /root/android-sdk ]; then
+    printf "sdk.dir=/root/android-sdk\\n" > "\$DIR/local.properties" 2>/dev/null || true
+fi
+
+# Auto-repair missing ic_launcher in AndroidManifest.xml
+if [ -f "\$DIR/app/src/main/AndroidManifest.xml" ] && grep -q "@mipmap/ic_launcher" "\$DIR/app/src/main/AndroidManifest.xml" 2>/dev/null; then
+    sed -i 's/@mipmap\\/ic_launcher_round/@android:drawable\\/sym_def_app_icon/g; s/@mipmap\\/ic_launcher/@android:drawable\\/sym_def_app_icon/g' "\$DIR/app/src/main/AndroidManifest.xml" 2>/dev/null || true
+    mkdir -p "\$DIR/app/src/main/res/mipmap-anydpi-v26" 2>/dev/null || true
+    printf '<?xml version="1.0" encoding="utf-8"?>\\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\\n    <background android:color="@android:color/holo_blue_dark"/>\\n    <foreground android:drawable="@android:drawable/sym_def_app_icon"/>\\n</adaptive-icon>\\n' > "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" 2>/dev/null || true
+    cp "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" 2>/dev/null || true
+fi
+
 GRADLE_BIN=""
 if [ -x "/opt/gradle/gradle-8.13/bin/gradle" ]; then
     GRADLE_BIN="/opt/gradle/gradle-8.13/bin/gradle"
@@ -906,6 +919,19 @@ if os.path.exists(p):
         if "compilerOptions" not in c:
             c += "\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n"
         with open(p, "w") as f: f.write(c)' 2>/dev/null || true
+fi
+
+# Auto-repair local.properties SDK path
+if [ -d /root/android-sdk ]; then
+    printf "sdk.dir=/root/android-sdk\\n" > "\$DIR/local.properties" 2>/dev/null || true
+fi
+
+# Auto-repair missing ic_launcher in AndroidManifest.xml
+if [ -f "\$DIR/app/src/main/AndroidManifest.xml" ] && grep -q "@mipmap/ic_launcher" "\$DIR/app/src/main/AndroidManifest.xml" 2>/dev/null; then
+    sed -i 's/@mipmap\\/ic_launcher_round/@android:drawable\\/sym_def_app_icon/g; s/@mipmap\\/ic_launcher/@android:drawable\\/sym_def_app_icon/g' "\$DIR/app/src/main/AndroidManifest.xml" 2>/dev/null || true
+    mkdir -p "\$DIR/app/src/main/res/mipmap-anydpi-v26" 2>/dev/null || true
+    printf '<?xml version="1.0" encoding="utf-8"?>\\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\\n    <background android:color="@android:color/holo_blue_dark"/>\\n    <foreground android:drawable="@android:drawable/sym_def_app_icon"/>\\n</adaptive-icon>\\n' > "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" 2>/dev/null || true
+    cp "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" 2>/dev/null || true
 fi
 
 GRADLE_BIN=""
