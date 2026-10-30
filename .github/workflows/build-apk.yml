@@ -32,16 +32,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.112 - Готовые шаблоны проектов Kotlin/Java и раздельные команды сборки Debug & Release
+        ## 🚀 QuantumIDE v1.2.113 - Полная поддержка шаблонов и кнопок запуска/сборки для всех проектов
 
         ### ✨ Что нового:
-        - **Готовые шаблоны проектов Kotlin (KT) и Java**: Добавлены полностью преднастроенные шаблоны нативных Android-проектов с interactive UI (счётчик нажатий), готовыми `settings.gradle.kts`, `build.gradle.kts`, `AndroidManifest.xml` и smart Gradle wrapper (`gradlew`).
-        - **Встроенный `gradle-wrapper.jar`**: Gradle wrapper упакован в assets приложения, обеспечивая офлайн инициализацию и сборку без внешних зависимостей.
-        - **Раздельные кнопки сборки Debug и Release**:
-          - **Flutter**: отдельные кнопки `Debug APK` (`flutter build apk --debug`) и `Release APK` (`flutter build apk --release`), `Pub Get`, `Clean`.
-          - **Kotlin**: отдельные кнопки `Debug APK (KT)` (`./gradlew assembleDebug`), `Release APK (KT)` (`./gradlew assembleRelease`), `Clean (KT)`, `Sync (KT)`.
-          - **Java**: отдельные кнопки `Debug APK (Java)` (`./gradlew assembleDebug`), `Release APK (Java)` (`./gradlew assembleRelease`), `Clean (Java)`, `Sync (Java)`.
-        - **Предотвращение OOM и ARM64 AAPT2 оверрайд**: Все шаблоны и команды сборки автоматически настраивают `org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m`, `systemProp.java.net.preferIPv4Stack=true` и `android.aapt2FromMavenOverride=/usr/bin/aapt2`.
+        - **Готовые шаблоны проектов для всех языков**: Добавлены полностью настроенные шаблоны для Kotlin (KT) и Java с интерактивным UI (счётчик кликов), готовыми `settings.gradle.kts`, `build.gradle.kts`, `AndroidManifest.xml` и smart Gradle wrapper (`gradlew`).
+        - **Встроенный `gradle-wrapper.jar`**: Автономная работа и оффлайн-сборка без загрузки jar-файлов из сети.
+        - **Индивидуальные кнопки запуска и сборки для всех типов проектов**:
+          - **Flutter**: `Debug APK`, `Release APK`, `Pub Get`, `Build PC`, `Clean`.
+          - **Kotlin**: `Debug APK (KT)`, `Release APK (KT)`, `Install (KT)`, `Clean (KT)`, `Sync (KT)`.
+          - **Java**: `Debug APK (Java)`, `Release APK (Java)`, `Install (Java)`, `Clean (Java)`, `Sync (Java)`.
+          - **Rust**: `Cargo Run`, `Cargo Build`, `Release`, `Check`, `Test`, `Clean`.
+          - **Node.js**: `Node Run`, `npm install`, `npm build`, `Web→APK`, `Clean`.
+          - **Python**: `Python Run`, `Install deps`, `Freeze`, `Build APK (Flet)`.
+          - **Web (HTML/React)**: `Start Server`, `Web→APK`.
+          - **Dart**: `Dart Run`, `Compile Exe`, `Analyze`, `Pub Get`.
+        - **Защита от OOM и оверрайд ARM64 AAPT2**: авто-инъекция параметров в `gradle.properties` для сборки на мобильных процессорах.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
