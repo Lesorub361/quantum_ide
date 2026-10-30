@@ -83,8 +83,8 @@ class AppUpdateState {
     this.errorMessage,
     this.statusMessage,
     this.downloadedApkPath,
-    this.currentVersion = '1.2.55',
-    this.currentBuildNumber = '71',
+    this.currentVersion = '1.2.115',
+    this.currentBuildNumber = '132',
   });
 
   bool get hasUpdate => updateInfo != null;
@@ -184,7 +184,49 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
         currentBuildNumber: packageInfo.buildNumber,
       );
 
-      // 1. Try GitHub Releases API first (always contains newest releases and APK URLs)
+      // 1. Try GitHub Web Releases Redirect (NEVER rate-limited by GitHub API!)
+      try {
+        final redirectResponse = await _dio.get(
+          'https://github.com/Lesorub361/quantum_ide/releases/latest',
+          options: Options(
+            followRedirects: false,
+            validateStatus: (status) => status != null && status >= 200 && status < 400,
+          ),
+        );
+        String? targetUrl;
+        if (redirectResponse.statusCode == 302 || redirectResponse.statusCode == 301) {
+          targetUrl = redirectResponse.headers.value('location');
+        } else {
+          targetUrl = redirectResponse.realUri.toString();
+        }
+        if (targetUrl != null && targetUrl.contains('/releases/tag/')) {
+          final tag = targetUrl.split('/releases/tag/').last.trim();
+          final cleanVersion = tag.replaceFirst(RegExp(r'^[vV]'), '');
+          if (isNewerVersion(cleanVersion, currentVersion)) {
+            final apkUrl =
+                'https://github.com/Lesorub361/quantum_ide/releases/download/$tag/app-arm64-v8a-release.apk';
+            final info = AppUpdateInfo(
+              versionCode: currentCode + 1,
+              versionName: cleanVersion,
+              apkUrl: apkUrl,
+              sha256: '',
+              sizeBytes: 30 * 1024 * 1024,
+              notes: 'Доступно обновление QuantumIDE v$cleanVersion.\n'
+                  'Нажмите «Скачать и установить» для обновления в 1 клик.',
+            );
+            state = state.copyWith(
+              isChecking: false,
+              updateInfo: info,
+              statusMessage: 'Доступна новая версия $cleanVersion!',
+            );
+            return info;
+          }
+        }
+      } catch (redirectError) {
+        debugPrint('[AppUpdateService] Web redirect check fallback: $redirectError');
+      }
+
+      // 2. Try GitHub Releases API (provides exact release notes & sizes when not rate-limited)
       try {
         final ghResponse = await _dio.get(githubApiLatestRelease);
         if (ghResponse.statusCode == 200 && ghResponse.data is Map<String, dynamic>) {
@@ -194,18 +236,19 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
           final notes = data['body']?.toString() ?? '';
           final assets = (data['assets'] as List<dynamic>?) ?? [];
 
-          // Look for APK in assets
+          // Look for APK in assets - prioritize arm64-v8a
           String apkUrl = '';
           int sizeBytes = 0;
           for (final a in assets) {
             if (a is Map<String, dynamic>) {
               final name = a['name']?.toString() ?? '';
-              if (name.endsWith('.apk')) {
-                // Prefer arm64 or release apk
-                if (apkUrl.isEmpty || name.contains('arm64') || name == 'app-release.apk') {
-                  apkUrl = a['browser_download_url']?.toString() ?? '';
-                  sizeBytes = (a['size'] is int) ? a['size'] as int : 0;
-                }
+              if (name.contains('arm64-v8a') && name.endsWith('.apk')) {
+                apkUrl = a['browser_download_url']?.toString() ?? '';
+                sizeBytes = (a['size'] is int) ? a['size'] as int : 0;
+                break;
+              } else if (apkUrl.isEmpty && name.endsWith('.apk') && !name.contains('x86')) {
+                apkUrl = a['browser_download_url']?.toString() ?? '';
+                sizeBytes = (a['size'] is int) ? a['size'] as int : 0;
               }
             }
           }

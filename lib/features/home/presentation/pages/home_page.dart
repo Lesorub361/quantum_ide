@@ -1037,19 +1037,48 @@ class _HomePageState extends ConsumerState<HomePage> {
     final hasUpdate = updateState.hasUpdate;
 
     return InkWell(
-      onTap: () {
-        if (hasUpdate) {
+      onTap: () async {
+        if (hasUpdate && updateState.updateInfo != null) {
           _showUpdateDialog(context, updateState.updateInfo!);
+          return;
+        }
+
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+                SizedBox(width: 10),
+                Text('Проверка обновлений QuantumIDE...'),
+              ],
+            ),
+            duration: Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        final info = await ref.read(appUpdateServiceProvider.notifier).checkForUpdates();
+        if (!context.mounted) return;
+        messenger.hideCurrentSnackBar();
+
+        if (info != null) {
+          _showUpdateDialog(context, info);
         } else {
-          ref.read(appUpdateServiceProvider.notifier).checkForUpdates();
-          ScaffoldMessenger.of(context).showSnackBar(
+          final latestState = ref.read(appUpdateServiceProvider);
+          messenger.showSnackBar(
             SnackBar(
               content: Text(
-                updateState.isChecking
-                    ? 'Проверка обновлений...'
-                    : 'QuantumIDE v${updateState.currentVersion} • Установлена актуальная версия',
+                latestState.errorMessage ??
+                    'QuantumIDE v${latestState.currentVersion} • Установлена актуальная версия',
               ),
-              duration: const Duration(seconds: 2),
+              backgroundColor: latestState.errorMessage != null ? Colors.redAccent : null,
+              duration: const Duration(seconds: 3),
               behavior: SnackBarBehavior.floating,
             ),
           );
