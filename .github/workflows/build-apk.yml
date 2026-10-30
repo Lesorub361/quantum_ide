@@ -32,12 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.111 - Встроенный нативный AAPT2 ARM64 и окончательное исправление --source-path
-        
+        ## 🚀 QuantumIDE v1.2.112 - Готовые шаблоны проектов Kotlin/Java и раздельные команды сборки Debug & Release
+
         ### ✨ Что нового:
-        - **Встроенный ARM64 AAPT2 в assets**: Полностью автономный статический бинарник modern AAPT2 упакован прямо в приложение (`assets/bin/aapt2-arm64.gz`) и автоматически разворачивается в контейнер при старте без необходимости загрузок.
-        - **Фикс раннего exit в quantum-heal-x64**: Устранено преждевременное завершение скрипта при наличии glibc x86_64, благодаря чему проверка aapt2 и build-tools теперь гарантированно отрабатывает.
-        - **Синхронизация с build-tools**: Все версии build-tools в Android SDK автоматически получают актуальный aapt2 с поддержкой `--source-path`.
+        - **Готовые шаблоны проектов Kotlin (KT) и Java**: Добавлены полностью преднастроенные шаблоны нативных Android-проектов с interactive UI (счётчик нажатий), готовыми `settings.gradle.kts`, `build.gradle.kts`, `AndroidManifest.xml` и smart Gradle wrapper (`gradlew`).
+        - **Встроенный `gradle-wrapper.jar`**: Gradle wrapper упакован в assets приложения, обеспечивая офлайн инициализацию и сборку без внешних зависимостей.
+        - **Раздельные кнопки сборки Debug и Release**:
+          - **Flutter**: отдельные кнопки `Debug APK` (`flutter build apk --debug`) и `Release APK` (`flutter build apk --release`), `Pub Get`, `Clean`.
+          - **Kotlin**: отдельные кнопки `Debug APK (KT)` (`./gradlew assembleDebug`), `Release APK (KT)` (`./gradlew assembleRelease`), `Clean (KT)`, `Sync (KT)`.
+          - **Java**: отдельные кнопки `Debug APK (Java)` (`./gradlew assembleDebug`), `Release APK (Java)` (`./gradlew assembleRelease`), `Clean (Java)`, `Sync (Java)`.
+        - **Предотвращение OOM и ARM64 AAPT2 оверрайд**: Все шаблоны и команды сборки автоматически настраивают `org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m`, `systemProp.java.net.preferIPv4Stack=true` и `android.aapt2FromMavenOverride=/usr/bin/aapt2`.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

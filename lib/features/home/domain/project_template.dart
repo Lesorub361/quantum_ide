@@ -12,6 +12,7 @@ enum ProjectTemplateType {
   genkit('Genkit AI App', 'Fullstack AI agents & flows with Dart & Genkit 1.0', LucideIcons.sparkles),
   androidCompose('Android (Compose)', 'Native Android app with Jetpack Compose & Material 3', LucideIcons.smartphone),
   androidKotlin('Android (Kotlin/Views)', 'Native Android app with Kotlin & XML layouts', LucideIcons.layers),
+  androidJava('Android (Java/Views)', 'Native Android app with Java & XML layouts', LucideIcons.coffee),
   rust('Rust', 'High-performance systems programming', LucideIcons.cpu);
 
   final String title;
@@ -644,12 +645,63 @@ include(":app")
 }
 ''',
           'gradle.properties': '''android.useAndroidX=true
+android.enableJetifier=false
 kotlin.code.style=official
 android.nonTransitiveRClass=true
-org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=256m
+systemProp.java.net.preferIPv4Stack=true
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
 org.gradle.daemon=false
 org.gradle.parallel=false
+org.gradle.workers.max=1
+android.aapt2.daemon=false
+android.aapt2FromMaven=false
+android.aapt2FromMavenOverride=/usr/bin/aapt2
 org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
+''',
+          'gradle/wrapper/gradle-wrapper.properties': '''distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+''',
+          'gradlew': '''#!/bin/bash
+# Smart gradlew for QuantumIDE ARM64 environment
+DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+
+# Ensure AAPT2 modern override and IPv4 in gradle.properties
+if [ -f "\$DIR/gradle.properties" ]; then
+    grep -q "android.aapt2FromMavenOverride" "\$DIR/gradle.properties" 2>/dev/null || printf "\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.useAndroidX=true\\nandroid.enableJetifier=false\\nandroid.aapt2.daemon=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\norg.gradle.daemon=false\\norg.gradle.parallel=false\\norg.gradle.workers.max=1\\n" >> "\$DIR/gradle.properties"
+fi
+
+GRADLE_BIN=""
+if [ -x "/opt/gradle/gradle-8.13/bin/gradle" ]; then
+    GRADLE_BIN="/opt/gradle/gradle-8.13/bin/gradle"
+elif [ -x "/usr/local/bin/gradle" ]; then
+    GRADLE_BIN="/usr/local/bin/gradle"
+elif command -v gradle >/dev/null 2>&1; then
+    GRADLE_BIN="\$(command -v gradle)"
+fi
+
+JAVACMD="java"
+if [ -n "\$JAVA_HOME" ] && [ -x "\$JAVA_HOME/bin/java" ]; then
+    JAVACMD="\$JAVA_HOME/bin/java"
+elif [ -x "/usr/lib/jvm/java-17-openjdk-arm64/bin/java" ]; then
+    JAVACMD="/usr/lib/jvm/java-17-openjdk-arm64/bin/java"
+fi
+
+if [ -f "\$DIR/gradle/wrapper/gradle-wrapper.jar" ]; then
+    exec "\$JAVACMD" -Dorg.gradle.appname=gradlew -classpath "\$DIR/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "\$@"
+elif [ -n "\$GRADLE_BIN" ]; then
+    exec "\$GRADLE_BIN" "\$@"
+else
+    echo "Downloading Gradle Wrapper..."
+    mkdir -p "\$DIR/gradle/wrapper"
+    if curl -k -fsSL --retry 2 "https://raw.githubusercontent.com/gradle/gradle/v8.11.1/gradle/wrapper/gradle-wrapper.jar" -o "\$DIR/gradle/wrapper/gradle-wrapper.jar" 2>/dev/null; then
+        exec "\$JAVACMD" -Dorg.gradle.appname=gradlew -classpath "\$DIR/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "\$@"
+    fi
+    echo "ERROR: Gradle not found. Please install Gradle in QuantumIDE Packages." >&2
+    exit 1
+fi
 ''',
           'app/build.gradle.kts': '''plugins {
     id("com.android.application")
@@ -702,19 +754,37 @@ dependencies {
 </manifest>
 ''',
           'app/src/main/res/layout/activity_main.xml': '''<?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp">
 
     <TextView
+        android:id="@+id/textViewTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:text="Hello from $projectName on Quantum IDE!"
-        android:textSize="20sp" />
+        android:text="$projectName (Kotlin)"
+        android:textSize="22sp"
+        android:textStyle="bold" />
 
-</FrameLayout>
+    <TextView
+        android:id="@+id/textViewCounter"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Clicks: 0"
+        android:textSize="18sp" />
+
+    <Button
+        android:id="@+id/btnClick"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Click Me!" />
+
+</LinearLayout>
 ''',
           'app/src/main/res/values/strings.xml': '''<resources>
     <string name="app_name">$projectName</string>
@@ -723,16 +793,231 @@ dependencies {
           'app/src/main/java/com/example/$pkgSlug/MainActivity.kt': '''package $pkgName
 
 import android.os.Bundle
+import android.widget.Button
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
+    private var counter = 0
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        val titleView = findViewById<TextView>(R.id.textViewTitle)
+        val counterView = findViewById<TextView>(R.id.textViewCounter)
+        val button = findViewById<Button>(R.id.btnClick)
+
+        titleView.text = "$projectName (Kotlin)"
+        button.setOnClickListener {
+            counter++
+            counterView.text = "Clicks: \$counter"
+            Toast.makeText(this, "Button clicked: \$counter", Toast.LENGTH_SHORT).show()
+        }
     }
 }
 ''',
-          'README.md': '# $projectName\n\nNative Android Kotlin project created with Quantum IDE.',
+          'README.md': '# $projectName\n\nNative Android Kotlin project created with Quantum IDE.\n\n### Build:\n- Debug: `./gradlew assembleDebug`\n- Release: `./gradlew assembleRelease`\n',
+          '.gitignore': '.gradle/\nlocal.properties\n**/build/\n*.iml\n.idea/\n',
+        };
+
+      case ProjectTemplateType.androidJava:
+        final pkgSlug = projectName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+        final pkgName = 'com.example.$pkgSlug';
+        return {
+          'settings.gradle.kts': '''pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "$projectName"
+include(":app")
+''',
+          'build.gradle.kts': '''plugins {
+    id("com.android.application") version "8.11.1" apply false
+}
+''',
+          'gradle.properties': '''android.useAndroidX=true
+android.enableJetifier=false
+android.nonTransitiveRClass=true
+systemProp.java.net.preferIPv4Stack=true
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+org.gradle.daemon=false
+org.gradle.parallel=false
+org.gradle.workers.max=1
+android.aapt2.daemon=false
+android.aapt2FromMaven=false
+android.aapt2FromMavenOverride=/usr/bin/aapt2
+org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
+''',
+          'gradle/wrapper/gradle-wrapper.properties': '''distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+''',
+          'gradlew': '''#!/bin/bash
+# Smart gradlew for QuantumIDE ARM64 environment
+DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+
+# Ensure AAPT2 modern override and IPv4 in gradle.properties
+if [ -f "\$DIR/gradle.properties" ]; then
+    grep -q "android.aapt2FromMavenOverride" "\$DIR/gradle.properties" 2>/dev/null || printf "\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.useAndroidX=true\\nandroid.enableJetifier=false\\nandroid.aapt2.daemon=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\norg.gradle.daemon=false\\norg.gradle.parallel=false\\norg.gradle.workers.max=1\\n" >> "\$DIR/gradle.properties"
+fi
+
+GRADLE_BIN=""
+if [ -x "/opt/gradle/gradle-8.13/bin/gradle" ]; then
+    GRADLE_BIN="/opt/gradle/gradle-8.13/bin/gradle"
+elif [ -x "/usr/local/bin/gradle" ]; then
+    GRADLE_BIN="/usr/local/bin/gradle"
+elif command -v gradle >/dev/null 2>&1; then
+    GRADLE_BIN="\$(command -v gradle)"
+fi
+
+JAVACMD="java"
+if [ -n "\$JAVA_HOME" ] && [ -x "\$JAVA_HOME/bin/java" ]; then
+    JAVACMD="\$JAVA_HOME/bin/java"
+elif [ -x "/usr/lib/jvm/java-17-openjdk-arm64/bin/java" ]; then
+    JAVACMD="/usr/lib/jvm/java-17-openjdk-arm64/bin/java"
+fi
+
+if [ -f "\$DIR/gradle/wrapper/gradle-wrapper.jar" ]; then
+    exec "\$JAVACMD" -Dorg.gradle.appname=gradlew -classpath "\$DIR/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "\$@"
+elif [ -n "\$GRADLE_BIN" ]; then
+    exec "\$GRADLE_BIN" "\$@"
+else
+    echo "Downloading Gradle Wrapper..."
+    mkdir -p "\$DIR/gradle/wrapper"
+    if curl -k -fsSL --retry 2 "https://raw.githubusercontent.com/gradle/gradle/v8.11.1/gradle/wrapper/gradle-wrapper.jar" -o "\$DIR/gradle/wrapper/gradle-wrapper.jar" 2>/dev/null; then
+        exec "\$JAVACMD" -Dorg.gradle.appname=gradlew -classpath "\$DIR/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "\$@"
+    fi
+    echo "ERROR: Gradle not found. Please install Gradle in QuantumIDE Packages." >&2
+    exit 1
+fi
+''',
+          'app/build.gradle.kts': '''plugins {
+    id("com.android.application")
+}
+
+android {
+    namespace = "$pkgName"
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = "$pkgName"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("com.google.android.material:material:1.11.0")
+}
+''',
+          'app/src/main/AndroidManifest.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="true"
+        android:label="$projectName"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
+''',
+          'app/src/main/res/layout/activity_main.xml': '''<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/textViewTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="$projectName (Java)"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/textViewCounter"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Clicks: 0"
+        android:textSize="18sp" />
+
+    <Button
+        android:id="@+id/btnClick"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="Click Me!" />
+
+</LinearLayout>
+''',
+          'app/src/main/res/values/strings.xml': '''<resources>
+    <string name="app_name">$projectName</string>
+</resources>
+''',
+          'app/src/main/java/com/example/$pkgSlug/MainActivity.java': '''package $pkgName;
+
+import android.os.Bundle;
+import android.widget.Button;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+
+public class MainActivity extends AppCompatActivity {
+    private int counter = 0;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        TextView titleView = findViewById(R.id.textViewTitle);
+        TextView counterView = findViewById(R.id.textViewCounter);
+        Button button = findViewById(R.id.btnClick);
+
+        titleView.setText("$projectName (Java)");
+        button.setOnClickListener(v -> {
+            counter++;
+            counterView.setText("Clicks: " + counter);
+            Toast.makeText(MainActivity.this, "Button clicked: " + counter, Toast.LENGTH_SHORT).show();
+        });
+    }
+}
+''',
+          'README.md': '# $projectName\n\nNative Android Java project created with Quantum IDE.\n\n### Build:\n- Debug: `./gradlew assembleDebug`\n- Release: `./gradlew assembleRelease`\n',
           '.gitignore': '.gradle/\nlocal.properties\n**/build/\n*.iml\n.idea/\n',
         };
     }

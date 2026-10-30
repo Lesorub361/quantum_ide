@@ -2873,7 +2873,23 @@ class _HomePageState extends ConsumerState<HomePage> {
         subtitle: 'Cross-platform mobile, desktop & web with Dart',
         icon: LucideIcons.smartphone,
         color: const Color(0xFF02569B),
-        badge: 'Recommended',
+        badge: 'Flutter',
+      ),
+      (
+        type: ProjectType.androidKotlin,
+        title: 'Android (Kotlin / KT)',
+        subtitle: 'Native Android app with Kotlin, AndroidX & Gradle',
+        icon: LucideIcons.layers,
+        color: const Color(0xFF7F52FF),
+        badge: 'Kotlin KT',
+      ),
+      (
+        type: ProjectType.androidJava,
+        title: 'Android (Java)',
+        subtitle: 'Native Android app with Java, AndroidX & Gradle',
+        icon: LucideIcons.coffee,
+        color: const Color(0xFFF89820),
+        badge: 'Java',
       ),
       (
         type: ProjectType.web,
@@ -2906,22 +2922,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         icon: LucideIcons.cpu,
         color: const Color(0xFFDEA584),
         badge: 'Rust',
-      ),
-      (
-        type: ProjectType.androidKotlin,
-        title: 'Android Native (Kotlin)',
-        subtitle: 'Modern native Android project with Gradle',
-        icon: LucideIcons.layers,
-        color: const Color(0xFF3DDC84),
-        badge: 'Kotlin',
-      ),
-      (
-        type: ProjectType.androidJava,
-        title: 'Android Native (Java)',
-        subtitle: 'Classic native Android project with Gradle',
-        icon: LucideIcons.layers,
-        color: const Color(0xFFF89820),
-        badge: 'Java',
       ),
     ];
 

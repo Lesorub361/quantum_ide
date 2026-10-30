@@ -85,7 +85,8 @@ class ProjectDetector {
           icon: '🐦',
           color: 0xFF027DFD,
           extraCommands: [
-            RunCommand('Build APK', 'cd "$guestPath" && flutter build apk --release'),
+            RunCommand('Build Debug APK', 'cd "$guestPath" && flutter build apk --debug'),
+            RunCommand('Build Release APK', 'cd "$guestPath" && flutter build apk --release'),
             RunCommand('Flutter Test', 'cd "$guestPath" && flutter test'),
             RunCommand('Pub Get', 'cd "$guestPath" && flutter pub get'),
           ],
@@ -154,19 +155,34 @@ class ProjectDetector {
           color: 0xFF4EAA25,
           extraCommands: [],
         );
-      case ProjectType.androidJava:
       case ProjectType.androidKotlin:
         return RunConfig(
-          label: 'Gradle Build (Debug APK)',
-          command: 'cd "$guestPath" && bash ./gradlew assembleDebug',
+          label: 'Gradle Build (Debug APK - Kotlin)',
+          command: 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug',
           port: null,
           supportsPreview: false,
           icon: '🤖',
-          color: 0xFF3DDC84,
+          color: 0xFF7F52FF,
           extraCommands: [
-            RunCommand('Install Debug APK', 'cd "$guestPath" && bash ./gradlew installDebug'),
-            RunCommand('Clean Project', 'cd "$guestPath" && bash ./gradlew clean'),
-            RunCommand('Build Release APK', 'cd "$guestPath" && bash ./gradlew assembleRelease'),
+            RunCommand('Build Debug APK (KT)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug'),
+            RunCommand('Build Release APK (KT)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleRelease'),
+            RunCommand('Install Debug APK (KT)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew installDebug'),
+            RunCommand('Clean Project (KT)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew clean'),
+          ],
+        );
+      case ProjectType.androidJava:
+        return RunConfig(
+          label: 'Gradle Build (Debug APK - Java)',
+          command: 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug',
+          port: null,
+          supportsPreview: false,
+          icon: '☕',
+          color: 0xFFF89820,
+          extraCommands: [
+            RunCommand('Build Debug APK (Java)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleDebug'),
+            RunCommand('Build Release APK (Java)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew assembleRelease'),
+            RunCommand('Install Debug APK (Java)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew installDebug'),
+            RunCommand('Clean Project (Java)', 'cd "$guestPath" && chmod +x ./gradlew 2>/dev/null; bash ./gradlew clean'),
           ],
         );
       case ProjectType.rust:

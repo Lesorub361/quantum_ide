@@ -333,6 +333,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       bool hasPackageJson = false;
       bool hasPyFile = false;
       bool hasHtmlFile = false;
+      bool hasGradle = false;
+      bool hasCargo = false;
       
       for (final file in files) {
         final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
@@ -340,9 +342,39 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         if (name == 'package.json') hasPackageJson = true;
         if (name.endsWith('.py')) hasPyFile = true;
         if (name == 'index.html' || name.endsWith('.html')) hasHtmlFile = true;
+        if (name == 'build.gradle' || name == 'build.gradle.kts' ||
+            name == 'settings.gradle' || name == 'settings.gradle.kts' ||
+            name == 'gradlew') {
+          hasGradle = true;
+        }
+        if (name == 'cargo.toml') hasCargo = true;
       }
       
-      if (hasPubspec) return ProjectType.flutter;
+      if (hasPubspec) {
+        try {
+          final pubspecContent = File(p.join(path, 'pubspec.yaml')).readAsStringSync();
+          if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
+          return ProjectType.dart;
+        } catch (_) {
+          return ProjectType.flutter;
+        }
+      }
+      if (hasGradle) {
+        final mainDir = Directory(p.join(path, 'app', 'src', 'main'));
+        if (mainDir.existsSync()) {
+          try {
+            final entities = mainDir.listSync(recursive: true);
+            if (entities.any((e) => e.path.endsWith('.kt'))) return ProjectType.androidKotlin;
+            if (entities.any((e) => e.path.endsWith('.java'))) return ProjectType.androidJava;
+          } catch (_) {}
+        }
+        if (File(p.join(path, 'build.gradle.kts')).existsSync() ||
+            File(p.join(path, 'app', 'build.gradle.kts')).existsSync()) {
+          return ProjectType.androidKotlin;
+        }
+        return ProjectType.androidKotlin;
+      }
+      if (hasCargo) return ProjectType.rust;
       if (hasPackageJson) return ProjectType.nodejs;
       if (hasPyFile) return ProjectType.python;
       if (hasHtmlFile) return ProjectType.web;
@@ -972,14 +1004,24 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
         ]);
         break;
-      case ProjectType.androidJava:
       case ProjectType.androidKotlin:
-        title = l10n.androidProject;
+        title = 'Android (Kotlin)';
         actions.addAll([
-          _buildActionButton(l10n.buildAPK, LucideIcons.box, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x gradlew && ./gradlew assembleDebug')),
-          _buildActionButton(l10n.install, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x gradlew && ./gradlew installDebug')),
+          _buildActionButton('Build Debug (KT)', LucideIcons.bug, Colors.yellow, 
+              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
+          _buildActionButton('Install (KT)', LucideIcons.smartphone, Colors.greenAccent, 
+              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug', displayCmd: './gradlew installDebug')),
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
+              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
+        ]);
+        break;
+      case ProjectType.androidJava:
+        title = 'Android (Java)';
+        actions.addAll([
+          _buildActionButton('Build Debug (Java)', LucideIcons.bug, Colors.yellow, 
+              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
+          _buildActionButton('Install (Java)', LucideIcons.smartphone, Colors.greenAccent, 
+              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug', displayCmd: './gradlew installDebug')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
               () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
         ]);
@@ -1072,14 +1114,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final dedicatedState = ref.watch(dedicatedTerminalProvider);
     final session = dedicatedState.sessions[DedicatedTerminalType.build];
     final ws = ref.watch(workspaceProvider).currentPath ?? '';
-    final isFlutter = ws.isNotEmpty && File(p.join(ws, 'pubspec.yaml')).existsSync();
-    final isNativeAndroid = ws.isNotEmpty && !isFlutter && (
-      File(p.join(ws, 'build.gradle.kts')).existsSync() ||
-      File(p.join(ws, 'build.gradle')).existsSync() ||
-      File(p.join(ws, 'settings.gradle.kts')).existsSync() ||
-      File(p.join(ws, 'settings.gradle')).existsSync() ||
-      File(p.join(ws, 'gradlew')).existsSync()
+    final allProjects = ref.watch(projectServiceProvider);
+    final currentProject = allProjects.firstWhere(
+      (p) => p.path == ws,
+      orElse: () => Project(
+        id: '',
+        name: 'Default',
+        path: ws,
+        type: ProjectType.other,
+        lastOpened: DateTime.now(),
+      ),
     );
+    final projectType = _detectProjectType(ws.isNotEmpty ? ws : null, currentProject.type);
+    final isFlutter = projectType == ProjectType.flutter || (ws.isNotEmpty && File(p.join(ws, 'pubspec.yaml')).existsSync());
+    final isKotlin = projectType == ProjectType.androidKotlin;
+    final isJava = projectType == ProjectType.androidJava;
 
     return Column(
       children: [
@@ -1102,26 +1151,25 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               ? Column(
                   children: [
                     _buildActionHeader(l10n.build, [
-                      if (isFlutter)
-                        _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && flutter build linux --release', displayCmd: 'flutter build linux --release')),
-                      _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange, () {
-                        if (isNativeAndroid) {
-                          _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: './gradlew assembleRelease');
-                        } else {
-                          _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && (mkdir -p android ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" android/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\norg.gradle.parallel=false\\n" >> android/gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\norg.gradle.parallel=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && flutter pub get && (sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && (/usr/local/bin/quantum-heal-x64 2>/dev/null || true) && ([ -x /root/setup-arm64.sh ] && /root/setup-arm64.sh 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false -Pandroid.enableJetifier=false -Porg.gradle.workers.max=1 -Porg.gradle.parallel=false && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) ; (pkill -9 -f aapt2 2>/dev/null || true)', displayCmd: 'flutter build apk --release');
-                        }
-                      }),
-                      if (isNativeAndroid)
-                        _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
-                      if (isFlutter)
+                      if (isFlutter) ...[
+                        _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && (mkdir -p android ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" android/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\norg.gradle.parallel=false\\n" >> android/gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\norg.gradle.parallel=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && flutter pub get && (sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && (/usr/local/bin/quantum-heal-x64 2>/dev/null || true) && ([ -x /root/setup-arm64.sh ] && /root/setup-arm64.sh 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false -Pandroid.enableJetifier=false -Porg.gradle.workers.max=1 -Porg.gradle.parallel=false && (cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk" ; (pkill -9 -f aapt2 2>/dev/null || true)', displayCmd: 'flutter build apk --debug')),
+                        _buildActionButton('Release APK', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && (mkdir -p android ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" android/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\norg.gradle.parallel=false\\n" >> android/gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\norg.gradle.parallel=false\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && flutter pub get && (sed -i "/extra-gen-snapshot-options/d" android/gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && (/usr/local/bin/quantum-heal-x64 2>/dev/null || true) && ([ -x /root/setup-arm64.sh ] && /root/setup-arm64.sh 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false -Pandroid.enableJetifier=false -Porg.gradle.workers.max=1 -Porg.gradle.parallel=false && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk" ; (pkill -9 -f aapt2 2>/dev/null || true)', displayCmd: 'flutter build apk --release')),
                         _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get', displayCmd: 'flutter pub get')),
-                      _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () {
-                        if (isNativeAndroid) {
-                          _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk', displayCmd: './gradlew clean');
-                        } else {
-                          _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean', displayCmd: 'flutter clean');
-                        }
-                      }),
+                        _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && flutter build linux --release', displayCmd: 'flutter build linux --release')),
+                        _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean', displayCmd: 'flutter clean')),
+                      ] else if (isKotlin) ...[
+                        _buildActionButton('Debug APK (KT)', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
+                        _buildActionButton('Release APK (KT)', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: './gradlew assembleRelease')),
+                        _buildActionButton('Clean (KT)', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk', displayCmd: './gradlew clean')),
+                      ] else if (isJava) ...[
+                        _buildActionButton('Debug APK (Java)', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
+                        _buildActionButton('Release APK (Java)', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (grep -q "org.gradle.jvmargs" ~/.gradle/gradle.properties 2>/dev/null || printf "\\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: './gradlew assembleRelease')),
+                        _buildActionButton('Clean (Java)', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk', displayCmd: './gradlew clean')),
+                      ] else ...[
+                        _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
+                        _buildActionButton('Release APK', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: './gradlew assembleRelease')),
+                        _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk', displayCmd: './gradlew clean')),
+                      ],
                       _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.build)),
                     ]),
                     Expanded(
