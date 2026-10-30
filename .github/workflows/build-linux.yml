@@ -38,12 +38,20 @@ jobs:
             libgl1-mesa-dev libxrender-dev libxrandr-dev libglib2.0-dev \
             libsecret-1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
 
-      - name: Setup Flutter
+      - name: Setup Flutter (x64)
+        if: matrix.arch == 'x64'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: '3.44.9'
           cache: true
+
+      - name: Setup Flutter (arm64)
+        if: matrix.arch == 'arm64'
+        run: |
+          git clone --depth 1 -b stable https://github.com/flutter/flutter.git $HOME/flutter
+          echo "$HOME/flutter/bin" >> $GITHUB_PATH
+          git config --global --add safe.directory $HOME/flutter
 
       - name: Enable Linux Desktop
         run: flutter config --enable-linux-desktop
