@@ -1,10 +1,10 @@
 {
-  "versionCode": 136,
-  "versionName": "1.2.119",
-  "notes": "QuantumIDE v1.2.119:\n• Кнопка боковой панели (проводника) возвращена прямо на верхнюю панель слева от заголовка файла для быстрого открытия в один клик на планшетах и телефонах.\n• Полностью убраны стрелки «Назад» и «Вперед» (Undo/Redo) с верхней панели.\n• Меню трёх точек очищено от лишних пунктов.",
+  "versionCode": 137,
+  "versionName": "1.2.120",
+  "notes": "QuantumIDE v1.2.120:\n• Исправлен запуск локального ИИ (llama-server, ошибка 127 libssl.so.3).\n• Добавлена автоматическая установка и проверка необходимых библиотек libssl3, libgomp1 и ca-certificates при установке и запуске модели.\n• Добавлена кнопка восстановления разделяемых библиотек в настройках ИИ.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.119/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.120/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }

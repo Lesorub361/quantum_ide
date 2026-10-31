@@ -1508,6 +1508,22 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                 if (state.error != null) ...[
                   const SizedBox(height: 8),
                   SelectableText(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
+                  if (state.error!.contains('127') || state.error!.contains('.so') || state.error!.contains('libssl')) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => notifier.repairLibraries(),
+                        icon: const Icon(LucideIcons.wrench, size: 14),
+                        label: const Text('Восстановить библиотеки (libssl3 / libgomp)'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: theme.colorScheme.primary,
+                          side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -1626,6 +1642,22 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                     if (state.error != null) ...[
                       const SizedBox(height: 8),
                       SelectableText(state.error!, style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11)),
+                      if (!isOllama && (state.error!.contains('127') || state.error!.contains('.so') || state.error!.contains('libssl'))) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => notifier.repairLibraries(),
+                            icon: const Icon(LucideIcons.wrench, size: 14),
+                            label: const Text('Восстановить библиотеки (libssl3 / libgomp)'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: theme.colorScheme.primary,
+                              side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                     if (!isOllama && state.logs.isNotEmpty) ...[
                       const SizedBox(height: 12),

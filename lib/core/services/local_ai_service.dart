@@ -1067,7 +1067,7 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
     final installCmd = [
       'apt-get update -qq || true',
-      'apt-get install -y -qq curl wget tar || true',
+      'apt-get install -y -qq curl wget tar libssl3 libgomp1 ca-certificates || apt-get install -y -qq libssl3 libgomp1 || true',
       'rm -rf /tmp/llama_dl && mkdir -p /tmp/llama_dl',
       'cd /tmp/llama_dl',
       'ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then LLAMA_ARCH="arm64"; else LLAMA_ARCH="x64"; fi',
@@ -1077,6 +1077,8 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       'find . -type f -name "llama-cli" -exec cp {} /usr/bin/llama-cli \\; 2>/dev/null || true',
       'find . \\( -name "*.so*" \\) -exec cp -a {} /usr/lib/ \\; 2>/dev/null || true',
       'find . \\( -name "*.so*" \\) -exec cp -a {} /usr/local/lib/ \\; 2>/dev/null || true',
+      'for dir in /usr/lib/*-linux-gnu /lib/*-linux-gnu; do [ -f "\$dir/libssl.so.3" ] && ln -sf "\$dir/libssl.so.3" /usr/lib/libssl.so.3 2>/dev/null; [ -f "\$dir/libcrypto.so.3" ] && ln -sf "\$dir/libcrypto.so.3" /usr/lib/libcrypto.so.3 2>/dev/null; [ -f "\$dir/libgomp.so.1" ] && ln -sf "\$dir/libgomp.so.1" /usr/lib/libgomp.so.1 2>/dev/null; done || true',
+      'if [ ! -f /usr/lib/libssl.so.3 ] && [ ! -f /usr/lib/aarch64-linux-gnu/libssl.so.3 ]; then ARCH=\$(uname -m); if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then SSL_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/o/openssl/libssl3_3.0.2-0ubuntu1.30_arm64.deb"; else SSL_URL="http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl3_3.0.2-0ubuntu1.30_amd64.deb"; fi; (wget -q -O /tmp/libssl3.deb "\$SSL_URL" || curl -sL -o /tmp/libssl3.deb "\$SSL_URL") 2>/dev/null; if [ -f /tmp/libssl3.deb ]; then (cd /tmp && (ar -x libssl3.deb 2>/dev/null || dpkg-deb -x libssl3.deb / 2>/dev/null || true) && tar -xf data.tar.* -C / 2>/dev/null); for dir in /usr/lib/*-linux-gnu /lib/*-linux-gnu; do [ -f "\$dir/libssl.so.3" ] && ln -sf "\$dir/libssl.so.3" /usr/lib/libssl.so.3 2>/dev/null; done; rm -f /tmp/libssl3.deb /tmp/data.tar.* /tmp/control.tar.* /tmp/debian-binary 2>/dev/null; fi; fi',
       'chmod +x /usr/bin/llama-server /usr/bin/llama-cli 2>/dev/null || true',
       'ldconfig 2>/dev/null || true',
       'rm -rf /tmp/llama_dl',
@@ -1132,9 +1134,17 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     }
   }
 
+  Future<void> repairLibraries() async {
+    await _repairLlamaLibraries();
+  }
+
   Future<void> _repairLlamaLibraries() async {
-    _appendLogs('[Local AI] 🔄 Восстановление системных библиотек llama-server (.so)...\n');
+    _appendLogs('[Local AI] 🔄 Автоматическая установка системных библиотек llama-server (libssl3, libgomp1)...\n');
     final repairCmd = [
+      'apt-get update -qq || true',
+      'apt-get install -y -qq libssl3 libgomp1 ca-certificates || apt-get install -y -qq libssl3 || true',
+      'for dir in /usr/lib/*-linux-gnu /lib/*-linux-gnu; do [ -f "\$dir/libssl.so.3" ] && ln -sf "\$dir/libssl.so.3" /usr/lib/libssl.so.3 2>/dev/null; [ -f "\$dir/libcrypto.so.3" ] && ln -sf "\$dir/libcrypto.so.3" /usr/lib/libcrypto.so.3 2>/dev/null; [ -f "\$dir/libgomp.so.1" ] && ln -sf "\$dir/libgomp.so.1" /usr/lib/libgomp.so.1 2>/dev/null; done || true',
+      'if [ ! -f /usr/lib/libssl.so.3 ] && [ ! -f /usr/lib/aarch64-linux-gnu/libssl.so.3 ]; then ARCH=\$(uname -m); if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then SSL_URL="http://ports.ubuntu.com/ubuntu-ports/pool/main/o/openssl/libssl3_3.0.2-0ubuntu1.30_arm64.deb"; else SSL_URL="http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl3_3.0.2-0ubuntu1.30_amd64.deb"; fi; (wget -q -O /tmp/libssl3.deb "\$SSL_URL" || curl -sL -o /tmp/libssl3.deb "\$SSL_URL") 2>/dev/null; if [ -f /tmp/libssl3.deb ]; then (cd /tmp && (ar -x libssl3.deb 2>/dev/null || dpkg-deb -x libssl3.deb / 2>/dev/null || true) && tar -xf data.tar.* -C / 2>/dev/null); for dir in /usr/lib/*-linux-gnu /lib/*-linux-gnu; do [ -f "\$dir/libssl.so.3" ] && ln -sf "\$dir/libssl.so.3" /usr/lib/libssl.so.3 2>/dev/null; done; rm -f /tmp/libssl3.deb /tmp/data.tar.* /tmp/control.tar.* /tmp/debian-binary 2>/dev/null; fi; fi',
       'mkdir -p /tmp/llama_repair && cd /tmp/llama_repair',
       'ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then LLAMA_ARCH="arm64"; else LLAMA_ARCH="x64"; fi',
       '(wget --no-check-certificate --tries=3 --timeout=60 -O llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz" 2>&1 || curl -k -fL --retry 3 -o llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz")',
@@ -1274,11 +1284,18 @@ class LocalAiService extends StateNotifier<LocalAiState> {
       _appendLogs('[Local AI] Command: $logArgs\n');
 
       if (isMobile) {
-        final libCommon1 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'usr', 'lib', 'libllama-common.so.0'));
-        final libCommon2 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'lib', 'libllama-common.so.0'));
-        final libCommon3 = File(p.join(_runtime.filesDir, 'rootfs', 'ubuntu', 'lib', 'libllama-common.so.0'));
-        if (!await libCommon1.exists() && !await libCommon2.exists() && !await libCommon3.exists()) {
-          _appendLogs('[Local AI] ⚠️ Отсутствуют разделяемые библиотеки llama-server (libllama-common.so.0).\n');
+        final rootfsBase = p.join(_runtime.filesDir, 'rootfs', 'ubuntu');
+        final hasLlamaLib = await File(p.join(rootfsBase, 'usr', 'lib', 'libllama-common.so.0')).exists() ||
+            await File(p.join(rootfsBase, 'usr', 'local', 'lib', 'libllama-common.so.0')).exists() ||
+            await File(p.join(rootfsBase, 'lib', 'libllama-common.so.0')).exists();
+
+        final hasSslLib = await File(p.join(rootfsBase, 'usr', 'lib', 'libssl.so.3')).exists() ||
+            await File(p.join(rootfsBase, 'usr', 'lib', 'aarch64-linux-gnu', 'libssl.so.3')).exists() ||
+            await File(p.join(rootfsBase, 'lib', 'aarch64-linux-gnu', 'libssl.so.3')).exists() ||
+            await File(p.join(rootfsBase, 'usr', 'local', 'lib', 'libssl.so.3')).exists();
+
+        if (!hasLlamaLib || !hasSslLib) {
+          _appendLogs('[Local AI] ⚠️ Обнаружены отсутствующие системные библиотеки (libssl.so.3 / libllama). Выполняется авто-установка...\n');
           await _repairLlamaLibraries();
         }
       }
@@ -1329,8 +1346,9 @@ class LocalAiService extends StateNotifier<LocalAiState> {
             _appendLogs('\n[Local AI] ❌ Сбой сегментации (SIGSEGV / Segfault). Установите GPU Layers = 0 в настройках.\n');
             state = state.copyWith(isRunning: false, isStarting: false, error: 'Сбой драйвера (Segfault)');
           } else if (code == 127) {
-            _appendLogs('\n[Local AI] ❌ Ошибка 127: Не найдены разделяемые библиотеки (.so). Выполните установку через панель настроек AI.\n');
-            state = state.copyWith(isRunning: false, isStarting: false, error: 'Ошибка 127: не найдены библиотеки .so');
+            _appendLogs('\n[Local AI] ❌ Ошибка 127: Не найдена библиотека libssl.so.3. Запуск автоматической установки зависимостей...\n');
+            state = state.copyWith(isRunning: false, isStarting: false, error: 'Ошибка 127: не найден libssl.so.3 (выполняется установка)');
+            _repairLlamaLibraries();
           } else {
             _appendLogs('\n[Local AI] Процесс сервера завершился с кодом $code.\n');
             state = state.copyWith(isRunning: false, isStarting: false, error: 'Сервер остановлен (код $code)');
