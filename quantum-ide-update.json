@@ -1,10 +1,10 @@
 {
-  "versionCode": 145,
-  "versionName": "1.2.128",
-  "notes": "QuantumIDE v1.2.128:\n• Полное удаление встроенного чат-бота и устаревшего AI-интерфейса из приложения.\n• Удаление всплывающих подсказок ИИ при написании кода (ghost text, AI автодополнение).\n• Полная очистка кодовой базы для разработки нового чат-бота.",
+  "versionCode": 146,
+  "versionName": "1.2.129",
+  "notes": "QuantumIDE v1.2.129:\n• Исправление зависаний (ANR) и падения производительности.\n• Оптимизация системного монитора: устранение спама SELinux-ошибок ядра при чтении /proc/stat.\n• Фоновый опрос процессов вынесен в on-demand режим (только при открытии Диспетчера задач).\n• Прямой подсчет процессорного времени через /proc/self/stat без вызовов дочернего шелла.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.128/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.129/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }

@@ -426,6 +426,16 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
   int _selectedTab = 0; // 0: Процессы и пакеты, 1: Производительность
   String _selectedCategory = 'Все';
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(systemStatsProvider.notifier).refreshProcesses();
+      }
+    });
+  }
+
   IconData _getCategoryIcon(String category) {
     switch (category) {
       case 'IDE':
@@ -571,7 +581,7 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                 const Spacer(),
                 IconButton(
                   tooltip: 'Обновить данные',
-                  onPressed: () => ref.read(systemStatsProvider.notifier).refreshNow(),
+                  onPressed: () => ref.read(systemStatsProvider.notifier).refreshProcesses(),
                   icon: const Icon(LucideIcons.refresh_cw, size: 15, color: Colors.white70),
                 ),
                 TextButton.icon(
