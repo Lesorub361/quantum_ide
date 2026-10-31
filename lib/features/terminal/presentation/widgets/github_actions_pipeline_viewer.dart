@@ -5,10 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:quantum_ide/core/models/terminal_session.dart';
+import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/core/services/android_app_installer_service.dart';
 import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart';
-import 'package:quantum_ide/features/workspace/presentation/providers/workspace_provider.dart';
+import 'package:quantum_ide/core/services/workspace_service.dart';
 
 // ─── GitHub Design Tokens ─────────────────────────────────────────────────────
 

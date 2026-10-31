@@ -1074,11 +1074,6 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                               ? GithubActionsPipelineViewer(
                                   session: session,
                                   onSwitchToTerminal: () => setState(() => _buildViewerMode = 1),
-                                  onRebuild: () {
-                                    if (buildActions.length >= 2) {
-                                      buildActions[1].onTap();
-                                    }
-                                  },
                                 )
                               : Container(
                                   margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
