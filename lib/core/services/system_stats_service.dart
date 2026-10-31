@@ -109,18 +109,32 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   int _lastCpuTotal = 0;
   int _lastCpuIdle = 0;
 
+  bool _procStatBlocked = false;
+  bool _sysfsCpuBlocked = false;
+  bool _gpuSysfsBlocked = false;
+
+  int? _lastAppCpuTicks;
+  DateTime? _lastAppCpuTime;
+  final int _cpuCores = Platform.numberOfProcessors > 0 ? Platform.numberOfProcessors : 8;
+
+  List<SystemProcessItem> _cachedProcesses = const [];
+
   SystemStatsNotifier() : super(SystemStats()) {
     _startUpdates();
   }
 
   void _startUpdates() {
-    _updateStats();
-    _timer = Timer.periodic(const Duration(seconds: 4), (timer) {
-      _updateStats();
+    _updateStats(fetchProcesses: false);
+    // 10-секундный интервал для защиты от перегрузки очереди событий и ANR на Android
+    _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      _updateStats(fetchProcesses: false);
     });
   }
 
-  Future<void> refreshNow() => _updateStats();
+  Future<void> refreshNow({bool fetchProcesses = true}) => _updateStats(fetchProcesses: fetchProcesses);
+
+  /// Обновляет полный список процессов (вызывается при открытии Диспетчера задач)
+  Future<void> refreshProcesses() => _updateStats(fetchProcesses: true);
 
   /// Останавливает зависшие фоновые демоны сборки (AAPT2, Gradle, Kotlin, Java, Dart),
   /// которые могут держать гигабайты ОЗУ и грузить CPU в фоне после сборки APK.
@@ -146,7 +160,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       }
     } catch (_) {}
     await Future.delayed(const Duration(milliseconds: 300));
-    await _updateStats();
+    await _updateStats(fetchProcesses: true);
   }
 
   /// Завершает выбранный процесс (по аналогии с Диспетчером задач Windows)
@@ -161,10 +175,10 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       }
     } catch (_) {}
     await Future.delayed(const Duration(milliseconds: 300));
-    await refreshNow();
+    await refreshProcesses();
   }
 
-  Future<void> _updateStats() async {
+  Future<void> _updateStats({bool fetchProcesses = false}) async {
     double cpu = 0.0;
 
     final cpuStats = await _parseCpuStats();
@@ -193,12 +207,19 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       _lastCpuTotal = total;
       _lastCpuIdle = idleTime;
     } else {
-      final sysfsCpu = await _parseCpuUsageFromSysfs();
-      if (sysfsCpu != null) {
-        final normalized = ((sysfsCpu - 0.40) / 0.60).clamp(0.03, 0.85);
-        cpu = normalized;
+      // 1-й fallback: точное измерение CPU процесса IDE через /proc/self/stat (доступно на Android без SELinux-ошибок)
+      final appCpu = await _parseAppCpuUsage();
+      if (appCpu != null) {
+        cpu = appCpu;
       } else {
-        cpu = 0.04;
+        // 2-й fallback: частоты CPU (если доступны)
+        final sysfsCpu = await _parseCpuUsageFromSysfs();
+        if (sysfsCpu != null) {
+          final normalized = ((sysfsCpu - 0.40) / 0.60).clamp(0.03, 0.85);
+          cpu = normalized;
+        } else {
+          cpu = 0.04;
+        }
       }
     }
 
@@ -224,8 +245,25 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     final double gpu = await _parseGpuUsage(cpu);
     final String gpuName = await _detectGpuName();
 
-    // 4. Получаем список активных процессов и пакетов (как в Диспетчере задач Windows)
-    final List<SystemProcessItem> processes = await _fetchProcessList(appRssBytes, cpu);
+    // 4. Список активных процессов: только по запросу (Диспетчер задач), чтобы не спавнить `ps` каждые секунды в фоне
+    List<SystemProcessItem> processes = _cachedProcesses;
+    if (fetchProcesses) {
+      processes = await _fetchProcessList(appRssBytes, cpu);
+      _cachedProcesses = processes;
+    } else if (processes.isEmpty) {
+      processes = [
+        SystemProcessItem(
+          pid: pid,
+          name: 'Quantum IDE',
+          description: 'Основное приложение IDE (Flutter UI & Engine)',
+          category: 'IDE',
+          cpuPercent: (cpu * 100).clamp(0.5, 99.0),
+          rssBytes: appRssBytes > 0 ? appRssBytes : 180 * 1024 * 1024,
+          command: 'quantum_ide (PID: $pid)',
+        )
+      ];
+      _cachedProcesses = processes;
+    }
 
     if (mounted) {
       state = SystemStats(
@@ -552,58 +590,63 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   }
 
   Future<double> _parseGpuUsage(double cpuLoad) async {
-    try {
-      // 1. Qualcomm Adreno /sys/class/kgsl/kgsl-3d0/gpubusy (busy total)
-      final kgslBusy = File('/sys/class/kgsl/kgsl-3d0/gpubusy');
-      if (await kgslBusy.exists()) {
-        final content = (await kgslBusy.readAsString()).trim();
-        final parts = content.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-        if (parts.length >= 2) {
-          final busy = double.tryParse(parts[0]) ?? 0.0;
-          final total = double.tryParse(parts[1]) ?? 0.0;
-          if (total > 0) {
-            return (busy / total).clamp(0.0, 1.0);
+    if (!_gpuSysfsBlocked) {
+      try {
+        // 1. Qualcomm Adreno /sys/class/kgsl/kgsl-3d0/gpubusy (busy total)
+        final kgslBusy = File('/sys/class/kgsl/kgsl-3d0/gpubusy');
+        if (await kgslBusy.exists()) {
+          final content = (await kgslBusy.readAsString()).trim();
+          final parts = content.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+          if (parts.length >= 2) {
+            final busy = double.tryParse(parts[0]) ?? 0.0;
+            final total = double.tryParse(parts[1]) ?? 0.0;
+            if (total > 0) {
+              return (busy / total).clamp(0.0, 1.0);
+            }
           }
         }
-      }
 
-      // 2. Qualcomm percentage file
-      final kgslPct = File('/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage');
-      if (await kgslPct.exists()) {
-        final content = (await kgslPct.readAsString()).trim();
-        final pct = double.tryParse(content);
-        if (pct != null) {
-          return (pct / 100.0).clamp(0.0, 1.0);
+        // 2. Qualcomm percentage file
+        final kgslPct = File('/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage');
+        if (await kgslPct.exists()) {
+          final content = (await kgslPct.readAsString()).trim();
+          final pct = double.tryParse(content);
+          if (pct != null) {
+            return (pct / 100.0).clamp(0.0, 1.0);
+          }
         }
-      }
 
-      // 3. ARM Mali utilization (0..100 or 0..255)
-      for (final path in [
-        '/sys/class/misc/mali0/device/utilization',
-        '/sys/devices/platform/13040000.mali/utilization',
-        '/sys/devices/platform/gpu/utilization',
-      ]) {
-        final maliFile = File(path);
-        if (await maliFile.exists()) {
-          final content = (await maliFile.readAsString()).trim();
+        // 3. ARM Mali utilization (0..100 or 0..255)
+        for (final path in [
+          '/sys/class/misc/mali0/device/utilization',
+          '/sys/devices/platform/13040000.mali/utilization',
+          '/sys/devices/platform/gpu/utilization',
+        ]) {
+          final maliFile = File(path);
+          if (await maliFile.exists()) {
+            final content = (await maliFile.readAsString()).trim();
+            final val = double.tryParse(content);
+            if (val != null) {
+              final ratio = val > 100 ? (val / 255.0) : (val / 100.0);
+              return ratio.clamp(0.0, 1.0);
+            }
+          }
+        }
+
+        // 4. Linux DRM GPU busy percent
+        final drmFile = File('/sys/class/drm/card0/device/gpu_busy_percent');
+        if (await drmFile.exists()) {
+          final content = (await drmFile.readAsString()).trim();
           final val = double.tryParse(content);
           if (val != null) {
-            final ratio = val > 100 ? (val / 255.0) : (val / 100.0);
-            return ratio.clamp(0.0, 1.0);
+            return (val / 100.0).clamp(0.0, 1.0);
           }
         }
+        _gpuSysfsBlocked = true;
+      } catch (_) {
+        _gpuSysfsBlocked = true;
       }
-
-      // 4. Linux DRM GPU busy percent
-      final drmFile = File('/sys/class/drm/card0/device/gpu_busy_percent');
-      if (await drmFile.exists()) {
-        final content = (await drmFile.readAsString()).trim();
-        final val = double.tryParse(content);
-        if (val != null) {
-          return (val / 100.0).clamp(0.0, 1.0);
-        }
-      }
-    } catch (_) {}
+    }
 
     // 5. Fallback estimate dynamically correlated with system activity
     if (cpuLoad > 0.0) {
@@ -613,9 +656,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   }
 
   Future<List<int>?> _parseCpuStats() async {
+    if (_procStatBlocked) return null;
     try {
       final file = File('/proc/stat');
-      if (!await file.exists()) return null;
+      if (!await file.exists()) {
+        _procStatBlocked = true;
+        return null;
+      }
       final lines = await file.readAsLines();
       if (lines.isEmpty) return null;
       final firstLine = lines.first;
@@ -623,11 +670,46 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       final parts = firstLine.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).skip(1);
       return parts.map((p) => int.tryParse(p) ?? 0).toList();
     } catch (_) {
+      _procStatBlocked = true;
       return null;
     }
   }
 
+  /// Читает процессорное время самого процесса IDE (/proc/self/stat).
+  /// Полностью легально в Android SELinux для непривилегированных приложений без root!
+  Future<double?> _parseAppCpuUsage() async {
+    try {
+      final content = await File('/proc/self/stat').readAsString();
+      final lastParen = content.lastIndexOf(')');
+      if (lastParen == -1) return null;
+      final rest = content.substring(lastParen + 2).split(' ');
+      if (rest.length > 14) {
+        final utime = int.tryParse(rest[11]) ?? 0;
+        final stime = int.tryParse(rest[12]) ?? 0;
+        final cutime = int.tryParse(rest[13]) ?? 0;
+        final cstime = int.tryParse(rest[14]) ?? 0;
+        final totalTicks = utime + stime + cutime + cstime;
+        final now = DateTime.now();
+
+        if (_lastAppCpuTicks != null && _lastAppCpuTime != null) {
+          final elapsedSeconds = now.difference(_lastAppCpuTime!).inMilliseconds / 1000.0;
+          final ticksDiff = totalTicks - _lastAppCpuTicks!;
+          if (elapsedSeconds > 0 && ticksDiff >= 0) {
+            final fraction = (ticksDiff / 100.0) / (elapsedSeconds * _cpuCores);
+            _lastAppCpuTicks = totalTicks;
+            _lastAppCpuTime = now;
+            return fraction.clamp(0.01, 1.0);
+          }
+        }
+        _lastAppCpuTicks = totalTicks;
+        _lastAppCpuTime = now;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<double?> _parseCpuUsageFromSysfs() async {
+    if (_sysfsCpuBlocked) return null;
     try {
       double totalRatio = 0.0;
       int count = 0;
@@ -648,7 +730,10 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       if (count > 0) {
         return totalRatio / count;
       }
-    } catch (_) {}
+      _sysfsCpuBlocked = true;
+    } catch (_) {
+      _sysfsCpuBlocked = true;
+    }
     return null;
   }
 
