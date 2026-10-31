@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
+import 'package:quantum_ide/core/services/native_llama_service.dart';
 import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -1233,6 +1234,10 @@ class LocalAiService extends StateNotifier<LocalAiState> {
     if (state.isRunning || state.isStarting) return;
 
     final engine = _ref.read(aiServiceProvider).settings.selectedLocalEngine;
+    if (engine == LocalAiEngine.nativeLlama) {
+      // Native engine is in-app and doesn't run llama-server process
+      return;
+    }
     if (engine == LocalAiEngine.ollama) {
       await _startOllamaServer();
       return;
@@ -1558,6 +1563,29 @@ class LocalAiService extends StateNotifier<LocalAiState> {
 
   Future<void> selectAndStartModel(String modelIdOrFilename) async {
     await selectModel(modelIdOrFilename);
+    final engine = _ref.read(aiServiceProvider).settings.selectedLocalEngine;
+    if (engine == LocalAiEngine.nativeLlama) {
+      final f = await findModelFile(state.selectedModelFilename);
+      if (f != null && await f.exists()) {
+        try {
+          final nativeNotifier = _ref.read(nativeLlamaServiceProvider.notifier);
+          final nativeState = _ref.read(nativeLlamaServiceProvider);
+          final gpuLayers = nativeState.gpuInfo?.vulkanSupported == true
+              ? nativeState.gpuInfo!.recommendedGpuLayers
+              : 0;
+          await nativeNotifier.loadModel(
+            modelPath: f.path,
+            gpuLayers: gpuLayers,
+            contextSize: state.contextSize,
+            threads: state.threads,
+          );
+          _appendLogs('[Local AI] Модель успешно загружена через Native Vulkan (${f.path})\n');
+          return;
+        } catch (e) {
+          _appendLogs('[Local AI] Ошибка запуска через Native Vulkan: $e\n');
+        }
+      }
+    }
     await restartServer();
   }
 

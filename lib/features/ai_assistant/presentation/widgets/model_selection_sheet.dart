@@ -203,6 +203,45 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     _discoverCloudModels();
   }
 
+  Future<void> _startModelSafely(String filename, {String? modelPath}) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final path = modelPath ?? (await ref.read(localAiServiceProvider.notifier).findModelFile(filename))?.path;
+      if (path != null && await File(path).exists()) {
+        final gpu = ref.read(nativeLlamaServiceProvider).gpuInfo;
+        final gpuLayers = (gpu != null && gpu.vulkanSupported) ? gpu.recommendedGpuLayers : 16;
+        await ref.read(nativeLlamaServiceProvider.notifier).loadModel(
+          modelPath: path,
+          gpuLayers: gpuLayers,
+        );
+        await ref.read(aiServiceProvider).setLocalEngine(LocalAiEngine.nativeLlama);
+        ref.read(aiServiceProvider).setProvider('local_edge');
+        ref.read(aiServiceProvider).setModel(filename);
+        if (mounted) {
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text('⚡ Модель запущена с Vulkan GPU ($gpuLayers слоев)'),
+              backgroundColor: const Color(0xFF30D158),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          Navigator.of(context).pop(filename);
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('[NativeLlama] Load error, falling back: $e');
+    }
+
+    // Fallback if not loaded via native
+    await ref.read(localAiServiceProvider.notifier).selectAndStartModel(filename);
+    ref.read(aiServiceProvider).setProvider('local_edge');
+    ref.read(aiServiceProvider).setModel(filename);
+    if (mounted) {
+      Navigator.of(context).pop(filename);
+    }
+  }
+
   Future<void> _importLocalModelFile() async {
     try {
       final result = await FilePicker.pickFiles(
@@ -216,7 +255,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
         messenger.showSnackBar(
           SnackBar(content: Text('Файл модели выбран: $name')),
         );
-        ref.read(localAiServiceProvider.notifier).selectAndStartModel(name);
+        await _startModelSafely(name, modelPath: path);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -542,6 +581,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   // ── Scope 1: My Models (Downloaded) ──
   Widget _buildMyModelsScope() {
     final localState = ref.watch(localAiServiceProvider);
+    final nativeLlama = ref.watch(nativeLlamaServiceProvider);
     final downloadedIds = localState.downloadedModels.entries.where((e) => e.value).map((e) => e.key).toList();
 
     return ListView(
@@ -615,7 +655,8 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
             );
 
-            final isRunning = localState.selectedModelFilename == model.filename && localState.isRunning;
+            final isRunning = (nativeLlama.isModelLoaded && (nativeLlama.loadedModelPath?.contains(model.filename) ?? false)) ||
+                (localState.selectedModelFilename == model.filename && localState.isRunning);
 
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -663,12 +704,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                     )
                   else
                     ElevatedButton(
-                      onPressed: () {
-                        ref.read(localAiServiceProvider.notifier).selectAndStartModel(model.filename);
-                        ref.read(aiServiceProvider).setProvider('local_edge');
-                        ref.read(aiServiceProvider).setModel(model.filename);
-                        Navigator.of(context).pop(model.filename);
-                      },
+                      onPressed: () => _startModelSafely(model.filename),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _PrivateLmTokens.accent,
                         foregroundColor: Colors.black,
@@ -799,12 +835,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                           ),
                         ] else if (isDownloaded) ...[
                           ElevatedButton.icon(
-                            onPressed: () {
-                              ref.read(localAiServiceProvider.notifier).selectAndStartModel(model.filename);
-                              ref.read(aiServiceProvider).setProvider('local_edge');
-                              ref.read(aiServiceProvider).setModel(model.filename);
-                              Navigator.of(context).pop(model.filename);
-                            },
+                            onPressed: () => _startModelSafely(model.filename),
                             icon: const Icon(LucideIcons.play, size: 12),
                             label: const Text('Запустить', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                             style: ElevatedButton.styleFrom(

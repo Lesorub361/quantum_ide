@@ -34,7 +34,7 @@ class AISettings {
     this.selectedModel = 'gemini-2.5-flash',
     this.apiKeys = const {},
     this.baseUrls = const {},
-    this.selectedLocalEngine = LocalAiEngine.llamaServer,
+    this.selectedLocalEngine = LocalAiEngine.nativeLlama,
     this.autoApprove = true,
     this.approvalMode = 'fullAutonomous',
     this.temperature = 0.7,
@@ -126,8 +126,14 @@ class AIService {
     final prefs = await SharedPreferences.getInstance();
 
     var providerId = prefs.getString('ai_provider_id') ?? 'google';
-    var localEngineIndex =
-        prefs.getInt('ai_local_engine') ?? LocalAiEngine.llamaServer.index;
+    final defaultLocalEngineIndex = (Platform.isAndroid || Platform.isIOS)
+        ? LocalAiEngine.nativeLlama.index
+        : LocalAiEngine.llamaServer.index;
+    var localEngineIndex = prefs.getInt('ai_local_engine') ?? defaultLocalEngineIndex;
+    if ((Platform.isAndroid || Platform.isIOS) && localEngineIndex == LocalAiEngine.llamaServer.index) {
+      localEngineIndex = LocalAiEngine.nativeLlama.index;
+      await prefs.setInt('ai_local_engine', localEngineIndex);
+    }
 
     // Migrate old lmstudio provider if present
     if (providerId == 'lmstudio') {

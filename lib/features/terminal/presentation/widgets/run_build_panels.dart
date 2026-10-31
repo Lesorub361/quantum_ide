@@ -13,6 +13,7 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/github_actions_pipeline_viewer.dart';
 import 'package:quantum_ide/core/services/android_app_installer_service.dart';
 import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
@@ -614,7 +615,7 @@ class SidebarBuildPanel extends ConsumerStatefulWidget {
 
 class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   int _buildSubTab = 0;
-  bool _showBeautifulLogs = false;
+  int _buildViewerMode = 0; // 0 = Pipeline (GitHub Actions), 1 = Raw Terminal
 
   void _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) {
     ref.read(projectSyncProvider.notifier).cancelSync();
@@ -1023,42 +1024,71 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               ? Column(
                   children: [
                     _buildActionHeader(l10n.build, buildActions),
-                    // Toggle Console vs Beautiful Logs
+                    // Toggle Pipeline vs Terminal
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      color: Colors.black.withValues(alpha: 0.05),
+                      color: Colors.black.withValues(alpha: 0.1),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF238636),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'GitHub Actions Pipeline',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF8B949E),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
                           _buildLogModeButton(
-                            label: 'Logs',
-                            isActive: _showBeautifulLogs,
-                            onTap: () => setState(() => _showBeautifulLogs = true),
-                            icon: LucideIcons.file_text,
+                            label: 'Pipeline',
+                            isActive: _buildViewerMode == 0,
+                            onTap: () => setState(() => _buildViewerMode = 0),
+                            icon: LucideIcons.git_branch,
                           ),
                           const SizedBox(width: 8),
                           _buildLogModeButton(
                             label: 'Terminal',
-                            isActive: !_showBeautifulLogs,
-                            onTap: () => setState(() => _showBeautifulLogs = false),
+                            isActive: _buildViewerMode == 1,
+                            onTap: () => setState(() => _buildViewerMode = 1),
                             icon: LucideIcons.terminal,
                           ),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: theme.background,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: session != null
-                            ? (_showBeautifulLogs
-                                ? BeautifulLogsViewer(session: session)
-                                : xt.TerminalView(
+                      child: session != null
+                          ? (_buildViewerMode == 0
+                              ? GithubActionsPipelineViewer(
+                                  session: session,
+                                  onSwitchToTerminal: () => setState(() => _buildViewerMode = 1),
+                                  onRebuild: () {
+                                    if (buildActions.length >= 2) {
+                                      buildActions[1].onTap();
+                                    }
+                                  },
+                                )
+                              : Container(
+                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: theme.background,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                                  ),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: xt.TerminalView(
                                     session.xtermTerminal,
                                     controller: session.xtermViewController,
                                     autofocus: true,
@@ -1080,9 +1110,9 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                     ),
                                     keyboardType: TextInputType.visiblePassword,
                                     deleteDetection: true,
-                                  ))
-                            : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),
-                      ),
+                                  ),
+                                ))
+                          : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),
                     ),
                   ],
                 )
