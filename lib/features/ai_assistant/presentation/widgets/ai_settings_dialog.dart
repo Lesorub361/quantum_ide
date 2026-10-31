@@ -357,7 +357,7 @@ class _AISettingsDialogState extends ConsumerState<AISettingsDialog> {
                 const SizedBox(height: 16),
                 
                 // Hardware / NPU Acceleration Settings
-                if (_selectedLocalEngine == LocalAiEngine.llamaServer) ...[
+                if (_selectedLocalEngine == LocalAiEngine.llamaServer || _selectedLocalEngine == LocalAiEngine.nativeLlama) ...[
                   Text(
                     'Ускорение NPU / GPU / CPU',
                     style: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold),

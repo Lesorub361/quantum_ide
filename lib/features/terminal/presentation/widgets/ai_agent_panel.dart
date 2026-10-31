@@ -1006,6 +1006,30 @@ class _AIAgentPanelState extends ConsumerState<AIAgentPanel> {
               ),
               const SizedBox(height: 10),
 
+              if (_selectedLocalEngine == LocalAiEngine.nativeLlama) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.zap, color: Colors.greenAccent, size: 14),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Native Vulkan Engine: ACTIVE (In-App)',
+                          style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+
               // Server controls/runtime installer when llamaServer is chosen
               if (_selectedLocalEngine == LocalAiEngine.llamaServer) ...[
                 // Binary Runtime Status Card

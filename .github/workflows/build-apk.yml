@@ -113,7 +113,7 @@ jobs:
 
       - name: Ensure native llama dependencies
         run: |
-          if [ ! -d "local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp" ] || [ -z "$(ls -A local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp 2>/dev/null)" ]; then
+          if [ -d "local_plugins/llama_flutter_android" ]; then
             bash scripts/setup_llama.sh
           fi
 

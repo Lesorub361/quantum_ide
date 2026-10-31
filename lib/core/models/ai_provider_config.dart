@@ -21,11 +21,13 @@ class AiProviderConfig {
   });
 }
 
-enum LocalAiEngine { llamaServer, ollama, lmStudio }
+enum LocalAiEngine { nativeLlama, llamaServer, ollama, lmStudio }
 
 extension LocalAiEngineExtension on LocalAiEngine {
   String get id {
     switch (this) {
+      case LocalAiEngine.nativeLlama:
+        return 'native_llama';
       case LocalAiEngine.llamaServer:
         return 'llama_server';
       case LocalAiEngine.ollama:
@@ -37,6 +39,8 @@ extension LocalAiEngineExtension on LocalAiEngine {
 
   String get displayName {
     switch (this) {
+      case LocalAiEngine.nativeLlama:
+        return 'Native Vulkan / CPU (In-App)';
       case LocalAiEngine.llamaServer:
         return 'llama-server (built-in)';
       case LocalAiEngine.ollama:
@@ -48,6 +52,8 @@ extension LocalAiEngineExtension on LocalAiEngine {
 
   String get defaultBaseUrl {
     switch (this) {
+      case LocalAiEngine.nativeLlama:
+        return 'native://embedded';
       case LocalAiEngine.llamaServer:
         return 'http://localhost:8080/v1';
       case LocalAiEngine.ollama:
@@ -59,8 +65,9 @@ extension LocalAiEngineExtension on LocalAiEngine {
 
   List<String> get defaultModels {
     switch (this) {
+      case LocalAiEngine.nativeLlama:
       case LocalAiEngine.llamaServer:
-        return ['qwen2.5-coder-1.5b-instruct'];
+        return ['deepseek-r1-distill-qwen-1.5b', 'qwen2.5-coder-1.5b-instruct'];
       case LocalAiEngine.ollama:
         return ['qwen2.5-coder', 'llama3.2', 'llama3.1', 'codellama', 'gemma2'];
       case LocalAiEngine.lmStudio:

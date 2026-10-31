@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/local_ai_service.dart';
+import 'package:quantum_ide/core/services/native_llama_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 // Provider для выбранного провайдера в UI
@@ -1306,7 +1307,9 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
           ),
         ),
         const SizedBox(height: 16),
-        if (currentEngine == LocalAiEngine.llamaServer) ...[
+        if (currentEngine == LocalAiEngine.nativeLlama) ...[
+          _buildNativeLlamaControls(),
+        ] else if (currentEngine == LocalAiEngine.llamaServer) ...[
           _buildLlamaServerControls(),
         ] else if (currentEngine == LocalAiEngine.ollama) ...[
           _buildExternalEngineNote(
@@ -1369,6 +1372,197 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNativeLlamaControls() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final nativeState = ref.watch(nativeLlamaServiceProvider);
+        final nativeNotifier = ref.read(nativeLlamaServiceProvider.notifier);
+        final localAiState = ref.watch(localAiServiceProvider);
+        final localAiNotifier = ref.read(localAiServiceProvider.notifier);
+        final theme = Theme.of(context);
+        final engineModels = availableLocalModels.where((m) => m.engine == LocalAiEngine.llamaServer || m.engine == LocalAiEngine.nativeLlama).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Native Engine Info Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(LucideIcons.zap, color: theme.colorScheme.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Нативный локальный ИИ (Vulkan / CPU)',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          'Без Linux и пакетов',
+                          style: GoogleFonts.inter(fontSize: 10, color: Colors.greenAccent, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Модель выполняется напрямую внутри процесса Android с аппаратным ускорением на GPU (Vulkan) или CPU. Никаких фоновых серверов, команд терминала или системных библиотек.',
+                    style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  if (nativeState.gpuInfo != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(LucideIcons.cpu, size: 14, color: theme.colorScheme.primary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'GPU: ${nativeState.gpuInfo!.gpuName}',
+                                  style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Vulkan GPU: ${nativeState.gpuInfo!.vulkanSupported ? "Поддерживается 🚀" : "Не поддерживается (CPU)"} · Слоев GPU: ${nativeState.gpuInfo!.recommendedGpuLayers} · Свободно RAM: ${nativeState.gpuInfo!.freeRamMb} МБ',
+                            style: GoogleFonts.inter(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            _label('Модели GGUF'),
+            const SizedBox(height: 8),
+            ..._buildModelCards(engineModels, localAiState, localAiNotifier, theme),
+            const SizedBox(height: 16),
+            _label('Статус загрузки в память'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.08)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            nativeState.isModelLoaded
+                                ? 'Модель загружена в память'
+                                : 'Модель не загружена',
+                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              _dot(nativeState.isModelLoaded ? Colors.green : Colors.grey),
+                              const SizedBox(width: 6),
+                              Text(
+                                nativeState.isModelLoaded
+                                    ? (nativeState.loadedModelPath?.split('/').last ?? 'Готова к инференсу')
+                                    : 'Нажмите «Загрузить» для мгновенного ответа',
+                                style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      if (nativeState.isLoading)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else if (nativeState.isModelLoaded)
+                        ElevatedButton.icon(
+                          onPressed: () => nativeNotifier.unloadModel(),
+                          icon: const Icon(LucideIcons.square, size: 14),
+                          label: const Text('Выгрузить'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.error,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        )
+                      else
+                        ElevatedButton.icon(
+                          onPressed: () async {
+                            final modelPath = await localAiNotifier.findModelFile(localAiState.selectedModelFilename);
+                            if (modelPath != null) {
+                              await nativeNotifier.loadModel(modelPath: modelPath);
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Сначала скачайте модель выше')),
+                              );
+                            }
+                          },
+                          icon: const Icon(LucideIcons.play, size: 14),
+                          label: const Text('Загрузить'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: theme.colorScheme.onPrimary,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (nativeState.error != null) ...[
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      nativeState.error!,
+                      style: GoogleFonts.inter(color: theme.colorScheme.error, fontSize: 11),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 

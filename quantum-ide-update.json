@@ -1,10 +1,10 @@
 {
-  "versionCode": 137,
-  "versionName": "1.2.120",
-  "notes": "QuantumIDE v1.2.120:\n• Исправлен запуск локального ИИ (llama-server, ошибка 127 libssl.so.3).\n• Добавлена автоматическая установка и проверка необходимых библиотек libssl3, libgomp1 и ca-certificates при установке и запуске модели.\n• Добавлена кнопка восстановления разделяемых библиотек в настройках ИИ.",
+  "versionCode": 138,
+  "versionName": "1.2.121",
+  "notes": "QuantumIDE v1.2.121:\n• Внедрён нативный движок локального ИИ (llama_flutter_android) с прямым аппаратным ускорением Vulkan GPU и ARM64 NEON.\n• Локальные модели GGUF теперь могут запускаться прямо внутри процесса Android без необходимости запуска фонового сервера, терминала и установки Linux-пакетов.\n• Добавлены автоопределение видеочипа (GPU / Vulkan) и телеметрия свободной памяти в настройках ИИ.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.120/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.121/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }

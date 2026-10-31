@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:genkit/genkit.dart' as gk;
 import 'genkit_service.dart';
+import 'native_llama_service.dart';
 
 // ─── Хранилище ключей и настроек ─────────────────────────────────────────────
 
@@ -585,6 +586,7 @@ class AIService {
       try {
         final List<String> raw;
         switch (_settings.selectedLocalEngine) {
+          case LocalAiEngine.nativeLlama:
           case LocalAiEngine.llamaServer:
             raw = await _fetchLocalEdgeModels();
             break;
@@ -969,6 +971,14 @@ class AIService {
       case 'ollama':
         return await _ollamaCompletion(prompt);
       case 'local_edge':
+        if (_settings.selectedLocalEngine == LocalAiEngine.nativeLlama && _ref != null) {
+          final nativeLlama = _ref.read(nativeLlamaServiceProvider.notifier);
+          return await nativeLlama.getCompletion(
+            prompt,
+            temperature: _settings.temperature,
+            maxTokens: _settings.maxTokens,
+          );
+        }
         if (_settings.selectedLocalEngine == LocalAiEngine.ollama) {
           return await _ollamaCompletion(prompt);
         }
@@ -1136,6 +1146,16 @@ class AIService {
           systemInstruction: systemInstruction,
         );
       case 'local_edge':
+        if (_settings.selectedLocalEngine == LocalAiEngine.nativeLlama && _ref != null) {
+          final nativeLlama = _ref.read(nativeLlamaServiceProvider.notifier);
+          return await nativeLlama.streamChat(
+            message: message,
+            history: history,
+            systemInstruction: systemInstruction,
+            temperature: _settings.temperature,
+            maxTokens: _settings.maxTokens,
+          );
+        }
         if (_settings.selectedLocalEngine == LocalAiEngine.ollama) {
           return await _ollamaChatMessage(
             message,
@@ -1207,6 +1227,18 @@ class AIService {
         history,
         systemInstruction: systemInstruction,
         onToken: onToken,
+      );
+    }
+    
+    if (pid == 'local_edge' && _settings.selectedLocalEngine == LocalAiEngine.nativeLlama && _ref != null) {
+      final nativeLlama = _ref.read(nativeLlamaServiceProvider.notifier);
+      return await nativeLlama.streamChat(
+        message: message,
+        history: history,
+        systemInstruction: systemInstruction,
+        onToken: onToken,
+        temperature: _settings.temperature,
+        maxTokens: _settings.maxTokens,
       );
     }
     
