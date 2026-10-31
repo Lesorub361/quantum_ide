@@ -703,18 +703,29 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 Expanded(
                   child: Row(
                     children: [
-                      if (!isDesktop) ...[
-                        const SizedBox(width: 8),
-                        ActionIconButton(
-                          icon: LucideIcons.menu,
-                          color: Colors.cyanAccent,
-                          tooltip: AppLocalizations.of(context)!.openExplorer,
-                          onTap: () => _scaffoldKey.currentState?.openDrawer(),
-                        ),
-                        const SizedBox(width: 4),
-                      ] else ...[
-                        const SizedBox(width: 14),
-                      ],
+                      const SizedBox(width: 8),
+                      ActionIconButton(
+                        icon: LucideIcons.panel_left,
+                        color: Colors.cyanAccent,
+                        tooltip: AppLocalizations.of(context)!.openExplorer,
+                        onTap: () {
+                          if (isDesktop) {
+                            final isOpen = ref.read(leftPanelOpenProvider);
+                            final currentTab = ref.read(drawerTabProvider);
+                            if (!isOpen) {
+                              ref.read(drawerTabProvider.notifier).state = 0;
+                              ref.read(leftPanelOpenProvider.notifier).state = true;
+                            } else if (currentTab != 0) {
+                              ref.read(drawerTabProvider.notifier).state = 0;
+                            } else {
+                              ref.read(leftPanelOpenProvider.notifier).state = false;
+                            }
+                          } else {
+                            _scaffoldKey.currentState?.openDrawer();
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 6),
                       const Expanded(
                         child: EditorAppBarTitle(),
                       ),
@@ -722,24 +733,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Wide screens: Undo / Redo
-                          if (screenWidth >= 720 && activeFile != null) ...[
-                            ActionIconButton(
-                              icon: LucideIcons.undo_2,
-                              tooltip: 'Отменить (Undo / Ctrl+Z)',
-                              onTap: () {
-                                try { activeFile.controller.undo(); } catch (_) {}
-                              },
-                            ),
-                            ActionIconButton(
-                              icon: LucideIcons.redo_2,
-                              tooltip: 'Повторить (Redo / Ctrl+Y)',
-                              onTap: () {
-                                try { activeFile.controller.redo(); } catch (_) {}
-                              },
-                            ),
-                            const SizedBox(width: 2),
-                          ],
                           _buildQuickUpdatePill(ref),
                           ActionIconButton(
                             icon: LucideIcons.play,
@@ -848,14 +841,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 case 'chat':
                                   ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                                   break;
-                                case 'toggle_panel':
-                                  if (isDesktop) {
-                                    final isOpen = ref.read(leftPanelOpenProvider);
-                                    ref.read(leftPanelOpenProvider.notifier).state = !isOpen;
-                                  } else {
-                                    _scaffoldKey.currentState?.openDrawer();
-                                  }
-                                  break;
                                 case 'sync':
                                   final currentWs = ref.read(workspaceProvider).currentPath;
                                   if (currentWs != null) {
@@ -871,29 +856,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               }
                             },
                             itemBuilder: (context) => [
-                              if (screenWidth < 720 && activeFile != null) ...[
-                                const PopupMenuItem(
-                                  value: 'undo',
-                                  child: Row(
-                                    children: [
-                                      Icon(LucideIcons.undo_2, size: 16, color: Colors.white70),
-                                      SizedBox(width: 10),
-                                      Text('Отменить (Undo)', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'redo',
-                                  child: Row(
-                                    children: [
-                                      Icon(LucideIcons.redo_2, size: 16, color: Colors.white70),
-                                      SizedBox(width: 10),
-                                      Text('Повторить (Redo)', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                              ],
                               if (screenWidth < 400) ...[
                                 PopupMenuItem(
                                   value: 'git',
@@ -924,19 +886,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                       const Icon(LucideIcons.sparkles, size: 16, color: Colors.purpleAccent),
                                       const SizedBox(width: 10),
                                       Text(AppLocalizations.of(context)!.aiChat, style: const TextStyle(fontSize: 13, color: Colors.white)),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                              ],
-                              if (isDesktop) ...[
-                                const PopupMenuItem(
-                                  value: 'toggle_panel',
-                                  child: Row(
-                                    children: [
-                                      Icon(LucideIcons.panel_left, size: 16, color: Colors.white70),
-                                      SizedBox(width: 10),
-                                      Text('Боковая панель', style: TextStyle(fontSize: 13, color: Colors.white)),
                                     ],
                                   ),
                                 ),
