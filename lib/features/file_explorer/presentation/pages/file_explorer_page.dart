@@ -14,10 +14,8 @@ import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
@@ -892,118 +890,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     );
   }
 
-  Widget _buildAIBadge(WidgetRef ref, String nodePath, bool isDirectory) {
-    final aiState = ref.watch(aiProvider);
-
-    if (isDirectory) {
-      final actions = aiState.proposedActions.where((a) => a.path.startsWith('$nodePath/')).toList();
-      final hasReadFiles = aiState.agentReadFiles.any((f) => f.startsWith('$nodePath/'));
-      if (actions.isEmpty && !hasReadFiles) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.only(right: 6.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (actions.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.purpleAccent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3), width: 0.5),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.sparkles, size: 8, color: Colors.purpleAccent),
-                    const SizedBox(width: 2),
-                    Text(
-                      '${actions.length}',
-                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.purpleAccent),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-
-    final wasReadByAgent = aiState.agentReadFiles.contains(nodePath);
-
-    final action = aiState.proposedActions.firstWhere(
-      (a) => a.path == nodePath,
-      orElse: () => AIAction(type: '', path: '', content: ''),
-    );
-    final hasPendingAction = action.path.isNotEmpty;
-
-    if (!hasPendingAction && !wasReadByAgent) return const SizedBox.shrink();
-
-    final additions = action.additions ?? 0;
-    final deletions = action.deletions ?? 0;
-    
-    return Padding(
-      padding: const EdgeInsets.only(right: 6.0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (wasReadByAgent && !hasPendingAction) ...[
-            const Icon(LucideIcons.eye, size: 10, color: Colors.cyanAccent),
-            const SizedBox(width: 3),
-          ],
-          if (hasPendingAction) ...[
-            Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: action.type == 'create'
-                    ? const Color(0xFF4EC994)
-                    : action.type == 'delete'
-                        ? const Color(0xFFFF6B6B)
-                        : Colors.purpleAccent,
-              ),
-            ),
-            if (additions > 0)
-              Text(
-                '+$additions',
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF4EC994),
-                ),
-              ),
-            if (additions > 0 && deletions > 0)
-              const SizedBox(width: 2),
-            if (deletions > 0)
-              Text(
-                '-$deletions',
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFFF6B6B),
-                ),
-              ),
-            if (additions == 0 && deletions == 0)
-              Text(
-                action.type == 'create' ? 'A' : action.type == 'delete' ? 'D' : 'M',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: action.type == 'create'
-                      ? const Color(0xFF4EC994)
-                      : action.type == 'delete'
-                          ? const Color(0xFFFF6B6B)
-                          : Colors.purpleAccent,
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildFileItem(BuildContext context, WidgetRef ref, FileNode node) {
     final iconInfo = FileIconHelper.getIconInfo(node.name, node.isDirectory);
     final isSelected = _selectedPaths.contains(node.path);
@@ -1060,7 +946,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            _buildAIBadge(ref, node.path, node.isDirectory),
             if (gitColor != Colors.white70 && gitColor != Colors.white)
               _buildGitBadge(gitColor, ref, node.path, node.isDirectory),
           ],
@@ -1251,48 +1136,9 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
           _extractZip(context, ref, node.path);
         } else if (value == 'compress') {
           _showCompressDialog(context, ref, [node.path]);
-        } else if (value == 'ai_ask') {
-          _handleAiAsk(node);
-        } else if (value == 'ai_explain') {
-          _handleAiAsk(node, presetQuery: node.isDirectory
-              ? l10n.explainFolderPreset
-              : l10n.explainFilePreset);
-        } else if (value == 'ai_docs') {
-          _handleAiAsk(node, presetQuery: node.isDirectory
-              ? l10n.addDocFolderPreset
-              : l10n.addDocFilePreset);
-        } else if (value == 'ai_tests') {
-          _handleAiAsk(node, presetQuery: node.isDirectory
-              ? l10n.generateTestsFolderPreset
-              : l10n.generateTestsFilePreset);
-        } else if (value == 'ai_optimize') {
-          _handleAiAsk(node, presetQuery: node.isDirectory
-              ? l10n.optimizeFolderPreset
-              : l10n.optimizeFilePreset);
         }
       },
       itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'ai_ask',
-          child: Row(children: [const Icon(LucideIcons.sparkles, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.askAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
-        ),
-        PopupMenuItem(
-          value: 'ai_explain',
-          child: Row(children: [const Icon(LucideIcons.book_open, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.explainAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
-        ),
-        PopupMenuItem(
-          value: 'ai_docs',
-          child: Row(children: [const Icon(LucideIcons.file_text, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.documentAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
-        ),
-        PopupMenuItem(
-          value: 'ai_tests',
-          child: Row(children: [const Icon(LucideIcons.shield_check, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.testAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
-        ),
-        PopupMenuItem(
-          value: 'ai_optimize',
-          child: Row(children: [const Icon(LucideIcons.zap, size: 14, color: Colors.cyanAccent), const SizedBox(width: 12), Text(AppLocalizations.of(context)!.optimizeAiAction, style: const TextStyle(color: Colors.cyanAccent))]),
-        ),
-        const PopupMenuDivider(height: 1),
         const PopupMenuItem(
           value: 'rename',
           child: Row(children: [Icon(LucideIcons.pencil, size: 14, color: Colors.white70), SizedBox(width: 12), Text('Rename', style: TextStyle(color: Colors.white70))]),
@@ -1717,134 +1563,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
         await entity.copy(newPath);
       }
     }
-  }
-
-  void _handleAiAsk(FileNode node, {String? presetQuery}) async {
-    final controller = TextEditingController();
-    String? instruction = presetQuery;
-    instruction ??= await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF13151A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              const Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context)!.aiAskDialogTitle,
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                node.isDirectory
-                    ? AppLocalizations.of(context)!.aiAskFolder(p.basename(node.path))
-                    : AppLocalizations.of(context)!.aiAskFile(p.basename(node.path)),
-                style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: 4,
-                minLines: 2,
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: node.isDirectory
-                      ? AppLocalizations.of(context)!.aiAskFolderHint
-                      : AppLocalizations.of(context)!.aiAskFileHint,
-                  hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
-                  filled: true,
-                  fillColor: Colors.black26,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.white10),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.white10),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.cyanAccent, width: 0.8),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                AppLocalizations.of(context)!.cancel,
-                style: GoogleFonts.inter(color: Colors.white38, fontSize: 13),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.cyanAccent.withValues(alpha: 0.15),
-                foregroundColor: Colors.cyanAccent,
-                elevation: 0,
-                side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(
-                AppLocalizations.of(context)!.send,
-                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      );
-
-    if (instruction == null || instruction.trim().isEmpty) return;
-
-    String content = '';
-    if (!node.isDirectory) {
-      try {
-        content = await File(node.path).readAsString();
-      } catch (e) {
-        content = '[Could not read file]';
-      }
-    }
-
-    final prompt = node.isDirectory
-        ? """
-I'm working in the folder: `${node.path}`.
-Files and subfolders in this folder:
-${node.children.map((c) => (c.isDirectory ? '[Folder] ' : '[File] ') + c.name).join('\n')}
-
-User request:
-$instruction
-
-Please perform this request. If you need to modify or create files/folders, or run a terminal command, use the <actions> action format.
-"""
-        : """
-I'm working on the file: `${node.path}`.
-Its current content:
-```
-$content
-```
-
-User request:
-$instruction
-
-Please perform this request. If you need to modify the file, create a new one, delete, or run a terminal command, use the <actions> action format.
-""";
-
-    ref.read(aiProvider.notifier).askAI(prompt);
-    ref.read(rightChatPanelOpenProvider.notifier).state = true;
-
-    if (mounted) context.push('/editor');
   }
 
   String _getFileTypeLabel(String fileName) {

@@ -11,8 +11,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/models/chat_message.dart';
+
 
 import '../../../../core/services/diff_service.dart';
 import '../../../../core/services/lsp_service.dart';
@@ -207,18 +206,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         final controller = state.openFiles[existingIndex].controller;
         controller.selection = CodeLineSelection.fromPosition(position: CodeLinePosition(index: line, offset: column));
       }
-      
-      // Load proposed AI change into controller if not already loaded
-      final aiState = ref.read(aiProvider);
-      final pendingActions = aiState.proposedActions.where((a) => a.path == path && (a.type == 'edit' || a.type == 'create')).toList();
-      if (pendingActions.isNotEmpty) {
-        final action = pendingActions.first;
-        if (updatedFile.controller.text != action.content) {
-          updatedFile.controller.text = action.content;
-          _updateDiff(path);
-        }
-      }
-
       _persistWorkspaceFiles();
       return;
     }
@@ -282,14 +269,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         );
       }
       
-      // Load proposed AI content or original content
-      final aiState = ref.read(aiProvider);
-      final pendingActions = aiState.proposedActions.where((a) => a.path == path && (a.type == 'edit' || a.type == 'create')).toList();
-      final hasProposed = pendingActions.isNotEmpty;
-      final initialContent = hasProposed ? pendingActions.first.content : content;
-
       final controller = CodeLineEditingController(
-        codeLines: CodeLines.fromText(initialContent),
+        codeLines: CodeLines.fromText(content),
       );
 
       if (line != null && column != null) {
@@ -759,13 +740,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       final content = await _readTextFile(path);
       if (content == null) return null;
       
-      final aiState = ref.read(aiProvider);
-      final pendingActions = aiState.proposedActions.where((a) => a.path == path && (a.type == 'edit' || a.type == 'create')).toList();
-      final hasProposed = pendingActions.isNotEmpty;
-      final initialContent = hasProposed ? pendingActions.first.content : content;
-
       final controller = CodeLineEditingController(
-        codeLines: CodeLines.fromText(initialContent),
+        codeLines: CodeLines.fromText(content),
       );
       _lastCodeLines[path] = controller.codeLines;
       controller.addListener(() {
@@ -1127,60 +1103,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     _handleContentChange(filePath);
   }
 
-  Future<void> acceptProposedChanges(String path, AIAction action) async {
-    try {
-      final file = File(path);
-      await file.parent.create(recursive: true);
-      await file.writeAsString(action.content);
 
-      final index = state.openFiles.indexWhere((f) => f.path == path);
-      if (index != -1) {
-        final currentFile = state.openFiles[index];
-        final newOpenFiles = List<EditorFile>.from(state.openFiles);
-        newOpenFiles[index] = currentFile.copyWith(
-          originalContent: action.content,
-          diffMarkers: const [],
-          isModified: false,
-        );
-        state = state.copyWith(openFiles: newOpenFiles);
-      }
-
-      ref.read(aiProvider.notifier).removeAction(action);
-      ref.read(analysisServiceProvider).triggerAnalysis(immediate: true);
-      ref.read(gitProvider.notifier).refreshStatus();
-    } catch (e) {
-      debugPrint('Error accepting proposed changes: $e');
-    }
-  }
-
-  Future<void> revertProposedChanges(String path, AIAction action) async {
-    try {
-      final file = File(path);
-      String content = '';
-      if (await file.exists()) {
-        content = await file.readAsString();
-      }
-
-      final index = state.openFiles.indexWhere((f) => f.path == path);
-      if (index != -1) {
-        final currentFile = state.openFiles[index];
-        currentFile.controller.text = content;
-        
-        final newOpenFiles = List<EditorFile>.from(state.openFiles);
-        newOpenFiles[index] = currentFile.copyWith(
-          originalContent: content,
-          diffMarkers: const [],
-          isModified: false,
-        );
-        state = state.copyWith(openFiles: newOpenFiles);
-      }
-
-      ref.read(aiProvider.notifier).removeAction(action);
-      ref.read(analysisServiceProvider).triggerAnalysis(immediate: true);
-    } catch (e) {
-      debugPrint('Error reverting proposed changes: $e');
-    }
-  }
 
   void applyHunkAction(String filePath, int hunkIndex, bool keep) {
     final index = state.openFiles.indexWhere((f) => f.path == filePath);

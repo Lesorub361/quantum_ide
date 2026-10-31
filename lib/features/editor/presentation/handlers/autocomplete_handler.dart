@@ -3,7 +3,6 @@ import 'package:re_editor/re_editor.dart';
 import '../notifiers/editor_notifier.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'snippet_prompt.dart';
-import '../../../../core/services/ai_autocomplete_service.dart';
 import '../../../../core/services/lsp_autocomplete_service.dart';
 import '../../../../core/services/lsp_service.dart';
 import '../../../../core/services/settings_service.dart';
@@ -47,37 +46,6 @@ class LspCompletionPrompt extends CodePrompt {
   @override
   bool match(String input) {
     return word.toLowerCase().contains(input.toLowerCase());
-  }
-}
-
-class AiAutocompletePrompt extends CodePrompt {
-  final String suggestion;
-  final String userWord;
-
-  AiAutocompletePrompt({
-    required this.suggestion,
-    required this.userWord,
-  }) : super(word: _getFirstLine(suggestion));
-
-  static String _getFirstLine(String text) {
-    final lines = text.split('\n');
-    if (lines.isEmpty) return '';
-    if (lines.length > 1) {
-      return '${lines.first} ...';
-    }
-    return lines.first;
-  }
-
-  @override
-  CodeAutocompleteResult get autocomplete => CodeAutocompleteResult(
-    input: userWord,
-    word: suggestion,
-    selection: TextSelection.collapsed(offset: suggestion.length),
-  );
-
-  @override
-  bool match(String input) {
-    return true; // Predetermined for this exact context, always matches
   }
 }
 
@@ -138,32 +106,6 @@ class QuantumAutocompletePromptsBuilder extends CodeAutocompletePromptsBuilder {
     if (config == null) return null;
 
     final List<CodePrompt> prompts = [];
-
-    // Trigger & add AI autocomplete suggestions if enabled
-    final settings = container.read(settingsProvider);
-    if (settings.aiAutoCompletion && word.isNotEmpty) {
-      // Trigger async fetch
-      container.read(aiAutocompleteServiceProvider.notifier).triggerAutocomplete(
-        filePath: file.path,
-        text: file.controller.text,
-        lineIndex: cursor.index,
-        columnOffset: cursor.offset,
-        word: word,
-      );
-
-      // Read loaded AI suggestion synchronously
-      final aiState = container.read(aiAutocompleteServiceProvider);
-      if (aiState.suggestion != null &&
-          aiState.suggestion!.isNotEmpty &&
-          aiState.filePath == file.path &&
-          aiState.lineIndex == cursor.index &&
-          aiState.columnOffset == cursor.offset) {
-        prompts.add(AiAutocompletePrompt(
-          suggestion: aiState.suggestion!,
-          userWord: word,
-        ));
-      }
-    }
 
     // Add LSP suggestions
     container.read(lspAutocompleteServiceProvider.notifier).triggerAutocomplete(

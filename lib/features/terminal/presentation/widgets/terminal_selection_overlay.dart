@@ -13,7 +13,6 @@ import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_ta
 class TerminalSelectionOverlay extends StatefulWidget {
   final TerminalSession session;
   final xt.TerminalViewState Function() getViewState;
-  final Function(String selectedText)? onAskAI;
   final VoidCallback? onSelectAll;
   final VoidCallback? onPaste;
 
@@ -21,7 +20,6 @@ class TerminalSelectionOverlay extends StatefulWidget {
     super.key,
     required this.session,
     required this.getViewState,
-    this.onAskAI,
     this.onSelectAll,
     this.onPaste,
   });
@@ -272,17 +270,7 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
                   },
                 ),
               ],
-              _divider(),
-              _buildToolbarBtn(
-                icon: LucideIcons.sparkles,
-                label: 'AI ✨',
-                color: Colors.purpleAccent,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  widget.onAskAI?.call(selectedText);
-                  widget.session.xtermViewController.clearSelection();
-                },
-              ),
+
               _divider(),
               _buildToolbarBtn(
                 icon: LucideIcons.share_2,

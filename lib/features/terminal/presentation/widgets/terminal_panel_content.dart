@@ -15,11 +15,8 @@ import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:xterm/xterm.dart' as xt;
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/virtual_keys.dart';
-import 'package:quantum_ide/shared/providers/panel_provider.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
-
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
+
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 
@@ -1972,32 +1969,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  InkWell(
-                    onTap: () {
-                      final sel = _inlineSelectedText;
-                      ref.read(rightChatPanelOpenProvider.notifier).state = true;
-                      ref.read(aiProvider.notifier).askAI(
-                        'Помоги разобраться с этим выводом из терминала:\n```\n$sel\n```',
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(5),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.purpleAccent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        'AI ✨',
-                        style: GoogleFonts.inter(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.purpleAccent,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
                 ],
                 InkWell(
                   onTap: () => _copyTerminalOutputDirect(session),
@@ -2254,12 +2225,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         TerminalSelectionOverlay(
           session: session,
           getViewState: () => _getTerminalKey(keyId).currentState!,
-          onAskAI: (selectedText) {
-            ref.read(rightChatPanelOpenProvider.notifier).state = true;
-            ref.read(aiProvider.notifier).askAI(
-              'Помоги разобраться с этой ошибкой/выводом из терминала:\n```\n$selectedText\n```',
-            );
-          },
           onSelectAll: () => _selectAllInTerminal(session),
           onPaste: () => _pasteToTerminal(session),
         ),
@@ -2422,48 +2387,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     return 'flutter analyze';
   }
 
-  Future<void> _fixErrorsWithAI() async {
-    final workspacePath = ref.read(workspaceProvider).currentPath;
-    final allDiagnostics = <String, List<CodeDiagnostic>>{};
-    ref.read(editorProvider).allDiagnostics.forEach((filePath, diags) {
-      if (workspacePath != null && filePath.startsWith(workspacePath)) {
-        allDiagnostics[filePath] = diags;
-      }
-    });
-    final totalErrors = allDiagnostics.values.fold<int>(0, (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.error).length);
-    final totalWarnings = allDiagnostics.values.fold<int>(0, (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.warning).length);
-    final hasErrors = totalErrors > 0 || totalWarnings > 0;
-    
-    final checkCommand = await _detectProjectCheckCommand(workspacePath);
-    
-    String prompt;
-    if (hasErrors) {
-      final buffer = StringBuffer();
-      buffer.writeln('I have the following compilation/analysis errors in my project. Please fix them:\n');
-      
-      allDiagnostics.forEach((filePath, diags) {
-        if (diags.isNotEmpty) {
-          final relPath = workspacePath != null && filePath.startsWith(workspacePath)
-              ? p.relative(filePath, from: workspacePath)
-              : filePath;
-          for (final d in diags) {
-            if (d.severity == CodeDiagnosticSeverity.error || d.severity == CodeDiagnosticSeverity.warning) {
-              final severityStr = d.severity == CodeDiagnosticSeverity.error ? 'ERROR' : 'WARNING';
-              buffer.writeln('- $relPath (line ${d.range.index + 1}, column ${d.range.start + 1}): [$severityStr] ${d.message}');
-            }
-          }
-        }
-      });
-      
-      buffer.writeln('\nAnalyze these errors, find the corresponding files, fix them using the <actions> block, and then run a project check using the command `$checkCommand` (action type "command") in the background to verify that errors are resolved.');
-      prompt = buffer.toString();
-    } else {
-      prompt = 'Run the check command for this project in the background: `$checkCommand`. Wait for the results, analyze the output for errors, fix all found errors using the <actions> block, and run the check again to confirm the fix.';
-    }
-
-    ref.read(rightChatPanelOpenProvider.notifier).state = true;
-    ref.read(aiProvider.notifier).askAI(prompt);
-  }
 
   Widget _buildProblemsView(EditorState state) {
     final workspacePath = ref.read(workspaceProvider).currentPath;
@@ -2569,35 +2492,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          InkWell(
-            onTap: _fixErrorsWithAI,
-            borderRadius: BorderRadius.circular(6),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
-                ),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(LucideIcons.sparkles, size: 12, color: Colors.white),
-                  const SizedBox(width: 5),
-                  Text(
-                    l10n.fixWithAi,
-                    style: GoogleFonts.inter(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+
         ],
       ),
     );
@@ -2749,69 +2644,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   child: Icon(LucideIcons.copy, color: Colors.white38, size: 12),
                 ),
               ),
-              InkWell(
-                onTap: () => _handleAiFix(path, d),
-                borderRadius: BorderRadius.circular(4),
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 13),
-                ),
-              ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  void _handleAiFix(String path, CodeDiagnostic diagnostic) async {
-    ref.read(rightChatPanelOpenProvider.notifier).state = true;
-    
-    String content = '';
-    final openFiles = ref.read(editorProvider).openFiles;
-    final openedFile = openFiles.any((f) => f.path == path) 
-        ? openFiles.firstWhere((f) => f.path == path) 
-        : null;
-
-    if (openedFile != null) {
-      content = openedFile.controller.text;
-    } else {
-      try {
-        content = await File(path).readAsString();
-      } catch (e) {
-        content = '[Failed to read file]';
-      }
-    }
-
-    final prompt = '''
-I am working on a project. I got an error in file: $path
-Error: ${diagnostic.message}
-Line: ${diagnostic.range.index + 1}, Column: ${diagnostic.range.start + 1}
-
-File content:
-```
-$content
-```
-
-Please analyze the error and propose a fix.
-Please apply the fix to this file using the <actions> tag format.
-You must return the corrected version of the file inside <actions> tags, so that the user can press "Apply" and fix the error immediately.
-Example:
-<actions>
-[
-  {
-    "type": "edit",
-    "path": "$path",
-    "content": "complete corrected code of the file",
-    "description": "fixing error: ${diagnostic.message}"
-  }
-]
-</actions>
-
-Also explain what exactly went wrong and how you fixed it.
-''';
-
-    ref.read(aiProvider.notifier).askAI(prompt);
   }
 
   // ОБНОВЛЕННОЕ ХАКЕРСКОЕ КОНТЕКСТНОЕ МЕНЮ (Как в Termux)

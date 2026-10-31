@@ -1,10 +1,10 @@
 {
-  "versionCode": 144,
-  "versionName": "1.2.127",
-  "notes": "QuantumIDE v1.2.127:\n• Защита от сбоя Gradle Daemon при сборке APK и AppBundle прямо в терминале (bash & zsh).\n• Автоматический перехват 'flutter build apk' и 'flutter build appbundle' с флагами безопасности: single worker, daemon=off, native aapt2, target-platform arm64.\n• Удобные команды-алиасы: 'build-apk', 'build-bundle', 'fb-bundle'.\n• Автоматическое копирование готового APK/AAB в корень проекта (./app-release.apk, ./app-release.aab).\n• Добавлен сниппет 'flutter build appbundle' в виртуальные клавиши терминала.",
+  "versionCode": 145,
+  "versionName": "1.2.128",
+  "notes": "QuantumIDE v1.2.128:\n• Полное удаление встроенного чат-бота и устаревшего AI-интерфейса из приложения.\n• Удаление всплывающих подсказок ИИ при написании кода (ghost text, AI автодополнение).\n• Полная очистка кодовой базы для разработки нового чат-бота.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.127/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.128/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }

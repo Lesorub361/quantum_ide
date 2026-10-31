@@ -6,8 +6,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:xterm/xterm.dart' as xt;
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
+
 
 class TerminalTextSelectionModal extends ConsumerStatefulWidget {
   final xt.Terminal terminal;
@@ -416,26 +415,7 @@ class _TerminalTextSelectionModalState extends ConsumerState<TerminalTextSelecti
                       onPressed: _copyAll,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    icon: const Icon(LucideIcons.sparkles, size: 14, color: Colors.purpleAccent),
-                    label: Text(
-                      'Исправить с ИИ',
-                      style: GoogleFonts.inter(fontSize: 12, color: Colors.purpleAccent, fontWeight: FontWeight.w600),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.purpleAccent.withValues(alpha: 0.35)),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      ref.read(rightChatPanelOpenProvider.notifier).state = true;
-                      ref.read(aiProvider.notifier).askAI(
-                        'Проанализируй вывод терминала и помоги исправить найденные ошибки:\n\n```\n$_extractedText\n```',
-                      );
-                    },
-                  ),
+
                   const SizedBox(width: 8),
                   ElevatedButton(
                     style: ElevatedButton.styleFrom(

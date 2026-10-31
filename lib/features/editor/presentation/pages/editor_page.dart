@@ -29,14 +29,10 @@ import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_panel_content.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/widgets/right_chat_panel.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_drawer.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_app_bar.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/stable_editor_widget.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/models/chat_message.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
@@ -366,53 +362,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _onWorkspaceChanged(newPath);
         });
-      }
-    });
-
-    ref.listen<bool>(rightChatPanelOpenProvider, (previous, current) {
-      if (current) {
-        if (!isDesktop) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            // Show bottom sheet instead of endDrawer
-            showModalBottomSheet(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: Colors.transparent,
-              builder: (context) {
-                final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-                return Padding(
-                  padding: EdgeInsets.only(bottom: bottomInset),
-                  child: Container(
-                    height: MediaQuery.of(context).size.height * 0.88,
-                    margin: const EdgeInsets.only(top: 24),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0F111A),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
-                      ),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: const RightChatPanel(isInline: false),
-                  ),
-                );
-              },
-            ).whenComplete(() {
-              // Ensure provider is reset if user dismissed the sheet by swiping
-              if (ref.read(rightChatPanelOpenProvider)) {
-                ref.read(rightChatPanelOpenProvider.notifier).state = false;
-              }
-            });
-          });
-        }
-      } else {
-        if (!isDesktop) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-             Navigator.of(context).popUntil((route) {
-               return route.settings.name != null || route.isFirst;
-             });
-          });
-        }
       }
     });
 
@@ -783,15 +732,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               },
                             ),
                           ],
-                          if (screenWidth >= 540)
-                            ActionIconButton(
-                              icon: LucideIcons.sparkles,
-                              color: Colors.purpleAccent,
-                              tooltip: AppLocalizations.of(context)!.aiChat,
-                              onTap: () {
-                                ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                              },
-                            ),
                           PopupMenuButton<String>(
                             tooltip: 'Ещё действия',
                             padding: EdgeInsets.zero,
@@ -830,16 +770,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     panelNotifier.openPanel();
                                   }
                                   break;
-                                case 'terminal':
+                                  case 'terminal':
                                   if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
                                     panelNotifier.closePanel();
                                   } else {
                                     panelNotifier.selectTab(PanelTab.terminal);
                                     panelNotifier.openPanel();
                                   }
-                                  break;
-                                case 'chat':
-                                  ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                                   break;
                                 case 'sync':
                                   final currentWs = ref.read(workspaceProvider).currentPath;
@@ -877,22 +814,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     ],
                                   ),
                                 ),
-                              ],
-                              if (screenWidth < 540) ...[
-                                PopupMenuItem(
-                                  value: 'chat',
-                                  child: Row(
-                                    children: [
-                                      const Icon(LucideIcons.sparkles, size: 16, color: Colors.purpleAccent),
-                                      const SizedBox(width: 10),
-                                      Text(AppLocalizations.of(context)!.aiChat, style: const TextStyle(fontSize: 13, color: Colors.white)),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                              ],
-                              const PopupMenuItem(
-                                value: 'sync',
+                                const PopupMenuItem(
+                                  value: 'sync',
                                 child: Row(
                                   children: [
                                     Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
@@ -932,7 +855,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           ? _buildDesktopMultiSplit(
               mainBody, 
               ref.watch(leftPanelOpenProvider), 
-              ref.watch(rightChatPanelOpenProvider),
             )
           : mainBody,
       bottomNavigationBar: isDesktop ? const StatusBar() : const StatusBar(),
@@ -1000,7 +922,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   }
 
 
-  Widget _buildDesktopMultiSplit(Widget mainContent, bool leftOpen, bool rightOpen) {
+  Widget _buildDesktopMultiSplit(Widget mainContent, bool leftOpen) {
     return Row(
       children: [
         if (leftOpen) ...[
@@ -1055,55 +977,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         Expanded(
           child: mainContent,
         ),
-        if (rightOpen) ...[
-          MouseRegion(
-            cursor: SystemMouseCursors.resizeColumn,
-            onEnter: (_) => setState(() => _isResizingRight = true),
-            onExit: (_) {
-              if (!_isDragging) setState(() => _isResizingRight = false);
-            },
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragStart: (_) => setState(() => _isDragging = true),
-              onHorizontalDragUpdate: (details) {
-                setState(() {
-                  _rightSidebarWidth = (_rightSidebarWidth - details.delta.dx).clamp(220.0, 700.0);
-                });
-              },
-              onHorizontalDragEnd: (_) => setState(() {
-                _isDragging = false;
-                _isResizingRight = false;
-              }),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 100),
-                width: 7,
-                decoration: BoxDecoration(
-                  color: _isResizingRight 
-                      ? Colors.cyanAccent.withValues(alpha: 0.2) 
-                      : Colors.white.withValues(alpha: 0.04),
-                  border: Border(
-                    left: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
-                    right: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
-                  ),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 2,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: _isResizingRight ? Colors.cyanAccent : Colors.white24,
-                      borderRadius: BorderRadius.circular(1),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SizedBox(
-            width: _rightSidebarWidth.clamp(220.0, 700.0),
-            child: const RightChatPanel(isInline: true),
-          ),
-        ],
       ],
     );
   }
@@ -1572,15 +1445,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       ref.read(panelProvider.notifier).openPanel();
                     },
                   ),
-                  _buildDashboardActionCard(
-                    icon: LucideIcons.message_square,
-                    iconColor: Colors.purpleAccent,
-                    title: 'ИИ Ассистент',
-                    subtitle: 'Чат с Gemini & Copilot',
-                    onTap: () {
-                      ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                    },
-                  ),
                 ],
               ),
             ],
@@ -1849,23 +1713,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           ? p.relative(file.path, from: workspacePath)
           : file.path;
 
-      final aiState = ref.read(aiProvider);
-      final action = aiState.proposedActions.firstWhere(
-        (a) =>
-            a.path == file.path &&
-            (a.type == 'edit' ||
-                a.type == 'create' ||
-                a.type == 'replace_code_block' ||
-                a.type == 'rewrite_whole_file'),
-        orElse: () => AIAction(type: 'edit', path: file.path, content: file.controller.text, description: ''),
-      );
-
       return GitDiffPage(
-        key: ValueKey('diff_${file.path}_${action.content.hashCode}'),
+        key: ValueKey('diff_${file.path}'),
         relativePath: relPath,
         initiallyStaged: false,
         originalOverride: file.originalContent,
-        previewContent: action.content,
+        previewContent: file.controller.text,
         onClose: () {
           ref.read(editorProvider.notifier).setDiffView(file.path, false);
         },

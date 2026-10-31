@@ -6,9 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:quantum_ide/core/providers/locale_provider.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
-import 'package:quantum_ide/core/services/ai_service.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
-import 'package:quantum_ide/features/home/presentation/pages/ai_settings_page.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/core/services/network_inspector_service.dart';
@@ -38,7 +35,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       (id: 'all', icon: LucideIcons.layout_grid, label: isRu ? 'Все настройки' : 'All Settings'),
       (id: 'editor', icon: LucideIcons.code, label: AppLocalizations.of(context)!.codeEditor),
       (id: 'appearance', icon: LucideIcons.palette, label: AppLocalizations.of(context)!.interfaceAndLocalization),
-      (id: 'ai', icon: LucideIcons.bot, label: isRu ? 'ИИ и Локальные модели' : 'AI & Local Models'),
       (id: 'terminal', icon: LucideIcons.terminal, label: isRu ? 'Терминал и Сборка' : 'Terminal & Build'),
       (id: 'system', icon: LucideIcons.cpu, label: AppLocalizations.of(context)!.system),
     ];
@@ -300,13 +296,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           _switchTile(
             context,
-            title: AppLocalizations.of(context)!.aiAutoCompletion,
-            subtitle: AppLocalizations.of(context)!.geminiCodeGeneration,
-            value: s.aiAutoCompletion,
-            onChanged: sn.setAiAutoCompletion,
-          ),
-          _switchTile(
-            context,
             title: AppLocalizations.of(context)!.wordWrap,
             subtitle: AppLocalizations.of(context)!.wordWrapDescription,
             value: s.wordWrap,
@@ -456,33 +445,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ]);
     }
 
-    // ─── 3. ИИ и Локальные Модели (Ollama / Llama Server) ────────────────────
-    if (showAll || _selectedCategory == 'ai') {
-      widgets.addAll([
-        _sectionHeader(context, isRu ? 'ИИ и Локальные модели (Ollama / Облако)' : 'AI & Local Models'),
-        _settingsGroup(context, [
-          _tile(
-            context,
-            icon: LucideIcons.bot,
-            title: AppLocalizations.of(context)!.aiProviders,
-            subtitle: isRu
-                ? 'Настройка моделей, PrivateLM, Gemini, OpenAI, Claude, DeepSeek и локального ИИ'
-                : AppLocalizations.of(context)!.aiProvidersSubtitle,
-            trailing: _badge(context, 'AI STUDIO', Colors.purpleAccent),
-            onTap: () {
-              final aiSvc = ref.read(aiServiceProvider);
-              showModelPickerModal(
-                context,
-                providerId: aiSvc.selectedProviderId,
-                currentModel: aiSvc.selectedModel,
-                initialMainTab: 1,
-              );
-            },
-          ),
-        ]),
-        const SizedBox(height: 24),
-      ]);
-    }
 
     // ─── 4. Терминал, Сборка и SDK ───────────────────────────────────────────
     if (showAll || _selectedCategory == 'terminal') {

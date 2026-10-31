@@ -10,7 +10,6 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import '../notifiers/editor_notifier.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/models/chat_message.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
@@ -19,7 +18,6 @@ import 'package:open_filex/open_filex.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/file_explorer_notifier.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/notifiers/bookmarks_notifier.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 
@@ -410,137 +408,6 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     return Colors.white70;
   }
 
-  bool _hasAIPending(WidgetRef ref) {
-    final proposedActions = ref.watch(aiProvider.select((s) => s.proposedActions));
-    if (widget.isDirectory) {
-      return proposedActions.any((a) => a.path.startsWith('${widget.path}/'));
-    } else {
-      return proposedActions.any((a) => a.path == widget.path);
-    }
-  }
-
-  Widget _buildAIBadge(WidgetRef ref) {
-    final proposedActions = ref.watch(aiProvider.select((s) => s.proposedActions));
-    final agentReadFiles = ref.watch(aiProvider.select((s) => s.agentReadFiles));
-
-    if (widget.isDirectory) {
-      final actions = proposedActions.where((a) => a.path.startsWith('${widget.path}/')).toList();
-      // Check if any files in this dir were read by agent
-      final hasReadFiles = agentReadFiles.any((f) => f.startsWith('${widget.path}/'));
-      if (actions.isEmpty && !hasReadFiles) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.only(right: 6.0),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (actions.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.purpleAccent.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.3), width: 0.5),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(LucideIcons.sparkles, size: 8, color: Colors.purpleAccent),
-                    const SizedBox(width: 2),
-                    Text(
-                      '${actions.length}',
-                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.purpleAccent),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-
-    // Check if agent READ this file (shows eye icon — AI is aware)
-    final wasReadByAgent = agentReadFiles.contains(widget.path);
-
-    // For files: find matching pending action
-    final action = proposedActions.firstWhere(
-      (a) => a.path == widget.path,
-      orElse: () => AIAction(type: '', path: '', content: ''),
-    );
-    final hasPendingAction = action.path.isNotEmpty;
-
-    if (!hasPendingAction && !wasReadByAgent) return const SizedBox.shrink();
-
-    final additions = action.additions ?? 0;
-    final deletions = action.deletions ?? 0;
-    
-    return Padding(
-      padding: const EdgeInsets.only(right: 6.0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Eye icon — AI read this file
-          if (wasReadByAgent && !hasPendingAction) ...[
-            const Icon(LucideIcons.eye, size: 10, color: Colors.cyanAccent),
-            const SizedBox(width: 3),
-          ],
-          if (hasPendingAction) ...[
-            // Action type indicator dot
-            Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: action.type == 'create'
-                    ? const Color(0xFF4EC994)
-                    : action.type == 'delete'
-                        ? const Color(0xFFFF6B6B)
-                        : Colors.purpleAccent,
-              ),
-            ),
-            // Show diff stats if available
-            if (additions > 0)
-              Text(
-                '+$additions',
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF4EC994),
-                ),
-              ),
-            if (additions > 0 && deletions > 0)
-              const SizedBox(width: 2),
-            if (deletions > 0)
-              Text(
-                '-$deletions',
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFFF6B6B),
-                ),
-              ),
-            // If no stats available yet, show action type letter
-            if (additions == 0 && deletions == 0)
-              Text(
-                action.type == 'create' ? 'A' : action.type == 'delete' ? 'D' : 'M',
-                style: TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: action.type == 'create'
-                      ? const Color(0xFF4EC994)
-                      : action.type == 'delete'
-                          ? const Color(0xFFFF6B6B)
-                          : Colors.purpleAccent,
-                ),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-
-
   Widget _buildGitBadge(Color color, WidgetRef ref) {
     final status = ref.watch(gitProvider.select((s) => s.status));
     if (status == null) return const SizedBox.shrink();
@@ -575,8 +442,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       }
     }
 
-    final hasAi = _hasAIPending(ref);
-    final showDiffStats = !hasAi && (additions > 0 || deletions > 0);
+    final showDiffStats = additions > 0 || deletions > 0;
 
     if (letter.isEmpty && !showDiffStats) return const SizedBox.shrink();
 
@@ -913,130 +779,6 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     }
   }
 
-  void _handleAiAsk(BuildContext context, WidgetRef ref, {String? presetQuery}) async {
-    final controller = TextEditingController();
-    final l10n = AppLocalizations.of(context)!;
-    String? instruction = presetQuery;
-    instruction ??= await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF13151A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              const Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                l10n.askAi,
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.isDirectory
-                    ? l10n.folderLabel(widget.name)
-                    : l10n.fileLabel(widget.name),
-                style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontSize: 11),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                maxLines: 4,
-                minLines: 2,
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: widget.isDirectory
-                      ? l10n.whatShouldAiDoFolder
-                      : l10n.whatShouldAiDoFile,
-                  hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
-                  filled: true,
-                  fillColor: Colors.black26,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.white10),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.white10),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(color: Colors.cyanAccent, width: 0.8),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                l10n.cancel,
-                style: GoogleFonts.inter(color: Colors.white38, fontSize: 13),
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.cyanAccent.withValues(alpha: 0.15),
-                foregroundColor: Colors.cyanAccent,
-                elevation: 0,
-                side: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.3)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(
-                l10n.send,
-                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      );
-
-    if (instruction == null || instruction.trim().isEmpty) return;
-
-    String content = '';
-    if (!widget.isDirectory) {
-      try {
-        content = await File(widget.path).readAsString();
-      } catch (e) {
-        content = '[Could not read file]';
-      }
-    }
-
-    final prompt = widget.isDirectory
-        ? '''
-I am working in directory: `${widget.path}`.
-User request:
-$instruction
-
-Please fulfill this request. If you need to modify or create files/folders, or run a command in the terminal, use the actions format <actions>.
-'''
-        : '''
-I am working on file: `${widget.path}`.
-Its current content:
-```
-$content
-```
-
-User request:
-$instruction
-
-Please fulfill this request. If you need to modify the file, create a new one, delete, or run a command in the terminal, use the actions format <actions>.
-''';
-
-    ref.read(aiProvider.notifier).askAI(prompt);
-    ref.read(rightChatPanelOpenProvider.notifier).state = true;
-  }
-
   void _showBottomSheetMenu(BuildContext context, WidgetRef ref) {
     final selectedPaths = ref.read(selectedPathsProvider);
     final hasSelection = selectedPaths.isNotEmpty;
@@ -1071,67 +813,6 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                     ),
                   ),
                   const Divider(color: Colors.white10),
-                  if (!hasSelection) ...[
-                    _buildBottomSheetItem(
-                      icon: LucideIcons.sparkles,
-                      title: l10n.askAi,
-                      subtitle: l10n.askAiDesc,
-                      color: Colors.cyanAccent,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _handleAiAsk(context, ref);
-                      },
-                    ),
-                    _buildBottomSheetItem(
-                      icon: LucideIcons.book_open,
-                      title: l10n.explainStructure,
-                      subtitle: l10n.explainStructureDesc,
-                      color: Colors.cyanAccent,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? l10n.explainFolderPreset
-                            : l10n.explainFilePreset);
-                      },
-                    ),
-                    _buildBottomSheetItem(
-                      icon: LucideIcons.file_text,
-                      title: l10n.addDoc,
-                      subtitle: l10n.addDocDesc,
-                      color: Colors.cyanAccent,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? l10n.addDocFolderPreset
-                            : l10n.addDocFilePreset);
-                      },
-                    ),
-                    _buildBottomSheetItem(
-                      icon: LucideIcons.shield_check,
-                      title: l10n.generateTests,
-                      subtitle: l10n.generateTestsDesc,
-                      color: Colors.cyanAccent,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? l10n.generateTestsFolderPreset
-                            : l10n.generateTestsFilePreset);
-                      },
-                    ),
-                    _buildBottomSheetItem(
-                      icon: LucideIcons.zap,
-                      title: l10n.optimizeCode,
-                      subtitle: l10n.optimizeCodeDesc,
-                      color: Colors.cyanAccent,
-                      onTap: () {
-                        Navigator.pop(context);
-                        _handleAiAsk(context, ref, presetQuery: widget.isDirectory
-                            ? l10n.optimizeFolderPreset
-                            : l10n.optimizeFilePreset);
-                      },
-                    ),
-                    const Divider(color: Colors.white10),
-                  ],
                   if (widget.isDirectory && !hasSelection) ...[
                     _buildBottomSheetItem(
                       icon: LucideIcons.file_plus,
@@ -1657,11 +1338,9 @@ Please fulfill this request. If you need to modify the file, create a new one, d
             decoration: BoxDecoration(
               color: isSelected 
                   ? Colors.blue.withValues(alpha: 0.18) 
-                  : (_hasAIPending(ref) && !widget.isDirectory)
-                      ? Colors.purpleAccent.withValues(alpha: 0.06)
-                      : _isHovered
-                          ? Colors.white.withValues(alpha: 0.04)
-                          : Colors.transparent,
+                  : _isHovered
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.transparent,
               borderRadius: BorderRadius.circular(4),
             ),
             padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: isMobile ? 3.0 : 4.0),
@@ -1700,7 +1379,7 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                               child: _buildFileNameText(
                                 widget.visualName ?? widget.name,
                                 searchQuery,
-                                _hasAIPending(ref) ? Colors.purpleAccent : gitColor,
+                                gitColor,
                                 isMobile: isMobile,
                               ),
                             ),
@@ -1716,7 +1395,6 @@ Please fulfill this request. If you need to modify the file, create a new one, d
                         ),
                 ),
                 if (!_isRenaming) ...[
-                  _buildAIBadge(ref),
                   if (gitColor != Colors.white70 && gitColor != Colors.white)
                     _buildGitBadge(gitColor, ref),
                   if ((_isHovered || isSelected) && widget.isDirectory) ...[

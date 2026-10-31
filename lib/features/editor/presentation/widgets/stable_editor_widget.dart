@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-import 'package:quantum_ide/core/services/ai_autocomplete_service.dart';
 import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart' hide CodeKeywordPrompt;
 import 'package:quantum_ide/features/editor/presentation/handlers/snippet_prompt.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/diff_gutter_indicator.dart';
@@ -17,8 +16,6 @@ import 'package:quantum_ide/features/editor/presentation/widgets/diagnostic_indi
 import 'package:quantum_ide/features/editor/presentation/widgets/code_find_panel.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/services/diff_service.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/models/chat_message.dart';
 import 'package:re_highlight/languages/dart.dart';
 import 'package:re_highlight/languages/json.dart';
 import 'package:re_highlight/languages/xml.dart';
@@ -35,7 +32,6 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_painter.dart';
 import 'package:quantum_ide/core/services/service_providers.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_minimap.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 
 
 class DiffBackgroundPainter extends CustomPainter {
@@ -215,7 +211,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   late List<DiffMarker> _diffMarkers;
   late final CodeFindController _findController;
   late final SelectionToolbarController _toolbarController;
-  List<AIAction> _pendingActions = [];
 
   final Map<int, Offset> _pinchPointers = {};
   double _pinchInitialDistance = 0.0;
@@ -552,51 +547,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             ),
           ),
         const PopupMenuDivider(),
-        if (hasSelection)
-          PopupMenuItem(
-            value: 'aiHelp',
-            child: Row(
-              children: [
-                const Icon(LucideIcons.sparkles, size: 14, color: Colors.purpleAccent),
-                const SizedBox(width: 8),
-                Text(
-                  'AI Help',
-                  style: GoogleFonts.inter(
-                    color: Colors.purpleAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        PopupMenuItem(
-          value: 'aiExplain',
-          child: Row(
-            children: [
-              const Icon(LucideIcons.brain, size: 14, color: Colors.cyanAccent),
-              const SizedBox(width: 8),
-              Text(
-                hasSelection ? 'Explain this code' : 'Explain file',
-                style: const TextStyle(color: Colors.cyanAccent, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuItem(
-          value: 'aiRefactor',
-          child: Row(
-            children: [
-              Icon(LucideIcons.wrench, size: 14, color: Colors.orangeAccent),
-              SizedBox(width: 8),
-              Text(
-                'Refactor',
-                style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
         PopupMenuItem(
           value: 'goToDefinition',
           child: Row(
@@ -684,13 +634,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           }
           try { controller.selectAll(); } catch (_) {}
           break;
-        case 'aiHelp':
-        case 'aiExplain':
-          _sendToAiChat(selectedText.isNotEmpty ? selectedText : controller.text, 'explain');
-          break;
-        case 'aiRefactor':
-          _sendToAiChat(selectedText, 'refactor');
-          break;
         case 'goToDefinition':
           ref.read(editorProvider.notifier).goToDefinition();
           break;
@@ -705,19 +648,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           break;
       }
     });
-  }
-
-  void _sendToAiChat(String code, String mode) {
-    ref.read(rightChatPanelOpenProvider.notifier).state = true;
-    
-    String prompt;
-    if (mode == 'refactor') {
-      prompt = 'Please refactor this code:\n\n```dart\n$code\n```';
-    } else {
-      prompt = 'Please explain this code:\n\n```dart\n$code\n```';
-    }
-    
-    ref.read(aiProvider.notifier).askAI(prompt);
   }
 
   void _findUsages(BuildContext context) async {
@@ -805,23 +735,8 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AIState>(aiProvider, (previous, current) {
-      final pending = current.proposedActions
-          .where((a) => a.path == widget.file.path && (a.type == 'edit' || a.type == 'create'))
-          .toList();
-      if (pending != _pendingActions) {
-        if (mounted) {
-          setState(() {
-            _pendingActions = pending;
-          });
-        }
-      }
-    });
-
     final settings = widget.settings;
     final file = widget.file;
-
-    final hasPendingAction = _pendingActions.isNotEmpty;
 
     if (file.isImage) {
       const sizeKb = '—';
@@ -1029,237 +944,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       );
     }
 
-    if (hasPendingAction) {
-      final action = _pendingActions.first;
-      final l10n = AppLocalizations.of(context)!;
-      
-      final hunks = DiffService.calculateHunks(file.originalContent, file.controller.text);
-      int additions = 0;
-      int deletions = 0;
-      for (final hunk in hunks) {
-        if (hunk.type == DiffType.added) {
-          additions += (hunk.endLine - hunk.startLine + 1);
-        } else if (hunk.type == DiffType.removed) {
-          deletions += 1;
-        } else if (hunk.type == DiffType.modified) {
-          additions += (hunk.endLine - hunk.startLine + 1);
-          deletions += (hunk.endLine - hunk.startLine + 1);
-        }
-      }
-
-      editorWidget = Stack(
-        children: [
-          Positioned.fill(child: editorWidget),
-          Positioned(
-            right: 16,
-            bottom: 16,
-            width: 290,
-            child: GlassContainer(
-              blur: 24,
-              opacity: 0.18,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.25), width: 0.8),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Card Header
-                    Row(
-                      children: [
-                        const Icon(LucideIcons.sparkles, color: Colors.purpleAccent, size: 14),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            l10n.pendingDiff,
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        if (additions > 0)
-                          Text(
-                            '+$additions',
-                            style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
-                        if (additions > 0 && deletions > 0) const SizedBox(width: 4),
-                        if (deletions > 0)
-                          Text(
-                            '-$deletions',
-                            style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Container(height: 0.5, color: Colors.white10),
-                    const SizedBox(height: 6),
-                    
-                    // Contiguous hunks list
-                    if (hunks.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Center(
-                          child: Text(
-                            l10n.noChanges,
-                            style: GoogleFonts.inter(color: Colors.white38, fontSize: 10),
-                          ),
-                        ),
-                      )
-                    else
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 140),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            children: List.generate(hunks.length, (hIdx) {
-                              final hunk = hunks[hIdx];
-                              final String typeLabel = hunk.type == DiffType.added
-                                  ? l10n.added
-                                  : hunk.type == DiffType.removed
-                                      ? l10n.removed
-                                      : l10n.modified;
-                              final Color typeColor = hunk.type == DiffType.added
-                                  ? Colors.greenAccent
-                                  : hunk.type == DiffType.removed
-                                      ? Colors.redAccent
-                                      : Colors.amberAccent;
-
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 6.0),
-                                child: Row(
-                                  children: [
-                                    Icon(LucideIcons.circle, size: 6, color: typeColor),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        'L${hunk.startLine + 1}-${hunk.endLine + 1} $typeLabel',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          color: Colors.white70,
-                                          fontSize: 10,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    // Individual Hunk Keep Button
-                                    TextButton(
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      onPressed: () {
-                                        ref.read(editorProvider.notifier).applyHunkAction(file.path, hIdx, true);
-                                      },
-                                      child: Text(
-                                        l10n.keep,
-                                        style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 2),
-                                    // Individual Hunk Reject Button
-                                    TextButton(
-                                      style: TextButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        minimumSize: Size.zero,
-                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      onPressed: () {
-                                        ref.read(editorProvider.notifier).applyHunkAction(file.path, hIdx, false);
-                                      },
-                                      child: Text(
-                                        l10n.reject,
-                                        style: const TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
-                      ),
-                    
-                    const SizedBox(height: 8),
-                    Container(height: 0.5, color: Colors.white10),
-                    const SizedBox(height: 8),
-                    
-                    // Card Level Keep all / Reject all Buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.greenAccent.withValues(alpha: 0.12),
-                              foregroundColor: Colors.greenAccent,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                side: BorderSide(color: Colors.greenAccent.withValues(alpha: 0.3)),
-                              ),
-                            ),
-                            onPressed: () {
-                              ref.read(editorProvider.notifier).acceptProposedChanges(file.path, action);
-                            },
-                            child: Text(
-                              l10n.keepAll,
-                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.redAccent.withValues(alpha: 0.12),
-                              foregroundColor: Colors.redAccent,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
-                              ),
-                            ),
-                            onPressed: () {
-                              ref.read(editorProvider.notifier).revertProposedChanges(file.path, action);
-                            },
-                            child: Text(
-                              l10n.rejectAll,
-                              style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    final aiState = ref.watch(aiAutocompleteServiceProvider);
-    final hasAiSuggestion = aiState.suggestion != null &&
-        aiState.suggestion!.trim().isNotEmpty &&
-        aiState.filePath == file.path;
-
-    if (hasAiSuggestion && !hasPendingAction) {
-      editorWidget = Stack(
-        children: [
-          editorWidget,
-          Positioned(
-            bottom: 16,
-            right: 16,
-            child: _buildCopilotGhostTextBar(file, aiState),
-          ),
-        ],
-      );
-    }
-
     return Listener(
       onPointerDown: (e) {
         _pinchPointers[e.pointer] = e.position;
@@ -1295,21 +979,11 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           ref.read(settingsProvider.notifier).setFontSize(newSize);
         }
       },
-      child: CallbackShortcuts(
-        bindings: {
-          const SingleActivator(LogicalKeyboardKey.tab): () {
-            if (hasAiSuggestion) {
-              _applyAiSuggestion(file.controller, aiState.suggestion!, aiState.triggerWord);
-              ref.read(aiAutocompleteServiceProvider.notifier).clear();
-            }
-          },
+      child: GestureDetector(
+        onSecondaryTapDown: (details) {
+          _showDesktopContextMenu(context, details.globalPosition);
         },
-        child: GestureDetector(
-          onSecondaryTapDown: (details) {
-            _showDesktopContextMenu(context, details.globalPosition);
-          },
-          child: editorWidget,
-        ),
+        child: editorWidget,
       ),
     );
   }
@@ -1543,88 +1217,6 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     );
   }
 
-  Widget _buildCopilotGhostTextBar(EditorFile file, AiAutocompleteState aiState) {
-    final suggestion = aiState.suggestion!;
-    final preview = suggestion.trim().split('\n').first;
-    return Material(
-      color: Colors.transparent,
-      child: GlassContainer(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.45), width: 0.8),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(LucideIcons.sparkles, color: Colors.deepPurpleAccent, size: 14),
-            ),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 260),
-              child: Text(
-                preview,
-                style: GoogleFonts.firaCode(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  fontSize: 12,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: () {
-                _applyAiSuggestion(file.controller, suggestion, aiState.triggerWord);
-                ref.read(aiAutocompleteServiceProvider.notifier).clear();
-              },
-              borderRadius: BorderRadius.circular(6),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.4), width: 0.5),
-                ),
-                child: Text(
-                  'Tab ⇥',
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(LucideIcons.x, size: 14, color: Colors.white38),
-              onPressed: () => ref.read(aiAutocompleteServiceProvider.notifier).clear(),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-              splashRadius: 12,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _applyAiSuggestion(CodeLineEditingController controller, String suggestion, String? triggerWord) {
-    var insertText = suggestion;
-    if (triggerWord != null && triggerWord.isNotEmpty && insertText.startsWith(triggerWord)) {
-      insertText = insertText.substring(triggerWord.length);
-    }
-    controller.replaceSelection(insertText);
-  }
-}
-
-
-
 class ActionIconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -1726,7 +1318,6 @@ class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWi
   Size get preferredSize => const Size(310, 240);
 
   IconData _getPromptIcon(CodePrompt prompt) {
-    if (prompt is AiAutocompletePrompt) return LucideIcons.sparkles;
     if (prompt is CodeSnippetPrompt) return LucideIcons.boxes;
     if (prompt is LspCompletionPrompt) return LucideIcons.box;
     if (prompt is CodeKeywordPrompt) return LucideIcons.key_round;
@@ -1734,7 +1325,6 @@ class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWi
   }
 
   Color _getPromptColor(CodePrompt prompt) {
-    if (prompt is AiAutocompletePrompt) return Colors.purpleAccent;
     if (prompt is CodeSnippetPrompt) return Colors.amberAccent;
     if (prompt is LspCompletionPrompt) return Colors.cyanAccent;
     if (prompt is CodeKeywordPrompt) return Colors.blueAccent;
@@ -1742,7 +1332,6 @@ class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWi
   }
 
   String _getPromptBadge(CodePrompt prompt) {
-    if (prompt is AiAutocompletePrompt) return 'ИИ ✨';
     if (prompt is CodeSnippetPrompt) return 'сниппет';
     if (prompt is LspCompletionPrompt) return 'LSP';
     if (prompt is CodeKeywordPrompt) return 'ключ';

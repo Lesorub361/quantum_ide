@@ -9,8 +9,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'mobile_companion_qr_dialog.dart';
 import 'device_simulator_dialog.dart';
@@ -410,25 +408,6 @@ class _SidebarWebPreviewPanelState extends ConsumerState<SidebarWebPreviewPanel>
                                   ),
                                 );
                               }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            icon: const Icon(LucideIcons.sparkles, size: 12, color: Colors.white),
-                            label: Text('Исправить с ИИ', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.purpleAccent.shade700,
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                            ),
-                            onPressed: () {
-                              final errorLog = _serverErrors.join('\n\n');
-                              ref.read(rightChatPanelOpenProvider.notifier).state = true;
-                              ref.read(aiProvider.notifier).askAI(
-                                'Пожалуйста, проанализируй эту ошибку в веб-приложении/сервере и предложи исправление кода:\n\n```\n$errorLog\n```',
-                              );
                             },
                           ),
                         ),

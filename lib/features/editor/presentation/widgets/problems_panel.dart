@@ -9,8 +9,6 @@ import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/analysis_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/lsp_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
@@ -69,66 +67,7 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
     if (lower.contains('too many positional arguments') || lower.contains('too few positional arguments')) {
       return 'Неверное количество позиционных аргументов: функции или конструктору передано больше или меньше параметров, чем объявлено.';
     }
-    return 'Компилятор Dart/Flutter обнаружил несоответствие в коде. Нажмите «Исправить с AI», чтобы автоматически применить корректное точечное исправление.';
-  }
-
-  void _sendAllToAi(Map<String, List<CodeDiagnostic>> diagnosticsMap, String workspaceRoot) {
-    final editorState = ref.read(editorProvider);
-    final activePath = editorState.activeFilePath;
-    final activeContent = activePath != null &&
-            editorState.openFiles.isNotEmpty &&
-            editorState.activeTabIndex < editorState.openFiles.length
-        ? editorState.openFiles[editorState.activeTabIndex].controller.text
-        : '';
-
-    final buffer = StringBuffer();
-    buffer.writeln('⚠️ **ОБНАРУЖЕНЫ ОШИБКИ В ПРОЕКТЕ. ПОЖАЛУЙСТА, ИСПРАВЬ ИХ ТОЧЕЧНО:**\n');
-    diagnosticsMap.forEach((filePath, diags) {
-      final relPath = filePath.startsWith(workspaceRoot) ? p.relative(filePath, from: workspaceRoot) : filePath;
-      buffer.writeln('📄 Файл: `$relPath`');
-      for (final d in diags) {
-        buffer.writeln('- [${d.severity.name.toUpperCase()}] Стр ${d.range.index + 1}, Кол ${d.range.start + 1}: ${d.message}');
-      }
-    });
-    if (activePath != null && activeContent.isNotEmpty) {
-      final relActive = activePath.startsWith(workspaceRoot) ? p.relative(activePath, from: workspaceRoot) : activePath;
-      buffer.writeln('\n### ТЕКУЩИЙ КОД ФАЙЛА (`$relActive`):\n```dart\n$activeContent\n```');
-    }
-    buffer.writeln('\n🔧 **ИНСТРУКЦИЯ**: Используй блоки точечной замены SEARCH/REPLACE (<<<<<<< SEARCH ... ======= ... >>>>>>>), чтобы устранить ошибки!');
-
-    ref.read(aiProvider.notifier).askAI(buffer.toString());
-    ref.read(rightChatPanelOpenProvider.notifier).state = true;
-  }
-
-  void _fixOneWithAi(String filePath, String relPath, CodeDiagnostic d) {
-    String contextLines = '';
-    try {
-      final f = File(filePath);
-      if (f.existsSync()) {
-        final lines = f.readAsLinesSync();
-        final errLine = d.range.index;
-        final startLine = (errLine - 4).clamp(0, lines.length);
-        final endLine = (errLine + 5).clamp(0, lines.length);
-        contextLines = lines.sublist(startLine, endLine).join('\n');
-      }
-    } catch (_) {}
-
-    final buffer = StringBuffer();
-    buffer.writeln('Исправь точечно ошибку в файле `$relPath` (строка ${d.range.index + 1}, колонка ${d.range.start + 1}):');
-    buffer.writeln('Тип ошибки: [${d.severity.name.toUpperCase()}] ${d.message}');
-    if (contextLines.isNotEmpty) {
-      buffer.writeln('\nКонтекст кода вокруг строки ошибки:');
-      buffer.writeln('```dart\n$contextLines\n```');
-    }
-    buffer.writeln('\nОБЯЗАТЕЛЬНО используй точечную замену кода через блок SEARCH/REPLACE:');
-    buffer.writeln('<<<<<<< SEARCH');
-    buffer.writeln('// точный фрагмент текущего кода');
-    buffer.writeln('=======');
-    buffer.writeln('// исправленный фрагмент');
-    buffer.writeln('>>>>>>>');
-
-    ref.read(aiProvider.notifier).askAI(buffer.toString());
-    ref.read(rightChatPanelOpenProvider.notifier).state = true;
+    return 'Компилятор Dart/Flutter обнаружил несоответствие в коде.';
   }
 
   void _showErrorQuickFixDialog(BuildContext context, String filePath, String relPath, CodeDiagnostic d) {
@@ -272,18 +211,7 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
             icon: const Icon(LucideIcons.external_link, size: 13),
             label: const Text('Перейти', style: TextStyle(fontSize: 11)),
           ),
-          FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _fixOneWithAi(filePath, relPath, d);
-            },
-            icon: const Icon(LucideIcons.sparkles, size: 14),
-            label: const Text('💡 Исправить с ИИ', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF8B5CF6),
-              foregroundColor: Colors.white,
-            ),
-          ),
+
         ],
       ),
     );
@@ -400,31 +328,7 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
                 ),
                 const SizedBox(width: 4),
               ],
-              if (diagnosticsMap.isNotEmpty)
-                Tooltip(
-                  message: l10n.sendToAi,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: () => _sendAllToAi(diagnosticsMap, workspaceRoot),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.purpleAccent.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.purpleAccent.withValues(alpha: 0.25), width: 0.6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(LucideIcons.sparkles, size: 11, color: Colors.purpleAccent),
-                          const SizedBox(width: 4),
-                          Text('AI фикс',
-                              style: GoogleFonts.inter(fontSize: 10, color: Colors.purpleAccent, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+
             ],
           ),
         ),
@@ -635,7 +539,6 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
             const SizedBox(width: 4),
             Text('$line:$col', style: GoogleFonts.jetBrainsMono(fontSize: 9, color: Colors.white30)),
             _miniIcon(LucideIcons.lightbulb, 'Объяснение и Quick-Fix', () => _showErrorQuickFixDialog(context, filePath, relPath, d), color: Colors.amberAccent),
-            _miniIcon(LucideIcons.sparkles, 'Исправить с AI', () => _fixOneWithAi(filePath, relPath, d), color: Colors.purpleAccent),
             _miniIcon(LucideIcons.copy, 'Копировать', () {
               Clipboard.setData(ClipboardData(text: '$relPath:$line:$col  ${d.message}'));
               ScaffoldMessenger.of(context).showSnackBar(

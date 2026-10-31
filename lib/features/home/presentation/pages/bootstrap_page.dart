@@ -7,8 +7,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/widgets/agent_activity_widgets.dart';
 
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});
@@ -20,7 +18,6 @@ class BootstrapPage extends ConsumerStatefulWidget {
 class _BootstrapPageState extends ConsumerState<BootstrapPage> {
   int _currentStep = 0; // 0: welcome & stacks, 1: agent choice, 2: installing
   final Set<DevStack> _selectedStacks = {DevStack.web, DevStack.python};
-  AgentKind _selectedAgent = AgentKind.antigravity;
   bool _isChecking = true;
   final List<String> _logLines = [];
   final ScrollController _logScroll = ScrollController();
@@ -68,15 +65,13 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
 
   Future<void> _startBootstrap() async {
     setState(() {
-      _currentStep = 2;
+      _currentStep = 1;
     });
 
     final runtime = ref.read(runtimeServiceProvider);
-    ref.read(aiProvider.notifier).setAgentKind(_selectedAgent);
 
     _addLog('Checking device architecture: ${Platform.operatingSystem} ${Platform.version.split(' ').first}');
     _addLog('Selected dev stacks: ${_selectedStacks.map((s) => s.name).join(', ')}');
-    _addLog('Selected default agent: ${_selectedAgent.title}');
 
     try {
       _addLog('Initializing QuantumIDE runtime environment...');
@@ -172,7 +167,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              AnimatedThinkingDots(dotColor: theme.colorScheme.primary, size: 6),
+              SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: theme.colorScheme.primary)),
               const SizedBox(height: 16),
               Text(
                 'Checking environment…',
@@ -208,8 +203,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
       case 0:
         return _buildStackSelectionStep(context, theme);
       case 1:
-        return _buildAgentSelectionStep(context, theme);
-      case 2:
       default:
         return _buildInstallingStep(context, theme, runtime);
     }
@@ -312,11 +305,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
 
           // Next Button
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _currentStep = 1;
-              });
-            },
+            onPressed: _startBootstrap,
             style: ElevatedButton.styleFrom(
               backgroundColor: theme.colorScheme.primary,
               foregroundColor: theme.colorScheme.onPrimary,
@@ -327,7 +316,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Continue: Coding Agent',
+                  'Install & Launch Runtime',
                   style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 8),
@@ -413,168 +402,6 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     );
   }
 
-  /// Step 2: Agent Selection (Mobile-Harness style)
-  Widget _buildAgentSelectionStep(BuildContext context, ThemeData theme) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => setState(() => _currentStep = 0),
-                icon: const Icon(LucideIcons.arrow_left, size: 20),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Default Coding Agent',
-                style: GoogleFonts.inter(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onSurface,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Choose which autonomous AI CLI engine to use for project automation, building, and chat:',
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          for (final agent in AgentKind.values) ...[
-            _buildAgentCard(theme, agent),
-            const SizedBox(height: 10),
-          ],
-          const SizedBox(height: 24),
-
-          ElevatedButton(
-            onPressed: _startBootstrap,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: theme.colorScheme.onPrimary,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Install & Launch Runtime',
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 8),
-                const Icon(LucideIcons.sparkles, size: 16),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAgentCard(ThemeData theme, AgentKind agent) {
-    final isSelected = _selectedAgent == agent;
-
-    return InkWell(
-      onTap: () => setState(() => _selectedAgent = agent),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? theme.colorScheme.primary.withValues(alpha: 0.1)
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
-            width: isSelected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 2),
-              width: 18,
-              height: 18,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
-                  width: 2,
-                ),
-              ),
-              child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        agent.title,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          agent.downloadNote,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.primary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    agent.subtitle,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Step 3: Installing & Live Terminal Log
   Widget _buildInstallingStep(BuildContext context, ThemeData theme, RuntimeService runtime) {
     return Column(
@@ -583,7 +410,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
         const SizedBox(height: 20),
         Row(
           children: [
-            AnimatedThinkingDots(dotColor: theme.colorScheme.primary, size: 5),
+            SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.primary)),
             const SizedBox(width: 12),
             Text(
               'Configuring Runtime Environment',

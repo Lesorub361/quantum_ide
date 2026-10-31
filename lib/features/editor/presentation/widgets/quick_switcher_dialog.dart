@@ -15,8 +15,6 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:go_router/go_router.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
 
 enum SwitcherMode { files, symbols, commands }
 
@@ -384,64 +382,6 @@ class _QuickSwitcherDialogState extends ConsumerState<QuickSwitcherDialog> {
             for (int i = 0; i < ctrl.lineCount; i++) {
               ctrl.expandChunk(i);
             }
-          }
-        },
-      ),
-      IDECommand(
-        title: isRu ? 'AI: Объяснить код' : 'AI: Explain Code',
-        description: isRu ? 'Отправить текущий файл в AI для объяснения' : 'Send current file to AI for explanation',
-        icon: LucideIcons.brain,
-        iconColor: Colors.purpleAccent,
-        action: () {
-          if (hasActiveFile) {
-            final code = editorState.openFiles[editorState.activeTabIndex].controller.text;
-            ref.read(aiProvider.notifier).askAI('Explain this code:\n\n```dart\n$code\n```');
-            ref.read(rightChatPanelOpenProvider.notifier).state = true;
-          }
-        },
-      ),
-      IDECommand(
-        title: isRu ? 'AI: Исправить ошибки' : 'AI: Fix Errors',
-        description: isRu ? 'Отправить ошибки компиляции в AI для исправления' : 'Send compilation errors to AI for fixing',
-        icon: LucideIcons.wrench,
-        iconColor: Colors.orangeAccent,
-        action: () {
-          if (hasActiveFile) {
-            final file = editorState.openFiles[editorState.activeTabIndex];
-            final errors = file.diagnostics.where((d) => d.severity == CodeDiagnosticSeverity.error).toList();
-            if (errors.isEmpty) {
-              return;
-            }
-            final errorText = errors.map((e) => '${e.range.index + 1}: ${e.message}').join('\n');
-            final code = file.controller.text;
-            ref.read(aiProvider.notifier).askAI('Fix these compilation errors:\n\nErrors:\n$errorText\n\nCode:\n```dart\n$code\n```');
-            ref.read(rightChatPanelOpenProvider.notifier).state = true;
-          }
-        },
-      ),
-      IDECommand(
-        title: isRu ? 'AI: Рефакторинг' : 'AI: Refactor',
-        description: isRu ? 'Предложить рефакторинг для текущего файла' : 'Suggest refactoring for current file',
-        icon: LucideIcons.refresh_cw,
-        iconColor: Colors.cyanAccent,
-        action: () {
-          if (hasActiveFile) {
-            final code = editorState.openFiles[editorState.activeTabIndex].controller.text;
-            ref.read(aiProvider.notifier).askAI('Suggest refactoring improvements for this code:\n\n```dart\n$code\n```');
-            ref.read(rightChatPanelOpenProvider.notifier).state = true;
-          }
-        },
-      ),
-      IDECommand(
-        title: isRu ? 'AI: Написать тесты' : 'AI: Write Tests',
-        description: isRu ? 'Сгенерировать unit-тесты для текущего файла' : 'Generate unit tests for current file',
-        icon: LucideIcons.flask_conical,
-        iconColor: Colors.greenAccent,
-        action: () {
-          if (hasActiveFile) {
-            final code = editorState.openFiles[editorState.activeTabIndex].controller.text;
-            ref.read(aiProvider.notifier).askAI('Write unit tests for this code:\n\n```dart\n$code\n```');
-            ref.read(rightChatPanelOpenProvider.notifier).state = true;
           }
         },
       ),

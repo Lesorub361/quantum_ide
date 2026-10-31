@@ -5,8 +5,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
-import 'package:quantum_ide/features/ai_assistant/presentation/notifiers/ai_notifier.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
+
 
 class AppLogsPanel extends ConsumerStatefulWidget {
   const AppLogsPanel({super.key});
@@ -131,41 +130,7 @@ class _AppLogsPanelState extends ConsumerState<AppLogsPanel> {
                   },
                   child: const Icon(LucideIcons.trash_2, size: 13, color: Colors.white38),
                 ),
-                const SizedBox(width: 10),
-                // Send to AI Button
-                GestureDetector(
-                  onTap: () {
-                    final recentLogs = _localLogs.length > 100
-                        ? _localLogs.sublist(_localLogs.length - 100)
-                        : _localLogs;
-                    final logText = recentLogs.join('\n');
-                    ref.read(aiProvider.notifier).askAI(
-                      'Here are my application logs. Please analyze them and suggest a fix for any errors or crashes:\n\n```log\n$logText\n```'
-                    );
-                    ref.read(rightChatPanelOpenProvider.notifier).state = true;
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: Colors.purpleAccent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(LucideIcons.sparkles, size: 10, color: Colors.purpleAccent),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Ask AI',
-                          style: GoogleFonts.inter(
-                            color: Colors.purpleAccent,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+
               ],
             ),
           ),

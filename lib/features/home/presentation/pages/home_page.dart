@@ -12,8 +12,6 @@ import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifi
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
-import 'package:quantum_ide/core/models/agent_activity_item.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/app_update_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -2157,28 +2155,6 @@ class _HomePageState extends ConsumerState<HomePage> {
         onTap: () {
           Navigator.pop(context);
           context.push('/packages');
-        },
-      ),
-      (
-        icon: LucideIcons.sparkles,
-        title: 'Быстрый ИИ-чат (Песочница)',
-        subtitle: 'Мгновенное создание временного проекта с ИИ-ассистентом',
-        color: const Color(0xFFa078ff),
-        onTap: () async {
-          Navigator.pop(context);
-          final allProjects = ref.read(projectServiceProvider);
-          final usedSlugs = allProjects.map((p) => p.name.toLowerCase()).toSet();
-          final identity = generateQuickChatIdentity(usedSlugs);
-          final project = await ref.read(projectServiceProvider.notifier).createProject(
-                name: identity.slug,
-                path: '',
-                type: ProjectType.web,
-              );
-          await ref.read(workspaceProvider.notifier).setWorkspace(project.path);
-          ref.read(rightChatPanelOpenProvider.notifier).state = true;
-          if (context.mounted) {
-            context.go('/editor');
-          }
         },
       ),
       (

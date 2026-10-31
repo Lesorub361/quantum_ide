@@ -4,11 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 
 class MobileBottomNav extends ConsumerWidget {
   final VoidCallback? onTerminalToggle;
-  final VoidCallback? onAiToggle;
   final VoidCallback? onExplorerToggle;
 
   const MobileBottomNav({
@@ -25,7 +23,6 @@ class MobileBottomNav extends ConsumerWidget {
     final hasOpenFiles = openFilesCount > 0;
     final panelState = ref.watch(panelProvider);
     final isTerminalOpen = panelState.isOpened && panelState.selectedTab == PanelTab.terminal;
-    final isAiOpen = ref.watch(rightChatPanelOpenProvider);
 
     return Container(
       decoration: BoxDecoration(
@@ -83,16 +80,6 @@ class MobileBottomNav extends ConsumerWidget {
                     panelNotifier.selectTab(PanelTab.terminal);
                     panelNotifier.openPanel();
                   }
-                },
-              ),
-              _NavButton(
-                icon: LucideIcons.sparkles,
-                label: 'AI Chat',
-                isActive: isAiOpen,
-                activeColor: const Color(0xFFB388FF),
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
                 },
               ),
             ],

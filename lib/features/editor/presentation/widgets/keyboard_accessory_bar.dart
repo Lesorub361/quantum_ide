@@ -6,7 +6,6 @@ import 'package:re_editor/re_editor.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
-import 'package:quantum_ide/core/services/ai_autocomplete_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/color_picker_dialog.dart';
 import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 
@@ -84,17 +83,6 @@ class KeyboardAccessoryBar extends ConsumerWidget {
 
   void _insertText(String text, WidgetRef ref) {
     if (text == 'TAB') {
-      final aiState = ref.read(aiAutocompleteServiceProvider);
-      if (aiState.suggestion != null && aiState.suggestion!.trim().isNotEmpty) {
-        var insertText = aiState.suggestion!;
-        final word = aiState.triggerWord;
-        if (word != null && word.isNotEmpty && insertText.startsWith(word)) {
-          insertText = insertText.substring(word.length);
-        }
-        controller.replaceSelection(insertText);
-        ref.read(aiAutocompleteServiceProvider.notifier).clear();
-        return;
-      }
       controller.replaceSelection('  ');
     } else {
       controller.replaceSelection(text);
@@ -393,8 +381,6 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final symbol = symbols[index];
                 final isTab = symbol == 'TAB';
-                final aiState = ref.watch(aiAutocompleteServiceProvider);
-                final hasAi = isTab && aiState.suggestion != null && aiState.suggestion!.trim().isNotEmpty;
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 1.5, vertical: 2),
                   child: TextButton(
@@ -403,44 +389,24 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                       _insertText(symbol, ref);
                     },
                     style: TextButton.styleFrom(
-                      minimumSize: Size(isTab ? (hasAi ? 46 : 38) : 26, 26),
+                      minimumSize: Size(isTab ? 38 : 26, 26),
                       padding: EdgeInsets.zero,
-                      backgroundColor: hasAi
-                          ? Colors.deepPurpleAccent.withValues(alpha: 0.3)
-                          : (isTab ? Colors.cyanAccent.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.03)),
-                      foregroundColor: hasAi ? Colors.deepPurpleAccent : (isTab ? Colors.cyanAccent : Colors.white70),
+                      backgroundColor: isTab ? Colors.cyanAccent.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.03),
+                      foregroundColor: isTab ? Colors.cyanAccent : Colors.white70,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(5),
-                        side: hasAi
-                            ? BorderSide(color: Colors.deepPurpleAccent.withValues(alpha: 0.6))
-                            : (isTab
-                                ? BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.15))
-                                : BorderSide(color: Colors.white.withValues(alpha: 0.04), width: 0.5)),
+                        side: isTab
+                            ? BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.15))
+                            : BorderSide(color: Colors.white.withValues(alpha: 0.04), width: 0.5),
                       ),
                     ),
-                    child: hasAi
-                        ? const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(LucideIcons.sparkles, size: 10, color: Colors.deepPurpleAccent),
-                              SizedBox(width: 2),
-                              Text(
-                                'TAB',
-                                style: TextStyle(
-                                  fontSize: 9.5,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.deepPurpleAccent,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Text(
-                            symbol,
-                            style: TextStyle(
-                              fontSize: isTab ? 9.5 : 12.5,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                    child: Text(
+                      symbol,
+                      style: TextStyle(
+                        fontSize: isTab ? 9.5 : 12.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 );
               },
