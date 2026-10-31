@@ -757,8 +757,9 @@ __update_quantum_ps1() {
 }
 PROMPT_COMMAND="__update_quantum_ps1"
 
-export FLUTTER_ALLOW_SU_ROOT=true
+export FLUTTER_ALLOW_SU_ROOT=1
 export FLUTTER_SUPPRESS_ANALYTICS=true
+export CI=true
 _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
 export _JAVA_OPTIONS
 GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
@@ -768,8 +769,13 @@ alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
-alias fb-apk="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --debug --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false -Pandroid.enableJetifier=false"
-alias fb-apk-release="(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons -Pandroid.aapt2FromMaven=false -Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2 -Pandroid.aapt2.daemon=false -Pandroid.enableJetifier=false"
+alias fb-apk="flutter build apk --debug"
+alias fb-apk-release="flutter build apk --release"
+alias fb-bundle="flutter build appbundle --release"
+alias fb-appbundle="flutter build appbundle --release"
+alias build-apk="flutter build apk --release"
+alias build-app="flutter build apk --release"
+alias build-bundle="flutter build appbundle --release"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
@@ -782,28 +788,86 @@ gradlew() {
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
     fi
     if [ -f "./gradlew" ]; then
-        bash ./gradlew "$@"
+        bash ./gradlew --no-daemon "$@"
     else
-        command gradlew "$@"
+        command gradlew --no-daemon "$@"
     fi
 }
 
-# Flutter wrapper to auto-ensure ARM64 target on native Android host and modern AAPT2
+# Flutter build wrapper to auto-ensure ARM64 target, disable daemon, and use native aapt2 on mobile Android PRoot
 flutter() {
-    if [ "$1" = "build" ] && [ "$2" = "apk" ]; then
-        if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
-            /usr/local/bin/quantum-heal-x64 2>/dev/null || true
-        fi
+    if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
+        /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+
+        mkdir -p ~/.gradle 2>/dev/null || true
+        for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
+            if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
+                touch "$gp" 2>/dev/null || true
+                sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
+                grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
+                grep -q "org.gradle.workers.max" "$gp" 2>/dev/null || echo "org.gradle.workers.max=1" >> "$gp"
+                grep -q "org.gradle.parallel" "$gp" 2>/dev/null || echo "org.gradle.parallel=false" >> "$gp"
+                grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
+                grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
+                grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
+            fi
+        done
+
         local has_plat=false
+        local has_val=false
+        local has_tree=false
         for a in "$@"; do
             case "$a" in
                 *target-platform*|*--split-per-abi*) has_plat=true ;;
+                *android-skip-build-dependency-validation*) has_val=true ;;
+                *no-tree-shake-icons*) has_tree=true ;;
             esac
         done
+
+        local extra_flags=()
         if [ "$has_plat" = "false" ]; then
-            command flutter "$@" --target-platform android-arm64 --android-skip-build-dependency-validation
-            return $?
+            extra_flags+=("--target-platform" "android-arm64")
         fi
+        if [ "$has_val" = "false" ]; then
+            extra_flags+=("--android-skip-build-dependency-validation")
+        fi
+        if [ "$has_tree" = "false" ]; then
+            extra_flags+=("--no-tree-shake-icons")
+        fi
+
+        extra_flags+=(
+            "-Pandroid.aapt2FromMaven=false"
+            "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+            "-Pandroid.aapt2.daemon=false"
+            "-Pandroid.enableJetifier=false"
+            "-Porg.gradle.workers.max=1"
+            "-Porg.gradle.parallel=false"
+            "-Dorg.gradle.daemon=false"
+        )
+
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 с защитой от сбоя памяти (daemon=off, aapt2=native, platform=arm64)..."
+        command flutter "$@" "${extra_flags[@]}"
+        local ret=$?
+
+        if [ $ret -eq 0 ]; then
+            if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+            elif [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+            elif [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-debug.apk" ./app-debug.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ Debug APK готов:\033[0m ./app-debug.apk"
+            elif [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
+                cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
+                echo -e "\033[1;32m✓ AppBundle готов:\033[0m ./app-release.aab"
+            fi
+        fi
+
+        pkill -9 -f aapt2 2>/dev/null || true
+        return $ret
     fi
     command flutter "$@"
 }
@@ -945,8 +1009,9 @@ if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
     term_fetch 2>/dev/null || true
     echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
     echo -e '    \e[38;5;141mll\e[0m             → ls -la'
+    echo -e '    \e[38;5;141mbuild-apk\e[0m      → flutter build apk (release arm64 safe)'
+    echo -e '    \e[38;5;141mbuild-bundle\e[0m   → flutter build appbundle (release safe)'
     echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
-    echo -e '    \e[38;5;141mfb-apk-release\e[0m → flutter build apk (release arm64)'
     echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
     echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
     echo
@@ -1018,24 +1083,133 @@ precmd() { vcs_info }
 zstyle ':vcs_info:git:*' formats ' (%b)'
 PROMPT='%F{green}boss@ubuntu%f:%F{blue}%~%f%F{yellow}${vcs_info_msg_0_}%f$ '
 
-export FLUTTER_ALLOW_SU_ROOT=true
+export FLUTTER_ALLOW_SU_ROOT=1
 export FLUTTER_SUPPRESS_ANALYTICS=true
+export CI=true
+_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+export _JAVA_OPTIONS
+GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
+export GRADLE_OPTS
 
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
-alias fb-apk="flutter build apk --debug --target-platform android-arm64 --android-skip-build-dependency-validation"
-alias fb-apk-release="flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation --no-tree-shake-icons"
+alias fb-apk="flutter build apk --debug"
+alias fb-apk-release="flutter build apk --release"
+alias fb-bundle="flutter build appbundle --release"
+alias fb-appbundle="flutter build appbundle --release"
+alias build-apk="flutter build apk --release"
+alias build-app="flutter build apk --release"
+alias build-bundle="flutter build appbundle --release"
 alias f-clean="flutter clean && flutter pub get"
 alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
 alias cls='clear'
 alias fetch="/usr/local/bin/term-fetch"
 
-if [ -z "$VTE_VERSION" ]; then
+# gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
+gradlew() {
+    if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+    fi
+    if [ -f "./gradlew" ]; then
+        bash ./gradlew --no-daemon "$@"
+    else
+        command gradlew --no-daemon "$@"
+    fi
+}
+
+# Flutter build wrapper to auto-ensure ARM64 target, disable daemon, and use native aapt2 on mobile Android PRoot
+flutter() {
+    if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
+        /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+
+        mkdir -p ~/.gradle 2>/dev/null || true
+        for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
+            if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
+                touch "$gp" 2>/dev/null || true
+                sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
+                grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
+                grep -q "org.gradle.workers.max" "$gp" 2>/dev/null || echo "org.gradle.workers.max=1" >> "$gp"
+                grep -q "org.gradle.parallel" "$gp" 2>/dev/null || echo "org.gradle.parallel=false" >> "$gp"
+                grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
+                grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
+                grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
+            fi
+        done
+
+        local has_plat=false
+        local has_val=false
+        local has_tree=false
+        for a in "$@"; do
+            case "$a" in
+                *target-platform*|*--split-per-abi*) has_plat=true ;;
+                *android-skip-build-dependency-validation*) has_val=true ;;
+                *no-tree-shake-icons*) has_tree=true ;;
+            esac
+        done
+
+        local extra_flags=()
+        if [ "$has_plat" = "false" ]; then
+            extra_flags+=("--target-platform" "android-arm64")
+        fi
+        if [ "$has_val" = "false" ]; then
+            extra_flags+=("--android-skip-build-dependency-validation")
+        fi
+        if [ "$has_tree" = "false" ]; then
+            extra_flags+=("--no-tree-shake-icons")
+        fi
+
+        extra_flags+=(
+            "-Pandroid.aapt2FromMaven=false"
+            "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+            "-Pandroid.aapt2.daemon=false"
+            "-Pandroid.enableJetifier=false"
+            "-Porg.gradle.workers.max=1"
+            "-Porg.gradle.parallel=false"
+            "-Dorg.gradle.daemon=false"
+        )
+
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 с защитой от сбоя памяти (daemon=off, aapt2=native, platform=arm64)..."
+        command flutter "$@" "${extra_flags[@]}"
+        local ret=$?
+
+        if [ $ret -eq 0 ]; then
+            if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+            elif [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+            elif [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-debug.apk" ./app-debug.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ Debug APK готов:\033[0m ./app-debug.apk"
+            elif [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
+                cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
+                echo -e "\033[1;32m✓ AppBundle готов:\033[0m ./app-release.aab"
+            fi
+        fi
+
+        pkill -9 -f aapt2 2>/dev/null || true
+        return $ret
+    fi
+    command flutter "$@"
+}
+
+if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
+    export _QUANTUM_GREETING_SHOWN=1
     clear
     [ -x /usr/local/bin/term-fetch ] && /usr/local/bin/term-fetch
+    echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
+    echo -e '    \e[38;5;141mll\e[0m             → ls -la'
+    echo -e '    \e[38;5;141mbuild-apk\e[0m      → flutter build apk (release arm64 safe)'
+    echo -e '    \e[38;5;141mbuild-bundle\e[0m   → flutter build appbundle (release safe)'
+    echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
+    echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
+    echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
+    echo
 fi
 ''';
         for (final target in zshrcTargets) {
