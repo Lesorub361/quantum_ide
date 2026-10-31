@@ -103,8 +103,8 @@ class AIService {
   GeminiRestClient? _geminiClient;
   final Dio _dio = Dio(
     BaseOptions(
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(minutes: 2),
+      connectTimeout: const Duration(seconds: 90),
+      receiveTimeout: const Duration(minutes: 5),
     ),
   );
   static const int _maxRetries = 3;
@@ -112,6 +112,11 @@ class AIService {
   AISettings get settings => _settings;
   String get selectedProviderId => _settings.selectedProviderId;
   String get selectedModel => _settings.selectedModel;
+
+  String? _lastDetectedServerModel;
+  String? get lastDetectedServerModel => _lastDetectedServerModel;
+  ServerHealthResult? _lastServerHealth;
+  ServerHealthResult? get lastServerHealth => _lastServerHealth;
 
   // Backwards compat
   String get apiKey => _settings.currentApiKey;
@@ -297,16 +302,23 @@ class AIService {
       selectedProviderId: providerId,
       selectedModel: nextModel,
     );
+    if (_ref != null) {
+      _ref.read(activeAiProviderIdProvider.notifier).state = providerId;
+      _ref.read(activeAiModelProvider.notifier).state = nextModel;
+      _ref.read(genkitServiceProvider).invalidate();
+    }
     _rebuildGemini();
-    _ref?.read(genkitServiceProvider).invalidate();
   }
 
   Future<void> setModel(String model) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('ai_selected_model', model);
     _settings = _settings.copyWith(selectedModel: model);
+    if (_ref != null) {
+      _ref.read(activeAiModelProvider.notifier).state = model;
+      _ref.read(genkitServiceProvider).invalidate();
+    }
     _rebuildGemini();
-    _ref?.read(genkitServiceProvider).invalidate();
   }
 
   Future<void> setApiKey(String providerId, String key) async {
@@ -471,6 +483,152 @@ class AIService {
         e.type == DioExceptionType.connectionError;
   }
 
+  static String cleanModelName(String raw) {
+    var name = raw.replaceAll(r'\', '/');
+    if (name.contains('/')) {
+      name = name.split('/').last;
+    }
+    return name;
+  }
+
+  Future<ServerHealthResult> testPrivateLmConnection(
+    String baseUrl, {
+    String? apiKey,
+  }) async {
+    final sw = Stopwatch()..start();
+    final cleansed = _cleanseBaseUrl(baseUrl);
+    final base = cleansed.endsWith('/v1')
+        ? cleansed.substring(0, cleansed.length - 3)
+        : cleansed;
+
+    String? detectedActiveModel;
+    final foundModels = <DiscoveredModel>[];
+    String? lastError;
+    bool anyOk = false;
+
+    // 1. Try props & slots first (llama.cpp / llama-server)
+    try {
+      final propsResp = await _dio.get(
+        '$base/props',
+        options: Options(
+          headers: apiKey != null && apiKey.isNotEmpty ? {'Authorization': 'Bearer $apiKey'} : null,
+          receiveTimeout: const Duration(seconds: 8),
+          sendTimeout: const Duration(seconds: 8),
+        ),
+      );
+      if (propsResp.statusCode == 200 && propsResp.data is Map) {
+        anyOk = true;
+        final rawPath = propsResp.data['model_path'] as String? ??
+            propsResp.data['model'] as String?;
+        if (rawPath != null && rawPath.isNotEmpty) {
+          detectedActiveModel = cleanModelName(rawPath);
+        }
+      }
+    } catch (_) {}
+
+    if (detectedActiveModel == null) {
+      try {
+        final slotsResp = await _dio.get(
+          '$base/slots',
+          options: Options(
+            headers: apiKey != null && apiKey.isNotEmpty ? {'Authorization': 'Bearer $apiKey'} : null,
+            receiveTimeout: const Duration(seconds: 8),
+            sendTimeout: const Duration(seconds: 8),
+          ),
+        );
+        if (slotsResp.statusCode == 200 &&
+            slotsResp.data is List &&
+            slotsResp.data.isNotEmpty) {
+          anyOk = true;
+          final raw = slotsResp.data[0]['model'] as String?;
+          if (raw != null && raw.isNotEmpty) {
+            detectedActiveModel = cleanModelName(raw);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Discover models via /v1/models, /models, and /api/tags
+    final modelCandidates = [
+      '$base/v1/models',
+      '$base/models',
+      '$base/api/tags',
+    ];
+
+    for (final ep in modelCandidates) {
+      try {
+        final resp = await _dio.get(
+          ep,
+          options: Options(
+            headers: apiKey != null && apiKey.isNotEmpty ? {'Authorization': 'Bearer $apiKey'} : null,
+            receiveTimeout: const Duration(seconds: 15),
+            sendTimeout: const Duration(seconds: 10),
+          ),
+        );
+        if (resp.statusCode == 200) {
+          anyOk = true;
+          if (resp.data is Map) {
+            final dataList = (resp.data['data'] ?? resp.data['models']) as List?;
+            if (dataList != null) {
+              for (final it in dataList) {
+                if (it is Map) {
+                  final rawId = (it['id'] ?? it['name']) as String?;
+                  if (rawId != null && rawId.isNotEmpty) {
+                    final cleanId = cleanModelName(rawId);
+                    final isAct = detectedActiveModel != null
+                        ? (cleanId == detectedActiveModel || rawId == detectedActiveModel)
+                        : (dataList.length == 1);
+                    foundModels.add(DiscoveredModel(
+                      id: rawId,
+                      displayName: isAct ? '🟢 $cleanId (Активна на сервере)' : cleanId,
+                      providerId: 'privatelm',
+                      isServerActive: isAct,
+                    ));
+                    if (isAct && detectedActiveModel == null) {
+                      detectedActiveModel = cleanId;
+                    }
+                  }
+                }
+              }
+            }
+          }
+          if (foundModels.isNotEmpty) break;
+        }
+      } catch (e) {
+        lastError = e.toString();
+      }
+    }
+
+    sw.stop();
+
+    if (detectedActiveModel != null && !foundModels.any((m) => m.isServerActive)) {
+      foundModels.insert(
+        0,
+        DiscoveredModel(
+          id: detectedActiveModel,
+          displayName: '🟢 $detectedActiveModel (Активна на сервере)',
+          providerId: 'privatelm',
+          isServerActive: true,
+        ),
+      );
+    }
+
+    if (detectedActiveModel != null) {
+      _lastDetectedServerModel = detectedActiveModel;
+    }
+
+    final isOk = anyOk || detectedActiveModel != null || foundModels.isNotEmpty;
+    final res = ServerHealthResult(
+      isOk: isOk,
+      latencyMs: sw.elapsedMilliseconds,
+      activeModel: detectedActiveModel,
+      models: foundModels,
+      errorMessage: isOk ? null : (lastError ?? 'Сервер не отвечает на порт 8080'),
+    );
+    _lastServerHealth = res;
+    return res;
+  }
+
   // ─── Загрузка доступных моделей ──────────────────────────────────────────
 
   final Map<String, List<DiscoveredModel>> _discoveredModelsCache = {};
@@ -615,6 +773,18 @@ class AIService {
         return list;
       } catch (_) {
         return AiProviders.getRecommendedDiscoveredModels('local_edge');
+      }
+    }
+
+    if (pid == 'privatelm') {
+      try {
+        final result = await testPrivateLmConnection(baseUrl, apiKey: key);
+        if (result.models.isNotEmpty) {
+          _discoveredModelsCache[pid] = result.models;
+          return result.models;
+        }
+      } catch (e) {
+        debugPrint('[PrivateLM] Discovery error: $e');
       }
     }
 
@@ -1216,7 +1386,9 @@ class AIService {
     String? systemInstruction,
     void Function(String token)? onToken,
   }) async {
-    if (_ref != null) {
+    final pid = _settings.selectedProviderId;
+
+    if (_ref != null && pid != 'privatelm' && pid != 'local_edge') {
       try {
         final genkit = _ref.read(genkitServiceProvider);
         final messages = <gk.Message>[];
@@ -1245,8 +1417,6 @@ class AIService {
         debugPrint('Genkit stream fallback to legacy: $e');
       }
     }
-
-    final pid = _settings.selectedProviderId;
 
     if (pid == 'google') {
       return await _streamGeminiChat(
@@ -1803,7 +1973,29 @@ class AIService {
 
 final aiServiceProvider = Provider<AIService>((ref) => AIService(ref));
 
+final activeAiProviderIdProvider = StateProvider<String>((ref) {
+  final aiSvc = ref.watch(aiServiceProvider);
+  return aiSvc.selectedProviderId;
+});
+
 final activeAiModelProvider = StateProvider<String>((ref) {
   final aiSvc = ref.watch(aiServiceProvider);
   return aiSvc.selectedModel;
 });
+
+class ServerHealthResult {
+  final bool isOk;
+  final int latencyMs;
+  final String? activeModel;
+  final List<DiscoveredModel> models;
+  final String? errorMessage;
+
+  const ServerHealthResult({
+    required this.isOk,
+    required this.latencyMs,
+    this.activeModel,
+    this.models = const [],
+    this.errorMessage,
+  });
+}
+

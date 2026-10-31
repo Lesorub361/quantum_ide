@@ -35,11 +35,6 @@ import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 
 final selectedCustomBotPersonaProvider = StateProvider<CustomAiBotPersona?>((ref) => null);
 
-final activeAiProviderIdProvider = StateProvider<String>((ref) {
-  final aiSvc = ref.read(aiServiceProvider);
-  return aiSvc.selectedProviderId;
-});
-
 final availableModelsProvider = FutureProvider.family<List<String>, String>((ref, providerId) async {
   final aiSvc = ref.watch(aiServiceProvider);
   try {
@@ -380,13 +375,17 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     final activeProviderId = ref.read(activeAiProviderIdProvider);
                     final effectiveModel = ref.read(activeAiModelProvider);
                     final apiKey = ref.read(aiServiceProvider).getApiKey(activeProviderId);
-                    showModelPickerModal(
+                    await showModelPickerModal(
                       context,
                       providerId: activeProviderId,
                       currentModel: effectiveModel,
                       apiKey: apiKey,
                       initialMainTab: 1,
                     );
+                    final currentP = ref.read(aiServiceProvider).selectedProviderId;
+                    final currentM = ref.read(aiServiceProvider).selectedModel;
+                    ref.read(activeAiProviderIdProvider.notifier).state = currentP;
+                    ref.read(activeAiModelProvider.notifier).state = currentM;
                   }
                 },
                 tooltip: aiState.activeAgentKind != AgentKind.native ? 'Настройки CLI-агентов' : 'Настройки моделей и параметров',
@@ -937,12 +936,15 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                     currentModel: effectiveModel,
                     apiKey: apiKey,
                   );
-                  if (selected != null && selected.isNotEmpty) {
-                    ref.read(activeAiModelProvider.notifier).state = selected;
-                    await ref.read(aiServiceProvider).setModel(selected);
-                    if (activeProviderId == 'local_edge' || activeProviderId == 'ollama') {
-                      await ref.read(localAiServiceProvider.notifier).selectModel(selected);
-                    }
+                  final currentP = ref.read(aiServiceProvider).selectedProviderId;
+                  final currentM = (selected != null && selected.isNotEmpty)
+                      ? selected
+                      : ref.read(aiServiceProvider).selectedModel;
+                  ref.read(activeAiProviderIdProvider.notifier).state = currentP;
+                  ref.read(activeAiModelProvider.notifier).state = currentM;
+                  await ref.read(aiServiceProvider).setModel(currentM);
+                  if (currentP == 'local_edge' || currentP == 'ollama') {
+                    await ref.read(localAiServiceProvider.notifier).selectModel(currentM);
                   }
                 }
               },
@@ -2707,12 +2709,15 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
           currentModel: activeModel,
           apiKey: apiKey,
         );
-        if (selected != null && selected.isNotEmpty) {
-          ref.read(activeAiModelProvider.notifier).state = selected;
-          await ref.read(aiServiceProvider).setModel(selected);
-          if (activeProviderId == 'local_edge' || activeProviderId == 'ollama') {
-            await ref.read(localAiServiceProvider.notifier).selectModel(selected);
-          }
+        final currentP = ref.read(aiServiceProvider).selectedProviderId;
+        final currentM = (selected != null && selected.isNotEmpty)
+            ? selected
+            : ref.read(aiServiceProvider).selectedModel;
+        ref.read(activeAiProviderIdProvider.notifier).state = currentP;
+        ref.read(activeAiModelProvider.notifier).state = currentM;
+        await ref.read(aiServiceProvider).setModel(currentM);
+        if (currentP == 'local_edge' || currentP == 'ollama') {
+          await ref.read(localAiServiceProvider.notifier).selectModel(currentM);
         }
         return;
       }

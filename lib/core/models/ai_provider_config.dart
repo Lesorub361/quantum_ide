@@ -82,12 +82,16 @@ class DiscoveredModel {
   final String displayName;
   final bool isFree;
   final String? providerId;
+  final bool isServerActive;
+  final String? details;
 
   const DiscoveredModel({
     required this.id,
     String? displayName,
     this.isFree = false,
     this.providerId,
+    this.isServerActive = false,
+    this.details,
   }) : displayName = displayName ?? id;
 }
 

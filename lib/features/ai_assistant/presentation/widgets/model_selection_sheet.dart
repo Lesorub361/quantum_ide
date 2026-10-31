@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/core/models/ai_provider_config.dart';
 import 'package:quantum_ide/core/services/ai_service.dart';
@@ -19,12 +18,10 @@ import 'package:quantum_ide/core/services/native_llama_service.dart';
 class _PrivateLmTokens {
   static const bg = Color(0xFF0C0D11);
   static const surface = Color(0xFF14151B);
-  static const surfacePressed = Color(0xFF1C1D26);
   static const card = Color(0xFF181A22);
   static const hairline = Color(0x1AFFFFFF);
   static const accent = Color(0xFF00D2FF);
   static const accentPurple = Color(0xFF9D65FF);
-  static const text = Colors.white;
   static const muted = Color(0xFF8E90A6);
   static const faint = Color(0xFF555770);
   static const green = Color(0xFF30D158);
@@ -76,71 +73,91 @@ class ModelSelectionSheet extends ConsumerStatefulWidget {
   ConsumerState<ModelSelectionSheet> createState() => _ModelSelectionSheetState();
 }
 
-enum _MainTab { models, settings, logs }
-enum _ModelScope { myModels, catalog, cloud }
+enum _MainTab { localAi, privateLmServer, cloudProviders, logs }
+enum _LocalSubTab { myModels, catalog, settings }
 
 class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   late _MainTab _mainTab;
-  _ModelScope _modelScope = _ModelScope.myModels;
+  _LocalSubTab _localSubTab = _LocalSubTab.myModels;
   String _catalogCategory = 'Все';
-  String _selectedCloudProviderId = 'privatelm';
 
-  final _searchController = TextEditingController();
-  final _apiKeyController = TextEditingController();
-  final _baseUrlController = TextEditingController();
+  // Cloud provider state
+  String _selectedCloudProviderId = 'openrouter';
+  final _cloudApiKeyController = TextEditingController();
+  final _cloudBaseUrlController = TextEditingController();
+  final _cloudSearchController = TextEditingController();
+  List<DiscoveredModel> _cloudModels = [];
+  bool _isDiscoveringCloud = false;
+  String? _cloudStatusMessage;
+  bool _cloudStatusOk = true;
+
+  // PrivateLM (Second Phone) server state
+  final _serverUrlController = TextEditingController();
+  final _serverApiKeyController = TextEditingController();
+  List<DiscoveredModel> _serverModels = [];
+  bool _isTestingServer = false;
+  ServerHealthResult? _serverHealth;
+
+  // Local settings values
   final _systemPromptController = TextEditingController();
-
-  // Settings values
   double _temperature = 0.7;
   int _maxTokens = 4096;
   double _topP = 0.95;
   int _cpuThreads = 4;
-  int _gpuLayers = 0;
-  bool _useFlashAttn = false;
-
-  // Cloud models discovered
-  List<DiscoveredModel> _cloudModels = [];
-  bool _isDiscovering = false;
-  String? _statusMessage;
-  bool _statusOk = true;
+  int _gpuLayers = 16;
+  bool _useFlashAttn = true;
 
   @override
   void initState() {
     super.initState();
-    _mainTab = widget.initialMainTab == 1
-        ? _MainTab.settings
-        : (widget.initialMainTab == 2 ? _MainTab.logs : _MainTab.models);
-
     final aiSvc = ref.read(aiServiceProvider);
-    _selectedCloudProviderId = widget.providerId == 'local_edge' ? 'privatelm' : widget.providerId;
 
+    // Initial Tab resolution
+    if (widget.initialMainTab == 2) {
+      _mainTab = _MainTab.logs;
+    } else if (widget.providerId == 'local_edge') {
+      _mainTab = _MainTab.localAi;
+      if (widget.initialMainTab == 1) _localSubTab = _LocalSubTab.settings;
+    } else if (widget.providerId == 'privatelm') {
+      _mainTab = _MainTab.privateLmServer;
+    } else {
+      _mainTab = _MainTab.cloudProviders;
+      _selectedCloudProviderId = widget.providerId;
+    }
+
+    // Load saved settings
     _temperature = aiSvc.temperature;
     _maxTokens = aiSvc.maxTokens;
     _topP = aiSvc.topP;
     _systemPromptController.text = aiSvc.systemPrompt;
 
-    _apiKeyController.text = aiSvc.getApiKey(_selectedCloudProviderId);
-    _baseUrlController.text = aiSvc.getBaseUrl(_selectedCloudProviderId);
-
     final localState = ref.read(localAiServiceProvider);
     _cpuThreads = localState.threads;
-    _gpuLayers = localState.gpuLayers;
+    _gpuLayers = localState.gpuLayers > 0 ? localState.gpuLayers : 16;
     _useFlashAttn = localState.useFlashAttn;
 
-    // Load initial discovered models
+    // Second Phone (PrivateLM) setup
+    var savedServerUrl = aiSvc.getBaseUrl('privatelm');
+    if (savedServerUrl.isEmpty || savedServerUrl == 'http://localhost:8080/v1') {
+      savedServerUrl = 'http://10.109.133.237:8080/v1';
+    }
+    _serverUrlController.text = savedServerUrl;
+    _serverApiKeyController.text = aiSvc.getApiKey('privatelm');
+    _serverModels = aiSvc.getCachedDiscoveredModels('privatelm');
+    _serverHealth = aiSvc.lastServerHealth;
+
+    // Cloud setup
+    _cloudApiKeyController.text = aiSvc.getApiKey(_selectedCloudProviderId);
+    _cloudBaseUrlController.text = aiSvc.getBaseUrl(_selectedCloudProviderId);
     _cloudModels = aiSvc.getCachedDiscoveredModels(_selectedCloudProviderId);
     if (_cloudModels.isEmpty) {
       _cloudModels = AiProviders.getRecommendedDiscoveredModels(_selectedCloudProviderId);
     }
 
-    if (widget.providerId == 'local_edge') {
-      _modelScope = _ModelScope.myModels;
-    } else {
-      _modelScope = _ModelScope.cloud;
-    }
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_selectedCloudProviderId == 'privatelm' || _modelScope == _ModelScope.cloud) {
+      if (_mainTab == _MainTab.privateLmServer) {
+        _testServerConnection();
+      } else if (_mainTab == _MainTab.cloudProviders) {
         _discoverCloudModels();
       }
     });
@@ -148,42 +165,119 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
   @override
   void dispose() {
-    _searchController.dispose();
-    _apiKeyController.dispose();
-    _baseUrlController.dispose();
+    _cloudSearchController.dispose();
+    _cloudApiKeyController.dispose();
+    _cloudBaseUrlController.dispose();
+    _serverUrlController.dispose();
+    _serverApiKeyController.dispose();
     _systemPromptController.dispose();
     super.dispose();
   }
 
+  // ─── Core Switcher / State Synchronizer ────────────────────────────────────
+
+  void _selectAndApplyProviderAndModel(String providerId, String modelId) {
+    final aiSvc = ref.read(aiServiceProvider);
+    aiSvc.setProvider(providerId);
+    aiSvc.setModel(modelId);
+    ref.read(activeAiProviderIdProvider.notifier).state = providerId;
+    ref.read(activeAiModelProvider.notifier).state = modelId;
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(LucideIcons.check_circle_2, color: _PrivateLmTokens.green, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Активировано в чате: ${AiProviders.byId(providerId).displayName} · ${_formatModelTitle(modelId)}',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF181A22),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: const BorderSide(color: _PrivateLmTokens.green, width: 0.8),
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      Navigator.of(context).pop(modelId);
+    }
+  }
+
+  // ─── PrivateLM (Second Phone) Connection Test & Discovery ──────────────────
+
+  Future<void> _testServerConnection() async {
+    setState(() => _isTestingServer = true);
+    final aiSvc = ref.read(aiServiceProvider);
+    final url = _serverUrlController.text.trim();
+    final key = _serverApiKeyController.text.trim();
+
+    await aiSvc.setBaseUrl('privatelm', url);
+    if (key.isNotEmpty) {
+      await aiSvc.setApiKey('privatelm', key);
+    }
+
+    try {
+      final health = await aiSvc.testPrivateLmConnection(url, apiKey: key);
+      if (!mounted) return;
+      setState(() {
+        _isTestingServer = false;
+        _serverHealth = health;
+        if (health.models.isNotEmpty) {
+          _serverModels = health.models;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isTestingServer = false;
+        _serverHealth = ServerHealthResult(
+          isOk: false,
+          latencyMs: 0,
+          errorMessage: e.toString(),
+        );
+      });
+    }
+  }
+
+  // ─── Cloud Provider Discovery ──────────────────────────────────────────────
+
   Future<void> _discoverCloudModels() async {
     setState(() {
-      _isDiscovering = true;
-      _statusMessage = null;
+      _isDiscoveringCloud = true;
+      _cloudStatusMessage = null;
     });
 
     try {
       final aiSvc = ref.read(aiServiceProvider);
       final models = await aiSvc.discoverModels(
         _selectedCloudProviderId,
-        customApiKey: _apiKeyController.text.trim(),
-        customBaseUrl: _baseUrlController.text.trim(),
+        customApiKey: _cloudApiKeyController.text.trim(),
+        customBaseUrl: _cloudBaseUrlController.text.trim(),
       );
 
       if (!mounted) return;
       setState(() {
         _cloudModels = models;
-        _isDiscovering = false;
-        _statusMessage = models.isEmpty
-            ? 'Список моделей пуст — проверьте адрес сервера и ключ'
+        _isDiscoveringCloud = false;
+        _cloudStatusMessage = models.isEmpty
+            ? 'Список моделей пуст — проверьте API ключ'
             : 'Доступно моделей: ${models.length}';
-        _statusOk = models.isNotEmpty;
+        _cloudStatusOk = models.isNotEmpty;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _isDiscovering = false;
-        _statusMessage = 'Ошибка подключения: $e';
-        _statusOk = false;
+        _isDiscoveringCloud = false;
+        _cloudStatusMessage = 'Ошибка подключения: $e';
+        _cloudStatusOk = false;
       });
     }
   }
@@ -192,16 +286,17 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     final aiSvc = ref.read(aiServiceProvider);
     setState(() {
       _selectedCloudProviderId = pid;
-      _apiKeyController.text = aiSvc.getApiKey(pid);
-      _baseUrlController.text = aiSvc.getBaseUrl(pid);
+      _cloudApiKeyController.text = aiSvc.getApiKey(pid);
+      _cloudBaseUrlController.text = aiSvc.getBaseUrl(pid);
       _cloudModels = aiSvc.getCachedDiscoveredModels(pid);
       if (_cloudModels.isEmpty) {
         _cloudModels = AiProviders.getRecommendedDiscoveredModels(pid);
       }
     });
-    aiSvc.setProvider(pid);
     _discoverCloudModels();
   }
+
+  // ─── Local Engine Launcher ────────────────────────────────────────────────
 
   Future<void> _startModelSafely(String filename, {String? modelPath}) async {
     final messenger = ScaffoldMessenger.of(context);
@@ -215,31 +310,15 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
           gpuLayers: gpuLayers,
         );
         await ref.read(aiServiceProvider).setLocalEngine(LocalAiEngine.nativeLlama);
-        ref.read(aiServiceProvider).setProvider('local_edge');
-        ref.read(aiServiceProvider).setModel(filename);
-        if (mounted) {
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text('⚡ Модель запущена с Vulkan GPU ($gpuLayers слоев)'),
-              backgroundColor: const Color(0xFF30D158),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-          Navigator.of(context).pop(filename);
-        }
+        _selectAndApplyProviderAndModel('local_edge', filename);
         return;
       }
     } catch (e) {
-      debugPrint('[NativeLlama] Load error, falling back: $e');
+      debugPrint('[NativeLlama] Load error, fallback: $e');
     }
 
-    // Fallback if not loaded via native
     await ref.read(localAiServiceProvider.notifier).selectAndStartModel(filename);
-    ref.read(aiServiceProvider).setProvider('local_edge');
-    ref.read(aiServiceProvider).setModel(filename);
-    if (mounted) {
-      Navigator.of(context).pop(filename);
-    }
+    _selectAndApplyProviderAndModel('local_edge', filename);
   }
 
   Future<void> _importLocalModelFile() async {
@@ -251,25 +330,29 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
       if (result != null && result.files.single.path != null) {
         final path = result.files.single.path!;
         final name = path.split('/').last;
-        final messenger = ScaffoldMessenger.of(context);
-        messenger.showSnackBar(
-          SnackBar(content: Text('Файл модели выбран: $name')),
-        );
         await _startModelSafely(name, modelPath: path);
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка импорта файла: $e')),
+        SnackBar(content: Text('Ошибка импорта: $e')),
       );
     }
   }
 
-  // ─── Main Build ──────────────────────────────────────────────────────────
+  static String _formatModelTitle(String raw) {
+    var name = raw.replaceAll(r'\', '/');
+    if (name.contains('/')) name = name.split('/').last;
+    name = name.replaceAll('.gguf', '').replaceAll('.litertlm', '');
+    name = name.replaceAll('-instruct', '').replaceAll('-chat', '');
+    return name;
+  }
+
+  // ─── Main Scaffold Build ──────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.90,
+      height: MediaQuery.of(context).size.height * 0.92,
       decoration: const BoxDecoration(
         color: _PrivateLmTokens.bg,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -291,7 +374,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
             // Top Header Bar
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
               child: Row(
                 children: [
                   Container(
@@ -308,7 +391,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'PrivateLM & AI Hub',
+                        'AI Hub & Выбор моделей',
                         style: GoogleFonts.inter(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -317,7 +400,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                         ),
                       ),
                       Text(
-                        'Локальный ИИ, второй телефон и облако',
+                        'Локальная ИИ · Второй телефон · Облако',
                         style: GoogleFonts.inter(fontSize: 11, color: _PrivateLmTokens.muted),
                       ),
                     ],
@@ -336,19 +419,20 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               ),
             ),
 
-            // Main Segmented Switcher (Модели | Настройки | Логи)
+            // Top Segmented Modules Switcher (4 Distinct Modules)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-              child: _buildMainTabs(),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              child: _buildMainModuleTabs(),
             ),
 
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
 
-            // Body
+            // Module Body
             Expanded(
               child: switch (_mainTab) {
-                _MainTab.models => _buildModelsTab(),
-                _MainTab.settings => _buildSettingsTab(),
+                _MainTab.localAi => _buildLocalAiTab(),
+                _MainTab.privateLmServer => _buildPrivateLmServerTab(),
+                _MainTab.cloudProviders => _buildCloudProvidersTab(),
                 _MainTab.logs => _buildLogsTab(),
               },
             ),
@@ -358,9 +442,9 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
-  // ─── Main Tabs Bar ───────────────────────────────────────────────────────
+  // ─── Module Tabs Switcher ─────────────────────────────────────────────────
 
-  Widget _buildMainTabs() {
+  Widget _buildMainModuleTabs() {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
@@ -370,38 +454,52 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
       ),
       child: Row(
         children: [
-          _mainTabButton(_MainTab.models, 'Модели', LucideIcons.cpu),
-          _mainTabButton(_MainTab.settings, 'Настройки', LucideIcons.sliders_horizontal),
-          _mainTabButton(_MainTab.logs, 'Логи', LucideIcons.terminal),
+          _moduleTabButton(_MainTab.localAi, 'Этот телефон', LucideIcons.cpu, 'Локально'),
+          _moduleTabButton(_MainTab.privateLmServer, 'Второй телефон', LucideIcons.smartphone, 'PrivateLM'),
+          _moduleTabButton(_MainTab.cloudProviders, 'Облачные API', LucideIcons.cloud, 'OpenRouter/etc'),
+          _moduleTabButton(_MainTab.logs, 'Логи', LucideIcons.terminal, ''),
         ],
       ),
     );
   }
 
-  Widget _mainTabButton(_MainTab tab, String label, IconData icon) {
+  Widget _moduleTabButton(_MainTab tab, String label, IconData icon, String badge) {
     final isSel = _mainTab == tab;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _mainTab = tab),
+        onTap: () {
+          setState(() => _mainTab = tab);
+          if (tab == _MainTab.privateLmServer && _serverHealth == null) {
+            _testServerConnection();
+          }
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 7),
           decoration: BoxDecoration(
             color: isSel ? Colors.white.withValues(alpha: 0.12) : Colors.transparent,
             borderRadius: BorderRadius.circular(9),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 13, color: isSel ? _PrivateLmTokens.accent : _PrivateLmTokens.muted),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
-                  color: isSel ? Colors.white : _PrivateLmTokens.muted,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: 12, color: isSel ? _PrivateLmTokens.accent : _PrivateLmTokens.muted),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                        color: isSel ? Colors.white : _PrivateLmTokens.muted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -410,72 +508,95 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
-  // ─── TAB 1: MODELS (PrivateLM Style) ──────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 1: ЛОКАЛЬНАЯ ИИ (НА ЭТОМ ТЕЛЕФОНЕ)
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  Widget _buildModelsTab() {
+  Widget _buildLocalAiTab() {
+    final nativeLlama = ref.watch(nativeLlamaServiceProvider);
+    final gpu = nativeLlama.gpuInfo;
+
     return Column(
       children: [
-        // Sub-scope selector: [ Мои модели | Каталог | Облако & Wi-Fi ]
+        // Hardware Acceleration Banner
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF10131B),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: Row(
+            children: [
+              Icon(LucideIcons.zap, size: 14, color: gpu?.vulkanSupported == true ? _PrivateLmTokens.green : _PrivateLmTokens.orange),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  gpu != null
+                      ? '${gpu.gpuName} · Vulkan GPU: ${gpu.vulkanSupported ? "Активен" : "Откл"} · Слоев: ${gpu.recommendedGpuLayers}'
+                      : 'Встроенный движок Native Llama (ARM64)',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white70),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Sub-tabs: [ Мои GGUF | Каталог | Настройки GPU/CPU ]
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Container(
-            padding: const EdgeInsets.all(3),
+            padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: Row(
               children: [
-                _scopeButton(_ModelScope.myModels, 'Мои модели', LucideIcons.hard_drive),
-                _scopeButton(_ModelScope.catalog, 'Каталог', LucideIcons.download),
-                _scopeButton(_ModelScope.cloud, 'Облако & Wi-Fi', LucideIcons.cloud),
+                _localSubTabButton(_LocalSubTab.myModels, 'Мои GGUF', LucideIcons.hard_drive),
+                _localSubTabButton(_LocalSubTab.catalog, 'Скачать из каталога', LucideIcons.download),
+                _localSubTabButton(_LocalSubTab.settings, 'Настройки GPU', LucideIcons.sliders_horizontal),
               ],
             ),
           ),
         ),
 
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
 
-        // Active Model Banner
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: _buildActiveModelBanner(),
-        ),
-
-        // Scope Content
         Expanded(
-          child: switch (_modelScope) {
-            _ModelScope.myModels => _buildMyModelsScope(),
-            _ModelScope.catalog => _buildCatalogScope(),
-            _ModelScope.cloud => _buildCloudScope(),
+          child: switch (_localSubTab) {
+            _LocalSubTab.myModels => _buildLocalMyModelsView(),
+            _LocalSubTab.catalog => _buildLocalCatalogView(),
+            _LocalSubTab.settings => _buildLocalSettingsView(),
           },
         ),
       ],
     );
   }
 
-  Widget _scopeButton(_ModelScope scope, String label, IconData icon) {
-    final isSel = _modelScope == scope;
+  Widget _localSubTabButton(_LocalSubTab tab, String label, IconData icon) {
+    final isSel = _localSubTab == tab;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => _modelScope = scope),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+        onTap: () => setState(() => _localSubTab = tab),
+        child: Container(
           padding: const EdgeInsets.symmetric(vertical: 6),
           decoration: BoxDecoration(
             color: isSel ? _PrivateLmTokens.card : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7),
             border: isSel ? Border.all(color: _PrivateLmTokens.hairline) : null,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 12, color: isSel ? _PrivateLmTokens.accent : _PrivateLmTokens.faint),
-              const SizedBox(width: 5),
+              Icon(icon, size: 11, color: isSel ? _PrivateLmTokens.accent : _PrivateLmTokens.faint),
+              const SizedBox(width: 4),
               Text(
                 label,
                 style: GoogleFonts.inter(
-                  fontSize: 11.5,
+                  fontSize: 11,
                   fontWeight: isSel ? FontWeight.w600 : FontWeight.w400,
                   color: isSel ? Colors.white : _PrivateLmTokens.muted,
                 ),
@@ -487,154 +608,47 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
-  // Active Model Banner Widget
-  Widget _buildActiveModelBanner() {
-    final localState = ref.watch(localAiServiceProvider);
-    final aiSvc = ref.watch(aiServiceProvider);
-    final nativeLlama = ref.watch(nativeLlamaServiceProvider);
-
-    final isLocalRunning = localState.isRunning || nativeLlama.isModelLoaded;
-    final isPrivateLm = aiSvc.selectedProviderId == 'privatelm';
-
-    if (!isLocalRunning && !isPrivateLm) {
-      return const SizedBox.shrink();
-    }
-
-    final String title;
-    final String subtitle;
-    final IconData icon;
-
-    if (isPrivateLm) {
-      title = aiSvc.selectedModel;
-      subtitle = 'Подключено · Второй телефон (PrivateLM Wi-Fi)';
-      icon = LucideIcons.smartphone;
-    } else {
-      title = localState.selectedModelFilename ?? nativeLlama.loadedModelPath?.split('/').last ?? 'Локальная модель';
-      subtitle = 'Загружена в память · ${nativeLlama.gpuInfo?.vulkanSupported == true ? "Vulkan GPU" : "CPU ускорение"}';
-      icon = LucideIcons.cpu;
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: _PrivateLmTokens.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _PrivateLmTokens.green.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: _PrivateLmTokens.green,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Icon(icon, size: 16, color: _PrivateLmTokens.green),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.inter(fontSize: 10, color: _PrivateLmTokens.muted),
-                ),
-              ],
-            ),
-          ),
-          if (isLocalRunning)
-            ElevatedButton(
-              onPressed: () {
-                ref.read(localAiServiceProvider.notifier).stopServer();
-                ref.read(nativeLlamaServiceProvider.notifier).unloadModel();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white.withValues(alpha: 0.08),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                minimumSize: Size.zero,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: const Text('Выгрузить', style: TextStyle(fontSize: 11)),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ── Scope 1: My Models (Downloaded) ──
-  Widget _buildMyModelsScope() {
+  Widget _buildLocalMyModelsView() {
     final localState = ref.watch(localAiServiceProvider);
     final nativeLlama = ref.watch(nativeLlamaServiceProvider);
     final downloadedIds = localState.downloadedModels.entries.where((e) => e.value).map((e) => e.key).toList();
 
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       children: [
         // Import Button
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _importLocalModelFile,
-                icon: const Icon(LucideIcons.file_up, size: 14, color: _PrivateLmTokens.accent),
-                label: const Text('Импортировать .gguf с телефона', style: TextStyle(fontSize: 12)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  side: BorderSide(color: _PrivateLmTokens.hairline),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-            ),
-          ],
+        OutlinedButton.icon(
+          onPressed: _importLocalModelFile,
+          icon: const Icon(LucideIcons.file_up, size: 14, color: _PrivateLmTokens.accent),
+          label: const Text('Импортировать .gguf с диска устройства', style: TextStyle(fontSize: 12)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: _PrivateLmTokens.hairline),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         if (downloadedIds.isEmpty)
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            padding: const EdgeInsets.all(30),
             alignment: Alignment.center,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(LucideIcons.download, size: 36, color: _PrivateLmTokens.faint),
-                const SizedBox(height: 12),
-                Text(
-                  'На телефоне пока нет скачанных моделей',
-                  style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
-                ),
+                const Icon(LucideIcons.hard_drive, size: 36, color: _PrivateLmTokens.faint),
+                const SizedBox(height: 10),
+                const Text('Нет скачанных локальных моделей', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                Text(
-                  'Скачайте готовую модель во вкладке «Каталог» или импортируйте свой .gguf файл.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(fontSize: 12, color: _PrivateLmTokens.muted),
-                ),
-                const SizedBox(height: 16),
+                const Text('Перейдите в «Скачать из каталога» или импортируйте GGUF файл.', style: TextStyle(color: _PrivateLmTokens.muted, fontSize: 11), textAlign: TextAlign.center),
+                const SizedBox(height: 12),
                 ElevatedButton(
-                  onPressed: () => setState(() => _modelScope = _ModelScope.catalog),
+                  onPressed: () => setState(() => _localSubTab = _LocalSubTab.catalog),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _PrivateLmTokens.accent,
                     foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Перейти в каталог моделей', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  child: const Text('Открыть каталог', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
@@ -646,12 +660,12 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               orElse: () => LocalModelInfo(
                 id: id,
                 name: id,
-                description: 'Пользовательская локальная модель',
+                description: 'Локальная модель GGUF',
                 filename: id,
                 sizeGb: 1.0,
                 ramRequiredGb: 2.0,
                 url: '',
-                engine: LocalAiEngine.llamaServer,
+                engine: LocalAiEngine.nativeLlama,
               ),
             );
 
@@ -663,44 +677,30 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: _PrivateLmTokens.surface,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: isRunning ? _PrivateLmTokens.green.withValues(alpha: 0.4) : _PrivateLmTokens.hairline),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: isRunning ? _PrivateLmTokens.green.withValues(alpha: 0.5) : _PrivateLmTokens.hairline),
               ),
               child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(LucideIcons.cpu, size: 18, color: Colors.white70),
-                  ),
-                  const SizedBox(width: 12),
+                  Icon(LucideIcons.cpu, size: 16, color: isRunning ? _PrivateLmTokens.green : Colors.white60),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          model.name,
-                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '${model.sizeGb.toStringAsFixed(1)} GB · Контекст 32K · GGUF',
-                          style: GoogleFonts.inter(fontSize: 11, color: _PrivateLmTokens.muted),
-                        ),
+                        Text(model.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                        Text('${model.sizeGb.toStringAsFixed(1)} GB · GGUF', style: const TextStyle(color: _PrivateLmTokens.muted, fontSize: 10.5)),
                       ],
                     ),
                   ),
                   if (isRunning)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: _PrivateLmTokens.green.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('Активна', style: TextStyle(fontSize: 11, color: _PrivateLmTokens.green, fontWeight: FontWeight.bold)),
+                      child: const Text('🟢 В памяти', style: TextStyle(color: _PrivateLmTokens.green, fontSize: 10.5, fontWeight: FontWeight.bold)),
                     )
                   else
                     ElevatedButton(
@@ -708,14 +708,14 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _PrivateLmTokens.accent,
                         foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         minimumSize: Size.zero,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
-                      child: const Text('Запустить', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      child: const Text('⚡ Запустить', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     ),
                   IconButton(
-                    icon: const Icon(LucideIcons.trash_2, size: 14, color: Colors.white38),
+                    icon: const Icon(LucideIcons.trash_2, size: 14, color: Colors.white30),
                     onPressed: () => ref.read(localAiServiceProvider.notifier).deleteModel(model.id),
                   ),
                 ],
@@ -726,32 +726,29 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
-  // ── Scope 2: Catalog (Download from PrivateLM) ──
-  Widget _buildCatalogScope() {
+  Widget _buildLocalCatalogView() {
     final localState = ref.watch(localAiServiceProvider);
-    final categories = ['Все', 'Кодинг', 'Рассуждения', 'Vision', 'Без цензуры'];
+    final categories = ['Все', 'Кодинг', 'Рассуждения', 'Компактные'];
 
     final filtered = availableLocalModels.where((m) {
       if (_catalogCategory == 'Кодинг') return m.name.toLowerCase().contains('coder');
-      if (_catalogCategory == 'Рассуждения') return m.name.toLowerCase().contains('r1') || m.description.contains('<think>');
-      if (_catalogCategory == 'Vision') return m.name.toLowerCase().contains('vl') || m.name.toLowerCase().contains('vision');
-      if (_catalogCategory == 'Без цензуры') return m.name.toLowerCase().contains('uncensored');
+      if (_catalogCategory == 'Рассуждения') return m.name.toLowerCase().contains('r1');
+      if (_catalogCategory == 'Компактные') return m.sizeGb < 1.5;
       return true;
     }).toList();
 
     return Column(
       children: [
-        // Category Pills
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: Row(
             children: categories.map((cat) {
               final isSel = _catalogCategory == cat;
               return Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: ChoiceChip(
-                  label: Text(cat, style: TextStyle(fontSize: 11, color: isSel ? Colors.black : Colors.white70)),
+                  label: Text(cat, style: TextStyle(fontSize: 10.5, color: isSel ? Colors.black : Colors.white70)),
                   selected: isSel,
                   selectedColor: _PrivateLmTokens.accent,
                   backgroundColor: _PrivateLmTokens.surface,
@@ -761,24 +758,21 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             }).toList(),
           ),
         ),
-
-        const SizedBox(height: 6),
-
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             itemCount: filtered.length,
             separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final model = filtered[index];
+            itemBuilder: (context, idx) {
+              final model = filtered[idx];
               final isDownloaded = localState.downloadedModels[model.id] == true;
               final isDownloading = localState.downloadingModelId == model.id;
 
               return Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: _PrivateLmTokens.surface,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: _PrivateLmTokens.hairline),
                 ),
                 child: Column(
@@ -786,84 +780,40 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                   children: [
                     Row(
                       children: [
-                        Expanded(
-                          child: Text(
-                            model.name,
-                            style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w700, color: Colors.white),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            '${model.sizeGb.toStringAsFixed(1)} GB',
-                            style: GoogleFonts.jetBrainsMono(fontSize: 10, color: _PrivateLmTokens.accent),
-                          ),
-                        ),
+                        Expanded(child: Text(model.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
+                        Text('${model.sizeGb.toStringAsFixed(1)} GB', style: const TextStyle(color: _PrivateLmTokens.accent, fontSize: 11, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      model.description,
-                      style: GoogleFonts.inter(fontSize: 11.5, color: _PrivateLmTokens.muted, height: 1.35),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Text(
-                          'Требует ~${model.ramRequiredGb.toStringAsFixed(1)} GB RAM',
-                          style: GoogleFonts.inter(fontSize: 10.5, color: _PrivateLmTokens.faint),
+                    Text(model.description, style: const TextStyle(color: _PrivateLmTokens.muted, fontSize: 11)),
+                    const SizedBox(height: 8),
+                    if (isDownloading) ...[
+                      LinearProgressIndicator(value: localState.downloadProgress, color: _PrivateLmTokens.accent, backgroundColor: Colors.white10),
+                      const SizedBox(height: 6),
+                      Text('Загрузка: ${(localState.downloadProgress * 100).toStringAsFixed(1)}%', style: const TextStyle(color: _PrivateLmTokens.muted, fontSize: 10.5)),
+                    ] else if (isDownloaded)
+                      ElevatedButton(
+                        onPressed: () => _startModelSafely(model.filename),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _PrivateLmTokens.green,
+                          foregroundColor: Colors.black,
+                          minimumSize: const Size(double.infinity, 32),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                         ),
-                        const Spacer(),
-                        if (isDownloading) ...[
-                          SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: _PrivateLmTokens.accent,
-                              value: localState.downloadProgress > 0 ? localState.downloadProgress : null,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${(localState.downloadProgress * 100).toStringAsFixed(0)}%',
-                            style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _PrivateLmTokens.accent),
-                          ),
-                        ] else if (isDownloaded) ...[
-                          ElevatedButton.icon(
-                            onPressed: () => _startModelSafely(model.filename),
-                            icon: const Icon(LucideIcons.play, size: 12),
-                            label: const Text('Запустить', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _PrivateLmTokens.green,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              minimumSize: Size.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                          ),
-                        ] else ...[
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              ref.read(localAiServiceProvider.notifier).downloadModel(model.id);
-                            },
-                            icon: const Icon(LucideIcons.download, size: 12),
-                            label: Text('Скачать (${model.sizeGb.toStringAsFixed(1)} GB)', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(alpha: 0.1),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              minimumSize: Size.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                        child: const Text('⚡ Запустить на GPU', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      )
+                    else
+                      ElevatedButton.icon(
+                        onPressed: () => ref.read(localAiServiceProvider.notifier).downloadModel(model),
+                        icon: const Icon(LucideIcons.download, size: 12),
+                        label: const Text('Скачать модель', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 32),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
                   ],
                 ),
               );
@@ -874,102 +824,164 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
-  // ── Scope 3: Cloud & Wi-Fi (PrivateLM) ──
-  Widget _buildCloudScope() {
-    final aiSvc = ref.watch(aiServiceProvider);
-    final isPrivateLm = _selectedCloudProviderId == 'privatelm';
+  Widget _buildLocalSettingsView() {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      children: [
+        _sliderSetting(
+          label: 'Слои GPU (Vulkan Offload)',
+          valueStr: '$_gpuLayers слоев',
+          value: _gpuLayers.toDouble(),
+          min: 0,
+          max: 33,
+          divisions: 33,
+          hint: 'Ускорение на Adreno GPU через Vulkan (рекомендуется: 16-24)',
+          onChanged: (v) {
+            setState(() => _gpuLayers = v.toInt());
+            ref.read(localAiServiceProvider.notifier).setGpuLayers(v.toInt());
+          },
+        ),
+        const SizedBox(height: 12),
+        _sliderSetting(
+          label: 'Потоки CPU',
+          valueStr: '$_cpuThreads потоков',
+          value: _cpuThreads.toDouble(),
+          min: 1,
+          max: 8,
+          divisions: 7,
+          hint: 'Количество ядер процессора для инференса',
+          onChanged: (v) {
+            setState(() => _cpuThreads = v.toInt());
+            ref.read(localAiServiceProvider.notifier).setThreads(v.toInt());
+          },
+        ),
+        const SizedBox(height: 12),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Flash Attention (FlashAttn)', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+          subtitle: const Text('Ускоряет обработку длинного контекста и экономит RAM', style: TextStyle(fontSize: 10.5, color: _PrivateLmTokens.muted)),
+          value: _useFlashAttn,
+          activeColor: _PrivateLmTokens.accent,
+          onChanged: (v) {
+            setState(() => _useFlashAttn = v);
+            ref.read(localAiServiceProvider.notifier).setUseFlashAttn(v);
+          },
+        ),
+      ],
+    );
+  }
 
-    final providers = [
-      AiProviders.privatelm,
-      AiProviders.openrouter,
-      AiProviders.deepseek,
-      AiProviders.google,
-      AiProviders.anthropic,
-      AiProviders.openai,
-      AiProviders.groq,
-      AiProviders.mistral,
-      AiProviders.together,
-      AiProviders.custom,
-    ];
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 2: СЕРВЕР PRIVATELM (ВТОРОЙ ТЕЛЕФОН ПО WI-FI)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildPrivateLmServerTab() {
+    final aiSvc = ref.watch(aiServiceProvider);
+    final health = _serverHealth;
+    final isOnline = health?.isOk == true;
+    final detectedModel = health?.activeModel ?? aiSvc.lastDetectedServerModel;
 
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       children: [
-        // Provider Horizontal Selector
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
+        // Server Description Card
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _PrivateLmTokens.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _PrivateLmTokens.hairline),
+          ),
           child: Row(
-            children: providers.map((p) {
-              final isSel = p.id == _selectedCloudProviderId;
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: ChoiceChip(
-                  label: Text('${p.logoEmoji} ${p.displayName}',
-                      style: TextStyle(fontSize: 11, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, color: isSel ? Colors.black : Colors.white70)),
-                  selected: isSel,
-                  selectedColor: isSel && p.id == 'privatelm' ? _PrivateLmTokens.accent : Colors.white,
-                  backgroundColor: _PrivateLmTokens.surface,
-                  onSelected: (_) => _onCloudProviderChanged(p.id),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _PrivateLmTokens.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              );
-            }).toList(),
+                child: const Icon(LucideIcons.smartphone, size: 20, color: _PrivateLmTokens.accent),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Второй телефон (PrivateLM Сервер)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Модель запускается на втором телефоне по Wi-Fi. На этом устройстве ресурсы не расходуются.',
+                      style: GoogleFonts.inter(fontSize: 10.5, color: _PrivateLmTokens.muted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
 
         const SizedBox(height: 12),
 
-        // Config Card for Selected Provider
+        // Connection Settings Box
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: _PrivateLmTokens.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isPrivateLm ? _PrivateLmTokens.accent.withValues(alpha: 0.3) : _PrivateLmTokens.hairline),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: isOnline ? _PrivateLmTokens.green.withValues(alpha: 0.4) : _PrivateLmTokens.hairline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(isPrivateLm ? LucideIcons.smartphone : LucideIcons.key_round, size: 16, color: _PrivateLmTokens.accent),
-                  const SizedBox(width: 8),
-                  Text(
-                    isPrivateLm ? 'Подключение к PrivateLM (Второй телефон)' : 'Настройки API провайдера',
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // Server URL (for PrivateLM or custom)
-              if (isPrivateLm || _selectedCloudProviderId == 'custom') ...[
-                const Text('Wi-Fi URL сервера:', style: TextStyle(fontSize: 10.5, color: _PrivateLmTokens.muted)),
-                const SizedBox(height: 4),
-                TextField(
-                  controller: _baseUrlController,
-                  style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'http://10.109.133.237:8080/v1',
-                    hintStyle: const TextStyle(fontSize: 11, color: Colors.white24),
-                    filled: true,
-                    fillColor: Colors.black26,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    isDense: true,
+              const Text('Wi-Fi URL сервера:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white70)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _serverUrlController,
+                style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'http://10.109.133.237:8080/v1',
+                  hintStyle: const TextStyle(fontSize: 11, color: Colors.white24),
+                  filled: true,
+                  fillColor: Colors.black26,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  isDense: true,
+                  suffixIcon: IconButton(
+                    icon: const Icon(LucideIcons.paste, size: 14, color: Colors.white60),
+                    tooltip: 'Вставить из буфера',
+                    onPressed: () async {
+                      final data = await Clipboard.getData('text/plain');
+                      if (data?.text != null) {
+                        _serverUrlController.text = data!.text!.trim();
+                      }
+                    },
                   ),
                 ),
-                const SizedBox(height: 8),
-              ],
+              ),
+              const SizedBox(height: 8),
 
-              // API Key
-              const Text('API Ключ:', style: TextStyle(fontSize: 10.5, color: _PrivateLmTokens.muted)),
+              // Presets chips
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _presetUrlChip('10.109.133.237:8080', 'http://10.109.133.237:8080/v1'),
+                    _presetUrlChip('192.168.1.100:8080', 'http://192.168.1.100:8080/v1'),
+                    _presetUrlChip('127.0.0.1:8080', 'http://127.0.0.1:8080/v1'),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              const Text('API Ключ (необязательно):', style: TextStyle(fontSize: 11, color: _PrivateLmTokens.muted)),
               const SizedBox(height: 4),
               TextField(
-                controller: _apiKeyController,
+                controller: _serverApiKeyController,
                 obscureText: true,
                 style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: isPrivateLm ? 'aichat_...' : 'sk-... или ключ',
+                  hintText: 'aichat_...',
                   hintStyle: const TextStyle(fontSize: 11, color: Colors.white24),
                   filled: true,
                   fillColor: Colors.black26,
@@ -981,41 +993,323 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
               const SizedBox(height: 12),
 
+              // Connect Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isTestingServer ? null : _testServerConnection,
+                  icon: _isTestingServer
+                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      : const Icon(LucideIcons.wifi, size: 14),
+                  label: Text(
+                    _isTestingServer ? 'Проверка соединения...' : 'Проверить связь и найти активную модель',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _PrivateLmTokens.accent,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── HERO КАРТА: ТЕКУЩАЯ МОДЕЛЬ НА СЕРВЕРЕ ──
+        if (isOnline) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  _PrivateLmTokens.green.withValues(alpha: 0.15),
+                  _PrivateLmTokens.accent.withValues(alpha: 0.08),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _PrivateLmTokens.green.withValues(alpha: 0.6), width: 1.2),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: _PrivateLmTokens.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'СЕРВЕР ПОДКЛЮЧЕН · ${health.latencyMs} ms',
+                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: _PrivateLmTokens.green),
+                    ),
+                    const Spacer(),
+                    const Icon(LucideIcons.sparkles, size: 14, color: _PrivateLmTokens.accent),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'АКТИВНАЯ МОДЕЛЬ НА ВТОРОМ ТЕЛЕФОНЕ:',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white60, letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  detectedModel != null ? _formatModelTitle(detectedModel) : 'Текущая модель PrivateLM',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Модель готова принимать запросы в чате через Wi-Fi без задержек.',
+                  style: TextStyle(fontSize: 11, color: _PrivateLmTokens.muted),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final mId = detectedModel ?? 'default';
+                      _selectAndApplyProviderAndModel('privatelm', mId);
+                    },
+                    icon: const Icon(LucideIcons.check_circle, size: 14),
+                    label: const Text('⚡ Выбрать эту модель для чата', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _PrivateLmTokens.green,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+        ] else if (health != null && !health.isOk) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _PrivateLmTokens.orange.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _PrivateLmTokens.orange.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(LucideIcons.alert_triangle, size: 16, color: _PrivateLmTokens.orange),
+                    const SizedBox(width: 8),
+                    const Text('Сервер не отвечает', style: TextStyle(color: _PrivateLmTokens.orange, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  health.errorMessage ?? 'Не удалось подключиться к порту 8080',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white70),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '• Убедитесь, что сервер PrivateLM запущен на втором телефоне\n• Оба телефона должны быть в одной Wi-Fi сети\n• Проверьте IP адрес в строке подключения',
+                  style: TextStyle(fontSize: 10.5, color: _PrivateLmTokens.muted, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // Список всех моделей сервера
+        Text(
+          'Модели на сервере (${_serverModels.length}):',
+          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: _PrivateLmTokens.muted),
+        ),
+        const SizedBox(height: 8),
+
+        if (_serverModels.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            alignment: Alignment.center,
+            child: const Text('Нажмите «Проверить связь», чтобы загрузить список моделей с сервера.', style: TextStyle(color: _PrivateLmTokens.faint, fontSize: 11), textAlign: TextAlign.center),
+          )
+        else
+          ..._serverModels.map((m) {
+            final isAct = m.isServerActive || m.id == detectedModel;
+            final isCurrent = aiSvc.selectedModel == m.id && aiSvc.selectedProviderId == 'privatelm';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: _PrivateLmTokens.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isAct ? _PrivateLmTokens.green.withValues(alpha: 0.6) : (isCurrent ? _PrivateLmTokens.accent : _PrivateLmTokens.hairline),
+                  width: isAct ? 1.2 : 0.8,
+                ),
+              ),
+              child: ListTile(
+                dense: true,
+                leading: Icon(
+                  isAct ? LucideIcons.sparkles : LucideIcons.cpu,
+                  size: 16,
+                  color: isAct ? _PrivateLmTokens.green : Colors.white60,
+                ),
+                title: Text(
+                  m.displayName,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11.5,
+                    fontWeight: isAct || isCurrent ? FontWeight.bold : FontWeight.normal,
+                    color: Colors.white,
+                  ),
+                ),
+                trailing: isAct
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _PrivateLmTokens.green.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text('🟢 Запущена', style: TextStyle(color: _PrivateLmTokens.green, fontSize: 10, fontWeight: FontWeight.bold)),
+                      )
+                    : (isCurrent ? const Icon(LucideIcons.check, size: 14, color: _PrivateLmTokens.accent) : null),
+                onTap: () => _selectAndApplyProviderAndModel('privatelm', m.id),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+
+  Widget _presetUrlChip(String label, String url) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: ActionChip(
+        label: Text(label, style: const TextStyle(fontSize: 10, color: Colors.white70)),
+        backgroundColor: Colors.white.withValues(alpha: 0.06),
+        padding: EdgeInsets.zero,
+        onPressed: () {
+          _serverUrlController.text = url;
+          _testServerConnection();
+        },
+      ),
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 3: ОБЛАЧНЫЕ ПРОВАЙДЕРЫ (OPENROUTER, DEEPSEEK, GOOGLE, CLAUDE, ETC.)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildCloudProvidersTab() {
+    final aiSvc = ref.watch(aiServiceProvider);
+    final providers = [
+      AiProviders.openrouter,
+      AiProviders.deepseek,
+      AiProviders.google,
+      AiProviders.anthropic,
+      AiProviders.openai,
+      AiProviders.groq,
+      AiProviders.mistral,
+      AiProviders.together,
+      AiProviders.custom,
+    ];
+
+    final query = _cloudSearchController.text.trim().toLowerCase();
+    final filtered = _cloudModels.where((m) {
+      if (query.isEmpty) return true;
+      return m.id.toLowerCase().contains(query) || m.displayName.toLowerCase().contains(query);
+    }).toList();
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      children: [
+        // Horizontal Provider Switcher
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: providers.map((p) {
+              final isSel = p.id == _selectedCloudProviderId;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ChoiceChip(
+                  label: Text(
+                    '${p.logoEmoji} ${p.displayName}',
+                    style: TextStyle(fontSize: 11, fontWeight: isSel ? FontWeight.bold : FontWeight.normal, color: isSel ? Colors.black : Colors.white70),
+                  ),
+                  selected: isSel,
+                  selectedColor: _PrivateLmTokens.accent,
+                  backgroundColor: _PrivateLmTokens.surface,
+                  onSelected: (_) => _onCloudProviderChanged(p.id),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Config Card for Selected Provider
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _PrivateLmTokens.surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _PrivateLmTokens.hairline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('API Ключ для ${_selectedCloudProviderId.toUpperCase()}:', style: const TextStyle(fontSize: 11, color: _PrivateLmTokens.muted)),
+              const SizedBox(height: 4),
+              TextField(
+                controller: _cloudApiKeyController,
+                obscureText: true,
+                style: GoogleFonts.jetBrainsMono(fontSize: 12, color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'sk-... или ключ доступа',
+                  hintStyle: const TextStyle(fontSize: 11, color: Colors.white24),
+                  filled: true,
+                  fillColor: Colors.black26,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   ElevatedButton.icon(
                     onPressed: () async {
-                      final key = _apiKeyController.text.trim();
-                      final url = _baseUrlController.text.trim();
+                      final key = _cloudApiKeyController.text.trim();
                       await aiSvc.setApiKey(_selectedCloudProviderId, key);
-                      if (url.isNotEmpty) {
-                        await aiSvc.setBaseUrl(_selectedCloudProviderId, url);
-                      }
                       _discoverCloudModels();
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Параметры сохранены'), duration: Duration(seconds: 1)),
-                        );
-                      }
                     },
-                    icon: _isDiscovering
+                    icon: _isDiscoveringCloud
                         ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.black))
                         : const Icon(LucideIcons.check, size: 12),
-                    label: const Text('Сохранить и проверить', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    label: const Text('Сохранить и обновить модели', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _PrivateLmTokens.accent,
                       foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       minimumSize: Size.zero,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
                   ),
-                  if (_statusMessage != null) ...[
-                    const SizedBox(width: 10),
+                  if (_cloudStatusMessage != null) ...[
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _statusMessage!,
-                        style: GoogleFonts.inter(fontSize: 10.5, color: _statusOk ? _PrivateLmTokens.green : _PrivateLmTokens.orange),
+                        _cloudStatusMessage!,
+                        style: TextStyle(fontSize: 10.5, color: _cloudStatusOk ? _PrivateLmTokens.green : _PrivateLmTokens.orange),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1027,45 +1321,70 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
           ),
         ),
 
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
 
-        Text(
-          'Доступные модели на ${_selectedCloudProviderId.toUpperCase()}:',
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: _PrivateLmTokens.muted),
+        // Search Bar
+        TextField(
+          controller: _cloudSearchController,
+          onChanged: (_) => setState(() {}),
+          style: GoogleFonts.inter(fontSize: 12, color: Colors.white),
+          decoration: InputDecoration(
+            hintText: 'Поиск моделей...',
+            hintStyle: const TextStyle(fontSize: 11, color: Colors.white30),
+            prefixIcon: const Icon(LucideIcons.search, size: 14, color: Colors.white38),
+            filled: true,
+            fillColor: _PrivateLmTokens.surface,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _PrivateLmTokens.hairline)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            isDense: true,
+          ),
         ),
-        const SizedBox(height: 8),
 
-        ..._cloudModels.map((m) {
+        const SizedBox(height: 10),
+
+        // Models List
+        ...filtered.map((m) {
           final isCurrent = aiSvc.selectedModel == m.id && aiSvc.selectedProviderId == _selectedCloudProviderId;
 
           return Container(
             margin: const EdgeInsets.only(bottom: 6),
             decoration: BoxDecoration(
-              color: isCurrent ? _PrivateLmTokens.accent.withValues(alpha: 0.12) : _PrivateLmTokens.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: isCurrent ? _PrivateLmTokens.accent.withValues(alpha: 0.4) : _PrivateLmTokens.hairline),
+              color: _PrivateLmTokens.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: isCurrent ? _PrivateLmTokens.accent : _PrivateLmTokens.hairline),
             ),
             child: ListTile(
               dense: true,
               leading: Icon(
-                m.id == 'default' ? LucideIcons.sparkles : LucideIcons.cpu,
-                size: 16,
-                color: isCurrent ? _PrivateLmTokens.accent : Colors.white60,
+                m.isFree ? LucideIcons.sparkles : LucideIcons.cpu,
+                size: 15,
+                color: isCurrent ? _PrivateLmTokens.accent : (m.isFree ? _PrivateLmTokens.green : Colors.white60),
               ),
               title: Text(
                 m.displayName,
                 style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
-                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
-                  color: isCurrent ? Colors.white : Colors.white.withValues(alpha: 0.9),
+                  fontSize: 11.5,
+                  fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                  color: Colors.white,
                 ),
               ),
-              trailing: isCurrent ? const Icon(LucideIcons.check, size: 14, color: _PrivateLmTokens.accent) : null,
-              onTap: () {
-                aiSvc.setProvider(_selectedCloudProviderId);
-                aiSvc.setModel(m.id);
-                Navigator.of(context).pop(m.id);
-              },
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (m.isFree)
+                    Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _PrivateLmTokens.green.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text('FREE', style: TextStyle(color: _PrivateLmTokens.green, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                    ),
+                  if (isCurrent) const Icon(LucideIcons.check, size: 14, color: _PrivateLmTokens.accent),
+                ],
+              ),
+              onTap: () => _selectAndApplyProviderAndModel(_selectedCloudProviderId, m.id),
             ),
           );
         }),
@@ -1073,340 +1392,9 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     );
   }
 
-  // ─── TAB 2: SETTINGS (PrivateLM Style) ────────────────────────────────────
-
-  Widget _buildSettingsTab() {
-    final aiSvc = ref.watch(aiServiceProvider);
-    final localState = ref.watch(localAiServiceProvider);
-
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-      children: [
-        // ── 1. Inference Mode ──
-        _sectionLabel('Режим работы (Inference Mode)'),
-        Container(
-          decoration: BoxDecoration(
-            color: _PrivateLmTokens.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _PrivateLmTokens.hairline),
-          ),
-          child: Column(
-            children: [
-              _modeRow(
-                title: 'Второй телефон (PrivateLM Wi-Fi)',
-                subtitle: 'Вычисления идут на втором устройстве по локальной сети',
-                icon: LucideIcons.smartphone,
-                isSelected: aiSvc.selectedProviderId == 'privatelm',
-                onTap: () {
-                  aiSvc.setProvider('privatelm');
-                  setState(() => _selectedCloudProviderId = 'privatelm');
-                },
-              ),
-              const Divider(color: _PrivateLmTokens.hairline, height: 1),
-              _modeRow(
-                title: 'Локальный на этом телефоне (Vulkan / CPU)',
-                subtitle: 'GGUF модели работают автономно без интернета',
-                icon: LucideIcons.cpu,
-                isSelected: aiSvc.selectedProviderId == 'local_edge',
-                onTap: () {
-                  aiSvc.setProvider('local_edge');
-                },
-              ),
-              const Divider(color: _PrivateLmTokens.hairline, height: 1),
-              _modeRow(
-                title: 'Облачные API (OpenRouter, DeepSeek, Google)',
-                subtitle: 'Генерация через официальные облачные ключи',
-                icon: LucideIcons.cloud,
-                isSelected: aiSvc.selectedProviderId != 'privatelm' && aiSvc.selectedProviderId != 'local_edge',
-                onTap: () {
-                  aiSvc.setProvider('openrouter');
-                  setState(() => _selectedCloudProviderId = 'openrouter');
-                },
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        // ── 2. Model Parameters ──
-        _sectionLabel('Параметры генерации (Model Parameters)'),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _PrivateLmTokens.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _PrivateLmTokens.hairline),
-          ),
-          child: Column(
-            children: [
-              // Temperature
-              _sliderSetting(
-                label: 'Температура (Temperature)',
-                valueStr: _temperature.toStringAsFixed(2),
-                value: _temperature,
-                min: 0.0,
-                max: 1.5,
-                divisions: 15,
-                hint: '0.2 = точно для кода · 0.7 = баланс · 1.0+ = креативно',
-                onChanged: (v) {
-                  setState(() => _temperature = v);
-                  aiSvc.setTemperature(v);
-                },
-              ),
-              const Divider(color: _PrivateLmTokens.hairline, height: 24),
-              // Max Tokens
-              _sliderSetting(
-                label: 'Длина ответа (Max Tokens)',
-                valueStr: '$_maxTokens токенов',
-                value: _maxTokens.toDouble(),
-                min: 512,
-                max: 8192,
-                divisions: 15,
-                hint: 'Ограничение токенов в одном ответе',
-                onChanged: (v) {
-                  setState(() => _maxTokens = v.toInt());
-                  aiSvc.setMaxTokens(v.toInt());
-                },
-              ),
-              const Divider(color: _PrivateLmTokens.hairline, height: 24),
-              // Top-P
-              _sliderSetting(
-                label: 'Креативность (Top-P)',
-                valueStr: _topP.toStringAsFixed(2),
-                value: _topP,
-                min: 0.1,
-                max: 1.0,
-                divisions: 9,
-                hint: 'Порог вероятностной фильтрации',
-                onChanged: (v) {
-                  setState(() => _topP = v);
-                  aiSvc.setTopP(v);
-                },
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        // ── 3. System Prompt ──
-        _sectionLabel('Системная инструкция (System Prompt)'),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _PrivateLmTokens.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _PrivateLmTokens.hairline),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _systemPromptController,
-                maxLines: 4,
-                style: GoogleFonts.inter(fontSize: 12.5, color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: 'Задайте общую роль для ассистента...',
-                  hintStyle: TextStyle(fontSize: 12, color: Colors.white24),
-                  border: InputBorder.none,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _presetPromptChip('Стандарт', 'You are a helpful AI coding assistant.'),
-                  const SizedBox(width: 6),
-                  _presetPromptChip('Fullstack Ninja', 'You are an elite Senior Fullstack Architect. Write concise, production-ready code.'),
-                  const Spacer(),
-                  ElevatedButton(
-                    onPressed: () {
-                      aiSvc.setSystemPrompt(_systemPromptController.text.trim());
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Системный промт сохранён'), duration: Duration(seconds: 1)),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _PrivateLmTokens.accent,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      minimumSize: Size.zero,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text('Сохранить', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        // ── 4. Hardware & Performance (Vulkan GPU & CPU) ──
-        _sectionLabel('Аппаратные настройки локального движка'),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: _PrivateLmTokens.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: _PrivateLmTokens.hairline),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _sliderSetting(
-                label: 'Потоки процессора (CPU Threads)',
-                valueStr: '$_cpuThreads потоков',
-                value: _cpuThreads.toDouble(),
-                min: 1,
-                max: 8,
-                divisions: 7,
-                hint: 'Рекомендуется: 3–6 потоков для баланса скорости и нагрева',
-                onChanged: (v) {
-                  setState(() => _cpuThreads = v.toInt());
-                  ref.read(localAiServiceProvider.notifier).updateSettings(threads: v.toInt());
-                },
-              ),
-              const Divider(color: _PrivateLmTokens.hairline, height: 24),
-              _sliderSetting(
-                label: 'Слои ускорения GPU / Vulkan',
-                valueStr: _gpuLayers == 0 ? '0 (Чистый CPU)' : '$_gpuLayers слоёв',
-                value: _gpuLayers.toDouble(),
-                min: 0,
-                max: 33,
-                divisions: 33,
-                hint: '0 = безопасно на CPU · 16–33 = аппаратный Vulkan GPU',
-                onChanged: (v) {
-                  setState(() => _gpuLayers = v.toInt());
-                  ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: v.toInt());
-                },
-              ),
-              const Divider(color: _PrivateLmTokens.hairline, height: 24),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Flash Attention', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-                        Text('Снижает расход памяти при длинном контексте', style: TextStyle(fontSize: 10.5, color: _PrivateLmTokens.muted)),
-                      ],
-                    ),
-                  ),
-                  Switch(
-                    value: _useFlashAttn,
-                    activeColor: _PrivateLmTokens.accent,
-                    onChanged: (v) {
-                      setState(() => _useFlashAttn = v);
-                      ref.read(localAiServiceProvider.notifier).updateSettings(useFlashAttn: v);
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 30),
-      ],
-    );
-  }
-
-  Widget _modeRow({required String title, required String subtitle, required IconData icon, required bool isSelected, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isSelected ? _PrivateLmTokens.accent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 16, color: isSelected ? _PrivateLmTokens.accent : Colors.white60),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: GoogleFonts.inter(fontSize: 12.5, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500, color: Colors.white)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: GoogleFonts.inter(fontSize: 10.5, color: _PrivateLmTokens.muted)),
-                ],
-              ),
-            ),
-            if (isSelected) const Icon(LucideIcons.check, size: 16, color: _PrivateLmTokens.accent),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _sliderSetting({
-    required String label,
-    required String valueStr,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String hint,
-    required ValueChanged<double> onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white))),
-            Text(valueStr, style: GoogleFonts.jetBrainsMono(fontSize: 11.5, fontWeight: FontWeight.bold, color: _PrivateLmTokens.accent)),
-          ],
-        ),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor: _PrivateLmTokens.accent,
-            inactiveTrackColor: Colors.white12,
-            thumbColor: Colors.white,
-            trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-          ),
-          child: Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: onChanged,
-          ),
-        ),
-        Text(hint, style: const TextStyle(fontSize: 10, color: _PrivateLmTokens.faint)),
-      ],
-    );
-  }
-
-  Widget _presetPromptChip(String title, String prompt) {
-    return ActionChip(
-      label: Text(title, style: const TextStyle(fontSize: 10, color: Colors.white70)),
-      backgroundColor: Colors.white.withValues(alpha: 0.06),
-      padding: EdgeInsets.zero,
-      onPressed: () => _systemPromptController.text = prompt,
-    );
-  }
-
-  Widget _sectionLabel(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
-      child: Text(
-        title,
-        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: _PrivateLmTokens.muted),
-      ),
-    );
-  }
-
-  // ─── TAB 3: LOGS (PrivateLM Style) ────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MODULE 4: ЛОГИ ИНФЕРЕНСА
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildLogsTab() {
     final localState = ref.watch(localAiServiceProvider);
@@ -1418,15 +1406,12 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
     ];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
           Row(
             children: [
-              Text(
-                'Консоль событий и инференса',
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: _PrivateLmTokens.muted),
-              ),
+              Text('Консоль событий и инференса', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: _PrivateLmTokens.muted)),
               const Spacer(),
               IconButton(
                 icon: const Icon(LucideIcons.copy, size: 14, color: Colors.white60),
@@ -1447,7 +1432,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: const Color(0xFF07080B),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: _PrivateLmTokens.hairline),
               ),
               child: allLogs.isEmpty
@@ -1477,6 +1462,46 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _sliderSetting({
+    required String label,
+    required String valueStr,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required String hint,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white))),
+            Text(valueStr, style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.bold, color: _PrivateLmTokens.accent)),
+          ],
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: _PrivateLmTokens.accent,
+            inactiveTrackColor: Colors.white12,
+            thumbColor: Colors.white,
+            trackHeight: 3,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+          ),
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: onChanged,
+          ),
+        ),
+        Text(hint, style: const TextStyle(fontSize: 9.5, color: _PrivateLmTokens.faint)),
+      ],
     );
   }
 }
