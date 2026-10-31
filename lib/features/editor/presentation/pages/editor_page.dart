@@ -353,8 +353,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final panelState = ref.watch(panelProvider);
     final panelNotifier = ref.read(panelProvider.notifier);
     
-    final isDesktop = MediaQuery.of(context).size.width > 800;
-    final isCompactPhone = MediaQuery.of(context).size.width < 620;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isDesktop = screenWidth > 800;
+    final isCompactPhone = screenWidth < 620;
     final l10n = AppLocalizations.of(context)!;
 
     // Слушаем смену workspace ОДИН РАЗ — не на каждый build()
@@ -702,230 +703,270 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 Expanded(
                   child: Row(
                     children: [
-                      if (!isDesktop)
-                        IconButton(
-                          icon: const Icon(LucideIcons.menu, size: 20, color: Colors.blueAccent),
-                          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                      if (!isDesktop) ...[
+                        const SizedBox(width: 8),
+                        ActionIconButton(
+                          icon: LucideIcons.menu,
+                          color: Colors.cyanAccent,
                           tooltip: AppLocalizations.of(context)!.openExplorer,
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          constraints: const BoxConstraints(),
-                        )
-                      else
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(LucideIcons.arrow_left, size: 16),
-                              onPressed: () async {
-                                await ref.read(workspaceProvider.notifier).closeWorkspace();
-                                if (context.mounted) {
-                                  context.go('/');
-                                }
-                              },
-                              tooltip: AppLocalizations.of(context)!.back,
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              constraints: const BoxConstraints(),
-                            ),
-                            IconButton(
-                              icon: const Icon(LucideIcons.panel_left, size: 16),
-                              onPressed: () {
-                                final isOpen = ref.read(leftPanelOpenProvider);
-                                final currentTab = ref.read(drawerTabProvider);
-                                if (!isOpen) {
-                                  ref.read(drawerTabProvider.notifier).state = 0;
-                                  ref.read(leftPanelOpenProvider.notifier).state = true;
-                                } else if (currentTab != 0) {
-                                  ref.read(drawerTabProvider.notifier).state = 0;
-                                } else {
-                                  ref.read(leftPanelOpenProvider.notifier).state = false;
-                                }
-                              },
-                              tooltip: AppLocalizations.of(context)!.openExplorer,
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
+                          onTap: () => _scaffoldKey.currentState?.openDrawer(),
                         ),
+                        const SizedBox(width: 4),
+                      ] else ...[
+                        const SizedBox(width: 14),
+                      ],
                       const Expanded(
                         child: EditorAppBarTitle(),
                       ),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // На планшетах и широких экранах кнопки Undo/Redo наверху доступны.
-                              // На узких телефонах в вертикали они скрыты сверху, т.к. уже есть внизу в KeyboardAccessoryBar.
-                              if (!isCompactPhone && activeFile != null) ...[
-                                ActionIconButton(
-                                  icon: LucideIcons.undo_2,
-                                  tooltip: 'Отменить (Undo / Ctrl+Z)',
-                                  onTap: () {
-                                    try { activeFile.controller.undo(); } catch (_) {}
-                                  },
-                                ),
-                                ActionIconButton(
-                                  icon: LucideIcons.redo_2,
-                                  tooltip: 'Повторить (Redo / Ctrl+Y)',
-                                  onTap: () {
-                                    try { activeFile.controller.redo(); } catch (_) {}
-                                  },
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                              _buildQuickUpdatePill(ref),
-                              ActionIconButton(
-                                icon: LucideIcons.play,
-                                color: Colors.greenAccent,
-                                tooltip: 'Запустить проект (F5)',
-                                onTap: () {
-                                  if (currentProject != null) {
-                                    ref.read(projectServiceProvider.notifier).runProject(currentProject);
-                                    panelNotifier.selectTab(PanelTab.terminal);
-                                    panelNotifier.openPanel();
-                                  } else {
-                                    panelNotifier.selectTab(PanelTab.terminal);
-                                    panelNotifier.openPanel();
-                                  }
-                                },
+                      const SizedBox(width: 8),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Wide screens: Undo / Redo
+                          if (screenWidth >= 720 && activeFile != null) ...[
+                            ActionIconButton(
+                              icon: LucideIcons.undo_2,
+                              tooltip: 'Отменить (Undo / Ctrl+Z)',
+                              onTap: () {
+                                try { activeFile.controller.undo(); } catch (_) {}
+                              },
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.redo_2,
+                              tooltip: 'Повторить (Redo / Ctrl+Y)',
+                              onTap: () {
+                                try { activeFile.controller.redo(); } catch (_) {}
+                              },
+                            ),
+                            const SizedBox(width: 2),
+                          ],
+                          _buildQuickUpdatePill(ref),
+                          ActionIconButton(
+                            icon: LucideIcons.play,
+                            color: Colors.greenAccent,
+                            backgroundColor: Colors.greenAccent.withValues(alpha: 0.16),
+                            borderColor: Colors.greenAccent.withValues(alpha: 0.38),
+                            tooltip: 'Запустить проект (F5)',
+                            onTap: () {
+                              if (currentProject != null) {
+                                ref.read(projectServiceProvider.notifier).runProject(currentProject);
+                                panelNotifier.selectTab(PanelTab.terminal);
+                                panelNotifier.openPanel();
+                              } else {
+                                panelNotifier.selectTab(PanelTab.terminal);
+                                panelNotifier.openPanel();
+                              }
+                            },
+                          ),
+                          ActionIconButton(
+                            icon: LucideIcons.save,
+                            tooltip: AppLocalizations.of(context)!.saveTooltip,
+                            onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                          ),
+                          if (screenWidth >= 400) ...[
+                            ActionIconButton(
+                              icon: LucideIcons.git_branch,
+                              color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent,
+                              tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.git);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                            ActionIconButton(
+                              icon: LucideIcons.terminal,
+                              tooltip: AppLocalizations.of(context)!.terminal,
+                              onTap: () {
+                                if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
+                                  panelNotifier.closePanel();
+                                } else {
+                                  panelNotifier.selectTab(PanelTab.terminal);
+                                  panelNotifier.openPanel();
+                                }
+                              },
+                            ),
+                          ],
+                          if (screenWidth >= 540)
+                            ActionIconButton(
+                              icon: LucideIcons.sparkles,
+                              color: Colors.purpleAccent,
+                              tooltip: AppLocalizations.of(context)!.aiChat,
+                              onTap: () {
+                                ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
+                              },
+                            ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Ещё действия',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            color: const Color(0xFF1E2230),
+                            elevation: 12,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                            ),
+                            icon: Container(
+                              width: 32,
+                              height: 32,
+                              margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF161922).withValues(alpha: 0.85),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.8),
                               ),
-                              ActionIconButton(
-                                icon: LucideIcons.save,
-                                tooltip: AppLocalizations.of(context)!.saveTooltip,
-                                onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
-                              ),
-                              ActionIconButton(
-                                icon: LucideIcons.git_branch,
-                                color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent,
-                                tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
-                                onTap: () {
+                              child: const Icon(LucideIcons.ellipsis_vertical, size: 15, color: Colors.white70),
+                            ),
+                            onSelected: (value) async {
+                              switch (value) {
+                                case 'undo':
+                                  try { activeFile?.controller.undo(); } catch (_) {}
+                                  break;
+                                case 'redo':
+                                  try { activeFile?.controller.redo(); } catch (_) {}
+                                  break;
+                                case 'git':
                                   if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
                                     panelNotifier.closePanel();
                                   } else {
                                     panelNotifier.selectTab(PanelTab.git);
                                     panelNotifier.openPanel();
                                   }
-                                },
-                              ),
-                              ActionIconButton(
-                                icon: LucideIcons.terminal,
-                                tooltip: AppLocalizations.of(context)!.terminal,
-                                onTap: () {
+                                  break;
+                                case 'terminal':
                                   if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
                                     panelNotifier.closePanel();
                                   } else {
                                     panelNotifier.selectTab(PanelTab.terminal);
                                     panelNotifier.openPanel();
                                   }
-                                },
-                              ),
-                              ActionIconButton(
-                                icon: LucideIcons.sparkles,
-                                color: Colors.purpleAccent,
-                                tooltip: AppLocalizations.of(context)!.aiChat,
-                                onTap: () {
+                                  break;
+                                case 'chat':
                                   ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                                },
-                              ),
-                              PopupMenuButton<String>(
-                                icon: const Icon(Icons.more_vert, size: 20, color: Colors.white70),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                color: const Color(0xFF1E1E2E),
-                                elevation: 8,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-                                ),
-                                onSelected: (value) async {
-                                  switch (value) {
-                                    case 'undo':
-                                      try { activeFile?.controller.undo(); } catch (_) {}
-                                      break;
-                                    case 'redo':
-                                      try { activeFile?.controller.redo(); } catch (_) {}
-                                      break;
-                                    case 'sync':
-                                      final currentWs = ref.read(workspaceProvider).currentPath;
-                                      if (currentWs != null) {
-                                        ref.read(projectSyncProvider.notifier).startSync(currentWs, force: true);
-                                      }
-                                      break;
-                                    case 'chat':
-                                      ref.read(rightChatPanelOpenProvider.notifier).update((v) => !v);
-                                      break;
-                                    case 'home':
-                                      await ref.read(workspaceProvider.notifier).closeWorkspace();
-                                      if (context.mounted) {
-                                        context.go('/');
-                                      }
-                                      break;
+                                  break;
+                                case 'toggle_panel':
+                                  if (isDesktop) {
+                                    final isOpen = ref.read(leftPanelOpenProvider);
+                                    ref.read(leftPanelOpenProvider.notifier).state = !isOpen;
+                                  } else {
+                                    _scaffoldKey.currentState?.openDrawer();
                                   }
-                                },
-                                itemBuilder: (context) => [
-                                  if (isCompactPhone && activeFile != null) ...[
-                                    const PopupMenuItem(
-                                      value: 'undo',
-                                      child: Row(
-                                        children: [
-                                          Icon(LucideIcons.undo_2, size: 16, color: Colors.white70),
-                                          SizedBox(width: 10),
-                                          Text('Отменить (Undo)', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'redo',
-                                      child: Row(
-                                        children: [
-                                          Icon(LucideIcons.redo_2, size: 16, color: Colors.white70),
-                                          SizedBox(width: 10),
-                                          Text('Повторить (Redo)', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuDivider(),
+                                  break;
+                                case 'sync':
+                                  final currentWs = ref.read(workspaceProvider).currentPath;
+                                  if (currentWs != null) {
+                                    ref.read(projectSyncProvider.notifier).startSync(currentWs, force: true);
+                                  }
+                                  break;
+                                case 'home':
+                                  await ref.read(workspaceProvider.notifier).closeWorkspace();
+                                  if (context.mounted) {
+                                    context.go('/');
+                                  }
+                                  break;
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              if (screenWidth < 720 && activeFile != null) ...[
+                                const PopupMenuItem(
+                                  value: 'undo',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.undo_2, size: 16, color: Colors.white70),
+                                      SizedBox(width: 10),
+                                      Text('Отменить (Undo)', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'redo',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.redo_2, size: 16, color: Colors.white70),
+                                      SizedBox(width: 10),
+                                      Text('Повторить (Redo)', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                              ],
+                              if (screenWidth < 400) ...[
+                                PopupMenuItem(
+                                  value: 'git',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.git_branch, size: 16, color: gitChangesCount > 0 ? Colors.amberAccent : Colors.cyanAccent),
+                                      const SizedBox(width: 10),
+                                      Text(gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git', style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'terminal',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.terminal, size: 16, color: Colors.white70),
+                                      SizedBox(width: 10),
+                                      Text('Терминал', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                              if (screenWidth < 540) ...[
+                                PopupMenuItem(
+                                  value: 'chat',
+                                  child: Row(
+                                    children: [
+                                      const Icon(LucideIcons.sparkles, size: 16, color: Colors.purpleAccent),
+                                      const SizedBox(width: 10),
+                                      Text(AppLocalizations.of(context)!.aiChat, style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                              ],
+                              if (isDesktop) ...[
+                                const PopupMenuItem(
+                                  value: 'toggle_panel',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.panel_left, size: 16, color: Colors.white70),
+                                      SizedBox(width: 10),
+                                      Text('Боковая панель', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                              ],
+                              const PopupMenuItem(
+                                value: 'sync',
+                                child: Row(
+                                  children: [
+                                    Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
+                                    SizedBox(width: 10),
+                                    Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
                                   ],
-                                  const PopupMenuItem(
-                                    value: 'sync',
-                                    child: Row(
-                                      children: [
-                                        Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
-                                        SizedBox(width: 10),
-                                        Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuDivider(),
-                                  PopupMenuItem(
-                                    value: 'chat',
-                                    child: Row(
-                                      children: [
-                                        const Icon(LucideIcons.message_square, size: 16, color: Colors.cyanAccent),
-                                        const SizedBox(width: 10),
-                                        Text(AppLocalizations.of(context)!.aiChat, style: const TextStyle(fontSize: 13, color: Colors.white)),
-                                      ],
-                                    ),
-                                  ),
-                                  const PopupMenuDivider(),
-                                  PopupMenuItem(
-                                    value: 'home',
-                                    child: Row(
-                                      children: [
-                                        const Icon(LucideIcons.house, size: 16, color: Colors.white70),
-                                        const SizedBox(width: 10),
-                                        Text(l10n.home, style: const TextStyle(fontSize: 13, color: Colors.white70)),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
-                              const SizedBox(width: 4),
+                              const PopupMenuDivider(),
+                              PopupMenuItem(
+                                value: 'home',
+                                child: Row(
+                                  children: [
+                                    const Icon(LucideIcons.house, size: 16, color: Colors.white70),
+                                    const SizedBox(width: 10),
+                                    Text(l10n.home, style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
-                        ),
+                          const SizedBox(width: 6),
+                        ],
                       ),
                     ],
                   ),

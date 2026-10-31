@@ -1630,18 +1630,83 @@ class ActionIconButton extends StatelessWidget {
   final VoidCallback onTap;
   final String? tooltip;
   final Color? color;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final double size;
+  final double iconSize;
 
-  const ActionIconButton({super.key, required this.icon, required this.onTap, this.tooltip, this.color});
+  const ActionIconButton({
+    super.key,
+    required this.icon,
+    required this.onTap,
+    this.tooltip,
+    this.color,
+    this.backgroundColor,
+    this.borderColor,
+    this.size = 32,
+    this.iconSize = 15,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      icon: Icon(icon, size: 14, color: color ?? Colors.white70),
-      onPressed: onTap,
-      tooltip: tooltip,
-      padding: const EdgeInsets.all(5),
-      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-      splashRadius: 18,
+    final effectiveColor = color ?? Colors.white.withValues(alpha: 0.85);
+    final isCustomColor = color != null && color != Colors.white70 && color != Colors.white;
+
+    final effectiveBg = backgroundColor ??
+        (isCustomColor
+            ? color!.withValues(alpha: 0.12)
+            : const Color(0xFF161922).withValues(alpha: 0.85));
+
+    final effectiveBorder = borderColor ??
+        (isCustomColor
+            ? color!.withValues(alpha: 0.28)
+            : Colors.white.withValues(alpha: 0.08));
+
+    Widget button = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: (color ?? Colors.cyanAccent).withValues(alpha: 0.2),
+        highlightColor: (color ?? Colors.cyanAccent).withValues(alpha: 0.1),
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: effectiveBg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: effectiveBorder, width: 0.8),
+            boxShadow: isCustomColor
+                ? [
+                    BoxShadow(
+                      color: color!.withValues(alpha: 0.08),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            icon,
+            size: iconSize,
+            color: effectiveColor,
+          ),
+        ),
+      ),
+    );
+
+    if (tooltip != null && tooltip!.isNotEmpty) {
+      button = Tooltip(
+        message: tooltip!,
+        waitDuration: const Duration(milliseconds: 350),
+        child: button,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2.5),
+      child: button,
     );
   }
 }

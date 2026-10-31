@@ -86,27 +86,40 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     required String tooltip,
     required VoidCallback onPressed,
     bool isActive = false,
+    Color? color,
   }) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        hoverColor: Colors.white.withValues(alpha: 0.08),
-        splashColor: Colors.white.withValues(alpha: 0.12),
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          margin: const EdgeInsets.symmetric(horizontal: 1.5),
-          decoration: isActive
-              ? BoxDecoration(
-                  color: const Color(0xFF4CD7F6).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                )
-              : null,
-          child: Icon(
-            icon,
-            size: 14,
-            color: isActive ? const Color(0xFF4CD7F6) : Colors.white60,
+      waitDuration: const Duration(milliseconds: 350),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(6),
+          hoverColor: Colors.white.withValues(alpha: 0.08),
+          splashColor: Colors.white.withValues(alpha: 0.12),
+          child: Container(
+            width: 26,
+            height: 26,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            alignment: Alignment.center,
+            decoration: isActive
+                ? BoxDecoration(
+                    color: const Color(0xFF4CD7F6).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: const Color(0xFF4CD7F6).withValues(alpha: 0.4),
+                      width: 0.8,
+                    ),
+                  )
+                : null,
+            child: Icon(
+              icon,
+              size: 13.5,
+              color: isActive
+                  ? const Color(0xFF4CD7F6)
+                  : (color ?? Colors.white.withValues(alpha: 0.7)),
+            ),
           ),
         ),
       ),
@@ -203,61 +216,82 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     const activeColor = Color(0xFF4CD7F6);
     final iconWidget = Icon(
       icon,
-      size: isMobile ? 14 : 16,
-      color: isActive ? activeColor : Colors.white38,
+      size: isMobile ? 15 : 16,
+      color: isActive ? activeColor : Colors.white.withValues(alpha: 0.45),
     );
 
-    final itemSize = isMobile ? 32.0 : 36.0;
+    final itemSize = isMobile ? 38.0 : 42.0;
 
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: () => ref.read(drawerTabProvider.notifier).state = index,
-        child: Container(
-          width: itemSize,
-          height: itemSize,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: isActive ? activeColor.withValues(alpha: 0.1) : Colors.transparent,
-            border: Border(
-              left: BorderSide(
-                color: isActive ? activeColor : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: badgeCount > 0
-              ? Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    iconWidget,
-                    Positioned(
-                      right: -4,
-                      top: -4,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: badgeColor,
-                          shape: BoxShape.circle,
+      waitDuration: const Duration(milliseconds: 350),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => ref.read(drawerTabProvider.notifier).state = index,
+          child: SizedBox(
+            width: itemSize,
+            height: itemSize,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (isActive)
+                  Positioned(
+                    left: 0,
+                    top: 8,
+                    bottom: 8,
+                    child: Container(
+                      width: 2.5,
+                      decoration: BoxDecoration(
+                        color: activeColor,
+                        borderRadius: const BorderRadius.only(
+                          topRight: Radius.circular(2),
+                          bottomRight: Radius.circular(2),
                         ),
-                        constraints: const BoxConstraints(
-                          minWidth: 14,
-                          minHeight: 14,
-                        ),
-                        child: Text(
-                          '$badgeCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
+                        boxShadow: [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: 0.5),
+                            blurRadius: 4,
                           ),
-                          textAlign: TextAlign.center,
-                        ),
+                        ],
                       ),
                     ),
-                  ],
-                )
-              : iconWidget,
+                  ),
+                badgeCount > 0
+                    ? Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          iconWidget,
+                          Positioned(
+                            right: -6,
+                            top: -4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: badgeColor,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 14,
+                                minHeight: 14,
+                              ),
+                              child: Text(
+                                badgeCount > 99 ? '99+' : '$badgeCount',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : iconWidget,
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -303,8 +337,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     ));
 
     // Activity bar on the left
+    final activityBarWidth = isMobile ? 38.0 : 42.0;
     final activityBar = Container(
-      width: isMobile ? 32 : 36,
+      width: activityBarWidth,
       decoration: BoxDecoration(
         color: const Color(0xFF090B0F),
         border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)),
@@ -363,10 +398,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               onTap: () {
                 context.push('/settings');
               },
-              child: Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
+              child: SizedBox(
+                width: activityBarWidth,
+                height: activityBarWidth,
                 child: const Icon(LucideIcons.settings, size: 16, color: Colors.white38),
               ),
             ),
@@ -425,23 +459,26 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               children: [
                 // VS Code Style sleek compact header bar
                 Container(
-                  height: 36,
+                  height: 38,
                   padding: const EdgeInsets.only(left: 10, right: 6),
                   decoration: BoxDecoration(
                     border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5)),
                   ),
                   child: Row(
                     children: [
-                      Text(
-                        AppLocalizations.of(context)!.explorer.toUpperCase(),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: Colors.white70,
+                      Flexible(
+                        child: Text(
+                          AppLocalizations.of(context)!.explorer.toUpperCase(),
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: Colors.white70,
+                          ),
                         ),
                       ),
-                      const Spacer(),
+                      const SizedBox(width: 4),
                       if (workspacePath.isNotEmpty) ...[
                         _buildHeaderAction(
                           icon: LucideIcons.file_plus,
@@ -476,6 +513,20 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                         ),
                         _buildHeaderMenu(context, ref, workspacePath),
                       ],
+                      if (!widget.isInline)
+                        _buildHeaderAction(
+                          icon: LucideIcons.x,
+                          tooltip: AppLocalizations.of(context)!.close,
+                          color: Colors.white60,
+                          onPressed: () {
+                            final scaffold = Scaffold.maybeOf(context);
+                            if (scaffold != null && scaffold.isDrawerOpen) {
+                              scaffold.closeDrawer();
+                            } else {
+                              Navigator.of(context).maybePop();
+                            }
+                          },
+                        ),
                     ],
                   ),
                 ),
@@ -635,17 +686,20 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     }
 
     final screenWidth = MediaQuery.of(context).size.width;
+    final drawerWidth = isMobile
+        ? (screenWidth * 0.84).clamp(260.0, 340.0).clamp(0.0, screenWidth)
+        : 300.0;
     
     return GlassContainer(
       blur: 30,
-      opacity: 0.85,
+      opacity: 0.92,
       color: const Color(0xFF0F1117),
       borderRadius: BorderRadius.zero,
       border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
       child: Drawer(
-        width: screenWidth,
+        width: drawerWidth,
         backgroundColor: Colors.transparent,
-        elevation: 0,
+        elevation: 16,
         child: content,
       ),
     );
