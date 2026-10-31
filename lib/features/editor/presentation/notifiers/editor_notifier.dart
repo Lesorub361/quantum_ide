@@ -312,10 +312,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       ref.read(collaborationProvider.notifier).initializeFileSync(path, content);
       _handleCursorMove(path);
       
-      // Calculate diff immediately if there are proposed AI changes
-      if (hasProposed) {
-        _updateDiff(path);
-      }
+
       
     } catch (e) {
       debugPrint('Error opening file: $e');
@@ -778,9 +775,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         debugPrint('LSP error opening file: $e');
       });
 
-      if (hasProposed) {
-        Future.microtask(() => _updateDiff(path));
-      }
+
       
       return editorFile;
     } catch (e) {
