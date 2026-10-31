@@ -90,3 +90,5 @@ final panelProvider = StateNotifierProvider<PanelNotifier, PanelState>((ref) {
 });
 
 final serverRunningProvider = StateProvider<bool>((ref) => false);
+final leftPanelWidthProvider = StateProvider<double>((ref) => 320.0);
+final leftPanelOpenProvider = StateProvider<bool>((ref) => true);
