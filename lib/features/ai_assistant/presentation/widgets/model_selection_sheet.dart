@@ -205,7 +205,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
   Future<void> _importLocalModelFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['gguf', 'litertlm', 'bin'],
       );
@@ -332,7 +332,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
       child: Row(
         children: [
           _mainTabButton(_MainTab.models, 'Модели', LucideIcons.cpu),
-          _mainTabButton(_MainTab.settings, 'Настройки', LucideIcons.sliders),
+          _mainTabButton(_MainTab.settings, 'Настройки', LucideIcons.sliders_horizontal),
           _mainTabButton(_MainTab.logs, 'Логи', LucideIcons.terminal),
         ],
       ),
@@ -542,7 +542,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
   // ── Scope 1: My Models (Downloaded) ──
   Widget _buildMyModelsScope() {
     final localState = ref.watch(localAiServiceProvider);
-    final downloadedIds = localState.downloadedModelIds;
+    final downloadedIds = localState.downloadedModels.entries.where((e) => e.value).map((e) => e.key).toList();
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
@@ -735,7 +735,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final model = filtered[index];
-              final isDownloaded = localState.downloadedModelIds.contains(model.id);
+              final isDownloaded = localState.downloadedModels[model.id] == true;
               final isDownloading = localState.downloadingModelId == model.id;
 
               return Container(
@@ -1383,7 +1383,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
 
     final allLogs = [
       if (nativeState.logs.isNotEmpty) ...nativeState.logs.split('\n'),
-      ...localState.serverLogs,
+      if (localState.logs.isNotEmpty) ...localState.logs.split('\n'),
     ];
 
     return Padding(
