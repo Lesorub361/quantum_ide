@@ -1,10 +1,10 @@
 {
-  "versionCode": 146,
-  "versionName": "1.2.129",
-  "notes": "QuantumIDE v1.2.129:\n• Исправление зависаний (ANR) и падения производительности.\n• Оптимизация системного монитора: устранение спама SELinux-ошибок ядра при чтении /proc/stat.\n• Фоновый опрос процессов вынесен в on-demand режим (только при открытии Диспетчера задач).\n• Прямой подсчет процессорного времени через /proc/self/stat без вызовов дочернего шелла.",
+  "versionCode": 147,
+  "versionName": "1.2.130",
+  "notes": "QuantumIDE v1.2.130:\n• Защита сборки APK от сбоев памяти и HyperSentinel (OOM-killer в HyperOS/MIUI).\n• Ограничение кучи Dart VM (DART_VM_OPTIONS=384MB) и JVM (Gradle 768MB + SerialGC).\n• Автоматическая остановка фонового LSP сервера перед запуском сборки APK.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.129/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.130/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }
