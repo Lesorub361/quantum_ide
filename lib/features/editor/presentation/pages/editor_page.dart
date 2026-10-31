@@ -814,17 +814,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     ],
                                   ),
                                 ),
-                                const PopupMenuItem(
-                                  value: 'sync',
-                                child: Row(
-                                  children: [
-                                    Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
-                                    SizedBox(width: 10),
-                                    Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuDivider(),
+                                  const PopupMenuItem(
+                                    value: 'sync',
+                                    child: Row(
+                                      children: [
+                                        Icon(LucideIcons.refresh_cw, size: 16, color: Colors.blueAccent),
+                                        SizedBox(width: 10),
+                                        Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                const PopupMenuDivider(),
                               PopupMenuItem(
                                 value: 'home',
                                 child: Row(

@@ -1216,6 +1216,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       ),
     );
   }
+}
 
 class ActionIconButton extends StatelessWidget {
   final IconData icon;
