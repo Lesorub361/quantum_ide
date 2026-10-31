@@ -289,8 +289,8 @@ class _GithubActionsPipelineViewerState
   @override
   Widget build(BuildContext context) {
     final workspaceState = ref.watch(workspaceProvider);
-    final apkDiagnostics = ref.read(androidBuildDiagnosticsServiceProvider);
-    final apkInfo = apkDiagnostics.findDebugApk(workspaceState.currentPath);
+    final wsPath = workspaceState.currentPath;
+    final apkInfo = wsPath != null ? apkDiagnostics.findDebugApk(wsPath) : null;
 
     return Container(
       color: _GhTokens.bg,
