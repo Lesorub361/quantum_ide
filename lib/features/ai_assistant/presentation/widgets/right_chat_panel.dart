@@ -1053,6 +1053,25 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                 }
               }
 
+              if (activeProviderId == 'privatelm') {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(width: 5, height: 5, decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle)),
+                      const SizedBox(width: 4),
+                      Text('Wi-Fi', style: GoogleFonts.inter(fontSize: 9, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                );
+              }
+
               return Container(
                 width: 7,
                 height: 7,

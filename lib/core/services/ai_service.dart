@@ -171,6 +171,13 @@ class AIService {
       if (u != null && u.isNotEmpty) urls[p.id] = u;
     }
 
+    if (!urls.containsKey('privatelm') || (urls['privatelm'] ?? '').isEmpty) {
+      urls['privatelm'] = 'http://10.109.133.237:8080/v1';
+    }
+    if (!keys.containsKey('privatelm') || (keys['privatelm'] ?? '').isEmpty) {
+      keys['privatelm'] = 'aichat_4af32cbcd223f502737a52e2';
+    }
+
     final autoApprove = prefs.getBool('ai_auto_approve') ?? true;
     final approvalMode = prefs.getString('ai_approval_mode') ?? (autoApprove ? 'fullAutonomous' : 'manual');
     final temperature = prefs.getDouble('ai_temperature') ?? 0.7;
@@ -380,7 +387,7 @@ class AIService {
               if (key.isNotEmpty) 'Authorization': 'Bearer $key',
               ...?options?.headers,
             },
-            receiveTimeout: pid == 'local_edge' ? Duration.zero : null,
+            receiveTimeout: (pid == 'local_edge' || pid == 'privatelm') ? Duration.zero : null,
           );
 
           final Response resp;
@@ -917,6 +924,7 @@ class AIService {
           pid == 'opencode_zen' ||
           pid == 'mistral' ||
           pid == 'custom' ||
+          pid == 'privatelm' ||
           pid == 'lmstudio' ||
           pid == 'local_edge') {
         final key = _settings.apiKeys[pid] ?? '';
@@ -967,6 +975,7 @@ class AIService {
       case 'opencode_zen':
       case 'mistral':
       case 'custom':
+      case 'privatelm':
         return await _openAiCompatCompletion(prompt);
       case 'ollama':
         return await _ollamaCompletion(prompt);
@@ -1011,12 +1020,15 @@ class AIService {
     if (key.isEmpty && pid != 'local_edge') {
       return 'Error: Set API key in settings.';
     }
+    final modelToSend = (pid == 'privatelm' && (_settings.selectedModel == 'default' || _settings.selectedModel.isEmpty))
+        ? null
+        : _settings.selectedModel;
     try {
       final resp = await _executeOpenAiCompatRequest(
         pid,
         '/chat/completions',
         data: jsonEncode({
-          'model': _settings.selectedModel,
+          if (modelToSend != null && modelToSend.isNotEmpty) 'model': modelToSend,
           'messages': [
             {'role': 'user', 'content': prompt},
           ],
@@ -1133,6 +1145,7 @@ class AIService {
       case 'opencode_zen':
       case 'mistral':
       case 'custom':
+      case 'privatelm':
         return await _openAiChatMessage(
           message,
           history,
@@ -1248,6 +1261,7 @@ class AIService {
         pid == 'perplexity' || pid == 'fireworks' ||
         pid == 'kimi' || pid == 'nvidia' ||
         pid == 'opencode_zen' || pid == 'mistral' || pid == 'custom' ||
+        pid == 'privatelm' ||
         pid == 'local_edge') {
       return await _streamOpenAICompatibleChat(
         message,
@@ -1285,6 +1299,10 @@ class AIService {
         endpoint = '$cleansed/v1/chat/completions';
       }
 
+      final modelToSend = (pid == 'privatelm' && (_settings.selectedModel == 'default' || _settings.selectedModel.isEmpty))
+          ? null
+          : _settings.selectedModel;
+
       // Retry logic for streaming
       for (int attempt = 0; attempt <= _maxRetries; attempt++) {
         try {
@@ -1300,7 +1318,7 @@ class AIService {
               validateStatus: (s) => s != null && s < 600,
             ),
             data: jsonEncode({
-              'model': _settings.selectedModel,
+              if (modelToSend != null && modelToSend.isNotEmpty) 'model': modelToSend,
               'messages': messages,
               'max_tokens': 4096,
               'stream': true,
@@ -1594,11 +1612,15 @@ class AIService {
         ...history.map((m) => {'role': m['role'], 'content': m['content']}),
         {'role': 'user', 'content': userContent},
       ];
+      final modelToSend = (pid == 'privatelm' && (_settings.selectedModel == 'default' || _settings.selectedModel.isEmpty))
+          ? null
+          : _settings.selectedModel;
+
       final resp = await _executeOpenAiCompatRequest(
         pid,
         '/chat/completions',
         data: jsonEncode({
-          'model': _settings.selectedModel,
+          if (modelToSend != null && modelToSend.isNotEmpty) 'model': modelToSend,
           'messages': messages,
           'max_tokens': _settings.maxTokens,
           'temperature': _settings.temperature,

@@ -322,6 +322,22 @@ class AiProviders {
     supportsLocalModels: true,
   );
 
+  static const privatelm = AiProviderConfig(
+    id: 'privatelm',
+    displayName: 'PrivateLM (Второй телефон)',
+    logoEmoji: '📲',
+    apiKeyHint: 'aichat_...',
+    baseUrl: 'http://10.109.133.237:8080/v1',
+    defaultModels: [
+      'Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm',
+      'Qwen3-0.6B.litertlm',
+      'DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm',
+      'default',
+    ],
+    supportsLocalModels: true,
+    requiresApiKey: true,
+  );
+
   static const custom = AiProviderConfig(
     id: 'custom',
     displayName: 'Custom API',
@@ -393,6 +409,7 @@ class AiProviders {
     fireworks,
     ollama,
     localEdge,
+    privatelm,
     custom,
     claudeSubscription,
   ];

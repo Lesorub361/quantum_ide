@@ -1,10 +1,10 @@
 {
-  "versionCode": 138,
-  "versionName": "1.2.121",
-  "notes": "QuantumIDE v1.2.121:\n• Внедрён нативный движок локального ИИ (llama_flutter_android) с прямым аппаратным ускорением Vulkan GPU и ARM64 NEON.\n• Локальные модели GGUF теперь могут запускаться прямо внутри процесса Android без необходимости запуска фонового сервера, терминала и установки Linux-пакетов.\n• Добавлены автоопределение видеочипа (GPU / Vulkan) и телеметрия свободной памяти в настройках ИИ.",
+  "versionCode": 139,
+  "versionName": "1.2.122",
+  "notes": "QuantumIDE v1.2.122:\n• Полная интеграция логики PrivateLM: поддержка прямого подключения к PrivateLM серверу на втором телефоне по Wi-Fi.\n• Добавлены модели Liquid AI (LFM2.5 1.2B / VL 1.6B), Kimi Moonlight MoE, Gemma 3/4.\n• Новый чистый интерфейс рассуждений ThoughtDisclosure с таймером и сворачиванием цепочек <think>.\n• Удалены устаревшие пакеты скачивания ollama-cli и llama-server из optional_package.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.121/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.122/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }

@@ -287,24 +287,6 @@ final defaultPackages = [
     icon: LucideIcons.brain_circuit,
     category: 'AI Tools',
   ),
-  OptionalPackage(
-    id: 'ollama-cli',
-    name: 'Ollama CLI',
-    version: 'Latest',
-    description: 'Run large language models locally (Llama 3, Mistral, Qwen, DeepSeek)',
-    command: '${_aptPrefix}apt install -y curl && curl -fsSL https://ollama.com/install.sh | sh',
-    icon: LucideIcons.brain,
-    category: 'AI Tools',
-  ),
-  OptionalPackage(
-    id: 'local-ai-qwen',
-    name: 'Local Llama Server (llama.cpp)',
-    version: 'b11541',
-    description: 'High-speed local inference engine for offline GGUF AI models (llama-server and llama-cli)',
-    command: '${_aptPrefix}(apt update -y 2>/dev/null || true) && ${_aptPrefix}(apt install -y curl wget tar ca-certificates libssl3 libgomp1 2>/dev/null || true) && ARCH=\$(uname -m) && if [ "\$ARCH" = "aarch64" ] || [ "\$ARCH" = "arm64" ]; then LLAMA_ARCH="arm64"; else LLAMA_ARCH="x64"; fi && mkdir -p /tmp/llama_dl && cd /tmp/llama_dl && (wget --no-check-certificate -qO llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz" || curl -k -fL --retry 3 -o llama.tar.gz "https://github.com/ggml-org/llama.cpp/releases/download/b11541/llama-b11541-bin-ubuntu-\${LLAMA_ARCH}.tar.gz") && tar -xzf llama.tar.gz && (find . -type f -name "llama-server" -exec cp {} /usr/bin/llama-server \\; ; find . -type f -name "llama-cli" -exec cp {} /usr/bin/llama-cli \\; ; find . \\( -name "*.so*" \\) -exec cp -a {} /usr/lib/ \\; 2>/dev/null || true ; find . \\( -name "*.so*" \\) -exec cp -a {} /usr/local/lib/ \\; 2>/dev/null || true ; for dir in /usr/lib/*-linux-gnu /lib/*-linux-gnu; do [ -f "\$dir/libssl.so.3" ] && ln -sf "\$dir/libssl.so.3" /usr/lib/libssl.so.3 2>/dev/null; [ -f "\$dir/libcrypto.so.3" ] && ln -sf "\$dir/libcrypto.so.3" /usr/lib/libcrypto.so.3 2>/dev/null; [ -f "\$dir/libgomp.so.1" ] && ln -sf "\$dir/libgomp.so.1" /usr/lib/libgomp.so.1 2>/dev/null; done; ldconfig 2>/dev/null || true) && chmod +x /usr/bin/llama-server /usr/bin/llama-cli 2>/dev/null || true && cd / && rm -rf /tmp/llama_dl && echo "Llama Server and libraries installed successfully"',
-    icon: LucideIcons.brain,
-    category: 'AI Tools',
-  ),
 
   // ==========================================
   // BUILD TOOLS & SDK (СБОРКА И SDK ANDROID)

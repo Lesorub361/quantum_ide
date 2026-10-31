@@ -35,6 +35,8 @@ import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/inline_diff_widget.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/presentation/widgets/agent_activity_widgets.dart';
+import 'package:quantum_ide/core/utils/thought_parser.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/thought_disclosure.dart';
 
 class CollapsibleConsole extends StatefulWidget {
   final String content;
@@ -1144,9 +1146,29 @@ class AIChatMessagesState extends ConsumerState<AIChatMessages> {
                                 ),
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: _renderMarkdown(message.content, context),
+                                  child: Builder(
+                                    builder: (context) {
+                                      final thoughtParts = splitThoughtTags(message.content);
+                                      return Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          if (thoughtParts.hasThought) ...[
+                                            ThoughtDisclosure(
+                                              thought: thoughtParts.thought,
+                                              isThinking: thoughtParts.isThinking,
+                                              durationSeconds: message.workedMillis > 0
+                                                  ? (message.workedMillis / 1000).round()
+                                                  : null,
+                                            ),
+                                            if (thoughtParts.hasAnswer) const SizedBox(height: 10),
+                                          ],
+                                          if (thoughtParts.hasAnswer)
+                                            ..._renderMarkdown(thoughtParts.answer, context)
+                                          else if (!thoughtParts.hasThought)
+                                            ..._renderMarkdown(message.content, context),
+                                        ],
+                                      );
+                                    },
                                   ),
                                 ),
                               ],
