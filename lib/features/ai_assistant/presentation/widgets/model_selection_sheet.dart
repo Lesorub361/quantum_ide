@@ -485,13 +485,11 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
             child: Row(
               children: _isLocalProvider
                   ? [
-                      _subTabButton(LocalViewMode.catalog, '🔥 Топ каталог', LucideIcons.sparkles),
+                      _subTabButton(LocalViewMode.catalog, '🔥 Каталог GGUF', LucideIcons.sparkles),
                       const SizedBox(width: 6),
                       _subTabButton(LocalViewMode.downloaded, '💾 Скачанные', LucideIcons.hard_drive),
                       const SizedBox(width: 6),
                       _subTabButton(LocalViewMode.huggingFaceOnline, '🌐 Hugging Face Hub', LucideIcons.globe),
-                      const SizedBox(width: 6),
-                      _subTabButton(LocalViewMode.ollamaLibrary, '🦙 Ollama Library', LucideIcons.terminal),
                       const SizedBox(width: 6),
                       _subTabButton(LocalViewMode.cloud, cloudTabLabel, LucideIcons.cloud),
                     ]
@@ -503,8 +501,6 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       _subTabButton(LocalViewMode.downloaded, '💾 Скачанные', LucideIcons.hard_drive),
                       const SizedBox(width: 6),
                       _subTabButton(LocalViewMode.huggingFaceOnline, '🌐 Hugging Face', LucideIcons.globe),
-                      const SizedBox(width: 6),
-                      _subTabButton(LocalViewMode.ollamaLibrary, '🦙 Ollama', LucideIcons.terminal),
                     ],
             ),
           ),
@@ -1664,6 +1660,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
         _models.any((m) => m.id.toLowerCase() == query.toLowerCase());
 
     final cloudProviders = [
+      AiProviders.privatelm,
       AiProviders.openrouter,
       AiProviders.deepseek,
       AiProviders.google,
@@ -1672,6 +1669,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
       AiProviders.groq,
       AiProviders.mistral,
       AiProviders.together,
+      AiProviders.custom,
     ];
 
     return Column(
@@ -1759,6 +1757,35 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       ),
                   ],
                 ),
+                if (_currentProviderId == 'privatelm' || _currentProviderId == 'custom') ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _currentProviderId == 'privatelm'
+                        ? 'Base URL (Wi-Fi адрес второго телефона с PrivateLM):'
+                        : 'Base URL (Прокси / Локальный адрес):',
+                    style: const TextStyle(fontSize: 10, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 32,
+                    child: TextField(
+                      controller: _baseUrlController,
+                      style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: 'http://10.109.133.237:8080/v1',
+                        hintStyle: const TextStyle(fontSize: 11, color: Colors.white38),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        filled: true,
+                        fillColor: Colors.black26,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                        ),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 6),
                 Row(
                   children: [
@@ -1788,11 +1815,15 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                     ElevatedButton.icon(
                       onPressed: () async {
                         final key = _apiKeyController.text.trim();
+                        final url = _baseUrlController.text.trim();
                         final messenger = ScaffoldMessenger.of(context);
                         await ref.read(aiServiceProvider).setApiKey(_currentProviderId, key);
+                        if (url.isNotEmpty) {
+                          await ref.read(aiServiceProvider).setBaseUrl(_currentProviderId, url);
+                        }
                         messenger.showSnackBar(
                           SnackBar(
-                            content: Text('Ключ для ${_currentProviderId.toUpperCase()} сохранён'),
+                            content: Text('Параметры для ${_currentProviderId.toUpperCase()} сохранены'),
                             duration: const Duration(seconds: 1),
                           ),
                         );

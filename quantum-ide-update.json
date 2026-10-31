@@ -1,10 +1,10 @@
 {
-  "versionCode": 139,
-  "versionName": "1.2.122",
-  "notes": "QuantumIDE v1.2.122:\n• Полная интеграция логики PrivateLM: поддержка прямого подключения к PrivateLM серверу на втором телефоне по Wi-Fi.\n• Добавлены модели Liquid AI (LFM2.5 1.2B / VL 1.6B), Kimi Moonlight MoE, Gemma 3/4.\n• Новый чистый интерфейс рассуждений ThoughtDisclosure с таймером и сворачиванием цепочек <think>.\n• Удалены устаревшие пакеты скачивания ollama-cli и llama-server из optional_package.",
+  "versionCode": 140,
+  "versionName": "1.2.123",
+  "notes": "QuantumIDE v1.2.123:\n• PrivateLM вынесен на первое место в настройках и диалоге выбора моделей.\n• Добавлена настройка Base URL (Wi-Fi адрес второго телефона) прямо в окне выбора моделей.\n• Удалены устаревшие вкладки Ollama из интерфейса.\n• Автоматическое определение текущей модели на сервере PrivateLM и опция default.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.122/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.123/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }

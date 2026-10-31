@@ -659,7 +659,15 @@ class AIService {
                 }
               }
               if (list.isNotEmpty) {
-                list.sort((a, b) => a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase()));
+                if (pid == 'privatelm' && !list.any((m) => m.id == 'default')) {
+                  list.insert(0, const DiscoveredModel(
+                    id: 'default',
+                    displayName: '✨ default (Текущая модель на телефоне)',
+                    isFree: true,
+                    providerId: 'privatelm',
+                  ));
+                }
+                list.sort((a, b) => a.id == 'default' ? -1 : (b.id == 'default' ? 1 : a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase())));
                 _discoveredModelsCache[pid] = list;
                 return list;
               }

@@ -393,10 +393,11 @@ class AiProviders {
   );
 
   static const all = [
+    privatelm,
     openrouter,
     deepseek,
-    anthropic,
     google,
+    anthropic,
     mistral,
     opencodeZen,
     kimi,
@@ -407,9 +408,7 @@ class AiProviders {
     together,
     perplexity,
     fireworks,
-    ollama,
     localEdge,
-    privatelm,
     custom,
     claudeSubscription,
   ];
