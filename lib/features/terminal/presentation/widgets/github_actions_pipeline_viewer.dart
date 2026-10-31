@@ -290,6 +290,7 @@ class _GithubActionsPipelineViewerState
   Widget build(BuildContext context) {
     final workspaceState = ref.watch(workspaceProvider);
     final wsPath = workspaceState.currentPath;
+    final apkDiagnostics = ref.read(androidBuildDiagnosticsServiceProvider);
     final apkInfo = wsPath != null ? apkDiagnostics.findDebugApk(wsPath) : null;
 
     return Container(
