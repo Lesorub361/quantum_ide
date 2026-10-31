@@ -181,6 +181,11 @@ class GitService {
       final conflicted = <String>[];
       final fileStatusCodes = <String, String>{};
 
+      final modifiedSet = <String>{};
+      final stagedSet = <String>{};
+      final untrackedSet = <String>{};
+      final conflictedSet = <String>{};
+
       // Note: Do NOT trim leading spaces of statusRaw because porcelain format uses leading space!
       final statusStartIdx = rawOut.indexOf('__SECTION_STATUS__');
       final numstatStartIdx = rawOut.indexOf('__SECTION_NUMSTAT__');
@@ -202,41 +207,35 @@ class GitService {
           file = file.substring(1, file.length - 1);
         }
 
+        final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
+
         const conflictStatuses = {'DD', 'AU', 'UD', 'UA', 'DU', 'AA', 'UU'};
         if (conflictStatuses.contains(status)) {
-          final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
-          if (!conflicted.contains(cleanRel)) conflicted.add(cleanRel);
-          fileStatusCodes[cleanRel] = 'U';
-        } else if (status == '??') {
-          final fullHostPath = p.join(hostPath, file);
-          final hostDir = Directory(fullHostPath);
-          if (file.endsWith('/') || hostDir.existsSync()) {
-            try {
-              if (hostDir.existsSync()) {
-                final subEntities = hostDir.listSync(recursive: true, followLinks: false);
-                for (final ent in subEntities) {
-                  if (ent is File) {
-                    final rel = p.relative(ent.path, from: hostPath).replaceAll('\\', '/');
-                    if (!untracked.contains(rel)) untracked.add(rel);
-                    fileStatusCodes[rel] = '?';
-                  }
-                }
-                continue;
-              }
-            } catch (_) {}
+          if (conflictedSet.add(cleanRel)) {
+            conflicted.add(cleanRel);
+            fileStatusCodes[cleanRel] = 'U';
           }
-          final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
-          if (!untracked.contains(cleanRel)) untracked.add(cleanRel);
-          fileStatusCodes[cleanRel] = '?';
+        } else if (status == '??') {
+          // Never perform synchronous recursive disk traversal of untracked directories
+          // on the main UI thread. Treat the untracked path itself as the item.
+          if (untrackedSet.length < 1000) {
+            if (untrackedSet.add(cleanRel)) {
+              untracked.add(cleanRel);
+              fileStatusCodes[cleanRel] = '?';
+            }
+          }
         } else {
-          final cleanRel = file.endsWith('/') ? file.substring(0, file.length - 1) : file;
           if (x != ' ' && x != '?') {
-            if (!staged.contains(cleanRel)) staged.add(cleanRel);
-            fileStatusCodes[cleanRel] = x;
+            if (stagedSet.add(cleanRel)) {
+              staged.add(cleanRel);
+              fileStatusCodes[cleanRel] = x;
+            }
           }
           if (y != ' ' && y != '?') {
-            if (!modified.contains(cleanRel)) modified.add(cleanRel);
-            fileStatusCodes[cleanRel] = y;
+            if (modifiedSet.add(cleanRel)) {
+              modified.add(cleanRel);
+              fileStatusCodes[cleanRel] = y;
+            }
           }
         }
       }

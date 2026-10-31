@@ -753,9 +753,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     final filteredStaged = status.stagedFiles
         .where((f) => _fileFilter.isEmpty || f.toLowerCase().contains(_fileFilter))
         .toList();
+    final modifiedSet = status.modifiedFiles.toSet();
+    final untrackedSet = status.untrackedFiles.toSet();
     final workingFiles = <String>[
       ...status.modifiedFiles,
-      ...status.untrackedFiles.where((u) => !status.modifiedFiles.contains(u)),
+      ...status.untrackedFiles.where((u) => !modifiedSet.contains(u)),
     ].where((f) => _fileFilter.isEmpty || f.toLowerCase().contains(_fileFilter)).toList();
 
     return Column(
@@ -1191,9 +1193,9 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                             )
                           : null,
                     ),
-                    if (_workingExpanded)
-                      ...workingFiles.map((f) {
-                        final isUntracked = status.untrackedFiles.contains(f);
+                    if (_workingExpanded) ...[
+                      ...workingFiles.take(150).map((f) {
+                        final isUntracked = untrackedSet.contains(f);
                         final code = isUntracked ? 'U' : (status.fileStatusCodes[f] ?? 'M');
                         final color = isUntracked ? Colors.lightBlueAccent : Colors.amberAccent;
                         return _buildFileRow(
@@ -1231,6 +1233,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           ],
                         );
                       }),
+                      if (workingFiles.length > 150)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          child: Text(
+                            'Показано 150 из ${workingFiles.length} файлов. Добавьте build/ и .dart_tool/ в .gitignore',
+                            style: const TextStyle(fontSize: 11, color: Colors.orangeAccent),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
         ),

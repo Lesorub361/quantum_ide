@@ -1,10 +1,10 @@
 {
-  "versionCode": 149,
-  "versionName": "1.2.132",
-  "notes": "QuantumIDE v1.2.132:\n• Чистая версия без встроенного чат-бота (кодовая база v1.2.128).\n• Полное устранение нагрузки на CPU и скачков процессора (кэширование SELinux /proc/sysfs).\n• Предотвращение крашей при сборке APK (лимиты кучи JVM/Dart VM) и оптимизация aapt2.",
+  "versionCode": 150,
+  "versionName": "1.2.133",
+  "notes": "QuantumIDE v1.2.133:\n• Полное устранение ANR («Приложение не отвечает») при сборке проектов из-за 20,000+ файлов в Git.\n• Устранено блокирующее синхронное сканирование диска в GitService и ограничен рендеринг списка изменений.\n• Полная чистота и плавность интерфейса.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.132/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.133/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }
