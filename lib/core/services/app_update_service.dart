@@ -205,14 +205,53 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
           if (isNewerVersion(cleanVersion, currentVersion)) {
             final apkUrl =
                 'https://github.com/Lesorub361/quantum_ide/releases/download/$tag/app-arm64-v8a-release.apk';
+
+            String detailedNotes = '';
+            int sizeBytes = 30 * 1024 * 1024;
+
+            // Try to load detailed release notes from raw manifest (never rate-limited)
+            try {
+              final manifestRes = await _dio.get(defaultManifestUrl);
+              if (manifestRes.statusCode == 200 && manifestRes.data != null) {
+                final mData = manifestRes.data is Map<String, dynamic>
+                    ? manifestRes.data as Map<String, dynamic>
+                    : jsonDecode(manifestRes.data.toString()) as Map<String, dynamic>;
+                final mNotes = mData['notes']?.toString();
+                if (mNotes != null && mNotes.isNotEmpty) {
+                  detailedNotes = mNotes;
+                }
+                final mSize = mData['artifacts']?['online']?['sizeBytes'];
+                if (mSize is int && mSize > 0) {
+                  sizeBytes = mSize;
+                }
+              }
+            } catch (_) {}
+
+            // Fallback: try GitHub release API body
+            if (detailedNotes.isEmpty) {
+              try {
+                final ghRes = await _dio.get(githubApiLatestRelease);
+                if (ghRes.statusCode == 200 && ghRes.data is Map<String, dynamic>) {
+                  final body = ghRes.data['body']?.toString() ?? '';
+                  if (body.isNotEmpty) {
+                    detailedNotes = body;
+                  }
+                }
+              } catch (_) {}
+            }
+
+            final finalNotes = detailedNotes.isNotEmpty
+                ? detailedNotes
+                : 'Доступно обновление QuantumIDE v$cleanVersion.\n'
+                    'Нажмите «Скачать и установить» для обновления в 1 клик.';
+
             final info = AppUpdateInfo(
               versionCode: currentCode + 1,
               versionName: cleanVersion,
               apkUrl: apkUrl,
               sha256: '',
-              sizeBytes: 30 * 1024 * 1024,
-              notes: 'Доступно обновление QuantumIDE v$cleanVersion.\n'
-                  'Нажмите «Скачать и установить» для обновления в 1 клик.',
+              sizeBytes: sizeBytes,
+              notes: finalNotes,
             );
             state = state.copyWith(
               isChecking: false,

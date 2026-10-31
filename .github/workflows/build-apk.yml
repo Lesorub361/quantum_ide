@@ -136,6 +136,17 @@ jobs:
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 14
 
+      - name: Extract release notes from manifest
+        run: |
+          if [ -f quantum-ide-update.json ]; then
+            NOTES=$(jq -r '.notes // empty' quantum-ide-update.json)
+            if [ -n "$NOTES" ]; then
+              echo "DEFAULT_NOTES<<EOF" >> $GITHUB_ENV
+              echo "$NOTES" >> $GITHUB_ENV
+              echo "EOF" >> $GITHUB_ENV
+            fi
+          fi
+
       - name: Create GitHub Release
         if: (github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v2
