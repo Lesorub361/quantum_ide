@@ -1245,9 +1245,12 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
                       if (aiState.activeAgentKind != AgentKind.native) {
                         CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
                       } else {
-                        showDialog(
-                          context: context,
-                          builder: (context) => const AISettingsDialog(),
+                        final aiSvc = ref.read(aiServiceProvider);
+                        showModelPickerModal(
+                          context,
+                          providerId: aiSvc.selectedProviderId,
+                          currentModel: aiSvc.selectedModel,
+                          initialMainTab: 1,
                         );
                       }
                     },

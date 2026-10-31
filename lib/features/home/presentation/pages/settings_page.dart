@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import 'package:quantum_ide/core/providers/locale_provider.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
+import 'package:quantum_ide/core/services/ai_service.dart';
+import 'package:quantum_ide/features/ai_assistant/presentation/widgets/model_selection_sheet.dart';
 import 'package:quantum_ide/features/home/presentation/pages/ai_settings_page.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
@@ -464,13 +466,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             icon: LucideIcons.bot,
             title: AppLocalizations.of(context)!.aiProviders,
             subtitle: isRu
-                ? 'Настройка Gemini, OpenAI, Claude, DeepSeek и локального ИИ (Ollama / llama-server без сборки C++)'
+                ? 'Настройка моделей, PrivateLM, Gemini, OpenAI, Claude, DeepSeek и локального ИИ'
                 : AppLocalizations.of(context)!.aiProvidersSubtitle,
             trailing: _badge(context, 'AI STUDIO', Colors.purpleAccent),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AiSettingsPage()),
-            ),
+            onTap: () {
+              final aiSvc = ref.read(aiServiceProvider);
+              showModelPickerModal(
+                context,
+                providerId: aiSvc.selectedProviderId,
+                currentModel: aiSvc.selectedModel,
+                initialMainTab: 1,
+              );
+            },
           ),
         ]),
         const SizedBox(height: 24),
