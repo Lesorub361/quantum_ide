@@ -368,7 +368,7 @@ class _RightChatPanelState extends ConsumerState<RightChatPanel> {
               // Settings Button (Unified AI Hub / CliAgentSettingsDialog)
               IconButton(
                 icon: const Icon(LucideIcons.sliders_horizontal, size: 14, color: Colors.white70),
-                onPressed: () {
+                onPressed: () async {
                   if (aiState.activeAgentKind != AgentKind.native) {
                     CliAgentSettingsDialog.show(context, initialKind: aiState.activeAgentKind);
                   } else {

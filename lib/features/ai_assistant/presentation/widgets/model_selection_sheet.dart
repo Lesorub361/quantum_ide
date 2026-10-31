@@ -188,7 +188,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
         SnackBar(
           content: Row(
             children: [
-              const Icon(LucideIcons.check_circle_2, color: _PrivateLmTokens.green, size: 18),
+              const Icon(LucideIcons.circle_check, color: _PrivateLmTokens.green, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -804,7 +804,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       )
                     else
                       ElevatedButton.icon(
-                        onPressed: () => ref.read(localAiServiceProvider.notifier).downloadModel(model),
+                        onPressed: () => ref.read(localAiServiceProvider.notifier).downloadModel(model.id),
                         icon: const Icon(LucideIcons.download, size: 12),
                         label: const Text('Скачать модель', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
@@ -838,7 +838,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
           hint: 'Ускорение на Adreno GPU через Vulkan (рекомендуется: 16-24)',
           onChanged: (v) {
             setState(() => _gpuLayers = v.toInt());
-            ref.read(localAiServiceProvider.notifier).setGpuLayers(v.toInt());
+            ref.read(localAiServiceProvider.notifier).updateSettings(gpuLayers: v.toInt());
           },
         ),
         const SizedBox(height: 12),
@@ -852,7 +852,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
           hint: 'Количество ядер процессора для инференса',
           onChanged: (v) {
             setState(() => _cpuThreads = v.toInt());
-            ref.read(localAiServiceProvider.notifier).setThreads(v.toInt());
+            ref.read(localAiServiceProvider.notifier).updateSettings(threads: v.toInt());
           },
         ),
         const SizedBox(height: 12),
@@ -864,7 +864,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
           activeColor: _PrivateLmTokens.accent,
           onChanged: (v) {
             setState(() => _useFlashAttn = v);
-            ref.read(localAiServiceProvider.notifier).setUseFlashAttn(v);
+            ref.read(localAiServiceProvider.notifier).updateSettings(useFlashAttn: v);
           },
         ),
       ],
@@ -947,7 +947,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   isDense: true,
                   suffixIcon: IconButton(
-                    icon: const Icon(LucideIcons.paste, size: 14, color: Colors.white60),
+                    icon: const Icon(LucideIcons.clipboard_paste, size: 14, color: Colors.white60),
                     tooltip: 'Вставить из буфера',
                     onPressed: () async {
                       final data = await Clipboard.getData('text/plain');
@@ -1050,7 +1050,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'СЕРВЕР ПОДКЛЮЧЕН · ${health.latencyMs} ms',
+                      'СЕРВЕР ПОДКЛЮЧЕН · ${health!.latencyMs} ms',
                       style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: _PrivateLmTokens.green),
                     ),
                     const Spacer(),
@@ -1080,7 +1080,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
                       final mId = detectedModel ?? 'default';
                       _selectAndApplyProviderAndModel('privatelm', mId);
                     },
-                    icon: const Icon(LucideIcons.check_circle, size: 14),
+                    icon: const Icon(LucideIcons.circle_check, size: 14),
                     label: const Text('⚡ Выбрать эту модель для чата', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _PrivateLmTokens.green,
@@ -1107,7 +1107,7 @@ class _ModelSelectionSheetState extends ConsumerState<ModelSelectionSheet> {
               children: [
                 Row(
                   children: [
-                    const Icon(LucideIcons.alert_triangle, size: 16, color: _PrivateLmTokens.orange),
+                    const Icon(LucideIcons.triangle_alert, size: 16, color: _PrivateLmTokens.orange),
                     const SizedBox(width: 8),
                     const Text('Сервер не отвечает', style: TextStyle(color: _PrivateLmTokens.orange, fontWeight: FontWeight.bold, fontSize: 12)),
                   ],
