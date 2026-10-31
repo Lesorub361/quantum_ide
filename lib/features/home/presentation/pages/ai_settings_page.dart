@@ -1531,9 +1531,9 @@ class _AiSettingsPageState extends ConsumerState<AiSettingsPage> {
                       else
                         ElevatedButton.icon(
                           onPressed: () async {
-                            final modelPath = await localAiNotifier.findModelFile(localAiState.selectedModelFilename);
-                            if (modelPath != null) {
-                              await nativeNotifier.loadModel(modelPath: modelPath);
+                            final modelFile = await localAiNotifier.findModelFile(localAiState.selectedModelFilename);
+                            if (modelFile != null) {
+                              await nativeNotifier.loadModel(modelPath: modelFile.path);
                             } else {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Сначала скачайте модель выше')),
