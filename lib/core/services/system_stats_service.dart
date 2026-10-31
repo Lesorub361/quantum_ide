@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 
 class SystemProcessItem {
   final int pid;
@@ -280,6 +281,29 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         processes: processes,
       );
     }
+
+    try {
+      int builderRamMB = 0;
+      for (final p in processes) {
+        if (p.category == 'Сборка' ||
+            p.category == 'Компилятор' ||
+            p.category == 'Упаковка' ||
+            p.name.contains('Gradle') ||
+            p.name.contains('Kotlin') ||
+            p.name.contains('AAPT2')) {
+          builderRamMB += (p.rssBytes / (1024 * 1024)).round();
+        }
+      }
+      LiveTelemetryService.instance.updateStats(
+        cpu: cpu,
+        gpu: gpu,
+        gpuTitle: gpuName,
+        appRam: appRamMB,
+        builderRam: builderRamMB,
+        freeRamGB: deviceAvailableGB,
+        totalRamGB: deviceTotalGB,
+      );
+    } catch (_) {}
   }
 
   Future<List<SystemProcessItem>> _fetchProcessList(int appRssBytes, double totalCpu) async {

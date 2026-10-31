@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/talker_service.dart';
+import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 
 class LogService {
   static String? _cacheDir;
@@ -52,6 +53,9 @@ class LogService {
 
   static Future<void> setWorkspace(String? workspacePath) async {
     await _flush();
+    try {
+      LiveTelemetryService.instance.currentWorkspace = workspacePath;
+    } catch (_) {}
     if (workspacePath != null) {
       try {
         final qDir = Directory(p.join(workspacePath, '.quantum'));
@@ -100,6 +104,10 @@ class LogService {
 
     try {
       TalkerService.info(message);
+    } catch (_) {}
+
+    try {
+      LiveTelemetryService.instance.logEvent(message);
     } catch (_) {}
 
     _writeBuffer.add(formattedLine);

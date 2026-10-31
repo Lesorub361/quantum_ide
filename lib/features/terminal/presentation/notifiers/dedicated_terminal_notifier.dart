@@ -11,6 +11,7 @@ import 'package:xterm/xterm.dart' as xt;
 
 import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';
+import '../../../../core/services/live_telemetry_service.dart';
 import 'terminal_tabs_notifier.dart';
 
 enum DedicatedTerminalType { run, build, appLogs }
@@ -92,6 +93,10 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           '/sdcard',
         );
       }
+    }
+
+    if (type == DedicatedTerminalType.build) {
+      LiveTelemetryService.instance.onBuildStarted(command);
     }
 
     if (interrupt) {
@@ -196,10 +201,16 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           .listen(
         (text) {
           xtermTerm.write(text);
+          if (type == DedicatedTerminalType.build) {
+            LiveTelemetryService.instance.appendBuildOutput(text);
+          }
         },
         onDone: () {
           _markAsExited(type);
           xtermTerm.write('\r\n\x1b[1;31m[Process exited]\x1b[0m\r\n');
+          if (type == DedicatedTerminalType.build) {
+            LiveTelemetryService.instance.onBuildFinished(0);
+          }
         },
       );
 

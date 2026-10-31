@@ -12,6 +12,7 @@ import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/quick_actions_service.dart';
 import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/core/services/network_inspector_service.dart';
+import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 import 'app.dart';
 
 void main() async {
@@ -60,6 +61,13 @@ void main() async {
       await GhostQAService.instance.init();
     } catch (e) {
       debugPrint('Ghost QA init error: $e');
+    }
+
+    // Initialize Live Telemetry Bridge (metrics, logs and terminal monitoring)
+    try {
+      await LiveTelemetryService.instance.init();
+    } catch (e) {
+      debugPrint('LiveTelemetryService init error: $e');
     }
 
     // Handle desktop-specific initialization
