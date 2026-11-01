@@ -21,13 +21,19 @@ class FastSyntaxEngine {
   List<CodeDiagnostic> analyze(String filePath, String content) {
     if (content.isEmpty) return const [];
 
-    final ext = filePath.split('.').last.toLowerCase();
+    final ext = filePath.contains('.') ? filePath.split('.').last.toLowerCase() : '';
     switch (ext) {
       case 'dart':
       case 'ts':
       case 'js':
       case 'jsx':
       case 'tsx':
+      case 'kt':
+      case 'kts':
+      case 'java':
+      case 'c':
+      case 'cpp':
+      case 'rs':
         return _analyzeCStyleCode(content, isDart: ext == 'dart');
       case 'json':
         return _analyzeJson(content);
@@ -35,7 +41,7 @@ class FastSyntaxEngine {
       case 'yml':
         return _analyzeYaml(content);
       default:
-        return _analyzeGeneralBrackets(content);
+        return const [];
     }
   }
 

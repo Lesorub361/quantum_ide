@@ -261,7 +261,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       final currentWs = ref.read(workspaceProvider).currentPath;
       if (currentWs != null) {
         _checkProjectRequirements(currentWs);
-        ref.read(projectSyncProvider.notifier).startSync(currentWs);
       }
     });
   }
@@ -307,9 +306,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
     // Автопроверка необходимых пакетов для проекта
     _checkProjectRequirements(workspacePath);
-
-    // Авто-синхронизация проекта при открытии (как на скриншотах)
-    ref.read(projectSyncProvider.notifier).startSync(workspacePath);
 
     // Показываем уведомление об автонастройке .gitignore
     if (mounted) {

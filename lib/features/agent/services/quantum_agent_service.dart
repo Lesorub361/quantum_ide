@@ -751,11 +751,11 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
           }
           await file.writeAsString(newContent, flush: true);
           await _mirrorAndReloadInIde(ws, fullPath, newContent, modifiedFiles);
-          final syntaxDiags = FastSyntaxEngine.analyze(newContent, fullPath);
+          final syntaxDiags = FastSyntaxEngine.instance.analyze(fullPath, newContent);
           final errs = syntaxDiags.where((d) => d.severity == CodeDiagnosticSeverity.error).toList();
           if (errs.isNotEmpty) {
             return 'Файл $reqPath обновлён, но анализатор нашёл синтаксические ошибки:\n'
-                '${errs.map((e) => "Строка ${e.line}: ${e.message}").join("\n")}';
+                '${errs.map((e) => "Строка ${e.range.index + 1}: ${e.message}").join("\n")}';
           }
           return 'SUCCESS: Файл $reqPath успешно обновлён и синхронизирован (ошибок синтаксиса: 0).';
         }
@@ -845,10 +845,10 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
         dartCount++;
         try {
           final content = await entity.readAsString();
-          final diags = FastSyntaxEngine.analyze(content, entity.path);
+          final diags = FastSyntaxEngine.instance.analyze(entity.path, content);
           for (final d in diags) {
             if (d.severity == CodeDiagnosticSeverity.error) {
-              errors.add('$rel:${d.line}: ${d.message}');
+              errors.add('$rel:${d.range.index + 1}: ${d.message}');
             }
           }
         } catch (_) {}

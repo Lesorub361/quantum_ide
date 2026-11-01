@@ -1,10 +1,10 @@
 {
-  "versionCode": 154,
-  "versionName": "1.2.137",
-  "notes": "QuantumIDE v1.2.137:\n• Полностью удалены 26 старых файлов чат-бота и создан новый автономный ИИ-агент Quantum Agent (по архитектуре Antigravity / Cline).\n• Встроенные инструменты агента: чтение, поиск, точечное редактирование кода, запуск сборки APK в терминале и автолечение ошибок.\n• Двусторонняя быстрая синхронизация с /storage/emulated/0/QuantumIDE и защита от пустых (0 байт) файлов.",
+  "versionCode": 155,
+  "versionName": "1.2.138",
+  "notes": "QuantumIDE v1.2.138:\n• Отключено навязчивое всплывающее окно «Синхронизация проекта (pub get)» при открытии и сохранении файлов.\n• Исправлены ложные ошибки скобок на обычных текстовых файлах (.txt, .md) в анализаторе FastSyntaxEngine.\n• Новый автономный ИИ-агент Quantum Agent (в стиле Antigravity / Cline) + быстрая двусторонняя синхронизация с /storage/emulated/0/QuantumIDE.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.137/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.138/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }
