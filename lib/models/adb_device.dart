@@ -77,8 +77,12 @@ class AdbDevice {
   });
 
   bool get isOnline => status == AdbDeviceStatus.online;
+  bool get isUnauthorized => status == AdbDeviceStatus.unauthorized;
+  bool get isOffline => status == AdbDeviceStatus.offline;
   bool get isUsb => connectionType == AdbConnectionType.usb;
   bool get isWifi => connectionType == AdbConnectionType.wifi;
+  bool get isUsbBridged => isUsb && (id.startsWith('127.0.0.1:') || id.startsWith('localhost:'));
+  String get displayTitle => displayName;
 
   String get displayName {
     if (model.isNotEmpty) {
