@@ -280,6 +280,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             subtitle: s.editorFontFamily,
             onTap: () => _showFontFamilyDialog(context, s.editorFontFamily, sn.setEditorFontFamily),
           ),
+          _tile(
+            context,
+            icon: LucideIcons.palette,
+            title: isRu ? 'Тема синтаксиса редактора' : 'Editor Syntax Theme',
+            subtitle: _editorThemeName(context, s.editorTheme),
+            onTap: () => _showEditorThemeDialog(context, s.editorTheme, sn.setEditorTheme),
+          ),
           _switchTile(
             context,
             title: AppLocalizations.of(context)!.fontLigatures,
@@ -885,6 +892,104 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             },
           ),
         ),
+      ),
+    );
+  }
+
+  String _editorThemeName(BuildContext context, String theme) {
+    switch (theme) {
+      case 'vs-dark':
+        return 'VS Code Dark+ (Standard)';
+      case 'atom-one-dark':
+        return 'Atom One Dark';
+      case 'dracula':
+        return 'Dracula';
+      case 'github-dark':
+        return 'GitHub Dark';
+      case 'nord':
+        return 'Nord';
+      case 'monokai':
+        return 'Monokai';
+      case 'solarized-dark':
+        return 'Solarized Dark';
+      default:
+        return 'VS Code Dark+';
+    }
+  }
+
+  void _showEditorThemeDialog(BuildContext context, String current, ValueChanged<String> onChanged) {
+    final theme = Theme.of(context);
+    final themes = [
+      {'id': 'vs-dark', 'name': 'VS Code Dark+ (Standard)'},
+      {'id': 'atom-one-dark', 'name': 'Atom One Dark'},
+      {'id': 'dracula', 'name': 'Dracula'},
+      {'id': 'github-dark', 'name': 'GitHub Dark'},
+      {'id': 'nord', 'name': 'Nord'},
+      {'id': 'monokai', 'name': 'Monokai'},
+      {'id': 'solarized-dark', 'name': 'Solarized Dark'},
+    ];
+    final isRu = Localizations.localeOf(context).languageCode == 'ru';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.colorScheme.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          isRu ? 'Тема синтаксиса редактора' : 'Editor Syntax Theme',
+          style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: themes.length,
+            itemBuilder: (ctx, i) {
+              final item = themes[i];
+              final id = item['id']!;
+              final name = item['name']!;
+              final isSel = current == id;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: isSel ? theme.colorScheme.primary.withValues(alpha: 0.1) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSel
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: ListTile(
+                  dense: true,
+                  title: Text(
+                    name,
+                    style: GoogleFonts.inter(
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 14,
+                      fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                    ),
+                  ),
+                  trailing: isSel
+                      ? Icon(LucideIcons.check, color: theme.colorScheme.primary, size: 16)
+                      : null,
+                  onTap: () {
+                    onChanged(id);
+                    Navigator.pop(ctx);
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              AppLocalizations.of(context)!.close,
+              style: TextStyle(color: theme.colorScheme.primary),
+            ),
+          ),
+        ],
       ),
     );
   }

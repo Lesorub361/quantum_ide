@@ -18,6 +18,7 @@ class SettingsState {
   final String geminiModel;
   final String flexScheme;
   final int? customPrimaryColor;
+  final String editorTheme;
   final String editorFontFamily;
   final String terminalFontFamily;
   final bool editorFontLigatures;
@@ -44,6 +45,7 @@ class SettingsState {
     this.geminiModel = 'gemini-2.5-flash',
     this.flexScheme = 'mandyRed',
     this.customPrimaryColor,
+    this.editorTheme = 'vs-dark',
     this.editorFontFamily = 'Fira Code',
     this.terminalFontFamily = 'JetBrains Mono',
     this.editorFontLigatures = true,
@@ -72,6 +74,7 @@ class SettingsState {
     String? flexScheme,
     int? customPrimaryColor,
     bool clearCustomColor = false,
+    String? editorTheme,
     String? editorFontFamily,
     String? terminalFontFamily,
     bool? editorFontLigatures,
@@ -98,6 +101,7 @@ class SettingsState {
       geminiModel: geminiModel ?? this.geminiModel,
       flexScheme: flexScheme ?? this.flexScheme,
       customPrimaryColor: clearCustomColor ? null : (customPrimaryColor ?? this.customPrimaryColor),
+      editorTheme: editorTheme ?? this.editorTheme,
       editorFontFamily: editorFontFamily ?? this.editorFontFamily,
       terminalFontFamily: terminalFontFamily ?? this.terminalFontFamily,
       editorFontLigatures: editorFontLigatures ?? this.editorFontLigatures,
@@ -131,6 +135,7 @@ class SettingsService extends StateNotifier<SettingsState> {
   static const _keyGeminiModel = 'settings_gemini_model';
   static const _keyFlexScheme = 'settings_flex_scheme';
   static const _keyCustomColor = 'settings_custom_color';
+  static const _keyEditorTheme = 'settings_editor_theme';
   static const _keyEditorFontFamily = 'settings_editor_font_family';
   static const _keyTerminalFontFamily = 'settings_terminal_font_family';
   static const _keyEditorFontLigatures = 'settings_editor_font_ligatures';
@@ -160,6 +165,7 @@ class SettingsService extends StateNotifier<SettingsState> {
           : (prefs.getString(_keyGeminiModel) ?? 'gemini-2.5-flash')),
       flexScheme: prefs.getString(_keyFlexScheme) ?? 'mandyRed',
       customPrimaryColor: prefs.getInt(_keyCustomColor),
+      editorTheme: prefs.getString(_keyEditorTheme) ?? 'vs-dark',
       editorFontFamily: prefs.getString(_keyEditorFontFamily) ?? 'Fira Code',
       terminalFontFamily: prefs.getString(_keyTerminalFontFamily) ?? 'JetBrains Mono',
       editorFontLigatures: prefs.getBool(_keyEditorFontLigatures) ?? true,
@@ -275,6 +281,12 @@ class SettingsService extends StateNotifier<SettingsState> {
     } else {
       await prefs.remove(_keyCustomColor);
     }
+  }
+
+  Future<void> setEditorTheme(String theme) async {
+    state = state.copyWith(editorTheme: theme);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyEditorTheme, theme);
   }
 
   Future<void> setEditorFontFamily(String family) async {

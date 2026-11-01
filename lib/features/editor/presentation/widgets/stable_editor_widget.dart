@@ -27,6 +27,12 @@ import 'package:re_highlight/languages/cpp.dart';
 import 'package:re_highlight/languages/java.dart';
 import 'package:re_highlight/languages/php.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
+import 'package:re_highlight/styles/vs2015.dart';
+import 'package:re_highlight/styles/dracula.dart';
+import 'package:re_highlight/styles/github-dark.dart';
+import 'package:re_highlight/styles/nord.dart';
+import 'package:re_highlight/styles/monokai.dart';
+import 'package:re_highlight/styles/solarized-dark.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_painter.dart';
@@ -231,28 +237,67 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     }
   }
 
-  // Cached static resources — created once, never rebuilt
-  static final CodeHighlightTheme _highlightTheme = CodeHighlightTheme(
-    languages: {
-      'dart': CodeHighlightThemeMode(mode: langDart),
-      'json': CodeHighlightThemeMode(mode: langJson),
-      'html': CodeHighlightThemeMode(mode: langXml),
-      'xml': CodeHighlightThemeMode(mode: langXml),
-      'js': CodeHighlightThemeMode(mode: langJavascript),
-      'javascript': CodeHighlightThemeMode(mode: langJavascript),
-      'yaml': CodeHighlightThemeMode(mode: langYaml),
-      'markdown': CodeHighlightThemeMode(mode: langMarkdown),
-      'py': CodeHighlightThemeMode(mode: langPython),
-      'python': CodeHighlightThemeMode(mode: langPython),
-      'cpp': CodeHighlightThemeMode(mode: langCpp),
-      'java': CodeHighlightThemeMode(mode: langJava),
-      'php': CodeHighlightThemeMode(mode: langPhp),
-    },
-    theme: atomOneDarkTheme,
-  );
+  // Cached syntax highlight themes map
+  static final Map<String, CodeHighlightTheme> _cachedThemes = {};
+
+  static CodeHighlightTheme _getHighlightTheme(String themeId) {
+    if (_cachedThemes.containsKey(themeId)) {
+      return _cachedThemes[themeId]!;
+    }
+
+    Map<String, TextStyle> styleMap;
+    switch (themeId) {
+      case 'atom-one-dark':
+        styleMap = atomOneDarkTheme;
+        break;
+      case 'dracula':
+        styleMap = draculaTheme;
+        break;
+      case 'github-dark':
+        styleMap = githubDarkTheme;
+        break;
+      case 'nord':
+        styleMap = nordTheme;
+        break;
+      case 'monokai':
+        styleMap = monokaiTheme;
+        break;
+      case 'solarized-dark':
+        styleMap = solarizedDarkTheme;
+        break;
+      case 'vs-dark':
+      default:
+        styleMap = vs2015Theme;
+        break;
+    }
+
+    final theme = CodeHighlightTheme(
+      languages: {
+        'dart': CodeHighlightThemeMode(mode: langDart),
+        'json': CodeHighlightThemeMode(mode: langJson),
+        'html': CodeHighlightThemeMode(mode: langXml),
+        'xml': CodeHighlightThemeMode(mode: langXml),
+        'js': CodeHighlightThemeMode(mode: langJavascript),
+        'javascript': CodeHighlightThemeMode(mode: langJavascript),
+        'yaml': CodeHighlightThemeMode(mode: langYaml),
+        'markdown': CodeHighlightThemeMode(mode: langMarkdown),
+        'py': CodeHighlightThemeMode(mode: langPython),
+        'python': CodeHighlightThemeMode(mode: langPython),
+        'cpp': CodeHighlightThemeMode(mode: langCpp),
+        'java': CodeHighlightThemeMode(mode: langJava),
+        'php': CodeHighlightThemeMode(mode: langPhp),
+      },
+      theme: styleMap,
+    );
+
+    _cachedThemes[themeId] = theme;
+    return theme;
+  }
 
   CodeLineEditingValue? _previousValue;
   bool _isAutoClosing = false;
+  late final CodeScrollController _scrollController;
+  double _lastBottomInset = 0;
 
   void _setupControllerListener() {
     _previousValue = widget.file.controller.value;
@@ -264,6 +309,14 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   }
 
   void _handleControllerChange() {
+    if (mounted && MediaQuery.of(context).viewInsets.bottom > 0) {
+      final cur = widget.file.controller.value.selection;
+      final prev = _previousValue?.selection;
+      if (cur.extentIndex != prev?.extentIndex) {
+        _ensureCursorVisible(center: false);
+      }
+    }
+
     if (_isAutoClosing) return;
 
     final controller = widget.file.controller;
@@ -413,6 +466,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   @override
   void initState() {
     super.initState();
+    _scrollController = CodeScrollController();
     _diagnostics = widget.file.diagnostics;
     _diffMarkers = widget.file.diffMarkers;
     _findController = CodeFindController(widget.file.controller);
@@ -421,10 +475,36 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    if (bottomInset > 0 && _lastBottomInset == 0) {
+      // Клавиатура только что открылась: центрируем активную строку над клавиатурой
+      _ensureCursorVisible(center: true);
+    }
+    _lastBottomInset = bottomInset;
+  }
+
+  void _ensureCursorVisible({bool center = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      try {
+        final position = widget.file.controller.selection.extent;
+        if (center) {
+          _scrollController.makeCenterIfInvisible(position);
+        } else {
+          _scrollController.makeVisible(position);
+        }
+      } catch (_) {}
+    });
+  }
+
+  @override
   void dispose() {
     QuantumSelectionToolbarController.dismissAll();
     _removeControllerListener();
     _findController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -856,6 +936,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
     Widget editorWidget = CodeEditor(
       controller: file.controller,
+      scrollController: _scrollController,
       wordWrap: settings.wordWrap,
       chunkAnalyzer: const DefaultCodeChunkAnalyzer(),
       findController: _findController,
@@ -892,10 +973,32 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (settings.lineNumbers) ...[
-                    DefaultCodeLineNumber(controller: controller, notifier: notifier),
+                    DefaultCodeLineNumber(
+                      controller: controller,
+                      notifier: notifier,
+                      textStyle: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.28),
+                        fontSize: (settings.fontSize * 0.88).clamp(9.0, 20.0),
+                        fontFamily: _getFontFamily(settings.editorFontFamily),
+                      ),
+                      focusedTextStyle: TextStyle(
+                        color: Colors.cyanAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: (settings.fontSize * 0.88).clamp(9.0, 20.0),
+                        fontFamily: _getFontFamily(settings.editorFontFamily),
+                      ),
+                    ),
                     const SizedBox(width: 8),
                   ],
-                  DefaultCodeChunkIndicator(width: 20, controller: chunkController, notifier: notifier),
+                  DefaultCodeChunkIndicator(
+                    width: 18,
+                    controller: chunkController,
+                    notifier: notifier,
+                    painter: DefaultCodeChunkIndicatorPainter(
+                      color: Colors.cyanAccent.withValues(alpha: 0.65),
+                      size: const Size(9, 9),
+                    ),
+                  ),
                 ],
               ),
               Positioned.fill(
@@ -932,8 +1035,14 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       style: CodeEditorStyle(
         fontSize: settings.fontSize,
         fontFamily: _getFontFamily(settings.editorFontFamily),
+        fontHeight: 1.48,
+        cursorColor: Colors.cyanAccent,
+        cursorWidth: 2.2,
+        cursorLineColor: const Color(0xFF161C2C).withValues(alpha: 0.42),
+        selectionColor: Colors.cyanAccent.withValues(alpha: 0.26),
+        chunkIndicatorColor: Colors.cyanAccent.withValues(alpha: 0.5),
         backgroundColor: const Color(0xFF090B12),
-        codeTheme: applyHighlighting ? _highlightTheme : null,
+        codeTheme: applyHighlighting ? _getHighlightTheme(settings.editorTheme) : null,
       ),
     );
 
@@ -1318,7 +1427,7 @@ class ActionIconButton extends StatelessWidget {
 
 
 
-class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWidget {
+class QuantumAutocompleteView extends StatefulWidget implements PreferredSizeWidget {
   final ValueNotifier<CodeAutocompleteEditingValue> notifier;
   final ValueChanged<CodeAutocompleteResult> onSelected;
 
@@ -1328,7 +1437,42 @@ class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWi
   });
 
   @override
-  Size get preferredSize => const Size(310, 240);
+  State<QuantumAutocompleteView> createState() => _QuantumAutocompleteViewState();
+
+  @override
+  Size get preferredSize => const Size(310, 190);
+}
+
+class _QuantumAutocompleteViewState extends State<QuantumAutocompleteView> {
+  double _dyCorrection = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkBoundary());
+  }
+
+  void _checkBoundary() {
+    if (!mounted) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+
+    final pos = box.localToGlobal(Offset.zero);
+    final media = MediaQuery.of(context);
+    final keyboardTop = media.size.height - media.viewInsets.bottom - 6.0;
+    final uncorrectedBottom = pos.dy + box.size.height - _dyCorrection;
+
+    double shift = 0.0;
+    if (uncorrectedBottom > keyboardTop) {
+      shift = -(uncorrectedBottom - keyboardTop + 6.0);
+    } else if (pos.dy - _dyCorrection < 64.0) {
+      shift = 64.0 - (pos.dy - _dyCorrection);
+    }
+
+    if ((_dyCorrection - shift).abs() > 1.5) {
+      setState(() => _dyCorrection = shift);
+    }
+  }
 
   IconData _getPromptIcon(CodePrompt prompt) {
     if (prompt is CodeSnippetPrompt) return LucideIcons.boxes;
@@ -1354,27 +1498,34 @@ class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWi
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final popupWidth = (screenWidth - 24.0).clamp(240.0, 310.0);
+    final maxPopupHeight = bottomInset > 0 ? 165.0 : 210.0;
+
     return ValueListenableBuilder<CodeAutocompleteEditingValue>(
-      valueListenable: notifier,
+      valueListenable: widget.notifier,
       builder: (context, value, child) {
         if (value.prompts.isEmpty) return const SizedBox();
-        return Container(
-          margin: EdgeInsets.only(bottom: bottomInset > 0 ? 8 : 0),
+
+        WidgetsBinding.instance.addPostFrameCallback((_) => _checkBoundary());
+
+        return Transform.translate(
+          offset: Offset(0, _dyCorrection),
           child: GlassContainer(
             blur: 40,
-            opacity: 0.35,
+            opacity: 0.38,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.25), width: 0.8),
+            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.35), width: 0.8),
             child: Container(
-              width: 310,
+              width: popupWidth,
               constraints: BoxConstraints(
-                maxHeight: bottomInset > 0 ? 190 : 240,
+                maxHeight: maxPopupHeight,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F121C).withValues(alpha: 0.92),
+                color: const Color(0xFF0F121C).withValues(alpha: 0.94),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: const [
-                  BoxShadow(color: Colors.black54, blurRadius: 16, offset: Offset(0, 6)),
+                  BoxShadow(color: Colors.black87, blurRadius: 18, offset: Offset(0, 6)),
                 ],
               ),
               child: Column(
@@ -1415,7 +1566,7 @@ class QuantumAutocompleteView extends StatelessWidget implements PreferredSizeWi
                         final badge = _getPromptBadge(prompt);
 
                         return InkWell(
-                          onTap: () => onSelected(value.copyWith(index: index).autocomplete),
+                          onTap: () => widget.onSelected(value.copyWith(index: index).autocomplete),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 120),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
