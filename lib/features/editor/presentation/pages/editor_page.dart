@@ -248,6 +248,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   bool _isDragging = false;
   bool _isSplitMode = false;
   int _splitTabIndex = -1;
+  bool _isZenMode = false;
 
   double _leftSidebarWidth = 260.0;
   double _rightSidebarWidth = 340.0;
@@ -423,20 +424,48 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                   ? _buildDashboard(context, ref, isDesktop, workspacePath)
                   : Column(
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Breadcrumbs(path: activeFile.path, workspacePath: workspacePath),
+                        if (!_isZenMode)
+                          Container(
+                            height: 30,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0A0C14).withValues(alpha: 0.95),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: Colors.white.withValues(alpha: 0.05),
+                                  width: 0.8,
+                                ),
+                              ),
                             ),
-                            IconButton(
-                              icon: const Icon(LucideIcons.search, size: 16, color: Colors.cyanAccent),
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              constraints: const BoxConstraints(),
-                              onPressed: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
-                              tooltip: AppLocalizations.of(context)!.quickSearch,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Breadcrumbs(path: activeFile.path, workspacePath: workspacePath),
+                                ),
+                                IconButton(
+                                  icon: const Icon(LucideIcons.wand_sparkles, size: 14, color: Colors.purpleAccent),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => ref.read(editorProvider.notifier).formatActiveFile(),
+                                  tooltip: 'Форматировать код',
+                                ),
+                                IconButton(
+                                  icon: const Icon(LucideIcons.search, size: 14, color: Colors.cyanAccent),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
+                                  tooltip: AppLocalizations.of(context)!.quickSearch,
+                                ),
+                                IconButton(
+                                  icon: const Icon(LucideIcons.maximize_2, size: 14, color: Colors.white70),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _toggleZenMode(ref),
+                                  tooltip: 'Режим фокуса (Zen Mode)',
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
                   Expanded(
                     child: DropTarget(
                       onDragDone: (detail) async {
@@ -600,6 +629,50 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               bottom: 0,
               child: ProjectSyncOutputPanel(),
             ),
+
+            // ── Кнопка выхода из Zen Mode (плавающий неоновый бейдж) ────
+            if (_isZenMode)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 8,
+                right: 12,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => _toggleZenMode(ref),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF141824).withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.45), width: 0.8),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.5),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(LucideIcons.minimize_2, size: 13, color: Colors.cyanAccent),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Выйти из Zen',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.cyanAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -639,7 +712,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       key: _scaffoldKey,
       resizeToAvoidBottomInset: false,
       drawer: isDesktop ? null : const FileDrawer(),
-      appBar: PreferredSize(
+      appBar: _isZenMode ? null : PreferredSize(
         preferredSize: const Size.fromHeight(72),
         child: GlassContainer(
           blur: 30,
@@ -748,6 +821,23 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               },
                             ),
                           ],
+                          ActionIconButton(
+                            icon: LucideIcons.smartphone,
+                            color: panelState.selectedTab == PanelTab.deviceMirror && panelState.isOpened
+                                ? Colors.greenAccent
+                                : Colors.greenAccent.withValues(alpha: 0.8),
+                            backgroundColor: Colors.greenAccent.withValues(alpha: 0.12),
+                            borderColor: Colors.greenAccent.withValues(alpha: 0.3),
+                            tooltip: 'Экран телефона и USB (Device Mirroring)',
+                            onTap: () {
+                              if (panelState.isOpened && panelState.selectedTab == PanelTab.deviceMirror) {
+                                panelNotifier.closePanel();
+                              } else {
+                                panelNotifier.selectTab(PanelTab.deviceMirror);
+                                panelNotifier.openPanel();
+                              }
+                            },
+                          ),
                           PopupMenuButton<String>(
                             tooltip: 'Ещё действия',
                             padding: EdgeInsets.zero,
@@ -888,7 +978,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         rightAgentOpen: ref.watch(rightAgentPanelOpenProvider),
         screenWidth: screenWidth,
       ),
-      bottomNavigationBar: isDesktop ? const StatusBar() : const StatusBar(),
+      bottomNavigationBar: _isZenMode ? null : const StatusBar(),
     ),
   );
   }
@@ -1359,6 +1449,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.git: return LucideIcons.git_branch;
       case PanelTab.problems: return LucideIcons.circle_alert;
       case PanelTab.debug: return LucideIcons.bug;
+      case PanelTab.deviceMirror: return LucideIcons.smartphone;
     }
   }
 
@@ -1371,6 +1462,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.git: return Colors.amberAccent;
       case PanelTab.problems: return Colors.redAccent;
       case PanelTab.debug: return Colors.orangeAccent;
+      case PanelTab.deviceMirror: return Colors.greenAccent;
     }
   }
 
@@ -1384,6 +1476,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.git: return 'Git';
       case PanelTab.problems: return l10n.problems;
       case PanelTab.debug: return l10n.debugger;
+      case PanelTab.deviceMirror: return 'Экран и USB';
     }
   }
 
@@ -1793,8 +1886,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   }
 
   void _toggleZenMode(WidgetRef ref) {
-    final panelNotifier = ref.read(panelProvider.notifier);
-    panelNotifier.toggle();
+    setState(() {
+      _isZenMode = !_isZenMode;
+    });
+    if (_isZenMode) {
+      ref.read(panelProvider.notifier).closePanel();
+    }
   }
 
   void _toggleSplitMode(WidgetRef ref) {

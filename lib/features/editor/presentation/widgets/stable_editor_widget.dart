@@ -56,13 +56,13 @@ class DiffBackgroundPainter extends CustomPainter {
         final paint = Paint();
         switch (marker.type) {
           case DiffType.added:
-            paint.color = Colors.green.withValues(alpha: 0.12);
+            paint.color = const Color(0xFF10B981).withValues(alpha: 0.14);
             break;
           case DiffType.removed:
-            paint.color = Colors.red.withValues(alpha: 0.12);
+            paint.color = const Color(0xFFEF4444).withValues(alpha: 0.14);
             break;
           case DiffType.modified:
-            paint.color = Colors.orange.withValues(alpha: 0.12);
+            paint.color = const Color(0xFFF59E0B).withValues(alpha: 0.14);
             break;
         }
 
@@ -867,11 +867,11 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       indicatorBuilder: (context, controller, chunkController, notifier) {
         return Container(
           decoration: const BoxDecoration(
-            color: Color(0xFF0C0F17),
+            color: Color(0xFF07090E),
             border: Border(
               right: BorderSide(
-                color: Color(0xFF1B2234),
-                width: 1,
+                color: Color(0xFF151924),
+                width: 0.8,
               ),
             ),
           ),
@@ -932,7 +932,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       style: CodeEditorStyle(
         fontSize: settings.fontSize,
         fontFamily: _getFontFamily(settings.editorFontFamily),
-        backgroundColor: const Color(0xFF090B10),
+        backgroundColor: const Color(0xFF090B12),
         codeTheme: applyHighlighting ? _highlightTheme : null,
       ),
     );

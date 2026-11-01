@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
@@ -79,6 +80,41 @@ class KeyboardAccessoryBar extends ConsumerWidget {
         extentOffset: lastLen,
       );
     }
+  }
+
+  void _moveCursor(int delta, WidgetRef ref) {
+    _triggerHaptic(ref);
+    final selection = controller.selection;
+    final lines = controller.codeLines;
+    if (lines.isEmpty) return;
+
+    int line = selection.extentIndex;
+    int col = selection.extentOffset + delta;
+
+    if (delta > 0) {
+      if (col > lines[line].text.length) {
+        if (line + 1 < lines.length) {
+          line += 1;
+          col = 0;
+        } else {
+          col = lines[line].text.length;
+        }
+      }
+    } else if (delta < 0) {
+      if (col < 0) {
+        if (line > 0) {
+          line -= 1;
+          col = lines[line].text.length;
+        } else {
+          col = 0;
+        }
+      }
+    }
+
+    controller.selection = CodeLineSelection.collapsed(
+      index: line.clamp(0, lines.length - 1),
+      offset: col.clamp(0, lines[line.clamp(0, lines.length - 1)].text.length),
+    );
   }
 
   void _insertText(String text, WidgetRef ref) {
@@ -221,15 +257,32 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       );
     }
 
+    Color getSymbolColor(String sym) {
+      if (sym == 'TAB') return const Color(0xFF22D3EE);
+      if (sym == '{' || sym == '}' || sym == '(' || sym == ')' || sym == '[' || sym == ']') {
+        return const Color(0xFF38BDF8);
+      }
+      if (sym == '"' || sym == "'" || sym == '`') {
+        return const Color(0xFFFCD34D);
+      }
+      if (sym == '=' || sym == '+' || sym == '-' || sym == '*' || sym == '/' || sym == '=>') {
+        return const Color(0xFFC084FC);
+      }
+      if (sym == ';' || sym == ':' || sym == ',' || sym == '.') {
+        return Colors.white70;
+      }
+      return Colors.white.withValues(alpha: 0.85);
+    }
+
     if (!isKeyboardOpen) {
       return Container(
         height: 32,
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: const Color(0xE610121D),
+          color: const Color(0xFF0A0C14).withValues(alpha: 0.98),
           border: Border(
-            top: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.8),
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.07), width: 0.8),
           ),
         ),
         child: Row(
@@ -255,9 +308,16 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                   },
                 ),
                 buildBtn(
-                  icon: LucideIcons.square,
-                  tooltip: l10n.selectAll,
-                  onPressed: () => _selectAll(ref),
+                  icon: LucideIcons.chevron_left,
+                  tooltip: 'Курсор влево',
+                  color: Colors.cyanAccent,
+                  onPressed: () => _moveCursor(-1, ref),
+                ),
+                buildBtn(
+                  icon: LucideIcons.chevron_right,
+                  tooltip: 'Курсор вправо',
+                  color: Colors.cyanAccent,
+                  onPressed: () => _moveCursor(1, ref),
                 ),
                 buildBtn(
                   icon: LucideIcons.copy,
@@ -276,7 +336,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               children: [
                 Text(
                   '${settings.fontSize.toInt()} px',
-                  style: const TextStyle(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(width: 6),
                 buildBtn(
@@ -300,8 +360,8 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF161925),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5)),
+        color: const Color(0xFF0C0E18),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
       ),
       child: Row(
         children: [
@@ -322,9 +382,16 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             },
           ),
           buildBtn(
-            icon: LucideIcons.square,
-            tooltip: l10n.selectAll,
-            onPressed: () => _selectAll(ref),
+            icon: LucideIcons.chevron_left,
+            tooltip: 'Курсор влево',
+            color: Colors.cyanAccent,
+            onPressed: () => _moveCursor(-1, ref),
+          ),
+          buildBtn(
+            icon: LucideIcons.chevron_right,
+            tooltip: 'Курсор вправо',
+            color: Colors.cyanAccent,
+            onPressed: () => _moveCursor(1, ref),
           ),
           buildBtn(
             icon: LucideIcons.copy,
@@ -381,6 +448,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final symbol = symbols[index];
                 final isTab = symbol == 'TAB';
+                final symColor = getSymbolColor(symbol);
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 1.5, vertical: 2),
                   child: TextButton(
@@ -391,20 +459,26 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                     style: TextButton.styleFrom(
                       minimumSize: Size(isTab ? 38 : 26, 26),
                       padding: EdgeInsets.zero,
-                      backgroundColor: isTab ? Colors.cyanAccent.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.03),
-                      foregroundColor: isTab ? Colors.cyanAccent : Colors.white70,
+                      backgroundColor: isTab
+                          ? Colors.cyanAccent.withValues(alpha: 0.08)
+                          : const Color(0xFF151926),
+                      foregroundColor: symColor,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(5),
-                        side: isTab
-                            ? BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.15))
-                            : BorderSide(color: Colors.white.withValues(alpha: 0.04), width: 0.5),
+                        side: BorderSide(
+                          color: isTab
+                              ? Colors.cyanAccent.withValues(alpha: 0.25)
+                              : Colors.white.withValues(alpha: 0.05),
+                          width: 0.5,
+                        ),
                       ),
                     ),
                     child: Text(
                       symbol,
-                      style: TextStyle(
+                      style: GoogleFonts.jetBrainsMono(
                         fontSize: isTab ? 9.5 : 12.5,
                         fontWeight: FontWeight.bold,
+                        color: symColor,
                       ),
                     ),
                   ),

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/models/adb_device.dart';
@@ -60,6 +62,16 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
   }
 
   Future<void> init() async {
+    final runtime = _ref.read(runtimeServiceProvider);
+    try {
+      runtime.runCommand(
+        'if [ -f /usr/bin/adb ]; then '
+        'mkdir -p /root/android-sdk/platform-tools && '
+        'cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb && '
+        'chmod +x /root/android-sdk/platform-tools/adb; '
+        'fi 2>/dev/null || true'
+      );
+    } catch (_) {}
     await checkUsbHostSupport();
     await refreshDevices();
   }
@@ -666,6 +678,64 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     } catch (e) {
       return 'Ошибка получения логов: $e';
     }
+  }
+
+  /// Automatically heals ADB by ensuring the native ARM64 binary is installed and linked
+  Future<String> fixAdbEnvironment() async {
+    final runtime = _ref.read(runtimeServiceProvider);
+    try {
+      await runtime.runCommand(
+        'mkdir -p /root/android-sdk/platform-tools && '
+        '(if [ ! -f /usr/bin/adb ]; then '
+        'apt update -qq && apt install -y -qq adb 2>/dev/null || true; '
+        'fi) && '
+        'if [ -f /usr/bin/adb ]; then '
+        'cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb && '
+        'chmod +x /root/android-sdk/platform-tools/adb; '
+        'fi && '
+        'adb kill-server 2>/dev/null; sleep 0.5; adb start-server 2>&1 || true'
+      );
+      await refreshDevices();
+      final ver = await runtime.runCommand('/root/android-sdk/platform-tools/adb version 2>&1 || true');
+      return '✅ ADB проверен и готов к работе:\n${ver.trim()}';
+    } catch (e) {
+      return 'Ошибка проверки ADB: $e';
+    }
+  }
+
+  /// Captures current frame from target device screen as raw PNG bytes
+  Future<Uint8List?> captureScreenFrame({String? deviceId}) async {
+    final targetId = deviceId ?? state.selectedDevice?.id;
+    if (targetId == null) return null;
+    final runtime = _ref.read(runtimeServiceProvider);
+    try {
+      final base64Str = await runtime.runCommand(
+        'adb -s $targetId exec-out screencap -p 2>/dev/null | base64 -w 0 2>/dev/null || '
+        'adb -s $targetId exec-out screencap -p 2>/dev/null | base64 2>/dev/null'
+      );
+      final clean = base64Str.replaceAll('\n', '').replaceAll('\r', '').replaceAll(' ', '').trim();
+      if (clean.length > 200) {
+        return base64Decode(clean);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Gets real screen resolution of target device (width, height)
+  Future<Size> getDeviceDisplaySize({String? deviceId}) async {
+    final targetId = deviceId ?? state.selectedDevice?.id;
+    if (targetId == null) return const Size(1080, 2400);
+    final runtime = _ref.read(runtimeServiceProvider);
+    try {
+      final out = await runtime.runCommand('adb -s $targetId shell wm size 2>/dev/null || true');
+      final match = RegExp(r'(\d+)\s*x\s*(\d+)').firstMatch(out);
+      if (match != null) {
+        final w = double.tryParse(match.group(1)!) ?? 1080;
+        final h = double.tryParse(match.group(2)!) ?? 2400;
+        return Size(w, h);
+      }
+    } catch (_) {}
+    return const Size(1080, 2400);
   }
 }
 

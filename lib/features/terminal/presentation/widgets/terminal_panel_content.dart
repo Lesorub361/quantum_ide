@@ -38,6 +38,7 @@ import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
 import 'package:fuzzy/fuzzy.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -923,6 +924,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         return _buildGitView();
       case PanelTab.debug:
         return const DebuggerPanel(key: ValueKey('debug'));
+      case PanelTab.deviceMirror:
+        return const DeviceMirrorPanel(key: ValueKey('deviceMirror'));
     }
   }
 
@@ -1231,8 +1234,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       children: [
         _buildActionHeader(l10n.appLogs, [
           _buildActionButton('Logs', LucideIcons.list, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'flutter logs')),
+          _buildActionButton('ADB Logcat', LucideIcons.smartphone, Colors.greenAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'if [ -f /usr/bin/adb ]; then mkdir -p /root/android-sdk/platform-tools && cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb 2>/dev/null && chmod +x /root/android-sdk/platform-tools/adb 2>/dev/null; fi ; adb logcat -v time *:V')),
           _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.appLogs)),
-          _buildActionButton(l10n.setupSdk, LucideIcons.settings, Colors.purpleAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'kill -9 \$(pgrep -x "apt|apt-get|dpkg|dpkg-deb" 2>/dev/null) 2>/dev/null ; rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend 2>/dev/null ; dpkg --configure -a 2>/dev/null ; apt update && apt install -y debianutils libz1 libexpat1 openjdk-21-jdk wget unzip libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 libc6 aapt adb zipalign apksigner clang lld cmake ninja-build pkg-config libgtk-3-dev && git config --global --add safe.directory \'*\' && mkdir -p /root/android-sdk/licenses && printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\\nd56f5187479451eabf01fb78af6dfcb131a6481e\\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\\n" > /root/android-sdk/licenses/android-sdk-license && printf "84831b9409646a918e30573bab4c9c91346d8abd\\n" > /root/android-sdk/licenses/android-sdk-preview-license && printf "859f317696f67ef3d7f30a50a5560e7834b43903\\n" > /root/android-sdk/licenses/android-sdk-arm-dbt-license && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && (flutter config --jdk-dir /usr/lib/jvm/java-17-openjdk-arm64 2>/dev/null || flutter config --jdk-dir /usr/lib/jvm/java-21-openjdk-arm64 2>/dev/null || true) && (which which >/dev/null || (echo "#!/bin/sh" > /usr/bin/which && echo "command -v \$1" >> /usr/bin/which && chmod +x /usr/bin/which))')),
+          _buildActionButton(l10n.setupSdk, LucideIcons.settings, Colors.purpleAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'kill -9 \$(pgrep -x "apt|apt-get|dpkg|dpkg-deb" 2>/dev/null) 2>/dev/null ; rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend 2>/dev/null ; dpkg --configure -a 2>/dev/null ; apt update && apt install -y debianutils libz1 libexpat1 openjdk-21-jdk wget unzip libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 libc6 aapt adb zipalign apksigner clang lld cmake ninja-build pkg-config libgtk-3-dev && git config --global --add safe.directory \'*\' && mkdir -p /root/android-sdk/licenses /root/android-sdk/platform-tools && cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb 2>/dev/null && chmod +x /root/android-sdk/platform-tools/adb 2>/dev/null && printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\\nd56f5187479451eabf01fb78af6dfcb131a6481e\\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\\n" > /root/android-sdk/licenses/android-sdk-license && printf "84831b9409646a918e30573bab4c9c91346d8abd\\n" > /root/android-sdk/licenses/android-sdk-preview-license && printf "859f317696f67ef3d7f30a50a5560e7834b43903\\n" > /root/android-sdk/licenses/android-sdk-arm-dbt-license && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && (flutter config --jdk-dir /usr/lib/jvm/java-17-openjdk-arm64 2>/dev/null || flutter config --jdk-dir /usr/lib/jvm/java-21-openjdk-arm64 2>/dev/null || true) && (which which >/dev/null || (printf \'#!/bin/sh\\ncommand -v "\$1"\\n\' > /usr/bin/which && chmod +x /usr/bin/which))')),
         ]),
         Expanded(
           child: session != null 
