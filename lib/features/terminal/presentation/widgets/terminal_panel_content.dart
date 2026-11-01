@@ -93,6 +93,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   double _pinchBaseFontSize = 13.0;
   final Map<int, Offset> _pinchPointers = {};
   double? _initialPinchDistance;
+  double? _pendingPinchFontSize;
 
   Widget _buildTerminalPinchWrapper({required Widget child}) {
     return Listener(
@@ -102,6 +103,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           final points = _pinchPointers.values.toList();
           _initialPinchDistance = (points[0] - points[1]).distance;
           _pinchBaseFontSize = ref.read(settingsProvider).terminalFontSize;
+          _pendingPinchFontSize = _pinchBaseFontSize;
         }
       },
       onPointerMove: (event) {
@@ -110,22 +112,27 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           final points = _pinchPointers.values.toList();
           final currentDistance = (points[0] - points[1]).distance;
           final scale = currentDistance / _initialPinchDistance!;
-          final newSize = (_pinchBaseFontSize * scale).clamp(8.0, 32.0);
-          if ((newSize - ref.read(settingsProvider).terminalFontSize).abs() >= 0.5) {
-            ref.read(settingsProvider.notifier).setTerminalFontSize(newSize);
-          }
+          _pendingPinchFontSize = (_pinchBaseFontSize * scale).clamp(9.0, 28.0);
         }
       },
       onPointerUp: (event) {
         _pinchPointers.remove(event.pointer);
         if (_pinchPointers.length < 2) {
           _initialPinchDistance = null;
+          if (_pendingPinchFontSize != null) {
+            final rounded = _pendingPinchFontSize!.roundToDouble();
+            if ((rounded - ref.read(settingsProvider).terminalFontSize).abs() >= 1.0) {
+              ref.read(settingsProvider.notifier).setTerminalFontSize(rounded);
+            }
+            _pendingPinchFontSize = null;
+          }
         }
       },
       onPointerCancel: (event) {
         _pinchPointers.remove(event.pointer);
         if (_pinchPointers.length < 2) {
           _initialPinchDistance = null;
+          _pendingPinchFontSize = null;
         }
       },
       child: child,

@@ -34,7 +34,6 @@ import 'package:quantum_ide/features/editor/presentation/widgets/editor_app_bar.
 import 'package:quantum_ide/features/editor/presentation/widgets/stable_editor_widget.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/markdown_preview_widget.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/system_status_bar.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
@@ -444,8 +443,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 Expanded(
                                   child: Breadcrumbs(path: activeFile.path, workspacePath: workspacePath),
                                 ),
-                                const SystemStatusBar(),
-                                const SizedBox(width: 4),
                                 IconButton(
                                   icon: const Icon(LucideIcons.command, size: 14, color: Color(0xFFF59E0B)),
                                   padding: const EdgeInsets.symmetric(horizontal: 5),

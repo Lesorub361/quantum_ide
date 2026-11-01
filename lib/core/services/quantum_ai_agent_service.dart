@@ -43,7 +43,7 @@ class QuantumModelItem {
       badgeColorValue: 0xFF3B82F6,
     ),
     QuantumModelItem(
-      id: 'deepseek/deepseek-r1',
+      id: 'deepseek/deepseek-r1-0528',
       name: 'DeepSeek R1 (Reasoning)',
       providerName: 'OpenRouter',
       category: 'Рассуждения',
@@ -51,14 +51,56 @@ class QuantumModelItem {
       badgeColorValue: 0xFF8B5CF6,
       isReasoning: true,
     ),
+
+    // Active Free Models on OpenRouter
     QuantumModelItem(
-      id: 'deepseek/deepseek-r1:free',
-      name: 'DeepSeek R1 (Free)',
+      id: 'google/gemma-4-31b-it:free',
+      name: 'Google Gemma 4 31B (Free)',
       providerName: 'OpenRouter',
       category: 'Бесплатные',
       badge: 'FREE',
       badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
+      name: 'NVIDIA Nemotron Reasoning (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE R1',
+      badgeColorValue: 0xFF10B981,
       isReasoning: true,
+    ),
+    QuantumModelItem(
+      id: 'cohere/north-mini-code:free',
+      name: 'Cohere North Mini Code (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE Code',
+      badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'google/gemma-4-26b-a4b-it:free',
+      name: 'Google Gemma 4 26B (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE',
+      badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'nvidia/nemotron-3.5-lightning:free',
+      name: 'NVIDIA 3.5 Lightning (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE',
+      badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'liquid/lfm-2.5-2.6b:free',
+      name: 'Liquid LFM 2.5 (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE Fast',
+      badgeColorValue: 0xFF10B981,
     ),
 
     // Claude
@@ -134,14 +176,6 @@ class QuantumModelItem {
       badgeColorValue: 0xFF2563EB,
     ),
     QuantumModelItem(
-      id: 'google/gemini-2.0-flash-exp:free',
-      name: 'Gemini 2.0 Flash (Free)',
-      providerName: 'OpenRouter',
-      category: 'Бесплатные',
-      badge: 'FREE',
-      badgeColorValue: 0xFF10B981,
-    ),
-    QuantumModelItem(
       id: 'google/gemini-2.5-pro',
       name: 'Gemini 2.5 Pro',
       providerName: 'OpenRouter',
@@ -160,28 +194,12 @@ class QuantumModelItem {
       badgeColorValue: 0xFF6366F1,
     ),
     QuantumModelItem(
-      id: 'qwen/qwen-2.5-coder-32b-instruct:free',
-      name: 'Qwen 2.5 Coder (Free)',
-      providerName: 'OpenRouter',
-      category: 'Бесплатные',
-      badge: 'FREE',
-      badgeColorValue: 0xFF10B981,
-    ),
-    QuantumModelItem(
       id: 'meta-llama/llama-3.3-70b-instruct',
       name: 'Llama 3.3 70B',
       providerName: 'OpenRouter',
       category: 'Популярные',
       badge: '70B',
       badgeColorValue: 0xFFEC4899,
-    ),
-    QuantumModelItem(
-      id: 'meta-llama/llama-3.3-70b-instruct:free',
-      name: 'Llama 3.3 70B (Free)',
-      providerName: 'OpenRouter',
-      category: 'Бесплатные',
-      badge: 'FREE',
-      badgeColorValue: 0xFF10B981,
     ),
     QuantumModelItem(
       id: 'mistralai/codestral-2501',
@@ -318,6 +336,7 @@ class QuantumAiAgentService extends ChangeNotifier {
       ),
     );
     _initDefaultGreeting();
+    unawaited(fetchLiveOpenRouterModels());
   }
 
   static List<QuantumModelItem> get predefinedModels => QuantumModelItem.predefinedModels;
@@ -333,12 +352,144 @@ class QuantumAiAgentService extends ChangeNotifier {
   final List<ChatMessage> _messages = [];
   bool _isGenerating = false;
   String _statusMessage = 'Готов к работе';
+  List<QuantumModelItem> _availableModels = List.from(QuantumModelItem.predefinedModels);
+  bool _isLoadingModels = false;
 
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get isGenerating => _isGenerating;
   String get statusMessage => _statusMessage;
   QuantumModelItem get selectedModel => _selectedModel;
   AiProvider get selectedProvider => _selectedProvider;
+  List<QuantumModelItem> get availableModels => _availableModels;
+  bool get isLoadingModels => _isLoadingModels;
+
+  Future<void> fetchLiveOpenRouterModels({bool force = false}) async {
+    if (_isLoadingModels) return;
+    _isLoadingModels = true;
+    notifyListeners();
+
+    try {
+      final response = await _dio.get(
+        'https://openrouter.ai/api/v1/models',
+        options: Options(
+          responseType: ResponseType.json,
+          receiveTimeout: const Duration(seconds: 15),
+          sendTimeout: const Duration(seconds: 15),
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is Map<String, dynamic>) {
+        final data = response.data['data'] as List<dynamic>?;
+        if (data != null && data.isNotEmpty) {
+          final Set<String> seenIds = {};
+          final List<QuantumModelItem> liveModels = [];
+
+          // 1. Сначала отбираем активные бесплатные модели (:free или pricing prompt == '0')
+          for (final raw in data) {
+            if (raw is! Map<String, dynamic>) continue;
+            final id = raw['id'] as String? ?? '';
+            if (id.isEmpty) continue;
+
+            final pricing = raw['pricing'] as Map<String, dynamic>?;
+            final promptPrice = pricing?['prompt']?.toString() ?? '';
+            final isZeroPrice = promptPrice == '0' || promptPrice == '0.0';
+            final isFree = id.endsWith(':free') || isZeroPrice;
+
+            if (isFree) {
+              seenIds.add(id);
+              final name = raw['name'] as String? ?? id.split('/').last;
+              final desc = (raw['description'] as String? ?? '').toLowerCase();
+              final isReasoning = raw['reasoning'] != null ||
+                  id.contains('r1') ||
+                  id.contains('reasoning') ||
+                  desc.contains('reasoning') ||
+                  desc.contains('thinking');
+
+              liveModels.add(QuantumModelItem(
+                id: id,
+                name: name.endsWith('(free)') || name.endsWith('(Free)') ? name : '$name (Free)',
+                providerName: 'OpenRouter',
+                category: 'Бесплатные',
+                badge: isReasoning ? 'FREE R1' : 'FREE',
+                badgeColorValue: 0xFF10B981,
+                isReasoning: isReasoning,
+                isOpenRouter: true,
+              ));
+            }
+          }
+
+          // 2. Добавляем ключевые популярные и рассуждающие модели
+          for (final raw in data) {
+            if (raw is! Map<String, dynamic>) continue;
+            final id = raw['id'] as String? ?? '';
+            if (id.isEmpty || seenIds.contains(id)) continue;
+
+            final name = raw['name'] as String? ?? id.split('/').last;
+            final desc = (raw['description'] as String? ?? '').toLowerCase();
+            final idLower = id.toLowerCase();
+            final isReasoning = raw['reasoning'] != null ||
+                idLower.contains('r1') ||
+                idLower.contains('o1') ||
+                idLower.contains('o3') ||
+                idLower.contains('reasoning') ||
+                idLower.contains('thinking');
+            final isCoder = idLower.contains('coder') ||
+                idLower.contains('code') ||
+                desc.contains('coding') ||
+                desc.contains('code generation');
+
+            String category = 'Популярные';
+            String badge = 'Pro';
+            int badgeColor = 0xFF6366F1;
+
+            if (isReasoning) {
+              category = 'Рассуждения';
+              badge = 'Reasoning';
+              badgeColor = 0xFF8B5CF6;
+            } else if (isCoder) {
+              category = 'Кодинг';
+              badge = 'Code';
+              badgeColor = 0xFF3B82F6;
+            } else if (idLower.contains('claude-3.7') ||
+                idLower.contains('gpt-4o') ||
+                idLower.contains('gemini-2.5') ||
+                idLower.contains('deepseek-v3')) {
+              category = 'Флагманы';
+              badge = 'Flagship';
+              badgeColor = 0xFFEC4899;
+            }
+
+            seenIds.add(id);
+            liveModels.add(QuantumModelItem(
+              id: id,
+              name: name,
+              providerName: 'OpenRouter',
+              category: category,
+              badge: badge,
+              badgeColorValue: badgeColor,
+              isReasoning: isReasoning,
+              isOpenRouter: true,
+            ));
+          }
+
+          // 3. Добавляем прямые API
+          for (final predefined in QuantumModelItem.predefinedModels) {
+            if (!predefined.isOpenRouter && !seenIds.contains(predefined.id)) {
+              liveModels.add(predefined);
+              seenIds.add(predefined.id);
+            }
+          }
+
+          _availableModels = liveModels;
+        }
+      }
+    } catch (e) {
+      debugPrint('[QuantumAI] Ошибка получения списка моделей OpenRouter: $e');
+    } finally {
+      _isLoadingModels = false;
+      notifyListeners();
+    }
+  }
 
   void selectModel(QuantumModelItem model) {
     _selectedModel = model;
@@ -505,6 +656,12 @@ class QuantumAiAgentService extends ChangeNotifier {
     } catch (e) {
       if (e is DioException && CancelToken.isCancel(e)) {
         _statusMessage = 'Остановлено пользователем';
+      } else if (e is DioException && (e.response?.statusCode == 404 || e.message?.contains('404') == true)) {
+        final errText = '⚠️ Модель "${_selectedModel.name}" (${_selectedModel.id}) недоступна на сервере (код 404).\n\n'
+            'OpenRouter периодически отключает устаревшие бесплатные модели или обновляет их идентификаторы.\n\n'
+            '💡 **Что делать:** Откройте выбор модели (вверху панели) и нажмите кнопку 🔄 **«Обновить список»**, чтобы загрузить актуальные активные бесплатные модели прямо с сервера OpenRouter.';
+        assistantMsg.text = assistantMsg.text.isEmpty ? errText : '${assistantMsg.text}\n\n$errText';
+        _statusMessage = 'Ошибка 404: модель отключена на сервере';
       } else {
         assistantMsg.text += '\n\n⚠️ **Ошибка генерации:** $e';
         _statusMessage = 'Ошибка: $e';

@@ -227,7 +227,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             'Прямой API',
           ];
 
-          final allModels = QuantumModelItem.predefinedModels;
+          final allModels = agent.availableModels.isNotEmpty
+              ? agent.availableModels
+              : QuantumModelItem.predefinedModels;
           final filteredModels = allModels.where((m) {
             final matchesCategory = selectedCategory == 'Все' || m.category == selectedCategory;
             final matchesQuery = searchQuery.isEmpty ||
@@ -266,12 +268,31 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         ),
                       ),
                       Text(
-                        'Все модели доступны по ключу OpenRouter',
+                        agent.isLoadingModels ? 'Обновление списка с OpenRouter...' : 'Все модели доступны по ключу OpenRouter',
                         style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 10.5),
                       ),
                     ],
                   ),
                 ),
+                IconButton(
+                  icon: agent.isLoadingModels
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)),
+                        )
+                      : const Icon(LucideIcons.refresh_cw, size: 16, color: Color(0xFFA78BFA)),
+                  tooltip: 'Обновить модели с OpenRouter',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                  onPressed: agent.isLoadingModels
+                      ? null
+                      : () async {
+                          await agent.fetchLiveOpenRouterModels(force: true);
+                          setDialogState(() {});
+                        },
+                ),
+                const SizedBox(width: 4),
                 IconButton(
                   icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
                   padding: EdgeInsets.zero,

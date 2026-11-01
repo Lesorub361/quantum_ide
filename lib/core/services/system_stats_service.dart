@@ -422,6 +422,46 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       }
     }
 
+    // Консолидация спящих демонов Gradle (idle daemons с <=0.5% CPU)
+    final gradleDaemons = list.where((p) => p.name.contains('Gradle')).toList();
+    if (gradleDaemons.length > 1) {
+      final idleDaemons = gradleDaemons.where((p) => p.cpuPercent <= 0.5).toList();
+      if (idleDaemons.length > 1) {
+        list.removeWhere((p) => p.name.contains('Gradle') && p.cpuPercent <= 0.5);
+        final totalIdleRss = idleDaemons.fold<int>(0, (sum, p) => sum + p.rssBytes);
+        final totalCpu = idleDaemons.fold<double>(0.0, (sum, p) => sum + p.cpuPercent);
+        list.add(SystemProcessItem(
+          pid: idleDaemons.first.pid,
+          name: 'Фоновые демоны сборщика (${idleDaemons.length} шт.)',
+          description: 'Спящие процессы Gradle в режиме ожидания (не грузят систему)',
+          category: 'Сборка',
+          cpuPercent: double.parse(totalCpu.toStringAsFixed(1)),
+          rssBytes: totalIdleRss,
+          command: 'gradle idle daemons (${idleDaemons.length} total)',
+        ));
+      }
+    }
+
+    // Консолидация спящих процессов JVM
+    final jvmProcesses = list.where((p) => p.name.contains('JVM') || p.name.contains('Java')).toList();
+    if (jvmProcesses.length > 1) {
+      final idleJvm = jvmProcesses.where((p) => p.cpuPercent <= 0.5).toList();
+      if (idleJvm.length > 1) {
+        list.removeWhere((p) => (p.name.contains('JVM') || p.name.contains('Java')) && p.cpuPercent <= 0.5);
+        final totalIdleRss = idleJvm.fold<int>(0, (sum, p) => sum + p.rssBytes);
+        final totalCpu = idleJvm.fold<double>(0.0, (sum, p) => sum + p.cpuPercent);
+        list.add(SystemProcessItem(
+          pid: idleJvm.first.pid,
+          name: 'Среда исполнения Java (${idleJvm.length} шт.)',
+          description: 'Фоновые процессы Java Virtual Machine в режиме ожидания',
+          category: 'Среда выполнения',
+          cpuPercent: double.parse(totalCpu.toStringAsFixed(1)),
+          rssBytes: totalIdleRss,
+          command: 'jvm idle instances (${idleJvm.length} total)',
+        ));
+      }
+    }
+
     // Группировка параллельных сборщиков AAPT2 при сборке APK
     final aaptWorkers = list.where((p) => p.name == 'AAPT2 / Packaging Tool').toList();
     if (aaptWorkers.length > 2) {
