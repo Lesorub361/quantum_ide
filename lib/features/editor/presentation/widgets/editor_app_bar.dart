@@ -193,100 +193,186 @@ class EditorTabBar extends ConsumerWidget {
     }
 
     return Container(
-      height: 40,
+      height: 42,
       decoration: BoxDecoration(
-        color: const Color(0xFF0D1017),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF090C14),
+            Color(0xFF0E121D),
+          ],
+        ),
         border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.07), width: 0.8),
         ),
       ),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-        itemCount: openFiles.length,
-        itemBuilder: (context, index) {
-          final file = openFiles[index];
-          final isActive = index == activeTabIndex;
-          final iconInfo = FileIconHelper.getIconInfo(file.name, false);
+      child: Row(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              itemCount: openFiles.length,
+              itemBuilder: (context, index) {
+                final file = openFiles[index];
+                final isActive = index == activeTabIndex;
+                final iconInfo = FileIconHelper.getIconInfo(file.name, false);
 
-          return Listener(
-            onPointerDown: (event) {
-              if (event.buttons == 4) { // Middle click
-                notifier.closeTab(index);
-              }
-            },
-            child: GestureDetector(
-              onTap: () => notifier.setActiveTab(index),
-              onSecondaryTapDown: (details) => _showTabContextMenu(context, ref, index, details.globalPosition),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
-                margin: const EdgeInsets.only(right: 3),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF181C28) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isActive 
-                        ? Colors.cyanAccent.withValues(alpha: 0.3) 
-                        : Colors.transparent,
-                    width: 0.8,
+                return Listener(
+                  onPointerDown: (event) {
+                    if (event.buttons == 4) { // Middle click
+                      notifier.closeTab(index);
+                    }
+                  },
+                  child: GestureDetector(
+                    onTap: () => notifier.setActiveTab(index),
+                    onSecondaryTapDown: (details) => _showTabContextMenu(context, ref, index, details.globalPosition),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOutCubic,
+                      margin: const EdgeInsets.only(right: 5),
+                      padding: const EdgeInsets.fromLTRB(10, 4, 8, 4),
+                      decoration: BoxDecoration(
+                        gradient: isActive
+                            ? const LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Color(0xFF1A2234),
+                                  Color(0xFF141928),
+                                ],
+                              )
+                            : LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.02),
+                                  Colors.white.withValues(alpha: 0.01),
+                                ],
+                              ),
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                          color: isActive
+                              ? Colors.cyanAccent.withValues(alpha: 0.45)
+                              : Colors.white.withValues(alpha: 0.05),
+                          width: isActive ? 1.0 : 0.6,
+                        ),
+                        boxShadow: isActive
+                            ? [
+                                BoxShadow(
+                                  color: Colors.cyanAccent.withValues(alpha: 0.08),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                iconInfo.icon,
+                                size: 13.5,
+                                color: isActive ? iconInfo.color : iconInfo.color.withValues(alpha: 0.55),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                file.name,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11.5,
+                                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                                  color: isActive ? Colors.white : Colors.white60,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (file.isModified)
+                                Container(
+                                  width: 6,
+                                  height: 6,
+                                  margin: const EdgeInsets.only(right: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFB800),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFFFB800).withValues(alpha: 0.6),
+                                        blurRadius: 4,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () => notifier.closeTab(index),
+                                child: Container(
+                                  padding: const EdgeInsets.all(3.5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    LucideIcons.x,
+                                    size: 11.5,
+                                    color: isActive ? Colors.white70 : Colors.white24,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (isActive) ...[
+                            const SizedBox(height: 3),
+                            Container(
+                              height: 1.8,
+                              width: 32,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF00E5FF),
+                                    Color(0xFF7C4DFF),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(1),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+                                    blurRadius: 4,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                  boxShadow: isActive ? [
-                    BoxShadow(
-                      color: Colors.cyanAccent.withValues(alpha: 0.05),
-                      blurRadius: 6,
-                      spreadRadius: 1,
-                    )
-                  ] : null,
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.6),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      iconInfo.icon,
-                      size: 13,
-                      color: isActive ? iconInfo.color : iconInfo.color.withValues(alpha: 0.5),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      file.name,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                        color: isActive ? Colors.white : Colors.white60,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (file.isModified)
-                      Container(
-                        width: 6,
-                        height: 6,
-                        margin: const EdgeInsets.only(right: 4),
-                        decoration: const BoxDecoration(
-                          color: Colors.amberAccent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () => notifier.closeTab(index),
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        child: Icon(
-                          LucideIcons.x,
-                          size: 12,
-                          color: isActive ? Colors.white70 : Colors.white30,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                child: const Icon(LucideIcons.plus, size: 13, color: Colors.cyanAccent),
               ),
             ),
-          );
-        },
+          ),
+        ],
       ),
     );
   }

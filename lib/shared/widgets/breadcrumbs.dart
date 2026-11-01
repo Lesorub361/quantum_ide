@@ -23,14 +23,14 @@ class Breadcrumbs extends StatelessWidget {
     final parts = relativePath.split(p.separator);
     
     return Container(
-      height: 28,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF0C0F17),
+        color: const Color(0xFF0B0E17),
         border: Border(
           bottom: BorderSide(
-            color: Colors.white.withValues(alpha: 0.05),
-            width: 0.5,
+            color: Colors.white.withValues(alpha: 0.06),
+            width: 0.6,
           ),
         ),
       ),
@@ -39,23 +39,35 @@ class Breadcrumbs extends StatelessWidget {
         physics: const BouncingScrollPhysics(),
         itemCount: parts.length,
         separatorBuilder: (context, index) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: Icon(LucideIcons.chevron_right, size: 11, color: Colors.white.withValues(alpha: 0.2)),
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: Icon(
+            LucideIcons.chevron_right,
+            size: 11,
+            color: Colors.cyanAccent.withValues(alpha: 0.35),
+          ),
         ),
         itemBuilder: (context, index) {
           final isLast = index == parts.length - 1;
           final name = parts[index];
           final iconInfo = isLast 
               ? FileIconHelper.getIconInfo(name, false)
-              : const FileIconInfo(LucideIcons.folder, Colors.amberAccent);
+              : const FileIconInfo(LucideIcons.folder, Color(0xFFFFB800));
 
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            padding: const EdgeInsets.symmetric(vertical: 3),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: isLast ? Colors.white.withValues(alpha: 0.04) : Colors.transparent,
-                borderRadius: BorderRadius.circular(4),
+                color: isLast
+                    ? Colors.cyanAccent.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.02),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: isLast
+                      ? Colors.cyanAccent.withValues(alpha: 0.25)
+                      : Colors.transparent,
+                  width: 0.6,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -63,15 +75,16 @@ class Breadcrumbs extends StatelessWidget {
                   Icon(
                     iconInfo.icon,
                     size: 12,
-                    color: isLast ? iconInfo.color : Colors.white30,
+                    color: isLast ? iconInfo.color : const Color(0xFFFFB800).withValues(alpha: 0.7),
                   ),
                   const SizedBox(width: 5),
                   Text(
                     name,
-                    style: GoogleFonts.inter(
+                    style: GoogleFonts.jetBrainsMono(
                       fontSize: 11,
-                      color: isLast ? Colors.white : Colors.white38,
+                      color: isLast ? Colors.white : Colors.white60,
                       fontWeight: isLast ? FontWeight.w600 : FontWeight.w400,
+                      letterSpacing: -0.2,
                     ),
                   ),
                 ],

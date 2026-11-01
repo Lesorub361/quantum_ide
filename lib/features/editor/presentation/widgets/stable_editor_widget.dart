@@ -865,62 +865,74 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       ),
       toolbarController: _toolbarController,
       indicatorBuilder: (context, controller, chunkController, notifier) {
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: DiffBackgroundPainter(
-                    notifier: notifier,
-                    markers: _diffMarkers,
-                  ),
-                  size: Size.zero,
-                ),
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF0C0F17),
+            border: Border(
+              right: BorderSide(
+                color: Color(0xFF1B2234),
+                width: 1,
               ),
             ),
-            Row(
-              children: [
-                if (settings.lineNumbers) ...[
-                  DefaultCodeLineNumber(controller: controller, notifier: notifier),
-                  const SizedBox(width: 8),
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: DiffBackgroundPainter(
+                      notifier: notifier,
+                      markers: _diffMarkers,
+                    ),
+                    size: Size.zero,
+                  ),
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (settings.lineNumbers) ...[
+                    DefaultCodeLineNumber(controller: controller, notifier: notifier),
+                    const SizedBox(width: 8),
+                  ],
+                  DefaultCodeChunkIndicator(width: 20, controller: chunkController, notifier: notifier),
                 ],
-                DefaultCodeChunkIndicator(width: 20, controller: chunkController, notifier: notifier),
-              ],
-            ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DiagnosticIndicator(diagnostics: _diagnostics, notifier: notifier),
               ),
-            ),
-            Positioned(
-              left: 0, top: 0, bottom: 0, width: 4,
-              child: IgnorePointer(
-                child: DiffGutterIndicator(
-                  controller: controller,
-                  markers: _diffMarkers,
-                  notifier: notifier,
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DiagnosticIndicator(diagnostics: _diagnostics, notifier: notifier),
                 ),
               ),
-            ),
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: CollaborationPainter(
+              Positioned(
+                left: 0, top: 0, bottom: 0, width: 4,
+                child: IgnorePointer(
+                  child: DiffGutterIndicator(
+                    controller: controller,
+                    markers: _diffMarkers,
                     notifier: notifier,
-                    filePath: file.path,
-                    ref: ref,
                   ),
-                  size: Size.zero,
                 ),
               ),
-            ),
-          ],
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: CollaborationPainter(
+                      notifier: notifier,
+                      filePath: file.path,
+                      ref: ref,
+                    ),
+                    size: Size.zero,
+                  ),
+                ),
+              ),
+            ],
+          ),
         );
       },
       style: CodeEditorStyle(
         fontSize: settings.fontSize,
         fontFamily: _getFontFamily(settings.editorFontFamily),
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: const Color(0xFF090B10),
         codeTheme: applyHighlighting ? _highlightTheme : null,
       ),
     );

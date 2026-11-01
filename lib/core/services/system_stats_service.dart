@@ -34,6 +34,8 @@ class SystemProcessItem {
 
 class SystemStats {
   final double cpuUsage;
+  /// Модель процессора / чипсета SoC (например, "Snapdragon 7s Gen 3 (8 Cores)")
+  final String socName;
   /// Доля использования видеоускорителя GPU (0.0 .. 1.0)
   final double gpuUsage;
   /// Модель или наименование графического чипа GPU (например, "Adreno 810" или "Mali")
@@ -51,11 +53,16 @@ class SystemStats {
   final double deviceRamUsedGB;
   /// Доля занятой памяти всей системы (0.0 .. 1.0)
   final double deviceRamUsage;
+  /// Память, занимаемая активными инструментами сборки (Gradle, AAPT2, PRoot, Java, Clang) в МБ
+  final int builderRamMB;
+  /// Нагрузка процессора от процессов сборщика (% CPU)
+  final double builderCpuPercent;
   /// Список активных процессов и пакетов (как в Диспетчере задач Windows)
   final List<SystemProcessItem> processes;
 
   SystemStats({
     this.cpuUsage = 0.0,
+    this.socName = 'Snapdragon / ARM64',
     this.gpuUsage = 0.05,
     this.gpuName = 'GPU',
     this.ramUsage = 0.0,
@@ -65,6 +72,8 @@ class SystemStats {
     this.deviceRamAvailableGB = 4.0,
     this.deviceRamUsedGB = 4.0,
     this.deviceRamUsage = 0.5,
+    this.builderRamMB = 0,
+    this.builderCpuPercent = 0.0,
     this.processes = const [],
   });
 
@@ -76,8 +85,17 @@ class SystemStats {
     return '${(appRamUsedMB / 1024.0).toStringAsFixed(1)} GB';
   }
 
+  /// Удобное форматирование памяти сборщика
+  String get builderRamFormatted {
+    if (builderRamMB < 1024) {
+      return '$builderRamMB MB';
+    }
+    return '${(builderRamMB / 1024.0).toStringAsFixed(1)} GB';
+  }
+
   SystemStats copyWith({
     double? cpuUsage,
+    String? socName,
     double? gpuUsage,
     String? gpuName,
     double? ramUsage,
@@ -87,10 +105,13 @@ class SystemStats {
     double? deviceRamAvailableGB,
     double? deviceRamUsedGB,
     double? deviceRamUsage,
+    int? builderRamMB,
+    double? builderCpuPercent,
     List<SystemProcessItem>? processes,
   }) {
     return SystemStats(
       cpuUsage: cpuUsage ?? this.cpuUsage,
+      socName: socName ?? this.socName,
       gpuUsage: gpuUsage ?? this.gpuUsage,
       gpuName: gpuName ?? this.gpuName,
       ramUsage: ramUsage ?? this.ramUsage,
@@ -100,6 +121,8 @@ class SystemStats {
       deviceRamAvailableGB: deviceRamAvailableGB ?? this.deviceRamAvailableGB,
       deviceRamUsedGB: deviceRamUsedGB ?? this.deviceRamUsedGB,
       deviceRamUsage: deviceRamUsage ?? this.deviceRamUsage,
+      builderRamMB: builderRamMB ?? this.builderRamMB,
+      builderCpuPercent: builderCpuPercent ?? this.builderCpuPercent,
       processes: processes ?? this.processes,
     );
   }
@@ -244,13 +267,15 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     // Доля ОЗУ, используемая самим приложением относительно общего объёма ОЗУ устройства
     final double appRamUsageRatio = (appRamGB / deviceTotalGB).clamp(0.01, 1.0);
 
-    // 3. Измеряем нагрузку и параметры видеоускорителя GPU
+    // 3. Измеряем нагрузку и параметры видеоускорителя GPU и процессора SoC
     final double gpu = await _parseGpuUsage(cpu);
     final String gpuName = await _detectGpuName();
+    final String socName = await _detectSocName();
 
-    // 4. Список активных процессов: только по запросу (Диспетчер задач), чтобы не спавнить `ps` каждые секунды в фоне
+    // 4. Список активных процессов: только по запросу (Диспетчер задач) или во время активной сборки
+    final isBuilding = LiveTelemetryService.instance.isBuilding;
     List<SystemProcessItem> processes = _cachedProcesses;
-    if (fetchProcesses) {
+    if (fetchProcesses || isBuilding) {
       processes = await _fetchProcessList(appRssBytes, cpu);
       _cachedProcesses = processes;
     } else if (processes.isEmpty) {
@@ -268,9 +293,37 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       _cachedProcesses = processes;
     }
 
+    // Вычисляем реальное потребление ОЗУ и CPU всеми дочерними процессами сборщика
+    int builderRamMB = 0;
+    double builderCpuPercent = 0.0;
+    for (final p in processes) {
+      if (p.pid != pid && (
+          p.category == 'Сборка' ||
+          p.category == 'Компилятор' ||
+          p.category == 'Упаковка' ||
+          p.category == 'Песочница' ||
+          p.name.contains('Gradle') ||
+          p.name.contains('Kotlin') ||
+          p.name.contains('AAPT2') ||
+          p.name.contains('PRoot') ||
+          p.name.contains('Java')
+      )) {
+        builderRamMB += (p.rssBytes / (1024 * 1024)).round();
+        builderCpuPercent += p.cpuPercent;
+      }
+    }
+
+    // Если чтение /proc/stat заблокировано SELinux на Android:
+    // учитываем реальную нагрузку дочерних процессов сборщика в общем индикаторе CPU!
+    if (_procStatBlocked && builderCpuPercent > 0) {
+      final totalSysLoad = (builderCpuPercent / (_cpuCores * 100.0)) + cpu;
+      cpu = totalSysLoad.clamp(0.04, 0.99);
+    }
+
     if (mounted) {
       state = SystemStats(
         cpuUsage: cpu,
+        socName: socName,
         gpuUsage: gpu,
         gpuName: gpuName,
         ramUsage: appRamUsageRatio,
@@ -280,22 +333,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         deviceRamAvailableGB: deviceAvailableGB,
         deviceRamUsedGB: deviceUsedGB,
         deviceRamUsage: deviceUsage,
+        builderRamMB: builderRamMB,
+        builderCpuPercent: builderCpuPercent,
         processes: processes,
       );
     }
 
     try {
-      int builderRamMB = 0;
-      for (final p in processes) {
-        if (p.category == 'Сборка' ||
-            p.category == 'Компилятор' ||
-            p.category == 'Упаковка' ||
-            p.name.contains('Gradle') ||
-            p.name.contains('Kotlin') ||
-            p.name.contains('AAPT2')) {
-          builderRamMB += (p.rssBytes / (1024 * 1024)).round();
-        }
-      }
       LiveTelemetryService.instance.updateStats(
         cpu: cpu,
         gpu: gpu,
@@ -316,7 +360,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       if (!Platform.isWindows) {
         final res = await Process.run('sh', [
           '-c',
-          'ps -eo pid,%cpu,rss,args 2>/dev/null || ps -o pid,%cpu,rss,args 2>/dev/null',
+          'ps -eo pid,%cpu,rss,args -ww 2>/dev/null || ps -o pid,%cpu,rss,args -ww 2>/dev/null || ps -eo pid,%cpu,rss,args 2>/dev/null',
         ]).timeout(const Duration(seconds: 3));
 
         if (res.exitCode == 0) {
@@ -541,16 +585,23 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     }
 
     final isShell = RegExp(r'(^|[\s/])(bash|zsh)(\s|$)|(^|[\s/])(sh|mksh|dash)(\s+[^-]|\s*$)').hasMatch(lower);
-    if (isShell &&
-        !lower.contains('ps -e') &&
-        !lower.contains('ps -o') &&
-        !lower.contains('which') &&
-        !lower.contains('grep') &&
-        !lower.contains('pkill')) {
+    if (isShell) {
+      if (lower.contains('ps -e') ||
+          lower.contains('ps -o') ||
+          lower.contains('which') ||
+          lower.contains('grep') ||
+          lower.contains('pkill') ||
+          lower.contains('getprop') ||
+          lower.contains('cat /') ||
+          lower.contains('kill ') ||
+          lower.contains('find ') ||
+          lower.contains('-c ')) {
+        return null;
+      }
       return SystemProcessItem(
         pid: procPid,
         name: 'Terminal Session',
-        description: 'Командная оболочка терминала (Bash/SH)',
+        description: 'Интерактивная оболочка терминала (Bash/SH)',
         category: 'Терминал',
         cpuPercent: cpu,
         rssBytes: rssBytes,
@@ -572,6 +623,111 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     }
 
     return null;
+  }
+
+  String? _cachedSocName;
+
+  Future<String> _detectSocName() async {
+    if (_cachedSocName != null) return _cachedSocName!;
+
+    String rawSoc = '';
+    String platform = '';
+
+    if (!Platform.isWindows && !Platform.isMacOS) {
+      try {
+        final resSoc = await Process.run('getprop', ['ro.soc.model']);
+        rawSoc = resSoc.stdout.toString().trim();
+      } catch (_) {}
+
+      try {
+        final resPlat = await Process.run('getprop', ['ro.board.platform']);
+        platform = resPlat.stdout.toString().trim();
+      } catch (_) {}
+
+      if (rawSoc.isEmpty) {
+        try {
+          final resChip = await Process.run('getprop', ['ro.chipname']);
+          rawSoc = resChip.stdout.toString().trim();
+        } catch (_) {}
+      }
+
+      if (rawSoc.isEmpty) {
+        try {
+          final resHw = await Process.run('getprop', ['ro.hardware']);
+          rawSoc = resHw.stdout.toString().trim();
+        } catch (_) {}
+      }
+    } else if (Platform.isLinux) {
+      try {
+        final cpuInfo = await File('/proc/cpuinfo').readAsString();
+        for (final line in cpuInfo.split('\n')) {
+          if (line.startsWith('model name')) {
+            final parts = line.split(':');
+            if (parts.length > 1) {
+              _cachedSocName = parts[1].trim();
+              return _cachedSocName!;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    _cachedSocName = _formatSocName(rawSoc, platform, _cpuCores);
+    return _cachedSocName!;
+  }
+
+  static String _formatSocName(String rawSoc, String platform, int cores) {
+    final s = rawSoc.toUpperCase().trim();
+    final p = platform.toLowerCase().trim();
+
+    // Qualcomm Snapdragon models
+    if (s.contains('SM7635') || p.contains('volcano')) return 'Snapdragon 7s Gen 3 ($cores Cores)';
+    if (s.contains('SM8750') || p.contains('sun')) return 'Snapdragon 8 Elite ($cores Cores)';
+    if (s.contains('SM8650') || p.contains('pineapple')) return 'Snapdragon 8 Gen 3 ($cores Cores)';
+    if (s.contains('SM8550') || p.contains('kalama')) return 'Snapdragon 8 Gen 2 ($cores Cores)';
+    if (s.contains('SM8475') || p.contains('cape')) return 'Snapdragon 8+ Gen 1 ($cores Cores)';
+    if (s.contains('SM8450') || p.contains('taro')) return 'Snapdragon 8 Gen 1 ($cores Cores)';
+    if (s.contains('SM7550') || p.contains('crow')) return 'Snapdragon 7 Gen 3 ($cores Cores)';
+    if (s.contains('SM7475')) return 'Snapdragon 7+ Gen 2 ($cores Cores)';
+    if (s.contains('SM7325') || p.contains('lahaina')) return 'Snapdragon 778G ($cores Cores)';
+    if (s.contains('SM6450')) return 'Snapdragon 6 Gen 1 ($cores Cores)';
+    if (s.contains('SM6375')) return 'Snapdragon 695 ($cores Cores)';
+    if (s.contains('SM4450')) return 'Snapdragon 4 Gen 2 ($cores Cores)';
+    if (s.contains('SM8350')) return 'Snapdragon 888 ($cores Cores)';
+    if (s.contains('SM8250') || p.contains('kona')) return 'Snapdragon 865 ($cores Cores)';
+    if (s.contains('SM8150')) return 'Snapdragon 855 ($cores Cores)';
+    if (s.contains('SDM845')) return 'Snapdragon 845 ($cores Cores)';
+
+    // MediaTek Dimensity / Helio
+    if (s.contains('MT6991')) return 'Dimensity 9400 ($cores Cores)';
+    if (s.contains('MT6989')) return 'Dimensity 9300 ($cores Cores)';
+    if (s.contains('MT6985')) return 'Dimensity 9200 ($cores Cores)';
+    if (s.contains('MT6983')) return 'Dimensity 9000 ($cores Cores)';
+    if (s.contains('MT6895')) return 'Dimensity 8100 ($cores Cores)';
+    if (s.contains('MT6877')) return 'Dimensity 1080 ($cores Cores)';
+    if (s.contains('MT6789')) return 'Helio G99 ($cores Cores)';
+    if (s.contains('MT6769') || s.contains('MT6768')) return 'Helio G85 ($cores Cores)';
+
+    // Google Tensor
+    if (p.contains('zumapro') || s.contains('G4')) return 'Google Tensor G4 ($cores Cores)';
+    if (p.contains('zuma') || s.contains('G3')) return 'Google Tensor G3 ($cores Cores)';
+    if (p.contains('bluejay') || p.contains('gs201')) return 'Google Tensor G2 ($cores Cores)';
+    if (p.contains('gs101')) return 'Google Tensor G1 ($cores Cores)';
+
+    // Samsung Exynos
+    if (s.contains('S5E9945')) return 'Exynos 2400 ($cores Cores)';
+    if (s.contains('S5E9925')) return 'Exynos 2200 ($cores Cores)';
+    if (s.contains('S5E9840')) return 'Exynos 2100 ($cores Cores)';
+    if (s.contains('S5E8845')) return 'Exynos 1480 ($cores Cores)';
+    if (s.contains('S5E8835')) return 'Exynos 1380 ($cores Cores)';
+
+    if (rawSoc.isNotEmpty) {
+      return '$rawSoc ($cores Cores)';
+    }
+    if (platform.isNotEmpty && platform != 'unknown') {
+      return '${platform.toUpperCase()} ($cores Cores)';
+    }
+    return 'ARM64 ($cores Cores)';
   }
 
   String? _cachedGpuName;

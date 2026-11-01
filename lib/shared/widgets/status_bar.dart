@@ -905,7 +905,12 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
             ] else ...[
               // Tab 1: Производительность (Hardware gauges)
 
-              _row('Процессор (CPU)', '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', stats.cpuUsage, LucideIcons.cpu),
+              _row(
+                'Процессор (${stats.socName})',
+                '${(stats.cpuUsage * 100).toStringAsFixed(0)}%${stats.builderCpuPercent > 0 ? " (Сборщик: ${(stats.builderCpuPercent).toStringAsFixed(0)}%)" : ""}',
+                stats.cpuUsage,
+                LucideIcons.cpu,
+              ),
               _row(
                 'Видеоускоритель (${stats.gpuName})',
                 '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
@@ -918,11 +923,11 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                 stats.ramUsage,
                 LucideIcons.memory_stick,
               ),
-              if (toolsRamMB > 50)
+              if (stats.builderRamMB > 30)
                 _row(
                   'Память сборщика (Gradle, AAPT2, PRoot)',
-                  '$toolsRamFormatted (${(toolsRamUsage * 100).toStringAsFixed(1)}% ОЗУ)',
-                  toolsRamUsage,
+                  '${stats.builderRamFormatted} (${((stats.builderRamMB / (stats.ramTotalGB * 1024.0)) * 100).toStringAsFixed(1)}% ОЗУ)',
+                  (stats.builderRamMB / (stats.ramTotalGB * 1024.0)).clamp(0.0, 1.0),
                   LucideIcons.package,
                 ),
               _row(
@@ -932,10 +937,61 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                 LucideIcons.hard_drive,
               ),
               const SizedBox(height: 8),
+
+              // Карточка аппаратных характеристик устройства
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.microchip, size: 13, color: Colors.cyanAccent),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Аппаратная конфигурация устройства',
+                          style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('SoC / Процессор:', style: GoogleFonts.inter(fontSize: 10, color: Colors.white54)),
+                        Text(stats.socName, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white)),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Графика (GPU):', style: GoogleFonts.inter(fontSize: 10, color: Colors.white54)),
+                        Text(stats.gpuName, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white)),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Оперативная память (RAM):', style: GoogleFonts.inter(fontSize: 10, color: Colors.white54)),
+                        Text('${stats.ramTotalGB.toStringAsFixed(1)} GB (Доступно: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} GB)', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (high ? const Color(0xFFFF6B6B) : (toolsRamMB > 250 ? Colors.amberAccent : Colors.greenAccent))
+                  color: (high ? const Color(0xFFFF6B6B) : (stats.builderRamMB > 250 ? Colors.amberAccent : Colors.greenAccent))
                       .withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -944,19 +1000,19 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                     Icon(
                       high
                           ? LucideIcons.triangle_alert
-                          : (toolsRamMB > 250 ? LucideIcons.info : LucideIcons.circle_check),
+                          : (stats.builderRamMB > 250 ? LucideIcons.info : LucideIcons.circle_check),
                       size: 14,
                       color: high
                           ? const Color(0xFFFF6B6B)
-                          : (toolsRamMB > 250 ? Colors.amberAccent : Colors.greenAccent),
+                          : (stats.builderRamMB > 250 ? Colors.amberAccent : Colors.greenAccent),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         high
                             ? 'Высокая нагрузка на процессор или память. Перейдите во вкладку «Процессы и пакеты» выше, чтобы увидеть или завершить нагружающий процесс.'
-                            : (toolsRamMB > 250
-                                ? 'Фоновые демоны сборки (Gradle/AAPT2) удерживают $toolsRamFormatted ОЗУ. Нажмите «Очистить ОЗУ» вверху справа, чтобы мгновенно освободить память.'
+                            : (stats.builderRamMB > 250
+                                ? 'Фоновые демоны сборки (Gradle/AAPT2) удерживают ${stats.builderRamFormatted} ОЗУ. Нажмите «Очистить ОЗУ» вверху справа, чтобы мгновенно освободить память.'
                                 : 'Система работает стабильно. Quantum IDE потребляет всего ${stats.appRamFormatted}. Остальная память распределена между ОС Android и приложениями.'),
                         style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70, height: 1.35),
                       ),

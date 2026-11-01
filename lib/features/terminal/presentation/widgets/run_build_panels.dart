@@ -111,6 +111,11 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
     ref.read(dedicatedTerminalProvider.notifier).sendRawChar(DedicatedTerminalType.run, key);
   }
 
+  void _stopCommand() {
+    _sendRawKeyToDedicatedTerminal(String.fromCharCode(3));
+    ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
+  }
+
   Future<void> _installBuiltApk(String? workspacePath) async {
     if (workspacePath == null) return;
 
@@ -318,7 +323,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               () => _runDedicatedCommand(workspaceState.currentPath,
                   'python3 -m flask run --host=0.0.0.0 2>/dev/null || python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 2>/dev/null || python3 -m http.server 8080')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
         break;
       case ProjectType.nodejs:
@@ -328,7 +333,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               () => _runDedicatedCommand(workspaceState.currentPath, 
                   'npm start || node index.js || node server.js || node app.js || (js_file=\$(find . -maxdepth 2 -name "*.js" ! -path "*/node_modules/*" | head -n 1); if [ -n "\$js_file" ]; then node "\$js_file"; else echo "No JS file found. Please create index.js or package.json"; fi)')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
         break;
       case ProjectType.dart:
@@ -338,7 +343,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               () => _runDedicatedCommand(workspaceState.currentPath, 
                   'dart run || dart bin/main.dart || dart main.dart || (dart_file=\$(find . -maxdepth 2 -name "*.dart" | head -n 1); if [ -n "\$dart_file" ]; then dart "\$dart_file"; else echo "No Dart file found. Please create bin/main.dart"; fi)')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
         break;
       case ProjectType.web:
@@ -348,7 +353,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               () => _runDedicatedCommand(workspaceState.currentPath, 
                   'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
         break;
       case ProjectType.androidKotlin:
@@ -361,7 +366,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                   ? _installBuiltApk(workspaceState.currentPath) 
                   : _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug', displayCmd: './gradlew installDebug')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
         break;
       case ProjectType.androidJava:
@@ -374,7 +379,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                   ? _installBuiltApk(workspaceState.currentPath) 
                   : _runDedicatedCommand(workspaceState.currentPath, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug', displayCmd: './gradlew installDebug')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
         break;
       case ProjectType.rust:
@@ -385,7 +390,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
           _buildActionButton('Test', LucideIcons.flask_conical, Colors.cyanAccent, 
               () => _runDedicatedCommand(workspaceState.currentPath, 'cargo test')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
         break;
       default:
@@ -394,7 +399,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
           _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter run || npm start || python3 main.py')),
           _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(String.fromCharCode(3))), // Ctrl+C
+              () => _stopCommand()),
         ]);
     }
 
@@ -619,6 +624,11 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   int _buildSubTab = 0;
   int _buildViewerMode = 0; // 0 = Pipeline (GitHub Actions), 1 = Raw Terminal
 
+  void _stopCommand() {
+    _sendRawKeyToDedicatedTerminal(String.fromCharCode(3));
+    ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
+  }
+
   Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
     ref.read(projectSyncProvider.notifier).cancelSync();
     await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
@@ -630,7 +640,15 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     const clearScreen = 'printf "\\033[2J\\033[H\\033[3J"';
     final banner = 'printf "\\033[1;36m▶ %s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeLabel"';
     const restoreTty = '; (stty sane 2>/dev/null || true); printf "\\r\\n"';
-    final finalCmd = cdCmd.isNotEmpty ? '$clearScreen && $cdCmd && $banner && ($cmd)$restoreTty' : '$clearScreen && $banner && ($cmd)$restoreTty';
+    const killZombiesAndPrepMem =
+        '(pkill -9 -f aapt2 2>/dev/null || true); '
+        '(pkill -9 -f GradleDaemon 2>/dev/null || true); '
+        '(pkill -9 -f KotlinCompileDaemon 2>/dev/null || true); '
+        '(mkdir -p ~/.gradle 2>/dev/null || true); '
+        '(printf "org.gradle.daemon=false\\norg.gradle.parallel=false\\norg.gradle.workers.max=1\\nandroid.aapt2.daemon=false\\norg.gradle.jvmargs=-Xmx768m -XX:+UseSerialGC\\n" > ~/.gradle/gradle.properties 2>/dev/null || true); ';
+    final finalCmd = cdCmd.isNotEmpty
+        ? '$clearScreen && $killZombiesAndPrepMem$cdCmd && $banner && ($cmd)$restoreTty'
+        : '$clearScreen && $killZombiesAndPrepMem$banner && ($cmd)$restoreTty';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.build, finalCmd, interrupt: true, clear: false);
   }
 
