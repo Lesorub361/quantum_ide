@@ -39,7 +39,6 @@ dependencies:
   fl_chart: ^0.70.2
   device_info_plus: ^11.5.0
   package_info_plus: ^8.3.1
-  battery_plus: ^6.2.1
   # Mobile UX & IDE Tools
   image_picker: ^1.1.2
   flutter_secure_storage: ^9.2.4
