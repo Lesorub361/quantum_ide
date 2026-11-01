@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -778,6 +777,85 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
     }
   }
 
+  void _showDesktopContextMenu(BuildContext context, WidgetRef ref, Offset position) async {
+    final selected = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx + 1, position.dy + 1),
+      color: const Color(0xFF18181B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+      ),
+      items: [
+        const PopupMenuItem<String>(
+          value: 'new_file',
+          height: 36,
+          child: Row(
+            children: [
+              Icon(LucideIcons.file_plus, size: 15, color: Colors.white70),
+              SizedBox(width: 8),
+              Text('New File', style: TextStyle(fontSize: 13, color: Colors.white)),
+            ],
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'new_folder',
+          height: 36,
+          child: Row(
+            children: [
+              Icon(LucideIcons.folder_plus, size: 15, color: Colors.white70),
+              SizedBox(width: 8),
+              Text('New Folder', style: TextStyle(fontSize: 13, color: Colors.white)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'rename',
+          height: 36,
+          child: Row(
+            children: [
+              Icon(LucideIcons.pencil, size: 15, color: Colors.white70),
+              SizedBox(width: 8),
+              Text('Rename', style: TextStyle(fontSize: 13, color: Colors.white)),
+            ],
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'delete',
+          height: 36,
+          child: Row(
+            children: [
+              Icon(LucideIcons.trash_2, size: 15, color: Colors.redAccent),
+              SizedBox(width: 8),
+              Text('Delete', style: TextStyle(fontSize: 13, color: Colors.redAccent)),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (selected == null || !mounted) return;
+    switch (selected) {
+      case 'new_file':
+        _startInlineCreation(isDir: false);
+        break;
+      case 'new_folder':
+        _startInlineCreation(isDir: true);
+        break;
+      case 'rename':
+        setState(() {
+          _inlineController = TextEditingController(text: widget.name);
+          _isRenaming = true;
+          _inlineFocusNode.requestFocus();
+        });
+        break;
+      case 'delete':
+        _confirmDelete(context, ref);
+        break;
+    }
+  }
+
   void _showBottomSheetMenu(BuildContext context, WidgetRef ref) {
     final selectedPaths = ref.read(selectedPathsProvider);
     final hasSelection = selectedPaths.isNotEmpty;
@@ -1289,51 +1367,8 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
           }
         },
         onLongPress: () => _showBottomSheetMenu(context, ref),
-        child: ContextMenuArea(
-          builder: (context) => [
-            ListTile(
-              leading: const Icon(LucideIcons.file_plus, size: 16),
-              title: const Text('New File', style: TextStyle(fontSize: 14)),
-              dense: true,
-              onTap: () {
-                Navigator.pop(context);
-                _startInlineCreation(isDir: false);
-              },
-            ),
-            ListTile(
-              leading: const Icon(LucideIcons.folder_plus, size: 16),
-              title: const Text('New Folder', style: TextStyle(fontSize: 14)),
-              dense: true,
-              onTap: () {
-                Navigator.pop(context);
-                _startInlineCreation(isDir: true);
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(LucideIcons.pencil, size: 16),
-              title: const Text('Rename', style: TextStyle(fontSize: 14)),
-              dense: true,
-              onTap: () {
-                Navigator.pop(context);
-                setState(() {
-                  _inlineController = TextEditingController(text: widget.name);
-                  _isRenaming = true;
-                  _inlineFocusNode.requestFocus();
-                });
-              },
-            ),
-            ListTile(
-              leading: const Icon(LucideIcons.trash_2, size: 16, color: Colors.redAccent),
-              title: const Text('Delete', style: TextStyle(fontSize: 14, color: Colors.redAccent)),
-              dense: true,
-              onTap: () {
-                Navigator.pop(context);
-                _confirmDelete(context, ref);
-              },
-            ),
-          ],
-          child: Container(
+        onSecondaryTapUp: (details) => _showDesktopContextMenu(context, ref, details.globalPosition),
+        child: Container(
             decoration: BoxDecoration(
               color: isSelected 
                   ? Colors.blue.withValues(alpha: 0.18) 
@@ -1426,8 +1461,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
             ),
           ),
         ),
-      ),
-    );
+      );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

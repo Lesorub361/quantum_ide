@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:xterm/xterm.dart' as xt;
-import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 
@@ -329,25 +328,13 @@ class _TerminalTextSelectionModalState extends ConsumerState<TerminalTextSelecti
                           physics: const BouncingScrollPhysics(),
                           scrollDirection: Axis.vertical,
                           child: _wrapLines
-                              ? SelectableLinkify(
-                                  text: _extractedText,
+                              ? SelectableText(
+                                  _extractedText,
                                   style: GoogleFonts.jetBrainsMono(
                                     fontSize: 12,
                                     color: const Color(0xFFE2E8F0),
                                     height: 1.45,
                                   ),
-                                  linkStyle: GoogleFonts.jetBrainsMono(
-                                    fontSize: 12,
-                                    color: Colors.cyanAccent,
-                                    decoration: TextDecoration.underline,
-                                    height: 1.45,
-                                  ),
-                                  onOpen: (link) async {
-                                    final uri = Uri.tryParse(link.url);
-                                    if (uri != null) {
-                                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                    }
-                                  },
                                   showCursor: true,
                                   cursorColor: Colors.cyanAccent,
                                   contextMenuBuilder: (context, editableTextState) {
@@ -359,25 +346,13 @@ class _TerminalTextSelectionModalState extends ConsumerState<TerminalTextSelecti
                               : SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   physics: const BouncingScrollPhysics(),
-                                  child: SelectableLinkify(
-                                    text: _extractedText,
+                                  child: SelectableText(
+                                    _extractedText,
                                     style: GoogleFonts.jetBrainsMono(
                                       fontSize: 12,
                                       color: const Color(0xFFE2E8F0),
                                       height: 1.45,
                                     ),
-                                    linkStyle: GoogleFonts.jetBrainsMono(
-                                      fontSize: 12,
-                                      color: Colors.cyanAccent,
-                                      decoration: TextDecoration.underline,
-                                      height: 1.45,
-                                    ),
-                                    onOpen: (link) async {
-                                      final uri = Uri.tryParse(link.url);
-                                      if (uri != null) {
-                                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                      }
-                                    },
                                     showCursor: true,
                                     cursorColor: Colors.cyanAccent,
                                     contextMenuBuilder: (context, editableTextState) {

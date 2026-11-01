@@ -32,17 +32,20 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.117 - Исправление сборки Android ресурсов (AAPT ic_launcher) и SDK пути
+        ## 🚀 QuantumIDE v1.2.159 - Модернизация зависимостей и интеграция DeepSeek Harness
 
-        ### ✨ Что нового:
-        - **Исправлена ошибка сборки ресурсов AAPT `:app:processDebugResources`**:
-          - В `AndroidManifest.xml` для проектов Kotlin и Java иконка переведена на гарантированно существующую системную иконку `@android:drawable/sym_def_app_icon`.
-          - Добавлена автоматическая генерация адаптивных иконок `res/mipmap-anydpi-v26/ic_launcher.xml` и `ic_launcher_round.xml`.
-          - Ошибка `resource mipmap/ic_launcher not found` полностью устранена.
-        - **Исправлен путь `sdk.dir` в `local.properties`**:
-          - `local.properties` теперь корректно указывает на гостевой путь `/root/android-sdk` внутри контейнера PRoot, предотвращая предупреждение `sdk.dir directory does not exist`.
-        - **Авто-лечение при синхронизации (`ProjectSyncService`) и сборке**:
-          - Скрипты сборки и синхронизации автоматически приводят `build.gradle.kts`, `local.properties` и `AndroidManifest.xml` в рабочее состояние.
+        ### ✨ Что нового и исправлено:
+        - **Оптимизация и обновление пакетов (`pubspec.yaml`)**:
+          - Удалены устаревшие пакеты `contextmenu` и `flutter_linkify`.
+          - Добавлен `flutter_animate` (декларативные 120 FPS анимации, шиммеры и эффекты загрузки).
+          - Добавлен `flutter_math_fork` (высокопроизводительный нативный рендеринг формул LaTeX / KaTeX для DeepSeek R1).
+          - Добавлены `hive_ce` и `hive_ce_flutter` (сверхбыстрое бинарное NoSQL хранилище сессий и кэша).
+          - Контекстные меню переведены на нативный системный механизм `showMenu` с haptic-откликом.
+        - **Исправление работы агента DeepSeek Harness**:
+          - Выполнение команд переведено на внутреннюю Linux-среду Quantum IDE (`RuntimeService` / `init-host`), устраняя ошибку `127: npx/npm inaccessible or not found`.
+          - Реализован автоматический перехват защитного токена `?token=...` из вывода процесса `dsh web`.
+          - Устранена ошибка `net::ERR_CONNECTION_REFUSED`: таймаут готовности поднят до 35с, добавлен самовосстанавливающийся экран ожидания с автоповтором подключения.
+          - Проброс API-ключей провайдеров (`DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`).
     steps:
       - name: Checkout
         uses: actions/checkout@v4
