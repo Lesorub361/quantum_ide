@@ -2,11 +2,94 @@ import 'dart:async';
 import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
+
+enum AgentKind {
+  native(
+    'native',
+    'Встроенный Автопилот',
+    'Работает прямо в приложении · Не требует установки сторонних CLI',
+    '0 MB (Встроен)',
+  ),
+  antigravity(
+    'antigravity',
+    'Antigravity CLI',
+    'Google\'s official coding agent · Google account',
+    '39.9 MB',
+  ),
+  claudeCode(
+    'claude-code',
+    'Claude Code',
+    'Anthropic\'s coding agent · broad provider support',
+    '71.8 MB',
+  ),
+  deepseekHarness(
+    'deepseek-harness',
+    'DeepSeek Harness',
+    'Official DeepSeek coding agent · API-key providers',
+    '26.5 MB',
+  );
+
+  final String stableId;
+  final String title;
+  final String subtitle;
+  final String downloadNote;
+
+  const AgentKind(this.stableId, this.title, this.subtitle, this.downloadNote);
+
+  static AgentKind fromStored(String? value) {
+    return AgentKind.values.firstWhere(
+      (e) => e.stableId == value || e.name == value,
+      orElse: () => AgentKind.native,
+    );
+  }
+}
+
+extension AgentKindUI on AgentKind {
+  IconData get icon {
+    switch (this) {
+      case AgentKind.native:
+        return LucideIcons.sparkles;
+      case AgentKind.antigravity:
+        return LucideIcons.wand;
+      case AgentKind.claudeCode:
+        return LucideIcons.bot;
+      case AgentKind.deepseekHarness:
+        return LucideIcons.brain_circuit;
+    }
+  }
+
+  Color get brandColor {
+    switch (this) {
+      case AgentKind.native:
+        return const Color(0xFF8B5CF6);
+      case AgentKind.antigravity:
+        return const Color(0xFF9C27B0);
+      case AgentKind.claudeCode:
+        return const Color(0xFFD97706);
+      case AgentKind.deepseekHarness:
+        return const Color(0xFF0284C7);
+    }
+  }
+
+  String get command {
+    switch (this) {
+      case AgentKind.native:
+        return 'native';
+      case AgentKind.antigravity:
+        return 'agy';
+      case AgentKind.claudeCode:
+        return 'claude';
+      case AgentKind.deepseekHarness:
+        return 'dsh';
+    }
+  }
+}
 
 class CliUpdateInfo {
   final String currentVersion;

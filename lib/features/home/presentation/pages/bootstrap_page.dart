@@ -7,6 +7,46 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 
+enum DevStack {
+  web(
+    'Web (JavaScript / TypeScript)',
+    'Websites and web apps with HTML, CSS, and JS frameworks.',
+    'Node.js and npm (already included)',
+    ['node', 'npm', 'git'],
+  ),
+  python(
+    'Python',
+    'Scripts, automation, data work, and Python backends.',
+    'python3, pip, venv, and build tools',
+    ['python3', 'python3-pip', 'python3-venv'],
+  ),
+  android(
+    'Android (Java / Kotlin / Flutter)',
+    'Build Android app projects and install them directly on device.',
+    'JDK 17, ARM64 Android SDK, Gradle, and Flutter',
+    ['openjdk-17-jdk', 'gradle', 'flutter'],
+  ),
+  cpp(
+    'C / C++',
+    'Fast compiled programs, algorithms, and systems code.',
+    'gcc, g++, make, cmake, gdb',
+    ['gcc', 'g++', 'make', 'cmake', 'gdb'],
+  ),
+  php(
+    'PHP',
+    'Websites and apps with PHP — classic sites and Laravel projects.',
+    'php-cli, common extensions, and Composer',
+    ['php-cli', 'composer'],
+  );
+
+  final String label;
+  final String description;
+  final String installsSummary;
+  final List<String> packages;
+
+  const DevStack(this.label, this.description, this.installsSummary, this.packages);
+}
+
 class BootstrapPage extends ConsumerStatefulWidget {
   const BootstrapPage({super.key});
 
