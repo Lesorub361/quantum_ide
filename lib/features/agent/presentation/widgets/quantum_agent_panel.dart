@@ -590,7 +590,7 @@ class _MessageBubble extends ConsumerWidget {
                 final fullPath = p.isAbsolute(relPath) ? relPath : p.join(workspacePath!, relPath);
                 return InkWell(
                   onTap: () {
-                    ref.read(editorProvider.notifier).openFile(fullPath, fileName: p.basename(fullPath));
+                    ref.read(editorProvider.notifier).openFile(fullPath);
                   },
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
