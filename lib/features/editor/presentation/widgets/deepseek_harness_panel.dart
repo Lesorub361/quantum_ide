@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -17,6 +18,15 @@ class DeepSeekHarnessPanel extends ConsumerStatefulWidget {
 class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
   InAppWebViewController? _webViewController;
   bool _showLogs = false;
+  bool _hasConnectionError = false;
+  String? _loadedUrl;
+  Timer? _retryTimer;
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +35,14 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
     final workspace = ref.watch(workspaceProvider);
     final projectPath = workspace.currentPath ?? '/data/user/0/com.agy/files';
     final projectName = projectPath.split('/').where((s) => s.isNotEmpty).lastOrNull ?? 'Проект';
+
+    // Автоматическая загрузка авторизованного URL при его появлении
+    if (dsh.isRunning && _loadedUrl != dsh.serverUrl && _webViewController != null) {
+      _loadedUrl = dsh.serverUrl;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(dsh.serverUrl)));
+      });
+    }
 
     return Container(
       color: const Color(0xFF0C0E15),
@@ -156,7 +174,10 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
               tooltip: 'Обновить страницу',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-              onPressed: () => _webViewController?.reload(),
+              onPressed: () {
+                setState(() => _hasConnectionError = false);
+                _webViewController?.loadUrl(urlRequest: URLRequest(url: WebUri(dsh.serverUrl)));
+              },
             ),
             IconButton(
               icon: const Icon(LucideIcons.square, size: 13, color: Colors.redAccent),
@@ -190,20 +211,92 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
   }
 
   Widget _buildWebView(DeepSeekHarnessService dsh) {
-    return InAppWebView(
-      initialUrlRequest: URLRequest(url: WebUri(dsh.serverUrl)),
-      initialSettings: InAppWebViewSettings(
-        transparentBackground: false,
-        useShouldOverrideUrlLoading: true,
-        mediaPlaybackRequiresUserGesture: false,
-        allowsInlineMediaPlayback: true,
-        javaScriptEnabled: true,
-        domStorageEnabled: true,
-        databaseEnabled: true,
-      ),
-      onWebViewCreated: (controller) {
-        _webViewController = controller;
-      },
+    return Stack(
+      children: [
+        InAppWebView(
+          key: ValueKey(dsh.serverUrl),
+          initialUrlRequest: URLRequest(url: WebUri(dsh.serverUrl)),
+          initialSettings: InAppWebViewSettings(
+            transparentBackground: false,
+            useShouldOverrideUrlLoading: true,
+            mediaPlaybackRequiresUserGesture: false,
+            allowsInlineMediaPlayback: true,
+            javaScriptEnabled: true,
+            domStorageEnabled: true,
+            databaseEnabled: true,
+            cacheEnabled: false,
+          ),
+          onWebViewCreated: (controller) {
+            _webViewController = controller;
+            _loadedUrl = dsh.serverUrl;
+          },
+          onLoadStop: (controller, url) {
+            if (_hasConnectionError) {
+              setState(() => _hasConnectionError = false);
+            }
+          },
+          onReceivedError: (controller, request, error) {
+            final isMain = request.isForMainFrame ?? true;
+            if (isMain) {
+              setState(() => _hasConnectionError = true);
+              _retryTimer?.cancel();
+              _retryTimer = Timer(const Duration(seconds: 2), () {
+                if (mounted && dsh.isRunning && _hasConnectionError) {
+                  _webViewController?.loadUrl(
+                    urlRequest: URLRequest(url: WebUri(dsh.serverUrl)),
+                  );
+                }
+              });
+            }
+          },
+        ),
+        if (_hasConnectionError)
+          Positioned.fill(
+            child: Container(
+              color: const Color(0xFF0C0E15),
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(color: Colors.cyanAccent, strokeWidth: 2.5),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Подключение к DeepSeek Harness...',
+                      style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Сервер запускается на порту ${dsh.port}. Повторная попытка соединения...',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white60, fontSize: 11.5),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyanAccent,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(LucideIcons.rotate_cw, size: 14),
+                      label: const Text('Подключиться сейчас'),
+                      onPressed: () {
+                        setState(() => _hasConnectionError = false);
+                        _webViewController?.loadUrl(
+                          urlRequest: URLRequest(url: WebUri(dsh.serverUrl)),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 

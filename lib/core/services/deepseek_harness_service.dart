@@ -20,6 +20,7 @@ class DeepSeekHarnessService extends ChangeNotifier {
   bool _isStarting = false;
   bool _isServerReady = false;
   bool _isUpdating = false;
+  String? _serverUrl;
   String _statusMessage = 'Остановлен';
   final List<String> _logs = [];
 
@@ -28,7 +29,7 @@ class DeepSeekHarnessService extends ChangeNotifier {
   bool get isUpdating => _isUpdating;
   String? get currentProjectPath => _currentProjectPath;
   int get port => _currentPort;
-  String get serverUrl => 'http://127.0.0.1:$_currentPort';
+  String get serverUrl => _serverUrl ?? 'http://127.0.0.1:$_currentPort';
   String get statusMessage => _statusMessage;
   List<String> get logs => List.unmodifiable(_logs);
 
@@ -248,6 +249,16 @@ class DeepSeekHarnessService extends ChangeNotifier {
 
       _process?.stdout.transform(utf8.decoder).listen((data) {
         _addLog(data);
+        final match = RegExp(r'(https?://(?:127\.0\.0\.1|localhost):\d+/\S*)').firstMatch(data);
+        if (match != null) {
+          final matchedUrl = match.group(1)!.trim();
+          _serverUrl = matchedUrl;
+          _isServerReady = true;
+          _isStarting = false;
+          _statusMessage = 'Работает (порт $_currentPort)';
+          _addLog('[DSH] Сервер готов: $_serverUrl');
+          notifyListeners();
+        }
       });
 
       _process?.stderr.transform(utf8.decoder).listen((data) {
@@ -265,23 +276,23 @@ class DeepSeekHarnessService extends ChangeNotifier {
 
       // Ожидание готовности веб-сервера
       final bool ready = await _waitForServerReady(_currentPort);
-      _isStarting = false;
 
-      if (ready) {
+      if (ready || _serverUrl != null) {
         _isServerReady = true;
+        _isStarting = false;
         _statusMessage = 'Работает (порт $_currentPort)';
         _addLog('[DSH] Сервер готов к работе на $serverUrl');
         notifyListeners();
         return true;
       } else {
+        _isServerReady = false;
         if (_process == null) {
           _statusMessage = 'Ошибка запуска (процесс завершился)';
         } else {
-          _statusMessage = 'Запущен (ожидание порта $_currentPort)';
-          _isServerReady = true;
+          _statusMessage = 'Сервер ещё запускается... Проверьте логи.';
         }
         notifyListeners();
-        return _isServerReady;
+        return false;
       }
     } catch (e) {
       _isStarting = false;
@@ -294,19 +305,24 @@ class DeepSeekHarnessService extends ChangeNotifier {
     }
   }
 
-  Future<bool> _waitForServerReady(int port, {int timeoutSeconds = 15}) async {
+  Future<bool> _waitForServerReady(int port, {int timeoutSeconds = 35}) async {
     final deadline = DateTime.now().add(Duration(seconds: timeoutSeconds));
     while (DateTime.now().isBefore(deadline)) {
       if (_process == null) return false;
+      if (_serverUrl != null && _serverUrl!.contains(':$_currentPort')) {
+        return true;
+      }
       try {
         final socket = await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 500));
         socket.destroy();
+        // Сокет открыт, даём dsh ещё 500мс для вывода строки с токеном
+        await Future.delayed(const Duration(milliseconds: 600));
         return true;
       } catch (_) {
         await Future.delayed(const Duration(milliseconds: 400));
       }
     }
-    return false;
+    return _serverUrl != null;
   }
 
   /// Останавливает сервер
@@ -323,6 +339,7 @@ class DeepSeekHarnessService extends ChangeNotifier {
         await _runtime.runCommand('pkill -f "@deepseek-ai/dsh" || pkill -f "dsh web" || true');
       } catch (_) {}
     }
+    _serverUrl = null;
     _isServerReady = false;
     _isStarting = false;
     _statusMessage = 'Остановлен';
