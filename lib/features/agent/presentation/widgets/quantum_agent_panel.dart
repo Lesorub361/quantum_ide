@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -23,7 +24,7 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  // Вкладки панели: 0 = Чат, 1 = Изменения (Diff), 2 = Модели (Cloud & Local), 3 = Настройки & Сервер
+  // Вкладки панели: 0 = Чат, 1 = Изменения (Diff), 2 = Модели & Харнессы, 3 = Сервер & Настр.
   int _activeTab = 0;
 
   // Состояние для вкладки Моделей
@@ -36,6 +37,11 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
   final TextEditingController _customSysPromptCtrl = TextEditingController();
   final TextEditingController _stopSeqCtrl = TextEditingController();
 
+  // Контроллеры для Image Generation (из cross-platform-llm-client)
+  final TextEditingController _imagePromptCtrl = TextEditingController();
+  final TextEditingController _imageNegPromptCtrl = TextEditingController();
+  final TextEditingController _imageSeedCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -47,6 +53,8 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
       _openRouterOrderCtrl.text = st.openRouterProviderOrder;
       _customSysPromptCtrl.text = st.customSystemPrompt;
       _stopSeqCtrl.text = st.stopSequences.join(', ');
+      _imageNegPromptCtrl.text = st.imageNegativePrompt;
+      _imageSeedCtrl.text = st.imageSeed.toString();
     });
   }
 
@@ -60,6 +68,9 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     _openRouterOrderCtrl.dispose();
     _customSysPromptCtrl.dispose();
     _stopSeqCtrl.dispose();
+    _imagePromptCtrl.dispose();
+    _imageNegPromptCtrl.dispose();
+    _imageSeedCtrl.dispose();
     super.dispose();
   }
 
@@ -83,6 +94,17 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     }
     setState(() => _activeTab = 0);
     ref.read(quantumAgentProvider.notifier).sendUserMessage(text);
+    _scrollToBottom();
+  }
+
+  void _triggerImageGen([String? customPrompt]) {
+    final prompt = (customPrompt ?? _imagePromptCtrl.text).trim();
+    if (prompt.isEmpty) return;
+    if (customPrompt == null) {
+      _imagePromptCtrl.clear();
+    }
+    setState(() => _activeTab = 0);
+    ref.read(quantumAgentProvider.notifier).generateImage(prompt);
     _scrollToBottom();
   }
 
@@ -136,6 +158,7 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     QuantumAgentProviderPreset preset,
     double screenWidth,
   ) {
+    final harnessSpec = AgentHarnessSpec.byId(state.selectedHarness);
     return Container(
       height: 44,
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -189,14 +212,14 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
-                          color: (state.isLocalServerRunning ? Colors.greenAccent : preset.brandColor)
+                          color: (state.isLocalServerRunning ? Colors.greenAccent : harnessSpec.brandColor)
                               .withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          state.inferenceMode == 'local' ? 'LOCAL' : state.selectedHarness.toUpperCase(),
+                          state.inferenceMode == 'local' ? 'LOCAL' : harnessSpec.title.toUpperCase(),
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 8.5,
+                            fontSize: 8.0,
                             fontWeight: FontWeight.w700,
                             color: state.isLocalServerRunning ? Colors.greenAccent : Colors.cyanAccent,
                           ),
@@ -343,7 +366,7 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ВКЛАДКА 0: ЧАТ С АВТОНОМНЫМ АГЕНТОМ + THOUGHT DISCLOSURE (<think>)
+  // ВКЛАДКА 0: ЧАТ С АВТОНОМНЫМ АГЕНТОМ + THOUGHT DISCLOSURE (<think>) + IMAGE GEN
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildChatTab(
@@ -366,6 +389,13 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
             child: Row(
               children: [
                 _buildQuickActionChip(
+                  icon: LucideIcons.info,
+                  label: '📱 Что за проект?',
+                  color: Colors.cyanAccent,
+                  onTap: () => _sendPrompt('Привет! Расскажи подробно, что это за проект, какой у него стек и файлы.'),
+                ),
+                const SizedBox(width: 6),
+                _buildQuickActionChip(
                   icon: LucideIcons.wrench,
                   label: '🔧 Исправить ошибки',
                   color: Colors.orangeAccent,
@@ -375,21 +405,10 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
                 ),
                 const SizedBox(width: 6),
                 _buildQuickActionChip(
-                  icon: LucideIcons.refresh_cw,
-                  label: '🔄 Синхр. проект',
-                  color: Colors.cyanAccent,
-                  onTap: () => _sendPrompt(
-                    'Синхронизируй файлы проекта с внешней папкой /storage/emulated/0/QuantumIDE и проверь целостность.',
-                  ),
-                ),
-                const SizedBox(width: 6),
-                _buildQuickActionChip(
-                  icon: LucideIcons.shield_check,
-                  label: '🔍 Проверить код',
-                  color: Colors.greenAccent,
-                  onTap: () => _sendPrompt(
-                    'Выполни полную диагностику всех .dart файлов и конфигурации Gradle.',
-                  ),
+                  icon: LucideIcons.image,
+                  label: '🎨 Сгенерировать картинку',
+                  color: Colors.pinkAccent,
+                  onTap: () => _showImageGeneratorModal(context, state),
                 ),
                 const SizedBox(width: 6),
                 _buildQuickActionChip(
@@ -464,6 +483,21 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              InkWell(
+                onTap: () => _showImageGeneratorModal(context, state),
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 34,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.pinkAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.4)),
+                  ),
+                  child: const Icon(LucideIcons.image_plus, size: 15, color: Colors.pinkAccent),
+                ),
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: Container(
                   constraints: const BoxConstraints(maxHeight: 110),
@@ -478,8 +512,8 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
                     style: GoogleFonts.inter(fontSize: 12.5, color: Colors.white),
                     onSubmitted: (_) => _sendPrompt(),
                     decoration: InputDecoration(
-                      hintText: 'Напишите задачу (код, баг, команда)...',
-                      hintStyle: GoogleFonts.inter(fontSize: 12, color: Colors.white38),
+                      hintText: 'Спросите про проект, код или напишите «нарисуй ...»',
+                      hintStyle: GoogleFonts.inter(fontSize: 11.5, color: Colors.white38),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       border: InputBorder.none,
                       isDense: true,
@@ -718,7 +752,7 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ВКЛАДКА 2: ЦЕНТР МОДЕЛЕЙ (Cloud Providers + Harnesses + Local GGUF/LiteRT)
+  // ВКЛАДКА 2: ЦЕНТР МОДЕЛЕЙ (3-Step Mobile-Harness + Cloud + Local PrivateLM)
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildModelsHubTab(QuantumAgentState state, QuantumAgentProviderPreset activePreset) {
@@ -731,7 +765,7 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
             children: [
               Expanded(
                 child: _buildScopeSegmentButton(
-                  label: '☁️ Облако & CLI Харнессы',
+                  label: '☁️ Харнессы & Облако',
                   selected: _modelScope == 'cloud',
                   onTap: () => setState(() => _modelScope = 'cloud'),
                 ),
@@ -760,6 +794,14 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     QuantumAgentState state,
     QuantumAgentProviderPreset activePreset,
   ) {
+    final activeHarness = AgentHarnessSpec.byId(state.selectedHarness);
+    final isSelectedHarnessInstalled = state.isHarnessInstalled(activeHarness.id);
+
+    // Фильтруем провайдеров под выбранный харнесс (как в Mobile-Harness providersForAgent)
+    final compatibleProviders = QuantumAgentProviderPreset.presets
+        .where((p) => activeHarness.compatibleProviders.contains(p.id))
+        .toList();
+
     final vaultKeys = state.savedKeysByProvider[state.providerId] ?? const [];
     final rawModels = state.discoveredModelsByProvider[state.providerId] ?? activePreset.models;
     final filteredModels = rawModels.where((m) {
@@ -779,72 +821,37 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(10, 4, 10, 20),
       children: [
-        // 1. Coding Agent Harness (из Mobile-Harness AgentScreen.kt)
-        _buildSectionLabel('ДВИЖОК АГЕНТА (MOBILE HARNESS)'),
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            _buildHarnessCard(state, 'native', 'Встроенный Автопилот', LucideIcons.sparkles, const Color(0xFF8B5CF6)),
-            _buildHarnessCard(state, 'antigravity', 'Antigravity CLI', LucideIcons.wand, const Color(0xFF9C27B0)),
-            _buildHarnessCard(state, 'claude-code', 'Claude Code', LucideIcons.bot, const Color(0xFFD97706)),
-            _buildHarnessCard(state, 'deepseek-harness', 'DeepSeek Harness', LucideIcons.brain_circuit, const Color(0xFF0284C7)),
-          ],
+        // ── ШАГ 1: ВЫБОР И УСТАНОВКА ХАРНЕССА (из Mobile-Harness AgentScreen.kt) ──
+        _buildSectionLabel('ШАГ 1: ВЫБЕРИТЕ И СКАЧАЙТЕ ХАРНЕСС (MOBILE-HARNESS)'),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          childAspectRatio: 2.35,
+          children: AgentHarnessSpec.catalog.map((spec) {
+            return _buildHarnessCard(state, spec);
+          }).toList(),
         ),
+        const SizedBox(height: 8),
 
-        if (state.selectedHarness == 'antigravity' || state.providerId == 'antigravity_doctor') ...[
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Text('Глубина рассуждений (Effort):', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
-              const Spacer(),
-              for (final eff in ['low', 'medium', 'high'])
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: InkWell(
-                    onTap: () => ref.read(quantumAgentProvider.notifier).updateConfig(
-                          providerId: state.providerId,
-                          modelId: state.modelId,
-                          apiKey: state.apiKey,
-                          antigravityEffort: eff,
-                        ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: state.antigravityEffort == eff
-                            ? Colors.purpleAccent.withValues(alpha: 0.25)
-                            : Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                          color: state.antigravityEffort == eff ? Colors.purpleAccent : Colors.white12,
-                        ),
-                      ),
-                      child: Text(
-                        eff.toUpperCase(),
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: state.antigravityEffort == eff ? Colors.white : Colors.white54,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
+        // ── ИНТЕРАКТИВНЫЙ МАСТЕР УСТАНОВКИ И ЗАПУСКА ВЫБРАННОГО ХАРНЕССА ──────
+        _buildHarnessSetupWizardCard(state, activeHarness, activePreset, isSelectedHarnessInstalled),
 
         const SizedBox(height: 14),
-        // 2. Провайдеры ИИ (из cross-platform-llm-client + Mobile-Harness)
-        _buildSectionLabel('ПРОВАЙДЕРЫ ИИ (11 ПРОВАЙДЕРОВ)'),
+        // ── ШАГ 2: ВЫБОР СОВМЕСТИМОГО ПРОВАЙДЕРА ИИ ──────────────────────────
+        _buildSectionLabel(
+          'ШАГ 2: ВЫБЕРИТЕ ПРОВАЙДЕРА ДЛЯ ${activeHarness.title.toUpperCase()} (${compatibleProviders.length})',
+        ),
         SizedBox(
-          height: 68,
+          height: 70,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: QuantumAgentProviderPreset.presets.length,
+            itemCount: compatibleProviders.length,
             separatorBuilder: (_, __) => const SizedBox(width: 6),
             itemBuilder: (context, index) {
-              final pItem = QuantumAgentProviderPreset.presets[index];
+              final pItem = compatibleProviders[index];
               final isSelected = pItem.id == state.providerId;
               return InkWell(
                 onTap: () async {
@@ -859,16 +866,16 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
                 },
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  width: 135,
+                  width: 140,
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? pItem.brandColor.withValues(alpha: 0.2)
+                        ? pItem.brandColor.withValues(alpha: 0.22)
                         : const Color(0xFF131722),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected ? pItem.brandColor : Colors.white.withValues(alpha: 0.08),
-                      width: isSelected ? 1.2 : 0.7,
+                      width: isSelected ? 1.3 : 0.7,
                     ),
                   ),
                   child: Column(
@@ -890,6 +897,8 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
                               ),
                             ),
                           ),
+                          if (isSelected)
+                            const Icon(LucideIcons.circle_check, size: 12, color: Colors.greenAccent),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -1041,7 +1050,7 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
                               )
                             : const Icon(LucideIcons.refresh_cw, size: 12, color: Colors.cyanAccent),
                         label: Text(
-                          'Загрузить модели & Проверить',
+                          'Загрузить модели & Проверить ключ',
                           style: GoogleFonts.inter(fontSize: 10.5, color: Colors.cyanAccent),
                         ),
                       ),
@@ -1172,6 +1181,305 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     );
   }
 
+  /// Пошаговый мастер установки и запуска Харнесса (1: Скачать -> 2: Выбрать провайдера -> 3: Начать работу)
+  Widget _buildHarnessSetupWizardCard(
+    QuantumAgentState state,
+    AgentHarnessSpec spec,
+    QuantumAgentProviderPreset activePreset,
+    bool isInstalled,
+  ) {
+    final isInstallingThis = state.installingHarnessId == spec.id;
+    final installedVer = state.installedHarnessVersions[spec.id];
+
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            spec.brandColor.withValues(alpha: 0.16),
+            const Color(0xFF121622),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: spec.brandColor.withValues(alpha: 0.5), width: 1.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: spec.brandColor.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(spec.icon, size: 15, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            spec.title,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: isInstalled
+                                ? Colors.greenAccent.withValues(alpha: 0.18)
+                                : Colors.amberAccent.withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isInstalled
+                                ? '✓ Установлен v${installedVer ?? spec.version}'
+                                : 'Не установлен · ${spec.downloadSize}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: isInstalled ? Colors.greenAccent : Colors.amberAccent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      spec.subtitle,
+                      style: GoogleFonts.inter(fontSize: 10, color: Colors.white60),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Полоса шагов 1 -> 2 -> 3 (как в Mobile-Harness)
+          Row(
+            children: [
+              _buildWizardStepBadge(
+                number: '1',
+                label: isInstalled ? 'Скачан ✓' : 'Скачать (${spec.downloadSize})',
+                done: isInstalled,
+                active: !isInstalled,
+              ),
+              const Expanded(child: Divider(color: Colors.white24, indent: 4, endIndent: 4)),
+              _buildWizardStepBadge(
+                number: '2',
+                label: 'Провайдер: ${activePreset.name}',
+                done: isInstalled,
+                active: isInstalled,
+              ),
+              const Expanded(child: Divider(color: Colors.white24, indent: 4, endIndent: 4)),
+              _buildWizardStepBadge(
+                number: '3',
+                label: 'В работу',
+                done: isInstalled && state.selectedHarness == spec.id,
+                active: isInstalled,
+              ),
+            ],
+          ),
+
+          if (isInstallingThis) ...[
+            const SizedBox(height: 10),
+            LinearProgressIndicator(
+              value: state.harnessInstallProgress,
+              color: Colors.cyanAccent,
+              backgroundColor: Colors.white12,
+              minHeight: 5,
+            ),
+            const SizedBox(height: 5),
+            Text(
+              '${(state.harnessInstallProgress * 100).toStringAsFixed(0)}% · ${state.harnessInstallStage}',
+              style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.cyanAccent),
+            ),
+          ],
+
+          if (state.harnessInstallLogs.isNotEmpty && (isInstallingThis || state.selectedHarness == spec.id)) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF080A0F),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: state.harnessInstallLogs.take(5).map((l) {
+                  return Text(
+                    l,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 9, color: Colors.white70),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 10),
+          // Кнопки действий (Шаг 1: Скачать / Шаг 3: Запустить в чате)
+          if (!isInstalled && spec.requiresInstallation)
+            ElevatedButton.icon(
+              onPressed: isInstallingThis
+                  ? null
+                  : () => ref.read(quantumAgentProvider.notifier).installHarness(spec.id),
+              icon: const Icon(LucideIcons.download, size: 14, color: Colors.black),
+              label: Text(
+                'Шаг 1: Скачать и установить ${spec.title} (${spec.downloadSize})',
+                style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.black),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.cyanAccent,
+                padding: const EdgeInsets.symmetric(vertical: 9),
+              ),
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await ref.read(quantumAgentProvider.notifier).activateHarnessAndStartSession(spec.id);
+                      if (mounted) {
+                        setState(() => _activeTab = 0);
+                      }
+                    },
+                    icon: const Icon(LucideIcons.play, size: 13, color: Colors.black),
+                    label: Text(
+                      'Шаг 3: Запустить ${spec.title} (${activePreset.name})',
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w800, color: Colors.black),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.greenAccent,
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                    ),
+                  ),
+                ),
+                if (spec.requiresInstallation) ...[
+                  const SizedBox(width: 6),
+                  IconButton(
+                    icon: const Icon(LucideIcons.refresh_cw, size: 13, color: Colors.cyanAccent),
+                    tooltip: 'Переустановить / Обновить харнесс',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: isInstallingThis
+                        ? null
+                        : () => ref.read(quantumAgentProvider.notifier).installHarness(spec.id),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.trash_2, size: 13, color: Colors.redAccent),
+                    tooltip: 'Удалить харнесс',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: isInstallingThis
+                        ? null
+                        : () => ref.read(quantumAgentProvider.notifier).uninstallHarness(spec.id),
+                  ),
+                ],
+              ],
+            ),
+
+          if (spec.id == 'antigravity' || state.providerId == 'antigravity_doctor') ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Text('Глубина рассуждений (Effort):', style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white70)),
+                const Spacer(),
+                for (final eff in ['low', 'medium', 'high'])
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: InkWell(
+                      onTap: () => ref.read(quantumAgentProvider.notifier).updateConfig(
+                            providerId: state.providerId,
+                            modelId: state.modelId,
+                            apiKey: state.apiKey,
+                            antigravityEffort: eff,
+                          ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: state.antigravityEffort == eff
+                              ? Colors.purpleAccent.withValues(alpha: 0.25)
+                              : Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: state.antigravityEffort == eff ? Colors.purpleAccent : Colors.white12,
+                          ),
+                        ),
+                        child: Text(
+                          eff.toUpperCase(),
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.0,
+                            fontWeight: FontWeight.w700,
+                            color: state.antigravityEffort == eff ? Colors.white : Colors.white54,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWizardStepBadge({
+    required String number,
+    required String label,
+    required bool done,
+    required bool active,
+  }) {
+    final color = done
+        ? Colors.greenAccent
+        : active
+            ? Colors.cyanAccent
+            : Colors.white38;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: 0.8),
+          ),
+          child: Text(
+            done ? '✓' : number,
+            style: GoogleFonts.jetBrainsMono(fontSize: 8.5, fontWeight: FontWeight.w800, color: color),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 9.5,
+            fontWeight: active || done ? FontWeight.w700 : FontWeight.w500,
+            color: active || done ? Colors.white : Colors.white54,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ─── Каталог локальных моделей (из cross-platform-llm-client ModelView) ───
 
   Widget _buildLocalModelsCatalogView(QuantumAgentState state) {
@@ -1224,6 +1532,13 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
           ],
         ),
         const SizedBox(height: 8),
+
+        // Если выбрана вкладка 🎨 Image SD — сразу показываем студию и полные настройки генерации изображений!
+        if (filter == 'image') ...[
+          _buildImageGenerationStudioAndSettingsCard(state),
+          const SizedBox(height: 10),
+        ],
+
         OutlinedButton.icon(
           onPressed: () => ref.read(quantumAgentProvider.notifier).importLocalModelFromStorage(),
           icon: const Icon(LucideIcons.folder_open, size: 13, color: Colors.tealAccent),
@@ -1339,7 +1654,7 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
                               borderRadius: BorderRadius.circular(5),
                             ),
                             child: Text(
-                              isActive ? '✓ Активна' : 'Загрузить в чат',
+                              isActive ? '✓ Активна' : 'Активировать',
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w700,
@@ -1387,7 +1702,372 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // ВКЛАДКА 3: НАСТРОЙКИ ПАРАМЕТРОВ МОДЕЛИ + ЛОКАЛЬНЫЙ OPENAI СЕРВЕР
+  // НАСТРОЙКИ И СТУДИЯ ГЕНЕРАЦИИ ИЗОБРАЖЕНИЙ (из cross-platform-llm-client SettingsView)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildImageGenerationStudioAndSettingsCard(QuantumAgentState state) {
+    final steps = state.imageSteps;
+    const safeStepsMax = 8;
+    final isOverSafeSteps = steps > safeStepsMax;
+    final currentSize = state.imageGenSize;
+    final isHighSize = currentSize >= 512;
+    final gpuMb = state.imageGenGpuGuardMb;
+    final isGpuRisky = gpuMb <= 0 || gpuMb >= 2048;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131722),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.pinkAccent.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(LucideIcons.image_plus, size: 15, color: Colors.pinkAccent),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  'Генерация изображений (SD 1.5 / PrivateLM Studio)',
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Поле быстрого запуска генерации картинки
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _imagePromptCtrl,
+                  style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white),
+                  decoration: _compactInputDecoration('Опишите картинку (например: cyberpunk samurai in neon rain)...'),
+                  onSubmitted: (_) => _triggerImageGen(),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: state.isGeneratingImage ? null : () => _triggerImageGen(),
+                icon: const Icon(LucideIcons.sparkles, size: 13, color: Colors.white),
+                label: Text(
+                  'Создать',
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.pinkAccent,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                  minimumSize: Size.zero,
+                ),
+              ),
+            ],
+          ),
+          const Divider(color: Colors.white12, height: 18),
+
+          // 1. Denoising Steps (1..50, default 20, safeMax 8)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Denoising Steps (шаги денойзинга)', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isOverSafeSteps
+                      ? Colors.amber.withValues(alpha: 0.2)
+                      : Colors.pinkAccent.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  '$steps',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isOverSafeSteps ? Colors.amberAccent : Colors.pinkAccent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: steps.toDouble().clamp(1, 50),
+            min: 1,
+            max: 50,
+            divisions: 49,
+            activeColor: isOverSafeSteps ? Colors.amber : Colors.pinkAccent,
+            onChanged: (v) => ref.read(quantumAgentProvider.notifier).updateImageGenSettings(steps: v.round()),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('1 (Быстро)', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white38)),
+              Text('Рекомендуется: 15–20', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54)),
+              Text('50 (Макс)', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white38)),
+            ],
+          ),
+          if (isOverSafeSteps) ...[
+            const SizedBox(height: 6),
+            _buildAmberWarningBanner('Больше шагов = выше качество, но генерация на телефоне идёт заметно медленнее!'),
+          ],
+
+          const SizedBox(height: 12),
+          // 2. Image Size (Auto / 256 / 320 / 384 / 512)
+          Text('Image Size (разрешение генерации)', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final entry in [
+                (val: 0, label: 'Auto'),
+                (val: 256, label: '256px'),
+                (val: 320, label: '320px'),
+                (val: 384, label: '384px'),
+                (val: 512, label: '512px'),
+              ])
+                InkWell(
+                  onTap: () => ref.read(quantumAgentProvider.notifier).updateImageGenSettings(size: entry.val),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: currentSize == entry.val
+                          ? Colors.pinkAccent.withValues(alpha: 0.22)
+                          : Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: currentSize == entry.val ? Colors.pinkAccent : Colors.white12,
+                      ),
+                    ),
+                    child: Text(
+                      entry.label,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: currentSize == entry.val ? Colors.white : Colors.white60,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (isHighSize) ...[
+            const SizedBox(height: 6),
+            _buildAmberWarningBanner('Высокое разрешение (512px) требует больше ОЗУ и может замедлить рендер.'),
+          ],
+
+          const SizedBox(height: 12),
+          // 3. GPU Safety (0..4096 MB)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('GPU Safety (лимит видеопамяти)', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isGpuRisky
+                      ? Colors.amber.withValues(alpha: 0.2)
+                      : Colors.cyanAccent.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  gpuMb <= 0 ? 'Off' : '$gpuMb MB',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: isGpuRisky ? Colors.amberAccent : Colors.cyanAccent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: gpuMb.toDouble().clamp(0, 4096),
+            min: 0,
+            max: 4096,
+            divisions: 16,
+            activeColor: isGpuRisky ? Colors.amber : Colors.cyanAccent,
+            onChanged: (v) => ref.read(quantumAgentProvider.notifier).updateImageGenSettings(gpuGuardMb: v.round()),
+          ),
+          if (isGpuRisky)
+            _buildAmberWarningBanner(
+              gpuMb <= 0
+                  ? 'Защита GPU отключена: большие промпты на GPU могут вызвать нехватку памяти.'
+                  : 'Высокий лимит GPU ($gpuMb MB) может привести к вылету на устройствах с малым ОЗУ.',
+            ),
+
+          const SizedBox(height: 12),
+          // 4. Backend (CPU vs GPU OpenCL/Vulkan) & Quantization (Q4_0 vs FP16)
+          Text('Backend & Квантование SD 1.5:', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (final b in [
+                (id: 'cpu', label: '🛡️ CPU (Стабильно)'),
+                (id: 'gpu', label: '🚀 GPU (OpenCL/Vulkan)'),
+              ])
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: InkWell(
+                      onTap: () => ref.read(quantumAgentProvider.notifier).updateImageGenSettings(backend: b.id),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: state.imageGenBackend == b.id
+                              ? Colors.pinkAccent.withValues(alpha: 0.22)
+                              : Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: state.imageGenBackend == b.id ? Colors.pinkAccent : Colors.white12,
+                          ),
+                        ),
+                        child: Text(
+                          b.label,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: state.imageGenBackend == b.id ? Colors.white : Colors.white60,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              for (final q in [
+                (id: 'q4_0', label: '⚡ Q4_0 (Быстрое · Меньше RAM)'),
+                (id: 'fp16', label: '💎 FP16 (Макс. чёткость)'),
+              ])
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: InkWell(
+                      onTap: () => ref.read(quantumAgentProvider.notifier).updateImageGenSettings(quantization: q.id),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 5),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: state.imageGenQuantization == q.id
+                              ? Colors.purpleAccent.withValues(alpha: 0.2)
+                              : Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: state.imageGenQuantization == q.id ? Colors.purpleAccent : Colors.white12,
+                          ),
+                        ),
+                        child: Text(
+                          q.label,
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: state.imageGenQuantization == q.id ? Colors.white : Colors.white60,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+          // 5. CFG Scale + Negative Prompt + Seed
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('CFG Scale (точность промпта)', style: GoogleFonts.inter(fontSize: 11, color: Colors.white70)),
+              Text(
+                state.imageCfgScale.toStringAsFixed(1),
+                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.pinkAccent, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          Slider(
+            value: state.imageCfgScale.clamp(1.0, 15.0),
+            min: 1.0,
+            max: 15.0,
+            divisions: 28,
+            activeColor: Colors.pinkAccent,
+            onChanged: (v) => ref.read(quantumAgentProvider.notifier).updateImageGenSettings(cfgScale: v),
+          ),
+          TextField(
+            controller: _imageNegPromptCtrl,
+            style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white),
+            decoration: _compactInputDecoration('Негативный промпт (blurry, low quality, watermark)...'),
+            onChanged: (v) => ref.read(quantumAgentProvider.notifier).updateImageGenSettings(negativePrompt: v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAmberWarningBanner(String message) {
+    return Container(
+      padding: const EdgeInsets.all(7),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(LucideIcons.triangle_alert, size: 13, color: Colors.amberAccent),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              message,
+              style: GoogleFonts.inter(fontSize: 9.5, color: Colors.amberAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showImageGeneratorModal(BuildContext context, QuantumAgentState state) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0E121B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 14,
+            right: 14,
+            top: 14,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Consumer(
+                  builder: (_, refModal, __) {
+                    final st = refModal.watch(quantumAgentProvider);
+                    return _buildImageGenerationStudioAndSettingsCard(st);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ВКЛАДКА 3: НАСТРОЙКИ ПАРАМЕТРОВ МОДЕЛИ + IMAGE GEN + ЛОКАЛЬНЫЙ OPENAI СЕРВЕР
   // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildSettingsAndServerTab(QuantumAgentState state) {
@@ -1395,7 +2075,12 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 24),
       children: [
-        // ── 1. ЛОКАЛЬНЫЙ OPENAI API СЕРВЕР (из cross-platform-llm-client ServerView) ──
+        // ── 1. НАСТРОЙКИ И СТУДИЯ ГЕНЕРАЦИИ ИЗОБРАЖЕНИЙ (из cross-platform-llm-client) ──
+        _buildSectionLabel('НАСТРОЙКИ ГЕНЕРАЦИИ ИЗОБРАЖЕНИЙ (IMAGE GENERATION)'),
+        _buildImageGenerationStudioAndSettingsCard(state),
+
+        const SizedBox(height: 14),
+        // ── 2. ЛОКАЛЬНЫЙ OPENAI API СЕРВЕР (из cross-platform-llm-client ServerView) ──
         _buildSectionLabel('ЛОКАЛЬНЫЙ OPENAI API СЕРВЕР'),
         Container(
           padding: const EdgeInsets.all(12),
@@ -1506,8 +2191,8 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
         ),
 
         const SizedBox(height: 14),
-        // ── 2. ПАРАМЕТРЫ ГЕНЕРАЦИИ (из cross-platform-llm-client SettingsView) ──
-        _buildSectionLabel('ПАРАМЕТРЫ МОДЕЛИ (TEMPERATURE / TOKENS / CONTEXT)'),
+        // ── 3. ПАРАМЕТРЫ ТЕКСТОВОЙ МОДЕЛИ (из cross-platform-llm-client SettingsView) ──
+        _buildSectionLabel('ПАРАМЕТРЫ ТЕКСТОВОЙ МОДЕЛИ (TEMPERATURE / TOKENS / CONTEXT)'),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -1639,6 +2324,8 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
 
   Widget _buildMessageBubble(AgentChatMessage message, String? workspacePath) {
     final isUser = message.role == 'user';
+    final hasImage = message.generatedImagePath != null && message.generatedImagePath!.isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(10),
@@ -1724,6 +2411,26 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
           if (message.toolCalls.isNotEmpty) ...[
             const SizedBox(height: 8),
             ...message.toolCalls.map((tc) => _buildToolCallCard(tc)),
+          ],
+
+          // Сгенерированное изображение (если есть)
+          if (hasImage) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(
+                File(message.generatedImagePath!),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  padding: const EdgeInsets.all(12),
+                  color: Colors.black26,
+                  child: Text(
+                    'Файл изображения: ${message.generatedImagePath}',
+                    style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white70),
+                  ),
+                ),
+              ),
+            ),
           ],
 
           // Основной текст ответа
@@ -1836,41 +2543,84 @@ class _QuantumAgentPanelState extends ConsumerState<QuantumAgentPanel> {
     );
   }
 
-  Widget _buildHarnessCard(
-    QuantumAgentState state,
-    String id,
-    String title,
-    IconData icon,
-    Color color,
-  ) {
-    final selected = state.selectedHarness == id;
+  Widget _buildHarnessCard(QuantumAgentState state, AgentHarnessSpec spec) {
+    final selected = state.selectedHarness == spec.id;
+    final installed = state.isHarnessInstalled(spec.id);
+    final isInstalling = state.installingHarnessId == spec.id;
+
     return InkWell(
-      onTap: () => ref.read(quantumAgentProvider.notifier).updateConfig(
-            providerId: state.providerId,
-            modelId: state.modelId,
-            apiKey: state.apiKey,
-            selectedHarness: id,
-          ),
-      borderRadius: BorderRadius.circular(8),
+      onTap: () {
+        // Выбираем харнесс; если для него текущий провайдер не совместим — переключаем на первый совместимый
+        String nextProvider = state.providerId;
+        String nextModel = state.modelId;
+        if (!spec.compatibleProviders.contains(nextProvider)) {
+          nextProvider = spec.compatibleProviders.first;
+          nextModel = QuantumAgentProviderPreset.byId(nextProvider).models.first;
+        }
+        ref.read(quantumAgentProvider.notifier).updateConfig(
+              providerId: nextProvider,
+              modelId: nextModel,
+              apiKey: state.apiKey,
+              selectedHarness: spec.id,
+            );
+      },
+      borderRadius: BorderRadius.circular(9),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.22) : const Color(0xFF131722),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: selected ? color : Colors.white12),
+          color: selected ? spec.brandColor.withValues(alpha: 0.24) : const Color(0xFF131722),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(
+            color: selected ? spec.brandColor : Colors.white12,
+            width: selected ? 1.3 : 0.7,
+          ),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 5),
-            Text(
-              title,
-              style: GoogleFonts.inter(
-                fontSize: 10.5,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: Colors.white,
-              ),
+            Row(
+              children: [
+                Icon(spec.icon, size: 13, color: spec.brandColor),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    spec.title,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: installed
+                        ? Colors.greenAccent.withValues(alpha: 0.16)
+                        : Colors.amberAccent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isInstalling
+                        ? 'Установка...'
+                        : installed
+                            ? '✓ v${state.installedHarnessVersions[spec.id] ?? spec.version}'
+                            : '⬇️ ${spec.downloadSize}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 8.0,
+                      fontWeight: FontWeight.w700,
+                      color: installed ? Colors.greenAccent : Colors.amberAccent,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

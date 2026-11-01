@@ -1,9 +1,8 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 1. ВЫЗОВЫ ИНСТРУМЕНТОВ И СООБЩЕНИЯ ЧАТ-БОТА (С <think> THOUGHT DISCLOSURE)
+// 1. ВЫЗОВЫ ИНСТРУМЕНТОВ И СООБЩЕНИЯ ЧАТ-БОТА (С <think> И КАРТИНКАМИ)
 // ═══════════════════════════════════════════════════════════════════════════
 
 class AgentToolCall {
@@ -74,6 +73,8 @@ class AgentChatMessage {
   final int thinkingDurationMs;
   final List<AgentToolCall> toolCalls;
   final List<String> modifiedFiles;
+  final String? generatedImagePath;
+  final String? generatedImagePrompt;
   final DateTime timestamp;
   final bool isStreaming;
 
@@ -85,6 +86,8 @@ class AgentChatMessage {
     this.thinkingDurationMs = 0,
     this.toolCalls = const [],
     this.modifiedFiles = const [],
+    this.generatedImagePath,
+    this.generatedImagePrompt,
     required this.timestamp,
     this.isStreaming = false,
   });
@@ -97,6 +100,8 @@ class AgentChatMessage {
     int? thinkingDurationMs,
     List<AgentToolCall>? toolCalls,
     List<String>? modifiedFiles,
+    String? generatedImagePath,
+    String? generatedImagePrompt,
     DateTime? timestamp,
     bool? isStreaming,
   }) {
@@ -108,6 +113,8 @@ class AgentChatMessage {
       thinkingDurationMs: thinkingDurationMs ?? this.thinkingDurationMs,
       toolCalls: toolCalls ?? this.toolCalls,
       modifiedFiles: modifiedFiles ?? this.modifiedFiles,
+      generatedImagePath: generatedImagePath ?? this.generatedImagePath,
+      generatedImagePrompt: generatedImagePrompt ?? this.generatedImagePrompt,
       timestamp: timestamp ?? this.timestamp,
       isStreaming: isStreaming ?? this.isStreaming,
     );
@@ -121,6 +128,8 @@ class AgentChatMessage {
         'thinkingDurationMs': thinkingDurationMs,
         'toolCalls': toolCalls.map((t) => t.toJson()).toList(),
         'modifiedFiles': modifiedFiles,
+        'generatedImagePath': generatedImagePath,
+        'generatedImagePrompt': generatedImagePrompt,
         'timestamp': timestamp.toIso8601String(),
       };
 
@@ -135,12 +144,150 @@ class AgentChatMessage {
                 .toList() ??
             const [],
         modifiedFiles: (json['modifiedFiles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        generatedImagePath: json['generatedImagePath']?.toString(),
+        generatedImagePrompt: json['generatedImagePrompt']?.toString(),
         timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
       );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 2. ЛОКАЛЬНЫЕ МОДЕЛИ (ИЗ cross-platform-llm-client / PrivateLM)
+// 2. СПЕЦИФИКАЦИЯ ХАРНЕССОВ (ИЗ Mobile-Harness: AgentKind + RuntimeInstaller)
+// ═══════════════════════════════════════════════════════════════════════════
+
+class AgentHarnessSpec {
+  final String id; // 'deepseek-harness' | 'claude-code' | 'antigravity' | 'native'
+  final String title;
+  final String subtitle;
+  final String version;
+  final String downloadSize;
+  final String npmPackageOrBinary;
+  final String markerFilename;
+  final String binaryPath;
+  final List<String> compatibleProviders;
+  final Color brandColor;
+  final IconData icon;
+  final bool requiresInstallation;
+
+  const AgentHarnessSpec({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.version,
+    required this.downloadSize,
+    required this.npmPackageOrBinary,
+    required this.markerFilename,
+    required this.binaryPath,
+    required this.compatibleProviders,
+    required this.brandColor,
+    required this.icon,
+    this.requiresInstallation = true,
+  });
+
+  static const List<AgentHarnessSpec> catalog = [
+    AgentHarnessSpec(
+      id: 'deepseek-harness',
+      title: 'DeepSeek Harness',
+      subtitle: 'Мульти-провайдерный CLI агент (@deepseek-ai/dsh) с патчем Android PRoot',
+      version: '0.1.2-rc.1',
+      downloadSize: '26.5 MB',
+      npmPackageOrBinary: '@deepseek-ai/dsh@0.1.2-rc.1',
+      markerFilename: '.pocket-dsh-version',
+      binaryPath: '/usr/local/bin/dsh',
+      compatibleProviders: [
+        'deepseek',
+        'openrouter',
+        'anthropic',
+        'kimi',
+        'nvidia',
+        'custom',
+        'antigravity_doctor',
+        'local_gguf',
+      ],
+      brandColor: Color(0xFF0284C7),
+      icon: LucideIcons.brain_circuit,
+      requiresInstallation: true,
+    ),
+    AgentHarnessSpec(
+      id: 'claude-code',
+      title: 'Claude Code',
+      subtitle: 'Официальный CLI агент Anthropic (@anthropic-ai/claude-code)',
+      version: '2.1.263',
+      downloadSize: '71.8 MB',
+      npmPackageOrBinary: '@anthropic-ai/claude-code@latest',
+      markerFilename: '.pocket-claude-version',
+      binaryPath: '/usr/local/bin/claude',
+      compatibleProviders: [
+        'anthropic',
+        'openrouter',
+        'deepseek',
+        'kimi',
+        'nvidia',
+        'custom',
+        'antigravity_doctor',
+      ],
+      brandColor: Color(0xFFD97706),
+      icon: LucideIcons.bot,
+      requiresInstallation: true,
+    ),
+    AgentHarnessSpec(
+      id: 'antigravity',
+      title: 'Antigravity CLI',
+      subtitle: 'Автономный ИИ-движок Antigravity (agy) с управлением глубиной Effort',
+      version: '1.1.27',
+      downloadSize: '39.9 MB',
+      npmPackageOrBinary: 'antigravity-cli@1.1.27',
+      markerFilename: '.pocket-agy-version',
+      binaryPath: '/root/.local/bin/agy',
+      compatibleProviders: [
+        'antigravity_doctor',
+        'gemini',
+        'anthropic',
+        'openrouter',
+        'openai',
+        'deepseek',
+      ],
+      brandColor: Color(0xFF9C27B0),
+      icon: LucideIcons.wand,
+      requiresInstallation: true,
+    ),
+    AgentHarnessSpec(
+      id: 'native',
+      title: 'Встроенный Автопилот',
+      subtitle: 'Мгновенный встроенный ReAct-агент IDE (не требует скачивания)',
+      version: '2.4.0',
+      downloadSize: 'Встроен',
+      npmPackageOrBinary: 'builtin',
+      markerFilename: '',
+      binaryPath: '',
+      compatibleProviders: [
+        'antigravity_doctor',
+        'openrouter',
+        'deepseek',
+        'openai',
+        'anthropic',
+        'gemini',
+        'kimi',
+        'nvidia',
+        'groq',
+        'local_gguf',
+        'custom',
+      ],
+      brandColor: Color(0xFF8B5CF6),
+      icon: LucideIcons.sparkles,
+      requiresInstallation: false,
+    ),
+  ];
+
+  static AgentHarnessSpec byId(String id) {
+    return catalog.firstWhere(
+      (h) => h.id == id,
+      orElse: () => catalog.first,
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. ЛОКАЛЬНЫЕ МОДЕЛИ (ИЗ cross-platform-llm-client / PrivateLM)
 // ═══════════════════════════════════════════════════════════════════════════
 
 class LocalAiModel {
@@ -381,7 +528,7 @@ class LocalAiModel {
       template: 'llama3',
       runtime: runtimeLlama,
     ),
-    // ─── IMAGE GENERATION (SD 1.5) ──────────────────────────────────────────
+    // ─── IMAGE GENERATION (SD 1.5 + TAESD из cross-platform-llm-client) ──────
     LocalAiModel(
       name: 'CyberRealistic V8 FP16 (SD 1.5)',
       filename: 'CyberRealistic_V8_FP16.safetensors',
@@ -397,7 +544,16 @@ class LocalAiModel {
       filename: 'DreamShaper8_LCM.safetensors',
       url: 'https://huggingface.co/Lykon/dreamshaper-8-lcm/resolve/main/DreamShaper8_LCM.safetensors',
       size: '2.0 GB',
-      description: 'Сверхбыстрая генерация изображений за 4 шага (LCM)',
+      description: 'Сверхбыстрая генерация изображений за 4–8 шагов (LCM)',
+      template: 'sd',
+      runtime: runtimeSd,
+    ),
+    LocalAiModel(
+      name: 'TAESD Fast Decoder (SD 1.5 VAE)',
+      filename: 'taesd_decoder.safetensors',
+      url: 'https://huggingface.co/madebyollin/taesd/resolve/main/diffusion_pytorch_model.safetensors',
+      size: '5.0 MB',
+      description: 'Быстрый декодер TAESD для экономии RAM при генерации картинок на Android',
       template: 'sd',
       runtime: runtimeSd,
     ),
@@ -405,7 +561,7 @@ class LocalAiModel {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 3. ПРОВАЙДЕРЫ И ХАРНЕССЫ (cross-platform-llm-client + Mobile-Harness)
+// 4. ПРОВАЙДЕРЫ И КЛЮЧИ (cross-platform-llm-client + Mobile-Harness)
 // ═══════════════════════════════════════════════════════════════════════════
 
 class SavedApiKeyEntry {
@@ -517,9 +673,9 @@ class QuantumAgentProviderPreset {
   static const List<QuantumAgentProviderPreset> presets = [
     QuantumAgentProviderPreset(
       id: 'antigravity_doctor',
-      name: 'Antigravity & Auto-Doctor',
-      subtitle: 'Встроенный ИИ-доктор + мост Antigravity (без API-ключа)',
-      baseUrl: 'http://127.0.0.1:45169',
+      name: 'Antigravity & Free AI',
+      subtitle: 'Встроенный ИИ + облачный мост (работает сразу без API-ключа)',
+      baseUrl: 'https://text.pollinations.ai/openai',
       models: [
         'gemini-3.8-flash-high',
         'gemini-3.8-flash-medium',
@@ -561,10 +717,10 @@ class QuantumAgentProviderPreset {
       baseUrl: 'https://api.deepseek.com/chat/completions',
       modelsUrl: 'https://api.deepseek.com/models',
       models: [
-        'deepseek-v4-flash',
-        'deepseek-v4-pro',
         'deepseek-chat',
         'deepseek-reasoner',
+        'deepseek-v4-flash',
+        'deepseek-v4-pro',
       ],
       keyHint: 'sk-...',
       brandColor: Color(0xFF0284C7),
@@ -698,7 +854,7 @@ class QuantumAgentProviderPreset {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 4. ЧЕКПОИНТЫ И DIFF ИЗМЕНЕНИЙ ФАЙЛОВ (ИЗ Mobile-Harness WorkspaceCheckpoints)
+// 5. ЧЕКПОИНТЫ И DIFF ИЗМЕНЕНИЙ ФАЙЛОВ (ИЗ Mobile-Harness WorkspaceCheckpoints)
 // ═══════════════════════════════════════════════════════════════════════════
 
 enum AgentDiffLineType { context, addition, deletion, info }
@@ -738,7 +894,7 @@ class WorkspaceChangeItem {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 5. ЕДИНОЕ СОСТОЯНИЕ ИИ-АГЕНТА, МОДЕЛЕЙ, НАСТРОЕК И СЕРВЕРА
+// 6. ЕДИНОЕ СОСТОЯНИЕ ИИ-АГЕНТА, ХАРНЕССОВ, IMAGE GEN, МОДЕЛЕЙ И СЕРВЕРА
 // ═══════════════════════════════════════════════════════════════════════════
 
 class QuantumAgentState {
@@ -753,15 +909,22 @@ class QuantumAgentState {
   final String apiKey;
   final String customBaseUrl;
   final String customProtocol; // 'openai-completions' | 'anthropic-messages' | 'openai-responses'
-  final String selectedHarness; // 'native' | 'antigravity' | 'claude-code' | 'deepseek-harness'
+  final String selectedHarness; // 'deepseek-harness' | 'claude-code' | 'antigravity' | 'native'
   final String antigravityEffort; // 'low' | 'medium' | 'high'
+
+  // Состояние установки Харнессов (из Mobile-Harness RuntimeInstaller.kt)
+  final Map<String, String> installedHarnessVersions; // harnessId -> version (например '0.1.2-rc.1')
+  final String? installingHarnessId;
+  final double harnessInstallProgress;
+  final String harnessInstallStage;
+  final List<String> harnessInstallLogs;
 
   // OpenRouter Routing (из Mobile-Harness)
   final String openRouterProviderOrder;
   final bool openRouterAllowFallbacks;
   final bool freeModelsFirst;
 
-  // Параметры генерации (из cross-platform-llm-client)
+  // Параметры генерации текста (из cross-platform-llm-client)
   final double temperature;
   final int maxTokens;
   final int contextSize;
@@ -770,6 +933,19 @@ class QuantumAgentState {
   final String customSystemPrompt;
   final List<String> stopSequences;
   final bool autoApplyEdits;
+
+  // Настройки генерации изображений (из cross-platform-llm-client SettingsView lines 744-859)
+  final int imageSteps; // 1..50 (default 20, safeMax 8)
+  final int imageGenSize; // 0 (Auto), 256, 320, 384, 512
+  final int imageGenGpuGuardMb; // 0 (Off) .. 4096 MB (default 1536)
+  final String imageGenBackend; // 'cpu' | 'gpu'
+  final String imageGenQuantization; // 'q4_0' | 'fp16'
+  final double imageCfgScale; // 1.0 .. 15.0 (default 7.0)
+  final String imageNegativePrompt;
+  final int imageSeed; // -1 = Random
+  final bool isGeneratingImage;
+  final double imageGenProgress;
+  final String imageGenStatusText;
 
   // Мульти-ключи и обнаруженные модели
   final Map<String, List<SavedApiKeyEntry>> savedKeysByProvider;
@@ -808,6 +984,11 @@ class QuantumAgentState {
     this.customProtocol = 'openai-completions',
     this.selectedHarness = 'native',
     this.antigravityEffort = 'high',
+    this.installedHarnessVersions = const {'native': '2.4.0'},
+    this.installingHarnessId,
+    this.harnessInstallProgress = 0.0,
+    this.harnessInstallStage = '',
+    this.harnessInstallLogs = const [],
     this.openRouterProviderOrder = '',
     this.openRouterAllowFallbacks = true,
     this.freeModelsFirst = true,
@@ -819,6 +1000,17 @@ class QuantumAgentState {
     this.customSystemPrompt = '',
     this.stopSequences = const [],
     this.autoApplyEdits = true,
+    this.imageSteps = 20,
+    this.imageGenSize = 0,
+    this.imageGenGpuGuardMb = 1536,
+    this.imageGenBackend = 'cpu',
+    this.imageGenQuantization = 'q4_0',
+    this.imageCfgScale = 7.0,
+    this.imageNegativePrompt = 'blurry, low quality, distorted, watermark, bad anatomy',
+    this.imageSeed = -1,
+    this.isGeneratingImage = false,
+    this.imageGenProgress = 0.0,
+    this.imageGenStatusText = '',
     this.savedKeysByProvider = const {},
     this.discoveredModelsByProvider = const {},
     this.isDiscoveringModels = false,
@@ -838,6 +1030,12 @@ class QuantumAgentState {
     this.pendingChanges = const [],
   });
 
+  bool isHarnessInstalled(String harnessId) {
+    if (harnessId == 'native') return true;
+    final ver = installedHarnessVersions[harnessId];
+    return ver != null && ver.isNotEmpty;
+  }
+
   QuantumAgentState copyWith({
     List<AgentChatMessage>? messages,
     bool? isWorking,
@@ -850,6 +1048,12 @@ class QuantumAgentState {
     String? customProtocol,
     String? selectedHarness,
     String? antigravityEffort,
+    Map<String, String>? installedHarnessVersions,
+    String? installingHarnessId,
+    bool clearInstallingHarness = false,
+    double? harnessInstallProgress,
+    String? harnessInstallStage,
+    List<String>? harnessInstallLogs,
     String? openRouterProviderOrder,
     bool? openRouterAllowFallbacks,
     bool? freeModelsFirst,
@@ -861,6 +1065,17 @@ class QuantumAgentState {
     String? customSystemPrompt,
     List<String>? stopSequences,
     bool? autoApplyEdits,
+    int? imageSteps,
+    int? imageGenSize,
+    int? imageGenGpuGuardMb,
+    String? imageGenBackend,
+    String? imageGenQuantization,
+    double? imageCfgScale,
+    String? imageNegativePrompt,
+    int? imageSeed,
+    bool? isGeneratingImage,
+    double? imageGenProgress,
+    String? imageGenStatusText,
     Map<String, List<SavedApiKeyEntry>>? savedKeysByProvider,
     Map<String, List<String>>? discoveredModelsByProvider,
     bool? isDiscoveringModels,
@@ -891,6 +1106,11 @@ class QuantumAgentState {
       customProtocol: customProtocol ?? this.customProtocol,
       selectedHarness: selectedHarness ?? this.selectedHarness,
       antigravityEffort: antigravityEffort ?? this.antigravityEffort,
+      installedHarnessVersions: installedHarnessVersions ?? this.installedHarnessVersions,
+      installingHarnessId: clearInstallingHarness ? null : (installingHarnessId ?? this.installingHarnessId),
+      harnessInstallProgress: harnessInstallProgress ?? this.harnessInstallProgress,
+      harnessInstallStage: harnessInstallStage ?? this.harnessInstallStage,
+      harnessInstallLogs: harnessInstallLogs ?? this.harnessInstallLogs,
       openRouterProviderOrder: openRouterProviderOrder ?? this.openRouterProviderOrder,
       openRouterAllowFallbacks: openRouterAllowFallbacks ?? this.openRouterAllowFallbacks,
       freeModelsFirst: freeModelsFirst ?? this.freeModelsFirst,
@@ -902,6 +1122,17 @@ class QuantumAgentState {
       customSystemPrompt: customSystemPrompt ?? this.customSystemPrompt,
       stopSequences: stopSequences ?? this.stopSequences,
       autoApplyEdits: autoApplyEdits ?? this.autoApplyEdits,
+      imageSteps: imageSteps ?? this.imageSteps,
+      imageGenSize: imageGenSize ?? this.imageGenSize,
+      imageGenGpuGuardMb: imageGenGpuGuardMb ?? this.imageGenGpuGuardMb,
+      imageGenBackend: imageGenBackend ?? this.imageGenBackend,
+      imageGenQuantization: imageGenQuantization ?? this.imageGenQuantization,
+      imageCfgScale: imageCfgScale ?? this.imageCfgScale,
+      imageNegativePrompt: imageNegativePrompt ?? this.imageNegativePrompt,
+      imageSeed: imageSeed ?? this.imageSeed,
+      isGeneratingImage: isGeneratingImage ?? this.isGeneratingImage,
+      imageGenProgress: imageGenProgress ?? this.imageGenProgress,
+      imageGenStatusText: imageGenStatusText ?? this.imageGenStatusText,
       savedKeysByProvider: savedKeysByProvider ?? this.savedKeysByProvider,
       discoveredModelsByProvider: discoveredModelsByProvider ?? this.discoveredModelsByProvider,
       isDiscoveringModels: isDiscoveringModels ?? this.isDiscoveringModels,
