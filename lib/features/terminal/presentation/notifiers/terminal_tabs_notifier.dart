@@ -227,6 +227,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       );
 
       Timer? gitRefreshDebounceTimer;
+      Timer? syncFlushTimer;
       String syncFrameBuffer = '';
       bool lastChunkEndedWithCr = false;
 
