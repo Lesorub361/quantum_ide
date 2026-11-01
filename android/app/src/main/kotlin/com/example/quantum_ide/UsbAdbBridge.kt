@@ -59,7 +59,7 @@ class UsbAdbBridge(
         private const val ADB_PROTOCOL = 1
         private const val FASTBOOT_PROTOCOL = 3
 
-        const val BASE_BRIDGE_PORT = 5556
+        const val BASE_BRIDGE_PORT = 15555
         const val CONTROL_PORT = 5038
         private const val MAX_ADB_PAYLOAD = 4 * 1024 * 1024 // 4 MB safety cap
         private const val MAX_BULK_CHUNK = 16384 // 16 KB (multiple of 512 and 1024 wMaxPacketSize)
@@ -625,7 +625,8 @@ class UsbAdbBridge(
                 val magic = bb.getInt(20)
 
                 if (magic != command.inv() || dataLength < 0 || dataLength > MAX_ADB_PAYLOAD) {
-                    throw IllegalStateException("Invalid ADB header from TCP: cmd=0x${Integer.toHexString(command)} len=$dataLength")
+                    Log.w(TAG, "Invalid ADB packet header from TCP: cmd=0x${Integer.toHexString(command)} len=$dataLength. Discarding...")
+                    continue
                 }
 
                 val payload = if (dataLength > 0) {

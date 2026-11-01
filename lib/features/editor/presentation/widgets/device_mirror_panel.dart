@@ -307,7 +307,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     if (!mounted) return;
 
     if (apks.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           backgroundColor: const Color(0xFF1E2230),
           content: Text(
@@ -372,7 +372,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     final selected = ref.read(adbDeviceServiceProvider).selectedDevice;
     if (selected == null) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 4),
         backgroundColor: const Color(0xFF1E2230),
@@ -391,7 +391,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     final res = await ref.read(adbDeviceServiceProvider.notifier).installAndRun(apkPath: apkPath, deviceId: selected.id);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         SnackBar(
           backgroundColor: res.contains('Success') ? const Color(0xFF14301E) : const Color(0xFF381616),
           content: Text(res, style: GoogleFonts.firaCode(color: res.contains('Success') ? Colors.greenAccent : Colors.redAccent, fontSize: 12)),
@@ -545,7 +545,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                   result = await adb.connectWifi(target);
                 }
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                     SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(result, style: GoogleFonts.firaCode())),
                   );
                 }
@@ -713,7 +713,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
             onTap: () async {
               final msg = await ref.read(adbDeviceServiceProvider.notifier).connectUsbOtg();
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                   SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(msg, style: GoogleFonts.firaCode())),
                 );
               }
@@ -738,7 +738,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
             onTap: () async {
               final res = await ref.read(adbDeviceServiceProvider.notifier).fixAdbEnvironment();
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                   SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(res, style: GoogleFonts.firaCode())),
                 );
               }
@@ -876,7 +876,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                     onPressed: () async {
                       final msg = await ref.read(adbDeviceServiceProvider.notifier).connectUsbOtg();
                       if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                           SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(msg, style: GoogleFonts.firaCode())),
                         );
                       }
@@ -941,6 +941,83 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                         ),
                       ),
                     )
+                  else if (device.isUnauthorized)
+                    Container(
+                      color: Colors.black,
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.shield_alert, color: Colors.orangeAccent, size: 48),
+                            const SizedBox(height: 14),
+                            Text(
+                              'Требуется подтверждение RSA-ключа',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.firaCode(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Разблокируйте экран второго телефона.\nВ появившемся диалоге Android отметьте «Всегда разрешать с этого компьютера» и нажмите ОК.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, height: 1.45, color: Colors.white.withValues(alpha: 0.7)),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orangeAccent,
+                                foregroundColor: Colors.black,
+                              ),
+                              icon: const Icon(LucideIcons.refresh_cw, size: 14),
+                              label: const Text('Проверить статус', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              onPressed: () => ref.read(adbDeviceServiceProvider.notifier).refreshDevices(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else if (device.isOffline)
+                    Container(
+                      color: Colors.black,
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(LucideIcons.circle_alert, color: Colors.redAccent, size: 48),
+                            const SizedBox(height: 14),
+                            Text(
+                              'Телефон в статусе Оффлайн (${device.id})',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.firaCode(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              'Переподключите кабель Type-C или нажмите кнопку повторного подключения USB.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, height: 1.45, color: Colors.white.withValues(alpha: 0.7)),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.greenAccent,
+                                foregroundColor: Colors.black,
+                              ),
+                              icon: const Icon(LucideIcons.cable, size: 14),
+                              label: const Text('Переподключить USB', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              onPressed: () async {
+                                final msg = await ref.read(adbDeviceServiceProvider.notifier).connectUsbOtg();
+                                if (mounted) {
+                                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                                    SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(msg, style: GoogleFonts.firaCode())),
+                                  );
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
                   else
                     Container(
                       color: Colors.black,
@@ -998,13 +1075,13 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                               try {
                                 final path = await ref.read(adbDeviceServiceProvider.notifier).takeScreenshot(deviceId: device.id);
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                                     SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text('Скриншот сохранён:\n$path', style: GoogleFonts.firaCode())),
                                   );
                                 }
                               } catch (e) {
                                 if (mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка скриншота: $e')));
+                                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('Ошибка скриншота: $e')));
                                 }
                               }
                             },
@@ -1223,7 +1300,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                 color: Colors.cyanAccent,
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: filteredLines.join('\n')));
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                     const SnackBar(content: Text('Логи скопированы в буфер обмена')),
                   );
                 },

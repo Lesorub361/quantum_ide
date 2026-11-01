@@ -172,10 +172,11 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     try {
       await checkUsbHostSupport(autoRequestPermission: !silent);
 
-      // Ensure ADB server is running
+      // Ensure ADB server is running and clear stale emulator entries
       await runtime.runCommand('adb start-server 2>/dev/null || true');
+      await runtime.runCommand('adb disconnect emulator-5556 2>/dev/null; adb disconnect 127.0.0.1:5556 2>/dev/null || true');
 
-      // Connect any active native USB-OTG bridges (e.g. 127.0.0.1:5556)
+      // Connect any active native USB-OTG bridges (e.g. 127.0.0.1:15555)
       for (final usbDev in state.rawUsbDevices) {
         final bridgeActive = usbDev['bridgeActive'] == true;
         final bridgeAddr = (usbDev['bridgeAddress'] ?? '').toString().trim();
@@ -636,35 +637,42 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
   /// Sends tap at coordinate (x, y) on target device
   Future<void> sendTap(int x, int y, {String? deviceId}) async {
     final targetId = deviceId ?? state.selectedDevice?.id;
-    if (targetId == null) throw Exception('Целевой телефон не подключен');
+    if (targetId == null) return;
     final runtime = _ref.read(runtimeServiceProvider);
-    await runtime.runCommand('adb -s $targetId shell input tap $x $y');
+    try {
+      await runtime.runCommand('adb -s $targetId shell input tap $x $y');
+    } catch (_) {}
   }
 
   /// Sends text to target device
   Future<void> sendText(String text, {String? deviceId}) async {
     final targetId = deviceId ?? state.selectedDevice?.id;
-    if (targetId == null) throw Exception('Целевой телефон не подключен');
+    if (targetId == null) return;
     final runtime = _ref.read(runtimeServiceProvider);
-    // Sanitize text for shell input
-    final escaped = text.replaceAll(' ', '%s').replaceAll("'", "\\'");
-    await runtime.runCommand("adb -s $targetId shell input text '$escaped'");
+    try {
+      final escaped = text.replaceAll(' ', '%s').replaceAll("'", "\\'");
+      await runtime.runCommand("adb -s $targetId shell input text '$escaped'");
+    } catch (_) {}
   }
 
   /// Sends swipe gesture
   Future<void> sendSwipe(int x1, int y1, int x2, int y2, {int durationMs = 300, String? deviceId}) async {
     final targetId = deviceId ?? state.selectedDevice?.id;
-    if (targetId == null) throw Exception('Целевой телефон не подключен');
+    if (targetId == null) return;
     final runtime = _ref.read(runtimeServiceProvider);
-    await runtime.runCommand('adb -s $targetId shell input swipe $x1 $y1 $x2 $y2 $durationMs');
+    try {
+      await runtime.runCommand('adb -s $targetId shell input swipe $x1 $y1 $x2 $y2 $durationMs');
+    } catch (_) {}
   }
 
   /// Sends keyevent (e.g. 4 for Back, 3 for Home, 66 for Enter)
   Future<void> sendKeyEvent(int keyCode, {String? deviceId}) async {
     final targetId = deviceId ?? state.selectedDevice?.id;
-    if (targetId == null) throw Exception('Целевой телефон не подключен');
+    if (targetId == null) return;
     final runtime = _ref.read(runtimeServiceProvider);
-    await runtime.runCommand('adb -s $targetId shell input keyevent $keyCode');
+    try {
+      await runtime.runCommand('adb -s $targetId shell input keyevent $keyCode');
+    } catch (_) {}
   }
 
   /// Fetches recent error/crash logcat entries
