@@ -813,6 +813,23 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               }
                             },
                           ),
+                          ActionIconButton(
+                            icon: LucideIcons.bot,
+                            color: panelState.selectedTab == PanelTab.deepseekHarness && panelState.isOpened
+                                ? Colors.purpleAccent
+                                : Colors.purpleAccent.withValues(alpha: 0.85),
+                            backgroundColor: Colors.purpleAccent.withValues(alpha: 0.14),
+                            borderColor: Colors.purpleAccent.withValues(alpha: 0.35),
+                            tooltip: 'DeepSeek Harness (AI Agent)',
+                            onTap: () {
+                              if (panelState.isOpened && panelState.selectedTab == PanelTab.deepseekHarness) {
+                                panelNotifier.closePanel();
+                              } else {
+                                panelNotifier.selectTab(PanelTab.deepseekHarness);
+                                panelNotifier.openPanel();
+                              }
+                            },
+                          ),
                           PopupMenuButton<String>(
                             tooltip: 'Ещё действия',
                             padding: EdgeInsets.zero,
@@ -856,6 +873,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     panelNotifier.closePanel();
                                   } else {
                                     panelNotifier.selectTab(PanelTab.terminal);
+                                    panelNotifier.openPanel();
+                                  }
+                                  break;
+                                case 'dsh':
+                                  if (panelState.isOpened && panelState.selectedTab == PanelTab.deepseekHarness) {
+                                    panelNotifier.closePanel();
+                                  } else {
+                                    panelNotifier.selectTab(PanelTab.deepseekHarness);
                                     panelNotifier.openPanel();
                                   }
                                   break;
@@ -906,6 +931,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     ),
                                   ),
                                 ],
+                                const PopupMenuItem(
+                                  value: 'dsh',
+                                  child: Row(
+                                    children: [
+                                      Icon(LucideIcons.bot, size: 16, color: Colors.purpleAccent),
+                                      SizedBox(width: 10),
+                                      Text('DeepSeek Harness (AI Agent)', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
                                 const PopupMenuDivider(),
                               PopupMenuItem(
                                 value: 'home',
@@ -1339,6 +1374,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.problems: return LucideIcons.circle_alert;
       case PanelTab.debug: return LucideIcons.bug;
       case PanelTab.deviceMirror: return LucideIcons.smartphone;
+      case PanelTab.deepseekHarness: return LucideIcons.bot;
     }
   }
 
@@ -1352,6 +1388,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.problems: return Colors.redAccent;
       case PanelTab.debug: return Colors.orangeAccent;
       case PanelTab.deviceMirror: return Colors.greenAccent;
+      case PanelTab.deepseekHarness: return Colors.purpleAccent;
     }
   }
 
@@ -1366,6 +1403,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.problems: return l10n.problems;
       case PanelTab.debug: return l10n.debugger;
       case PanelTab.deviceMirror: return 'Экран и USB';
+      case PanelTab.deepseekHarness: return 'DeepSeek Harness';
     }
   }
 

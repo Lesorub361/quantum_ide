@@ -39,6 +39,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/deepseek_harness_panel.dart';
 import 'package:fuzzy/fuzzy.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -926,6 +927,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         return const DebuggerPanel(key: ValueKey('debug'));
       case PanelTab.deviceMirror:
         return const DeviceMirrorPanel(key: ValueKey('deviceMirror'));
+      case PanelTab.deepseekHarness:
+        return const DeepSeekHarnessPanel(key: ValueKey('deepseekHarness'));
     }
   }
 

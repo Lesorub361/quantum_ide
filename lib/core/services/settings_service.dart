@@ -52,10 +52,20 @@ class SettingsState {
     this.glassmorphismOpacity = 0.15,
     this.glassmorphismBlur = 0.0,
     this.hotkeysJson = '{}',
-    this.sdCardSync = true,
     this.formatOnSave = true,
+    this.deepseekApiKey = '',
+    this.openrouterApiKey = '',
+    this.openaiApiKey = '',
+    this.anthropicApiKey = '',
+    this.dshPort = 3080,
     this.isInitialized = false,
   });
+
+  final String deepseekApiKey;
+  final String openrouterApiKey;
+  final String openaiApiKey;
+  final String anthropicApiKey;
+  final int dshPort;
 
   SettingsState copyWith({
     ThemeMode? themeMode,
@@ -83,6 +93,11 @@ class SettingsState {
     String? hotkeysJson,
     bool? sdCardSync,
     bool? formatOnSave,
+    String? deepseekApiKey,
+    String? openrouterApiKey,
+    String? openaiApiKey,
+    String? anthropicApiKey,
+    int? dshPort,
     bool? isInitialized,
   }) {
     return SettingsState(
@@ -110,6 +125,11 @@ class SettingsState {
       hotkeysJson: hotkeysJson ?? this.hotkeysJson,
       sdCardSync: sdCardSync ?? this.sdCardSync,
       formatOnSave: formatOnSave ?? this.formatOnSave,
+      deepseekApiKey: deepseekApiKey ?? this.deepseekApiKey,
+      openrouterApiKey: openrouterApiKey ?? this.openrouterApiKey,
+      openaiApiKey: openaiApiKey ?? this.openaiApiKey,
+      anthropicApiKey: anthropicApiKey ?? this.anthropicApiKey,
+      dshPort: dshPort ?? this.dshPort,
       isInitialized: isInitialized ?? this.isInitialized,
     );
   }
@@ -144,6 +164,11 @@ class SettingsService extends StateNotifier<SettingsState> {
   static const _keyHotkeys = 'settings_hotkeys';
   static const _keySdCardSync = 'settings_sd_card_sync';
   static const _keyFormatOnSave = 'settings_format_on_save';
+  static const _keyDeepseekApiKey = 'settings_deepseek_api_key';
+  static const _keyOpenrouterApiKey = 'settings_openrouter_api_key';
+  static const _keyOpenaiApiKey = 'settings_openai_api_key';
+  static const _keyAnthropicApiKey = 'settings_anthropic_api_key';
+  static const _keyDshPort = 'settings_dsh_port';
 
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
@@ -174,6 +199,11 @@ class SettingsService extends StateNotifier<SettingsState> {
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
       sdCardSync: prefs.getBool(_keySdCardSync) ?? true,
       formatOnSave: prefs.getBool(_keyFormatOnSave) ?? true,
+      deepseekApiKey: prefs.getString(_keyDeepseekApiKey) ?? '',
+      openrouterApiKey: prefs.getString(_keyOpenrouterApiKey) ?? '',
+      openaiApiKey: prefs.getString(_keyOpenaiApiKey) ?? '',
+      anthropicApiKey: prefs.getString(_keyAnthropicApiKey) ?? '',
+      dshPort: prefs.getInt(_keyDshPort) ?? 3080,
       isInitialized: true,
     );
   }
@@ -329,6 +359,36 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(formatOnSave: v);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyFormatOnSave, v);
+  }
+
+  Future<void> setDeepseekApiKey(String key) async {
+    state = state.copyWith(deepseekApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyDeepseekApiKey, key);
+  }
+
+  Future<void> setOpenrouterApiKey(String key) async {
+    state = state.copyWith(openrouterApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyOpenrouterApiKey, key);
+  }
+
+  Future<void> setOpenaiApiKey(String key) async {
+    state = state.copyWith(openaiApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyOpenaiApiKey, key);
+  }
+
+  Future<void> setAnthropicApiKey(String key) async {
+    state = state.copyWith(anthropicApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyAnthropicApiKey, key);
+  }
+
+  Future<void> setDshPort(int port) async {
+    state = state.copyWith(dshPort: port);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyDshPort, port);
   }
 }
 

@@ -36,6 +36,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       (id: 'editor', icon: LucideIcons.code, label: AppLocalizations.of(context)!.codeEditor),
       (id: 'appearance', icon: LucideIcons.palette, label: AppLocalizations.of(context)!.interfaceAndLocalization),
       (id: 'terminal', icon: LucideIcons.terminal, label: isRu ? 'Терминал и Сборка' : 'Terminal & Build'),
+      (id: 'dsh', icon: LucideIcons.bot, label: 'DeepSeek Harness'),
       (id: 'system', icon: LucideIcons.cpu, label: AppLocalizations.of(context)!.system),
     ];
 
@@ -507,6 +508,83 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ]);
     }
 
+    // ─── 4.5. DeepSeek Harness (AI Agent) ────────────────────────────────────
+    if (showAll || _selectedCategory == 'dsh') {
+      widgets.addAll([
+        _sectionHeader(context, 'DeepSeek Harness (AI Agent)'),
+        _settingsGroup(context, [
+          _tile(
+            context,
+            icon: LucideIcons.key,
+            title: 'DeepSeek API Key',
+            subtitle: s.deepseekApiKey.isNotEmpty ? '••••••••' : (isRu ? 'Не указан' : 'Not set'),
+            onTap: () => _showTextInputDialog(
+              context,
+              'DeepSeek API Key',
+              s.deepseekApiKey,
+              sn.setDeepseekApiKey,
+              obscure: true,
+            ),
+          ),
+          _tile(
+            context,
+            icon: LucideIcons.network,
+            title: 'OpenRouter API Key',
+            subtitle: s.openrouterApiKey.isNotEmpty ? '••••••••' : (isRu ? 'Не указан (доступ ко всем моделям)' : 'Not set (all models access)'),
+            onTap: () => _showTextInputDialog(
+              context,
+              'OpenRouter API Key',
+              s.openrouterApiKey,
+              sn.setOpenrouterApiKey,
+              obscure: true,
+            ),
+          ),
+          _tile(
+            context,
+            icon: LucideIcons.bot,
+            title: 'OpenAI API Key',
+            subtitle: s.openaiApiKey.isNotEmpty ? '••••••••' : (isRu ? 'Не указан' : 'Not set'),
+            onTap: () => _showTextInputDialog(
+              context,
+              'OpenAI API Key',
+              s.openaiApiKey,
+              sn.setOpenaiApiKey,
+              obscure: true,
+            ),
+          ),
+          _tile(
+            context,
+            icon: LucideIcons.sparkles,
+            title: 'Anthropic Claude Key',
+            subtitle: s.anthropicApiKey.isNotEmpty ? '••••••••' : (isRu ? 'Не указан' : 'Not set'),
+            onTap: () => _showTextInputDialog(
+              context,
+              'Anthropic API Key',
+              s.anthropicApiKey,
+              sn.setAnthropicApiKey,
+              obscure: true,
+            ),
+          ),
+          _tile(
+            context,
+            icon: LucideIcons.server,
+            title: isRu ? 'Порт веб-сервера Harness' : 'Harness Web Port',
+            subtitle: '${s.dshPort}',
+            onTap: () => _showTextInputDialog(
+              context,
+              isRu ? 'Порт сервера DeepSeek Harness' : 'DeepSeek Harness Port',
+              '${s.dshPort}',
+              (v) {
+                final p = int.tryParse(v) ?? 3080;
+                sn.setDshPort(p);
+              },
+            ),
+          ),
+        ]),
+        const SizedBox(height: 24),
+      ]);
+    }
+
     // ─── 5. Система и Оптимизация ОЗУ ────────────────────────────────────────
     if (showAll || _selectedCategory == 'system') {
       widgets.addAll([
@@ -748,6 +826,54 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       default:
         return theme;
     }
+  }
+
+  void _showTextInputDialog(
+    BuildContext context,
+    String title,
+    String current,
+    ValueChanged<String> onSaved, {
+    bool obscure = false,
+  }) {
+    final theme = Theme.of(context);
+    final ctrl = TextEditingController(text: current);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.colorScheme.surfaceContainerHigh,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          title,
+          style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: TextField(
+          controller: ctrl,
+          obscureText: obscure,
+          autofocus: true,
+          style: GoogleFonts.jetBrainsMono(color: theme.colorScheme.onSurface, fontSize: 13),
+          decoration: InputDecoration(
+            hintText: 'Введите значение...',
+            filled: true,
+            fillColor: theme.colorScheme.surfaceContainerLow,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(AppLocalizations.of(context)!.cancel),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary),
+            onPressed: () {
+              onSaved(ctrl.text.trim());
+              Navigator.pop(ctx);
+            },
+            child: Text(AppLocalizations.of(context)!.saveTooltip, style: TextStyle(color: theme.colorScheme.onPrimary)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSliderDialog(
