@@ -68,7 +68,7 @@ class QuantumTerminalEngine {
   static void selectAll(TerminalSession session) {
     try {
       final buffer = session.xtermTerminal.buffer;
-      if (buffer.height == 0 || buffer.lines.isEmpty) return;
+      if (buffer.height == 0 || buffer.lines.length == 0) return;
       final firstLine = buffer.lines[0];
       final lastLine = buffer.lines[buffer.height - 1];
       final base = xt.CellAnchor(0, owner: firstLine);
