@@ -150,6 +150,8 @@ class _GithubActionsPipelineViewerState
         return 'build-rust (Rust Cargo Build)';
       case ProjectType.dart:
         return 'build-dart (Dart Native Compile)';
+      case ProjectType.shell:
+        return 'build-shell (Bash / Shell Script Execution)';
       case ProjectType.flutter:
       case ProjectType.other:
         return 'build-flutter (Flutter · ARM64 APK)';
@@ -355,6 +357,39 @@ class _GithubActionsPipelineViewerState
             id: 'finalize',
             title: 'Завершение сборки',
             defaultSummary: '✓ Сборка Dart завершена',
+          ),
+        ];
+      case ProjectType.shell:
+        return [
+          _PipelineStep(
+            id: 'env',
+            title: 'Подготовка окружения (Bash / Linux Shell)',
+            defaultSummary: '✓ Окружение шелла и переменные PATH инициализированы',
+          ),
+          _PipelineStep(
+            id: 'deps',
+            title: 'Проверка прав исполнения и системных утилит',
+            defaultSummary: '✓ Файлы скриптов и системные бинарники проверены',
+          ),
+          _PipelineStep(
+            id: 'ndk',
+            title: 'Синтаксический анализ и валидация скрипта',
+            defaultSummary: '✓ Синтаксис и аргументы проверены',
+          ),
+          _PipelineStep(
+            id: 'compile',
+            title: 'Выполнение шелл-скрипта / сборочных задач',
+            defaultSummary: '✓ Скрипт выполнен',
+          ),
+          _PipelineStep(
+            id: 'package',
+            title: 'Проверка кода завершения и выходных данных',
+            defaultSummary: '✓ Выходные артефакты сформированы',
+          ),
+          _PipelineStep(
+            id: 'finalize',
+            title: 'Завершение исполнения',
+            defaultSummary: '✓ Исполнение шелла завершено успешно',
           ),
         ];
       case ProjectType.flutter:

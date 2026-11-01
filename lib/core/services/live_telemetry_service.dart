@@ -29,6 +29,7 @@ class LiveTelemetryService {
   double deviceRamTotalGB = 0.0;
   String? currentWorkspace;
   String currentBuildStatus = 'Idle';
+  bool get isBuilding => currentBuildStatus.toLowerCase() == 'running';
   String currentBuildCommand = '';
   DateTime? buildStartTime;
   Future<List<String>> Function()? onSyncRequested;
