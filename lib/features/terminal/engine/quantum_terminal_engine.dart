@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,7 +51,12 @@ class QuantumTerminalEngine {
     try {
       final data = await Clipboard.getData(Clipboard.kTextPlain);
       if (data?.text != null && data!.text!.isNotEmpty) {
-        session.terminal.write(data.text!);
+        final text = data.text!;
+        if (session.xtermTerminal.bracketedPasteMode) {
+          session.xtermTerminal.paste(text);
+        } else {
+          session.pty.write(Uint8List.fromList(utf8.encode(text)));
+        }
         HapticFeedback.lightImpact();
         return true;
       }

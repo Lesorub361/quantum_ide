@@ -276,8 +276,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       if (mounted) {
         final pluginState = ref.read(quantumPluginServiceProvider);
         ref.read(quantumTerminalBarProvider.notifier).syncPluginButtons(
-              pluginState.terminalCommands,
-              pluginState.customButtons,
+              pluginState.activeTerminalCommands,
+              pluginState.activeCustomButtons,
             );
       }
     });
