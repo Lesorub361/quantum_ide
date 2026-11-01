@@ -28,11 +28,13 @@ import 'package:re_highlight/languages/java.dart';
 import 'package:re_highlight/languages/php.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/vs2015.dart';
-import 'package:re_highlight/styles/dracula.dart';
 import 'package:re_highlight/styles/github-dark.dart';
+import 'package:re_highlight/styles/github-dark-dimmed.dart';
 import 'package:re_highlight/styles/nord.dart';
 import 'package:re_highlight/styles/monokai.dart';
-import 'package:re_highlight/styles/solarized-dark.dart';
+import 'package:re_highlight/styles/tokyo-night-dark.dart';
+import 'package:re_highlight/styles/night-owl.dart';
+import 'package:re_highlight/styles/androidstudio.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_painter.dart';
@@ -250,11 +252,17 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       case 'atom-one-dark':
         styleMap = atomOneDarkTheme;
         break;
-      case 'dracula':
-        styleMap = draculaTheme;
+      case 'tokyo-night':
+        styleMap = tokyoNightDarkTheme;
+        break;
+      case 'night-owl':
+        styleMap = nightOwlTheme;
         break;
       case 'github-dark':
         styleMap = githubDarkTheme;
+        break;
+      case 'github-dark-dimmed':
+        styleMap = githubDarkDimmedTheme;
         break;
       case 'nord':
         styleMap = nordTheme;
@@ -262,8 +270,8 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       case 'monokai':
         styleMap = monokaiTheme;
         break;
-      case 'solarized-dark':
-        styleMap = solarizedDarkTheme;
+      case 'android-studio':
+        styleMap = androidstudioTheme;
         break;
       case 'vs-dark':
       default:

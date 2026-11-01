@@ -902,16 +902,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         return 'VS Code Dark+ (Standard)';
       case 'atom-one-dark':
         return 'Atom One Dark';
-      case 'dracula':
-        return 'Dracula';
+      case 'tokyo-night':
+        return 'Tokyo Night';
+      case 'night-owl':
+        return 'Night Owl';
       case 'github-dark':
         return 'GitHub Dark';
+      case 'github-dark-dimmed':
+        return 'GitHub Dark Dimmed';
       case 'nord':
         return 'Nord';
       case 'monokai':
         return 'Monokai';
-      case 'solarized-dark':
-        return 'Solarized Dark';
+      case 'android-studio':
+        return 'Android Studio (Darcula)';
       default:
         return 'VS Code Dark+';
     }
@@ -922,11 +926,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final themes = [
       {'id': 'vs-dark', 'name': 'VS Code Dark+ (Standard)'},
       {'id': 'atom-one-dark', 'name': 'Atom One Dark'},
-      {'id': 'dracula', 'name': 'Dracula'},
+      {'id': 'tokyo-night', 'name': 'Tokyo Night Dark'},
+      {'id': 'night-owl', 'name': 'Night Owl'},
       {'id': 'github-dark', 'name': 'GitHub Dark'},
+      {'id': 'github-dark-dimmed', 'name': 'GitHub Dark Dimmed'},
       {'id': 'nord', 'name': 'Nord'},
       {'id': 'monokai', 'name': 'Monokai'},
-      {'id': 'solarized-dark', 'name': 'Solarized Dark'},
+      {'id': 'android-studio', 'name': 'Android Studio (Darcula)'},
     ];
     final isRu = Localizations.localeOf(context).languageCode == 'ru';
     showDialog(
