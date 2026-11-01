@@ -68,17 +68,13 @@ class QuantumTerminalEngine {
   static void selectAll(TerminalSession session) {
     try {
       final buffer = session.xtermTerminal.buffer;
-      final lineCount = buffer.lines.length;
-      if (lineCount > 0) {
-        final lastLine = buffer.lines[lineCount - 1];
-        session.xtermViewController.setSelection(
-          xt.BufferRangeLine(
-            xt.CellOffset(0, 0),
-            xt.CellOffset(lastLine.length, lineCount - 1),
-          ),
-        );
-        HapticFeedback.selectionClick();
-      }
+      if (buffer.height == 0 || buffer.lines.isEmpty) return;
+      final firstLine = buffer.lines[0];
+      final lastLine = buffer.lines[buffer.height - 1];
+      final base = xt.CellAnchor(0, owner: firstLine);
+      final extent = xt.CellAnchor(lastLine.length, owner: lastLine);
+      session.xtermViewController.setSelection(base, extent);
+      HapticFeedback.selectionClick();
     } catch (_) {}
   }
 }
