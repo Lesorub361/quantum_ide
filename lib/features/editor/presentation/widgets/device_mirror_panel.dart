@@ -53,11 +53,15 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initDevice();
+      ref.read(adbDeviceServiceProvider.notifier).startPolling(interval: const Duration(seconds: 2));
     });
   }
 
   @override
   void dispose() {
+    try {
+      ref.read(adbDeviceServiceProvider.notifier).stopPolling();
+    } catch (_) {}
     _streamTimer?.cancel();
     _logcatTimer?.cancel();
     _logSearchController.dispose();
@@ -560,6 +564,17 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AdbDeviceState>(adbDeviceServiceProvider, (prev, next) {
+      final prevOnline = prev?.selectedDevice?.isOnline ?? false;
+      final nextOnline = next.selectedDevice?.isOnline ?? false;
+      if (!prevOnline && nextOnline && next.selectedDevice != null) {
+        _updateDisplaySize(next.selectedDevice!.id);
+        if (_currentSubTab == _DevicePanelSubTab.screen && !_isStreaming) {
+          _startStream();
+        }
+      }
+    });
+
     final adbState = ref.watch(adbDeviceServiceProvider);
     final selectedDevice = adbState.selectedDevice;
 
@@ -1006,7 +1021,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                               icon: const Icon(LucideIcons.cable, size: 14),
                               label: const Text('Переподключить USB', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                               onPressed: () async {
-                                final msg = await ref.read(adbDeviceServiceProvider.notifier).connectUsbOtg();
+                                final msg = await ref.read(adbDeviceServiceProvider.notifier).reconnectDevice(device.id);
                                 if (mounted) {
                                   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                                     SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(msg, style: GoogleFonts.firaCode())),

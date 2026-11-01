@@ -138,8 +138,8 @@ class AdbDevice {
     final trimmed = line.trim();
     final parts = trimmed.split(RegExp(r'\s+'));
     if (parts.length < 2) {
-      return AdbDevice(
-        id: trimmed,
+      return const AdbDevice(
+        id: '',
         status: AdbDeviceStatus.unknown,
         connectionType: AdbConnectionType.usb,
       );
@@ -147,6 +147,13 @@ class AdbDevice {
 
     final id = parts[0];
     final status = AdbDeviceStatus.fromString(parts[1]);
+    if (status == AdbDeviceStatus.unknown || id.startsWith('cat:') || id.startsWith('bash:') || id.startsWith('sh:') || id.startsWith('*')) {
+      return const AdbDevice(
+        id: '',
+        status: AdbDeviceStatus.unknown,
+        connectionType: AdbConnectionType.usb,
+      );
+    }
 
     String model = '';
     String product = '';

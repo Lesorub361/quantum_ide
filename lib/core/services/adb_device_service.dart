@@ -415,6 +415,18 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     }
   }
 
+  /// Reconnects offline or stalled device by kicking transport and re-connecting
+  Future<String> reconnectDevice(String deviceId) async {
+    final runtime = _ref.read(runtimeServiceProvider);
+    try {
+      await runtime.runCommand('adb reconnect offline 2>/dev/null; adb disconnect $deviceId 2>/dev/null; sleep 0.4; adb connect $deviceId 2>&1 || true');
+      await refreshDevices();
+      return 'Сброс и повторное подключение $deviceId выполнено';
+    } catch (e) {
+      return 'Ошибка переподключения: $e';
+    }
+  }
+
   /// Restarts ADB server
   Future<String> restartServer() async {
     final runtime = _ref.read(runtimeServiceProvider);
@@ -455,8 +467,14 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
     try {
       final output = await runtime.runCommand(cmd.toString());
+      if (output.contains('INSTALL_FAILED_USER_RESTRICTED')) {
+        return 'Ошибка Xiaomi: включите «Установка через USB» в «Настройках для разработчиков» на подключаемом телефоне.';
+      }
       return output.trim();
     } catch (e) {
+      if (e.toString().contains('INSTALL_FAILED_USER_RESTRICTED')) {
+        return 'Ошибка Xiaomi: включите «Установка через USB» в «Настройках для разработчиков» на подключаемом телефоне.';
+      }
       return 'Ошибка установки: $e';
     }
   }
@@ -716,16 +734,32 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     final targetId = deviceId ?? state.selectedDevice?.id;
     if (targetId == null) return null;
     final runtime = _ref.read(runtimeServiceProvider);
+
+    // Method 1: Pull directly from device RAM tmpfs (/data/local/tmp) to /tmp
+    try {
+      final localTmp = '/tmp/q_frame_$targetId.png';
+      await runtime.runCommand(
+        'adb -s $targetId shell "screencap -p /data/local/tmp/q_screen.png" 2>/dev/null && '
+        'adb -s $targetId pull /data/local/tmp/q_screen.png "$localTmp" 2>/dev/null || true'
+      );
+      final f = File(localTmp);
+      if (await f.exists() && await f.length() > 500) {
+        final bytes = await f.readAsBytes();
+        return bytes;
+      }
+    } catch (_) {}
+
+    // Method 2: exec-out with base64 stream
     try {
       final base64Str = await runtime.runCommand(
-        'adb -s $targetId exec-out screencap -p 2>/dev/null | base64 -w 0 2>/dev/null || '
-        'adb -s $targetId exec-out screencap -p 2>/dev/null | base64 2>/dev/null'
+        'adb -s $targetId exec-out "screencap -p" 2>/dev/null | base64 -w 0 2>/dev/null || true'
       );
       final clean = base64Str.replaceAll('\n', '').replaceAll('\r', '').replaceAll(' ', '').trim();
-      if (clean.length > 200) {
+      if (clean.length > 500) {
         return base64Decode(clean);
       }
     } catch (_) {}
+
     return null;
   }
 
