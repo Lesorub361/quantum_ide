@@ -32,23 +32,23 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.162 - Интеграция gpt_markdown, dio_smart_retry и connectivity_plus для Quantum AI Агента
+        ## 🚀 QuantumIDE v1.2.163 - Внедрение пакетов LangChain, StreamDown и MarkdownStream для Quantum AI Агента
 
         ### ✨ Что нового и улучшено:
-        - **Пакеты нового поколения для Quantum AI Агента**:
-          - **`gpt_markdown`**: специализированный парсер для ИИ-чатов с потоковым рендерингом (streaming) незавершённого Markdown, LaTeX-формул и таблиц без рывков экрана.
-          - **`dio_smart_retry`**: экспоненциальный автоповтор запросов к API нейросетей при потере/смене пакетов в мобильной сети.
-          - **`connectivity_plus`**: мгновенная проверка статуса подключения к интернету перед отправкой запросов с понятным предупреждением пользователя.
+        - **Пакеты агентской логики и стриминга для Quantum AI Агента**:
+          - **`langchain` & `langchain_openai`**: официальный порт LangChain на Dart для оркестрации ReAct агентов и вызова инструментов (Tools / Function Calling: чтение/запись файлов, команды терминала).
+          - **`streamdown`**: специализированный инкрементальный рендерер Markdown для LLM, корректно обрабатывающий незавершённые блоки кода, подсветку синтаксиса и LaTeX-формулы в потоке.
+          - **`flutter_markdown_stream`**: компонент потокового отображения текста без мерцания (flicker-free) с поддержкой цепочки мыслей (`<think>`) у reasoning-моделей.
+          - **`gpt_markdown`**: парсер стриминга сообщений нейросетей без рывков интерфейса.
+          - **`dio_smart_retry`**: умный повтор сетевых запросов при переключении или обрывах мобильной сети.
+          - **`connectivity_plus`**: мгновенная проверка интернет-соединения перед запросами к ИИ.
         - **Полная замена DeepSeek Harness на нативный Quantum AI Агент**:
-          - Устранены фоновые Node.js процессы и WebView, вызывавшие зависания и утечки памяти.
-          - Встроен сверхбыстрый Flutter AI-движок (`QuantumAiAgentService`) с прямой связью с REST API (0% CPU в режиме ожидания).
-          - Прямой SSE-стриминг генерации кода и текста в реальном времени.
-          - Поддержка рассуждений для DeepSeek R1 с интерактивным сворачиваемым аккордеоном (thinking accordion).
-          - Поддержка провайдеров OpenRouter (Claude 3.5 Sonnet, GPT-4o, Gemini 2.0 Flash, Qwen 2.5 Coder), DeepSeek, OpenAI и Anthropic.
+          - Устранены фоновые Node.js процессы и WebView (0% CPU в фоне).
+          - Прямой SSE-стриминг генерации кода в реальном времени.
+          - Поддержка DeepSeek V3/R1, OpenRouter (Claude 3.5 Sonnet, GPT-4o, Gemini 2.0 Flash, Qwen 2.5 Coder), OpenAI и Anthropic.
           - Интерактивное применение сгенерированного кода в проект в 1 клик с предпросмотром пути и diff.
-        - **Оптимизация и пакеты**:
-          - Удалены: `fuzzy: ^0.5.1`, `contextmenu: ^3.0.0`, `flutter_linkify: ^6.0.0`.
-          - Добавлены: `gpt_markdown: ^1.4.0`, `connectivity_plus: ^6.1.1`, `dio_smart_retry: ^6.0.0`, `cached_network_image: ^3.4.1`, `flutter_slidable: ^3.1.2`, `reorderables: ^0.6.0`, `battery_plus: ^6.1.0`, `haptic_feedback: ^0.5.1`.
+        - **Современные стабильные пакеты (`pubspec.yaml`)**:
+          - Добавлены: `langchain: ^0.9.0`, `langchain_openai: ^0.9.0`, `streamdown: ^0.1.1`, `flutter_markdown_stream: ^0.6.1`, `gpt_markdown: ^1.4.0`, `connectivity_plus: ^6.1.1`, `dio_smart_retry: ^6.0.0`, `cached_network_image: ^3.4.1`, `flutter_slidable: ^3.1.2`, `reorderables: ^0.6.0`, `battery_plus: ^6.1.0`, `haptic_feedback: ^0.5.1`.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -1,10 +1,10 @@
 {
-  "versionCode": 179,
-  "versionName": "1.2.162",
-  "notes": "QuantumIDE v1.2.162:\n• Внедрён gpt_markdown для идеального плавного стриминга сообщений ИИ-агента без дёрганья экрана, с поддержкой незавершённого кода и LaTeX.\n• Подключен dio_smart_retry для автоматического повтора запросов при сбоях связи к LLM-провайдерам.\n• Интегрирован connectivity_plus для мгновенного контроля интернет-соединения.\n• Полная замена DeepSeek Harness на нативный Quantum AI Агент (0% CPU в фоне, прямой SSE стриминг R1/V3, Claude 3.5 Sonnet, GPT-4o).",
+  "versionCode": 180,
+  "versionName": "1.2.163",
+  "notes": "QuantumIDE v1.2.163:\n• Добавлены официальные пакеты ИИ-агентов и стриминга: langchain, langchain_openai, streamdown, flutter_markdown_stream.\n• Добавлен gpt_markdown для потокового парсинга ответов модели.\n• Интегрированы dio_smart_retry (умные повторы при сбоях сети) и connectivity_plus (проверка подключения к интернету).\n• Нативный Quantum AI Агент с поддержкой Tool Calling (write_file, run_command) и аккордеоном рассуждений DeepSeek R1.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.162/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.163/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
