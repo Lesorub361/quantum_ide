@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class VirtualKey {
@@ -201,18 +202,45 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       onTap: () => widget.onKeyTap('toggle_keyboard'),
     );
 
-    final moreButton = _VirtualKeyButton(
-      fixedWidth: 50,
-      keyData: VirtualKey(
-        label: l10n?.keypadMore ?? 'More',
-        value: 'more_commands',
-        icon: LucideIcons.layout_grid,
-        tooltip: isRu ? 'Все команды, сочетания клавиш и спецсимволы' : 'All commands, shortcuts & symbols',
-      ),
-      isActive: false,
-      isHighlightedAction: false,
-      onTap: () => _showMoreCommandsSheet(context, isRu),
-    );
+    final barConfig = ref.watch(quantumTerminalBarProvider);
+    final showMore = barConfig.showMoreButton;
+
+    final customKeys = barConfig.keys
+        .where((k) => k.isEnabled && (k.isCommand || k.isPlugin || k.id.startsWith('custom_')))
+        .map((k) => VirtualKey(
+              label: k.label,
+              value: k.value,
+              icon: k.icon,
+              isCommand: k.isCommand,
+              tooltip: k.tooltip,
+            ))
+        .toList();
+
+    final moreButton = showMore
+        ? _VirtualKeyButton(
+            fixedWidth: 50,
+            keyData: VirtualKey(
+              label: l10n?.keypadMore ?? 'More',
+              value: 'more_commands',
+              icon: LucideIcons.layout_grid,
+              tooltip: isRu ? 'Все команды, сочетания клавиш и спецсимволы' : 'All commands, shortcuts & symbols',
+            ),
+            isActive: false,
+            isHighlightedAction: false,
+            onTap: () => _showMoreCommandsSheet(context, isRu),
+          )
+        : _VirtualKeyButton(
+            fixedWidth: 38,
+            keyData: VirtualKey(
+              label: '',
+              value: 'configure_keys',
+              icon: LucideIcons.sliders_horizontal,
+              tooltip: isRu ? 'Настроить кнопки' : 'Configure buttons',
+            ),
+            isActive: false,
+            isHighlightedAction: false,
+            onTap: () => TerminalBarCustomizerSheet.show(context, isRu: isRu),
+          );
 
     if (widget.isCompact) {
       return SafeArea(
@@ -225,7 +253,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
             border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
           ),
           child: _buildKeyRow(
-            _getCompactKeys(isRu),
+            [..._getCompactKeys(isRu), ...customKeys],
             trailingFixed: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -338,7 +366,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildKeyRow(
-              _getRow1Keys(isRu),
+              [..._getRow1Keys(isRu), ...customKeys],
               trailingFixed: trailingRow1,
             ),
             const SizedBox(height: 3),
@@ -452,6 +480,46 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
               controller: scrollController,
               padding: const EdgeInsets.all(14),
               children: [
+                // Настройка кнопок и плагинов
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  child: Material(
+                    color: Colors.cyanAccent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        TerminalBarCustomizerSheet.show(context, isRu: isRu);
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        child: Row(
+                          children: [
+                            const Icon(LucideIcons.sliders_horizontal, size: 16, color: Colors.cyanAccent),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    isRu ? 'Настроить кнопки и плагины терминала' : 'Configure Terminal Keys & Plugins',
+                                    style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                                  ),
+                                  Text(
+                                    isRu ? 'Скрыть/добавить кнопки, убрать кнопку «Ещё», свои команды' : 'Toggle "More" button, add custom commands, manage plugin keys',
+                                    style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white60),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Icon(LucideIcons.chevron_right, size: 16, color: Colors.cyanAccent),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 _buildSectionHeader(isRu ? 'УПРАВЛЕНИЕ И ВЫДЕЛЕНИЕ' : 'NAVIGATION & SELECTION', LucideIcons.sliders_horizontal),
                 const SizedBox(height: 8),
                 Wrap(

@@ -32,6 +32,9 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_text_selection_modal.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_selection_overlay.dart';
+import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart';
+import 'package:quantum_ide/features/terminal/engine/quantum_terminal_engine.dart';
+import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
@@ -269,6 +272,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     WakelockPlus.enabled.then((val) {
       if (mounted) setState(() => _isWakelockEnabled = val);
     }).catchError((_) {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final pluginState = ref.read(quantumPluginServiceProvider);
+        ref.read(quantumTerminalBarProvider.notifier).syncPluginButtons(
+              pluginState.terminalCommands,
+              pluginState.customButtons,
+            );
+      }
+    });
   }
 
   Future<void> _toggleWakelock() async {
@@ -2165,9 +2177,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                     final buffer = session.xtermTerminal.buffer;
                                     if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
                                       final lineText = buffer.lines[lineIndex].toString();
-                                      final url = _findUrlAt(lineText, colIndex);
-                                      if (url != null) {
-                                        _showUrlDetected(url);
+                                      final link = QuantumLinkDetector.findLinkAt(lineText, colIndex);
+                                      if (link != null) {
+                                        QuantumLinkDetector.handleLinkTap(context, ref, link);
                                         return;
                                       }
                                     }
@@ -2229,6 +2241,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           getViewState: () => _getTerminalKey(keyId).currentState!,
           onSelectAll: () => _selectAllInTerminal(session),
           onPaste: () => _pasteToTerminal(session),
+        ),
+        QuantumTerminalQuickToolbar(
+          session: session,
+          onDismiss: () {
+            if (mounted) setState(() {});
+          },
         ),
       ],
     );
