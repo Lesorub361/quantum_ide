@@ -495,7 +495,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
 
   Future<void> importLocalModelFromStorage() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.any);
+      final result = await FilePicker.pickFiles(type: FileType.any);
       final path = result?.files.single.path;
       if (path == null || path.isEmpty) return;
       final dir = Directory(_modelsDir);
