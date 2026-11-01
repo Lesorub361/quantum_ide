@@ -347,6 +347,28 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       }
 
       if (!await file.exists()) return null;
+
+      // Self-healing inside IDE: if file is 0 bytes in both internal and external storage,
+      // automatically try restoring it from local Git history (git show HEAD:<relPath>)!
+      if (await file.length() == 0) {
+        final ws = ref.read(workspaceProvider).currentPath;
+        if (ws != null && path.startsWith(ws) && await Directory(p.join(ws, '.git')).exists()) {
+          try {
+            final rel = p.relative(path, from: ws);
+            final res = await Process.run(
+              'git',
+              ['show', 'HEAD:$rel'],
+              workingDirectory: ws,
+            ).timeout(const Duration(seconds: 3));
+            final out = res.stdout?.toString() ?? '';
+            if (res.exitCode == 0 && out.isNotEmpty) {
+              await file.writeAsString(out, flush: true);
+              await ref.read(projectServiceProvider.notifier).mirrorEntity(path);
+              return out;
+            }
+          } catch (_) {}
+        }
+      }
       
       final raf = file.openSync(mode: FileMode.read);
       final checkLimit = raf.lengthSync() < 8192 ? raf.lengthSync() : 8192;
@@ -562,7 +584,13 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     final content = file.controller.text;
 
     try {
-      await File(path).writeAsString(content);
+      final diskFile = File(path);
+      if (content.trim().isEmpty && await diskFile.exists() && await diskFile.length() > 0) {
+        // Never overwrite a non-empty file on disk with an empty controller buffer; reload instead!
+        await reloadFileFromDisk(path);
+        return;
+      }
+      await diskFile.writeAsString(content, flush: true);
       
       // Mirror to external storage
       await ref.read(projectServiceProvider.notifier).mirrorEntity(path);
@@ -815,13 +843,24 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     state = EditorState();
   }
 
+  final Map<String, Timer> _watcherDebouncers = {};
+
   void _startWorkspaceWatcher(String workspacePath) {
     _workspaceWatcherSubscription?.cancel();
     _externalSyncTimer?.cancel();
+    for (final t in _watcherDebouncers.values) {
+      t.cancel();
+    }
+    _watcherDebouncers.clear();
     try {
       _workspaceWatcherSubscription = Directory(workspacePath).watch().listen(
         (event) {
-          reloadFileFromDisk(event.path);
+          final eventPath = event.path;
+          _watcherDebouncers[eventPath]?.cancel();
+          _watcherDebouncers[eventPath] = Timer(const Duration(milliseconds: 350), () {
+            _watcherDebouncers.remove(eventPath);
+            reloadFileFromDisk(eventPath);
+          });
         },
         onError: (e) {
           debugPrint('Workspace watcher error: $e');
@@ -878,11 +917,23 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       final content = await _readTextFile(normalisedPath);
       if (content == null) return;
 
+      final index = state.openFiles.indexWhere((f) => p.normalize(f.path) == normalisedPath);
+      if (index != -1) {
+        final openFile = state.openFiles[index];
+        // Critical protection: never wipe a non-empty open editor tab if disk momentarily reads empty (O_TRUNC)
+        if (content.trim().isEmpty && openFile.controller.text.trim().isNotEmpty) {
+          try {
+            await File(normalisedPath).writeAsString(openFile.controller.text, flush: true);
+            await ref.read(projectServiceProvider.notifier).mirrorEntity(normalisedPath);
+          } catch (_) {}
+          return;
+        }
+      }
+
       // Always re-run FastSyntaxEngine so stale diagnostics on fixed files disappear immediately
       final fastDiags = FastSyntaxEngine.instance.analyze(normalisedPath, content);
       updateDiagnostics(normalisedPath, fastDiags);
 
-      final index = state.openFiles.indexWhere((f) => p.normalize(f.path) == normalisedPath);
       if (index == -1) return;
 
       final openFile = state.openFiles[index];

@@ -1,10 +1,10 @@
 {
-  "versionCode": 155,
-  "versionName": "1.2.138",
-  "notes": "QuantumIDE v1.2.138:\n• Отключено навязчивое всплывающее окно «Синхронизация проекта (pub get)» при открытии и сохранении файлов.\n• Исправлены ложные ошибки скобок на обычных текстовых файлах (.txt, .md) в анализаторе FastSyntaxEngine.\n• Новый автономный ИИ-агент Quantum Agent (в стиле Antigravity / Cline) + быстрая двусторонняя синхронизация с /storage/emulated/0/QuantumIDE.",
+  "versionCode": 156,
+  "versionName": "1.2.139",
+  "notes": "QuantumIDE v1.2.139:\n• Исправлена корневая причина обнуления открытых файлов (гонка O_TRUNC в Directory.watch() при записи на диск).\n• Встроено самовосстановление файлов из локального Git (git show HEAD) и защита saveFileByPath от записи 0 байт.\n• Отключено всплывающее окно «Синхронизация проекта (pub get)» и добавлен новый автономный ИИ-агент Quantum Agent.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.138/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.139/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 30638080
     }
