@@ -79,6 +79,37 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     VirtualKey(label: '.', value: '.'),
   ];
 
+  static String _keyToId(String label) {
+    switch (label) {
+      case 'ESC': return 'esc';
+      case 'TAB': return 'tab';
+      case 'CTRL': return 'ctrl';
+      case 'ALT': return 'alt';
+      case 'SHIFT': return 'shift';
+      case 'PASTE': return 'paste';
+      case 'C-C': return 'cc';
+      case 'DEL': return 'del';
+      case 'END': return 'end';
+      case '↑': return 'arr_u';
+      case '↓': return 'arr_d';
+      case '←': return 'arr_l';
+      case '→': return 'arr_r';
+      case '~': return 'sym_tilde';
+      case '/': return 'sym_slash';
+      case '-': return 'sym_dash';
+      case '_': return 'sym_underscore';
+      case '|': return 'sym_pipe';
+      case '\\': return 'sym_backslash';
+      case '"': return 'sym_quote';
+      case '\'': return 'sym_singlequote';
+      case ':': return 'sym_colon';
+      case ';': return 'sym_semicolon';
+      case '=': return 'sym_equal';
+      case '.': return 'sym_dot';
+      default: return label;
+    }
+  }
+
   void _showMoreCommandsSheet(BuildContext context, bool isRu) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
@@ -195,15 +226,22 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
         label: kbLabel,
         value: 'toggle_keyboard',
         icon: LucideIcons.keyboard,
-        tooltip: isRu ? 'Показать/скрыть клавиатуру' : 'Show/hide software keyboard',
+        tooltip: isRu ? 'Клавиатура (удержание — настройки кнопок)' : 'Keyboard (Hold to configure buttons)',
       ),
       isActive: isKeybActive,
       isHighlightedAction: true,
       onTap: () => widget.onKeyTap('toggle_keyboard'),
+      onLongPress: () => TerminalBarCustomizerSheet.show(context, isRu: isRu),
     );
 
     final barConfig = ref.watch(quantumTerminalBarProvider);
     final showMore = barConfig.showMoreButton;
+
+    bool isKeyEnabled(String id) {
+      final match = barConfig.keys.where((k) => k.id == id);
+      if (match.isEmpty) return true;
+      return match.first.isEnabled;
+    }
 
     final customKeys = barConfig.keys
         .where((k) => k.isEnabled && (k.isCommand || k.isPlugin || k.id.startsWith('custom_')))
@@ -216,33 +254,33 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
             ))
         .toList();
 
-    final moreButton = showMore
-        ? _VirtualKeyButton(
-            fixedWidth: 50,
-            keyData: VirtualKey(
-              label: l10n?.keypadMore ?? 'More',
-              value: 'more_commands',
-              icon: LucideIcons.layout_grid,
-              tooltip: isRu ? 'Все команды, сочетания клавиш и спецсимволы' : 'All commands, shortcuts & symbols',
-            ),
-            isActive: false,
-            isHighlightedAction: false,
-            onTap: () => _showMoreCommandsSheet(context, isRu),
-          )
-        : _VirtualKeyButton(
-            fixedWidth: 38,
-            keyData: VirtualKey(
-              label: '',
-              value: 'configure_keys',
-              icon: LucideIcons.sliders_horizontal,
-              tooltip: isRu ? 'Настроить кнопки' : 'Configure buttons',
-            ),
-            isActive: false,
-            isHighlightedAction: false,
-            onTap: () => TerminalBarCustomizerSheet.show(context, isRu: isRu),
-          );
+    final moreButton = _VirtualKeyButton(
+      fixedWidth: 50,
+      keyData: VirtualKey(
+        label: l10n?.keypadMore ?? 'More',
+        value: 'more_commands',
+        icon: LucideIcons.layout_grid,
+        tooltip: isRu ? 'Все команды, сочетания клавиш и спецсимволы' : 'All commands, shortcuts & symbols',
+      ),
+      isActive: false,
+      isHighlightedAction: false,
+      onTap: () => _showMoreCommandsSheet(context, isRu),
+    );
 
-    if (widget.isCompact) {
+    if (widget.isCompact || barConfig.isCompact) {
+      final compactKeys = _getCompactKeys(isRu).where((k) {
+        final id = _keyToId(k.label);
+        return isKeyEnabled(id);
+      }).toList();
+
+      final trailingCompact = <Widget>[
+        keybButton,
+        if (showMore) ...[
+          const SizedBox(width: 3),
+          moreButton,
+        ],
+      ];
+
       return SafeArea(
         top: false,
         bottom: false,
@@ -253,105 +291,123 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
             border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
           ),
           child: _buildKeyRow(
-            [..._getCompactKeys(isRu), ...customKeys],
+            [...compactKeys, ...customKeys],
             trailingFixed: Row(
               mainAxisSize: MainAxisSize.min,
-              children: [
-                keybButton,
-                const SizedBox(width: 3),
-                moreButton,
-              ],
+              children: trailingCompact,
             ),
           ),
         ),
       );
     }
 
-    // Classic standard Inverted-T Arrow Cluster + Delete & End + Actions
+    // Trailing Row 1 (DEL, ↑, END, Keyboard)
+    final trailingRow1List = <Widget>[];
+    if (isKeyEnabled('del')) {
+      trailingRow1List.add(_VirtualKeyButton(
+        fixedWidth: 34,
+        keyData: VirtualKey(
+          label: 'DEL',
+          value: '\x7f',
+          icon: LucideIcons.delete,
+          tooltip: isRu ? 'Удалить символ (Backspace / Delete)' : 'Delete character (Backspace / Delete)',
+        ),
+        isActive: false,
+        onTap: () => widget.onKeyTap('\x7f'),
+      ));
+    }
+    if (isKeyEnabled('arr_u')) {
+      if (trailingRow1List.isNotEmpty) trailingRow1List.add(const SizedBox(width: 3));
+      trailingRow1List.add(_VirtualKeyButton(
+        fixedWidth: 34,
+        keyData: VirtualKey(
+          label: '↑',
+          value: '\x1b[A',
+          icon: LucideIcons.arrow_up,
+          tooltip: isRu ? 'Вверх (история команд)' : 'Up (Command history)',
+        ),
+        isActive: false,
+        onTap: () => widget.onKeyTap('\x1b[A'),
+      ));
+    }
+    if (isKeyEnabled('end')) {
+      if (trailingRow1List.isNotEmpty) trailingRow1List.add(const SizedBox(width: 3));
+      trailingRow1List.add(_VirtualKeyButton(
+        fixedWidth: 34,
+        keyData: VirtualKey(
+          label: 'END',
+          value: '\x1b[F',
+          tooltip: isRu ? 'В конец строки (End)' : 'End of line (End)',
+        ),
+        isActive: false,
+        onTap: () => widget.onKeyTap('\x1b[F'),
+      ));
+    }
+    if (trailingRow1List.isNotEmpty) trailingRow1List.add(const SizedBox(width: 4));
+    trailingRow1List.add(keybButton);
+
     final trailingRow1 = Row(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        _VirtualKeyButton(
-          fixedWidth: 34,
-          keyData: VirtualKey(
-            label: 'DEL',
-            value: '\x7f',
-            icon: LucideIcons.delete,
-            tooltip: isRu ? 'Удалить символ (Backspace / Delete)' : 'Delete character (Backspace / Delete)',
-          ),
-          isActive: false,
-          onTap: () => widget.onKeyTap('\x7f'),
-        ),
-        const SizedBox(width: 3),
-        _VirtualKeyButton(
-          fixedWidth: 34,
-          keyData: VirtualKey(
-            label: '↑',
-            value: '\x1b[A',
-            icon: LucideIcons.arrow_up,
-            tooltip: isRu ? 'Вверх (история команд)' : 'Up (Command history)',
-          ),
-          isActive: false,
-          onTap: () => widget.onKeyTap('\x1b[A'),
-        ),
-        const SizedBox(width: 3),
-        _VirtualKeyButton(
-          fixedWidth: 34,
-          keyData: VirtualKey(
-            label: 'END',
-            value: '\x1b[F',
-            tooltip: isRu ? 'В конец строки (End)' : 'End of line (End)',
-          ),
-          isActive: false,
-          onTap: () => widget.onKeyTap('\x1b[F'),
-        ),
-        const SizedBox(width: 4),
-        keybButton,
-      ],
+      children: trailingRow1List,
     );
 
-    final trailingRow2 = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _VirtualKeyButton(
-          fixedWidth: 34,
-          keyData: VirtualKey(
-            label: '←',
-            value: '\x1b[D',
-            icon: LucideIcons.arrow_left,
-            tooltip: isRu ? 'Влево' : 'Left',
-          ),
-          isActive: false,
-          onTap: () => widget.onKeyTap('\x1b[D'),
+    // Trailing Row 2 (←, ↓, →, More)
+    final trailingRow2List = <Widget>[];
+    if (isKeyEnabled('arr_l')) {
+      trailingRow2List.add(_VirtualKeyButton(
+        fixedWidth: 34,
+        keyData: VirtualKey(
+          label: '←',
+          value: '\x1b[D',
+          icon: LucideIcons.arrow_left,
+          tooltip: isRu ? 'Влево' : 'Left',
         ),
-        const SizedBox(width: 3),
-        _VirtualKeyButton(
-          fixedWidth: 34,
-          keyData: VirtualKey(
-            label: '↓',
-            value: '\x1b[B',
-            icon: LucideIcons.arrow_down,
-            tooltip: isRu ? 'Вниз' : 'Down',
-          ),
-          isActive: false,
-          onTap: () => widget.onKeyTap('\x1b[B'),
+        isActive: false,
+        onTap: () => widget.onKeyTap('\x1b[D'),
+      ));
+    }
+    if (isKeyEnabled('arr_d')) {
+      if (trailingRow2List.isNotEmpty) trailingRow2List.add(const SizedBox(width: 3));
+      trailingRow2List.add(_VirtualKeyButton(
+        fixedWidth: 34,
+        keyData: VirtualKey(
+          label: '↓',
+          value: '\x1b[B',
+          icon: LucideIcons.arrow_down,
+          tooltip: isRu ? 'Вниз' : 'Down',
         ),
-        const SizedBox(width: 3),
-        _VirtualKeyButton(
-          fixedWidth: 34,
-          keyData: VirtualKey(
-            label: '→',
-            value: '\x1b[C',
-            icon: LucideIcons.arrow_right,
-            tooltip: isRu ? 'Вправо' : 'Right',
-          ),
-          isActive: false,
-          onTap: () => widget.onKeyTap('\x1b[C'),
+        isActive: false,
+        onTap: () => widget.onKeyTap('\x1b[B'),
+      ));
+    }
+    if (isKeyEnabled('arr_r')) {
+      if (trailingRow2List.isNotEmpty) trailingRow2List.add(const SizedBox(width: 3));
+      trailingRow2List.add(_VirtualKeyButton(
+        fixedWidth: 34,
+        keyData: VirtualKey(
+          label: '→',
+          value: '\x1b[C',
+          icon: LucideIcons.arrow_right,
+          tooltip: isRu ? 'Вправо' : 'Right',
         ),
-        const SizedBox(width: 4),
-        moreButton,
-      ],
-    );
+        isActive: false,
+        onTap: () => widget.onKeyTap('\x1b[C'),
+      ));
+    }
+    if (showMore) {
+      if (trailingRow2List.isNotEmpty) trailingRow2List.add(const SizedBox(width: 4));
+      trailingRow2List.add(moreButton);
+    }
+
+    final Widget? trailingRow2 = trailingRow2List.isEmpty
+        ? null
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: trailingRow2List,
+          );
+
+    final filteredRow1 = _getRow1Keys(isRu).where((k) => isKeyEnabled(_keyToId(k.label))).toList();
+    final filteredRow2 = _row2Keys.where((k) => isKeyEnabled(_keyToId(k.label))).toList();
 
     return SafeArea(
       top: false,
@@ -366,12 +422,12 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildKeyRow(
-              [..._getRow1Keys(isRu), ...customKeys],
+              [...filteredRow1, ...customKeys],
               trailingFixed: trailingRow1,
             ),
             const SizedBox(height: 3),
             _buildKeyRow(
-              _row2Keys,
+              filteredRow2,
               trailingFixed: trailingRow2,
             ),
           ],
@@ -634,6 +690,7 @@ class _VirtualKeyButton extends StatelessWidget {
   final bool isHighlightedAction;
   final double? fixedWidth;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const _VirtualKeyButton({
     required this.keyData,
@@ -641,6 +698,7 @@ class _VirtualKeyButton extends StatelessWidget {
     this.isHighlightedAction = false,
     this.fixedWidth,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -688,6 +746,12 @@ class _VirtualKeyButton extends StatelessWidget {
           HapticFeedback.lightImpact();
           onTap();
         },
+        onLongPress: onLongPress != null
+            ? () {
+                HapticFeedback.mediumImpact();
+                onLongPress!();
+              }
+            : null,
         borderRadius: BorderRadius.circular(5),
         child: Container(
           height: 24,

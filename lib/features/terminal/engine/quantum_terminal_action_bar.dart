@@ -113,29 +113,41 @@ class QuantumTerminalBarState {
 
 /// Riverpod notifier managing customizable terminal keys, plugin buttons and toggle states
 class QuantumTerminalBarNotifier extends StateNotifier<QuantumTerminalBarState> {
-  static const String _prefsKey = 'quantum_terminal_action_bar_v2';
+  static const String _prefsKey = 'quantum_terminal_action_bar_v3';
 
   QuantumTerminalBarNotifier() : super(const QuantumTerminalBarState(keys: [])) {
     _loadConfiguration();
   }
 
   static List<TerminalActionKey> getDefaultKeys() => [
+        // Ряд 1: Основные клавиши управления и модификаторы
         const TerminalActionKey(id: 'esc', label: 'ESC', value: '\x1b', tooltip: 'Escape'),
         const TerminalActionKey(id: 'tab', label: 'TAB', value: '\t', tooltip: 'Tab / Autocomplete'),
         const TerminalActionKey(id: 'ctrl', label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: 'Hold Ctrl'),
         const TerminalActionKey(id: 'alt', label: 'ALT', value: 'ALT', isToggle: true, tooltip: 'Hold Alt'),
+        const TerminalActionKey(id: 'shift', label: 'SHIFT', value: 'SHIFT', isToggle: true, tooltip: 'Hold Shift'),
         const TerminalActionKey(id: 'paste', label: 'PASTE', value: 'paste', iconName: 'clipboard_paste', tooltip: 'Paste from clipboard'),
         const TerminalActionKey(id: 'cc', label: 'C-C', value: 'ctrl+c', tooltip: 'Interrupt process (Ctrl+C)'),
-        const TerminalActionKey(id: 'clear', label: 'CLS', value: 'clear\n', isCommand: true, tooltip: 'Clear terminal'),
-        const TerminalActionKey(id: 'arr_l', label: '←', value: '\x1b[D', iconName: 'arrow_left', tooltip: 'Left'),
+        const TerminalActionKey(id: 'del', label: 'DEL', value: '\x7f', iconName: 'delete', tooltip: 'Delete'),
         const TerminalActionKey(id: 'arr_u', label: '↑', value: '\x1b[A', iconName: 'arrow_up', tooltip: 'Up (History)'),
-        const TerminalActionKey(id: 'arr_d', label: '↓', value: '\x1b[B', iconName: 'arrow_down', tooltip: 'Down'),
-        const TerminalActionKey(id: 'arr_r', label: '→', value: '\x1b[C', iconName: 'arrow_right', tooltip: 'Right'),
+        const TerminalActionKey(id: 'end', label: 'END', value: '\x1b[F', tooltip: 'End'),
+
+        // Ряд 2: Спецсимволы и стрелки навигации
         const TerminalActionKey(id: 'sym_tilde', label: '~', value: '~'),
         const TerminalActionKey(id: 'sym_slash', label: '/', value: '/'),
         const TerminalActionKey(id: 'sym_dash', label: '-', value: '-'),
+        const TerminalActionKey(id: 'sym_underscore', label: '_', value: '_'),
         const TerminalActionKey(id: 'sym_pipe', label: '|', value: '|'),
+        const TerminalActionKey(id: 'sym_backslash', label: '\\', value: '\\'),
         const TerminalActionKey(id: 'sym_quote', label: '"', value: '"'),
+        const TerminalActionKey(id: 'sym_singlequote', label: '\'', value: '\''),
+        const TerminalActionKey(id: 'sym_colon', label: ':', value: ':'),
+        const TerminalActionKey(id: 'sym_semicolon', label: ';', value: ';'),
+        const TerminalActionKey(id: 'sym_equal', label: '=', value: '='),
+        const TerminalActionKey(id: 'sym_dot', label: '.', value: '.'),
+        const TerminalActionKey(id: 'arr_l', label: '←', value: '\x1b[D', iconName: 'arrow_left', tooltip: 'Left'),
+        const TerminalActionKey(id: 'arr_d', label: '↓', value: '\x1b[B', iconName: 'arrow_down', tooltip: 'Down'),
+        const TerminalActionKey(id: 'arr_r', label: '→', value: '\x1b[C', iconName: 'arrow_right', tooltip: 'Right'),
       ];
 
   Future<void> _loadConfiguration() async {

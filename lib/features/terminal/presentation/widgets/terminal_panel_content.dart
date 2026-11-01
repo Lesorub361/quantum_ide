@@ -2242,12 +2242,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           onSelectAll: () => _selectAllInTerminal(session),
           onPaste: () => _pasteToTerminal(session),
         ),
-        QuantumTerminalQuickToolbar(
-          session: session,
-          onDismiss: () {
-            if (mounted) setState(() {});
-          },
-        ),
       ],
     );
   }

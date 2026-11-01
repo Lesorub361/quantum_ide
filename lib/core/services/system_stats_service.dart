@@ -403,6 +403,59 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       command: 'quantum_ide (PID: $pid)',
     ));
 
+    // Консолидация спящих / фоновых оболочек (idle shells с <=0.2% CPU)
+    final terminalSessions = list.where((p) => p.name == 'Terminal Session').toList();
+    if (terminalSessions.length > 2) {
+      final idleSessions = terminalSessions.where((p) => p.cpuPercent <= 0.2).toList();
+      if (idleSessions.length > 1) {
+        list.removeWhere((p) => p.name == 'Terminal Session' && p.cpuPercent <= 0.2);
+        final totalIdleRss = idleSessions.fold<int>(0, (sum, p) => sum + p.rssBytes);
+        list.add(SystemProcessItem(
+          pid: idleSessions.first.pid,
+          name: 'Фоновые оболочки (${idleSessions.length} шт.)',
+          description: 'Спящие процессы оболочек Bash/SH в режиме ожидания',
+          category: 'Терминал',
+          cpuPercent: 0.0,
+          rssBytes: totalIdleRss,
+          command: 'bash/sh idle subshells (${idleSessions.length} total)',
+        ));
+      }
+    }
+
+    // Группировка параллельных сборщиков AAPT2 при сборке APK
+    final aaptWorkers = list.where((p) => p.name == 'AAPT2 / Packaging Tool').toList();
+    if (aaptWorkers.length > 2) {
+      final totalAaptCpu = aaptWorkers.fold<double>(0.0, (sum, p) => sum + p.cpuPercent);
+      final totalAaptRss = aaptWorkers.fold<int>(0, (sum, p) => sum + p.rssBytes);
+      list.removeWhere((p) => p.name == 'AAPT2 / Packaging Tool');
+      list.add(SystemProcessItem(
+        pid: aaptWorkers.first.pid,
+        name: 'AAPT2 Workers (${aaptWorkers.length} шт.)',
+        description: 'Параллельные сборщики ресурсов Android AAPT2',
+        category: 'Упаковка',
+        cpuPercent: double.parse(totalAaptCpu.toStringAsFixed(1)),
+        rssBytes: totalAaptRss,
+        command: 'aapt2 parallel workers (${aaptWorkers.length})',
+      ));
+    }
+
+    // Группировка подпроцессов гостевой среды PRoot
+    final prootProcesses = list.where((p) => p.name == 'PRoot Container').toList();
+    if (prootProcesses.length > 2) {
+      final totalProotCpu = prootProcesses.fold<double>(0.0, (sum, p) => sum + p.cpuPercent);
+      final totalProotRss = prootProcesses.fold<int>(0, (sum, p) => sum + p.rssBytes);
+      list.removeWhere((p) => p.name == 'PRoot Container');
+      list.add(SystemProcessItem(
+        pid: prootProcesses.first.pid,
+        name: 'PRoot Linux Sandbox (${prootProcesses.length} шт.)',
+        description: 'Изолированные потоки гостевой среды Ubuntu / Linux rootfs',
+        category: 'Песочница',
+        cpuPercent: double.parse(totalProotCpu.toStringAsFixed(1)),
+        rssBytes: totalProotRss,
+        command: 'proot sub-processes (${prootProcesses.length})',
+      ));
+    }
+
     // Сортировка: сначала самые прожорливые по CPU, затем по памяти
     list.sort((a, b) {
       final cpuCmp = b.cpuPercent.compareTo(a.cpuPercent);

@@ -256,12 +256,33 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
                   }
                 },
               ),
+              _divider(),
+              _buildToolbarBtn(
+                icon: LucideIcons.clipboard_paste,
+                label: 'Вставить',
+                color: Colors.greenAccent,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.onPaste?.call();
+                  widget.session.xtermViewController.clearSelection();
+                },
+              ),
+              _divider(),
+              _buildToolbarBtn(
+                icon: LucideIcons.check_check,
+                label: 'Всё',
+                color: Colors.white70,
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  widget.onSelectAll?.call();
+                },
+              ),
               if (isUrl) ...[
                 _divider(),
                 _buildToolbarBtn(
                   icon: LucideIcons.external_link,
                   label: 'Открыть',
-                  color: Colors.greenAccent,
+                  color: Colors.amberAccent,
                   onTap: () async {
                     final uri = Uri.tryParse(selectedText.trim());
                     if (uri != null) {
@@ -270,7 +291,6 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
                   },
                 ),
               ],
-
               _divider(),
               _buildToolbarBtn(
                 icon: LucideIcons.share_2,
