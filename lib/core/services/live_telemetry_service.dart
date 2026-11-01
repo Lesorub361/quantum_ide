@@ -31,6 +31,8 @@ class LiveTelemetryService {
   String currentBuildStatus = 'Idle';
   String currentBuildCommand = '';
   DateTime? buildStartTime;
+  Future<List<String>> Function()? onSyncRequested;
+  Future<void> Function(String path)? onFileUpdated;
 
   Future<void> init() async {
     try {
@@ -75,11 +77,68 @@ class LiveTelemetryService {
             request.response
               ..headers.contentType = ContentType.text
               ..write(_recentLogs.join('\n'));
+          } else if (uri == '/sync') {
+            final updated = await (onSyncRequested?.call() ?? Future.value(<String>[]));
+            request.response
+              ..headers.contentType = ContentType.json
+              ..write(jsonEncode({'status': 'ok', 'updatedFiles': updated}));
+          } else if (uri == '/read') {
+            final reqPath = request.uri.queryParameters['path'];
+            if (reqPath == null || reqPath.isEmpty) {
+              request.response.statusCode = HttpStatus.badRequest;
+              request.response.write('Missing path query parameter');
+            } else {
+              final ws = currentWorkspace;
+              final fullPath = p.isAbsolute(reqPath)
+                  ? reqPath
+                  : (ws != null ? p.join(ws, reqPath) : reqPath);
+              final f = File(fullPath);
+              if (await f.exists()) {
+                request.response
+                  ..headers.contentType = ContentType.text
+                  ..write(await f.readAsString());
+              } else {
+                request.response.statusCode = HttpStatus.notFound;
+                request.response.write('File not found: $fullPath');
+              }
+            }
+          } else if (uri == '/write' && request.method == 'POST') {
+            final reqPath = request.uri.queryParameters['path'];
+            if (reqPath == null || reqPath.isEmpty) {
+              request.response.statusCode = HttpStatus.badRequest;
+              request.response.write('Missing path query parameter');
+            } else {
+              final body = await utf8.decoder.bind(request).join();
+              final ws = currentWorkspace;
+              final fullPath = p.isAbsolute(reqPath)
+                  ? reqPath
+                  : (ws != null ? p.join(ws, reqPath) : reqPath);
+              final f = File(fullPath);
+              await f.parent.create(recursive: true);
+              await f.writeAsString(body, flush: true);
+
+              // Also mirror to /storage/emulated/0/QuantumIDE/<project> if inside internal workspace
+              if (ws != null && fullPath.startsWith(ws)) {
+                final rel = p.relative(fullPath, from: ws);
+                final extFile = File(p.join(_sharedDir, p.basename(ws), rel));
+                try {
+                  await extFile.parent.create(recursive: true);
+                  await extFile.writeAsString(body, flush: true);
+                } catch (_) {}
+              }
+
+              await onFileUpdated?.call(fullPath);
+              logEvent('Remote file updated: $fullPath (${body.length} bytes)');
+              request.response
+                ..headers.contentType = ContentType.json
+                ..write(jsonEncode({'status': 'ok', 'path': fullPath, 'bytes': body.length}));
+            }
           } else {
             request.response.statusCode = HttpStatus.notFound;
           }
-        } catch (_) {
+        } catch (e) {
           request.response.statusCode = HttpStatus.internalServerError;
+          request.response.write('Error: $e');
         } finally {
           await request.response.close();
         }

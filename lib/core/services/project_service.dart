@@ -37,7 +37,7 @@ class ProjectService extends StateNotifier<List<Project>> {
 
   Future<void> _initSyncIfEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    final sdSyncEnabled = prefs.getBool(_sdSyncPrefKey) ?? false;
+    final sdSyncEnabled = prefs.getBool(_sdSyncPrefKey) ?? true;
     if (sdSyncEnabled && Platform.isAndroid) {
       _startFileWatcher();
       _startPeriodicSync();
@@ -148,12 +148,24 @@ class ProjectService extends StateNotifier<List<Project>> {
       return;
     }
 
+    bool shouldSkipDir(String name) =>
+        name == 'external' ||
+        name == '.git' ||
+        name == '.dart_tool' ||
+        name == '.idea' ||
+        name == '.gradle' ||
+        name == 'build' ||
+        name == 'node_modules' ||
+        name == 'local_plugins' ||
+        name == '.quantum' ||
+        name == '.cxx' ||
+        name == '.widget_preview';
+
     final Set<String> sourceNames = {};
     try {
       await for (final entity in source.list(recursive: false)) {
         final name = p.basename(entity.path);
-        if (name == 'external') continue;
-        if (name == '.git' || name == '.dart_tool' || name == '.idea' || name == '.gradle' || name == 'build' || name == 'node_modules') continue;
+        if (shouldSkipDir(name)) continue;
         sourceNames.add(name);
 
         final destPath = p.join(destination.path, name);
@@ -161,32 +173,35 @@ class ProjectService extends StateNotifier<List<Project>> {
           if (entity is Directory) {
             await _syncDirectory(entity, Directory(destPath));
           } else if (entity is File) {
-            // Skip symlinks as they cause FileSystemException when copied
             final isLink = await FileSystemEntity.isLink(entity.path);
             if (isLink) continue;
 
             final destFile = File(destPath);
-            bool shouldCopy = false;
             try {
+              final srcStat = await entity.stat();
               if (!await destFile.exists()) {
-                shouldCopy = true;
+                if (srcStat.size > 0) {
+                  await entity.copy(destPath);
+                }
               } else {
-                final sourceTime = await entity.lastModified();
-                final destTime = await destFile.lastModified();
-                if (sourceTime.isAfter(destTime)) {
-                  shouldCopy = true;
+                final destStat = await destFile.stat();
+                if (srcStat.size == 0 && destStat.size > 0) {
+                  // Internal file became 0 bytes — restore it from external mirror!
+                  await destFile.copy(entity.path);
+                } else if (destStat.size > 0 &&
+                    destStat.modified.isAfter(srcStat.modified.add(const Duration(seconds: 1)))) {
+                  // External file was edited more recently — pull into internal!
+                  await destFile.copy(entity.path);
+                  try {
+                    await entity.setLastModified(destStat.modified);
+                  } catch (_) {}
+                } else if (srcStat.size > 0 &&
+                    srcStat.modified.isAfter(destStat.modified.add(const Duration(seconds: 1)))) {
+                  await entity.copy(destPath);
                 }
               }
             } catch (e) {
-              shouldCopy = true; // Fallback to copy if checking fails
-            }
-
-            if (shouldCopy) {
-              try {
-                await entity.copy(destPath);
-              } catch (e) {
-                debugPrint('Sync: Failed to copy file ${entity.path} to $destPath: $e');
-              }
+              debugPrint('Sync: Failed to sync file ${entity.path} <-> $destPath: $e');
             }
           }
         } catch (e) {
@@ -197,35 +212,24 @@ class ProjectService extends StateNotifier<List<Project>> {
       debugPrint('Sync: Error listing directory ${source.path}: $e');
     }
 
-    // Clean up deleted files/folders in destination
-    try {
-      await for (final destEntity in destination.list(recursive: false)) {
-        final name = p.basename(destEntity.path);
-        if (name.startsWith('.')) continue;
-        if (name == 'build' || name == 'node_modules' || name == '.git' || name == '.dart_tool' || name == '.idea' || name == '.gradle') continue;
-
-        if (destination.path == _externalPath) {
-          // At the root of QuantumIDE, only delete directories representing deleted projects
-          if (destEntity is Directory && !sourceNames.contains(name)) {
-            try {
-              await destEntity.delete(recursive: true);
-            } catch (e) {
-              debugPrint('Sync: Failed to delete remote project folder $name: $e');
-            }
-          }
-        } else {
-          // Inside a project folder, perform full mirror cleanup
+    // Pull new files created in external mirror into internal project
+    if (destination.path != _externalPath) {
+      try {
+        await for (final destEntity in destination.list(recursive: false)) {
+          final name = p.basename(destEntity.path);
+          if (shouldSkipDir(name)) continue;
           if (!sourceNames.contains(name)) {
+            final srcTarget = p.join(source.path, name);
             try {
-              await destEntity.delete(recursive: true);
-            } catch (e) {
-              debugPrint('Sync: Failed to delete remote entity $name: $e');
-            }
+              if (destEntity is File && await destEntity.length() > 0) {
+                await destEntity.copy(srcTarget);
+              } else if (destEntity is Directory) {
+                await _copyDirectory(destEntity, Directory(srcTarget));
+              }
+            } catch (_) {}
           }
         }
-      }
-    } catch (e) {
-      debugPrint('Sync: Error cleaning up destination ${destination.path}: $e');
+      } catch (_) {}
     }
   }
 
@@ -559,6 +563,12 @@ class ProjectService extends StateNotifier<List<Project>> {
       if (type == FileSystemEntityType.file) {
         final entity = File(internalPath);
         final extFile = File(externalPath);
+        final intLen = await entity.length();
+        if (intLen == 0 && await extFile.exists() && await extFile.length() > 0) {
+          // Never overwrite a non-empty external file with 0 bytes; restore internal instead!
+          await extFile.copy(internalPath);
+          return;
+        }
         if (!await extFile.parent.exists()) await extFile.parent.create(recursive: true);
         await entity.copy(externalPath);
       } else if (type == FileSystemEntityType.directory) {
@@ -572,6 +582,11 @@ class ProjectService extends StateNotifier<List<Project>> {
             final itemRelative = p.relative(item.path, from: internalPath);
             final itemExternal = p.join(externalPath, itemRelative);
             final itemExtFile = File(itemExternal);
+            final intLen = await item.length();
+            if (intLen == 0 && await itemExtFile.exists() && await itemExtFile.length() > 0) {
+              await itemExtFile.copy(item.path);
+              continue;
+            }
             if (!await itemExtFile.parent.exists()) await itemExtFile.parent.create(recursive: true);
             await item.copy(itemExternal);
           }
@@ -580,6 +595,84 @@ class ProjectService extends StateNotifier<List<Project>> {
     } catch (e) {
       debugPrint('Mirroring failed: $e');
     }
+  }
+
+  /// Fast bidirectional sync for the active workspace:
+  /// Pulls any newer or non-empty files from /storage/emulated/0/QuantumIDE/<project>
+  /// into the internal workspace and returns the list of updated internal file paths.
+  Future<List<String>> syncExternalIntoWorkspace(String internalWorkspacePath) async {
+    if (!Platform.isAndroid) return const [];
+    final runtime = _ref.read(runtimeServiceProvider);
+    final projectsPath = p.join(runtime.appDirectory, 'projects');
+    if (!internalWorkspacePath.startsWith(projectsPath)) return const [];
+
+    final relativeProject = p.relative(internalWorkspacePath, from: projectsPath);
+    final externalProjectPath = p.join('/storage/emulated/0/QuantumIDE', relativeProject);
+    final extDir = Directory(externalProjectPath);
+    if (!await extDir.exists()) return const [];
+
+    final List<String> updatedPaths = [];
+
+    Future<void> scanDir(Directory currentExtDir) async {
+      try {
+        await for (final entity in currentExtDir.list(recursive: false, followLinks: false)) {
+          final name = p.basename(entity.path);
+          if (name == '.git' ||
+              name == 'build' ||
+              name == '.dart_tool' ||
+              name == '.gradle' ||
+              name == '.idea' ||
+              name == 'node_modules' ||
+              name == 'local_plugins' ||
+              name == '.cxx' ||
+              name == '.quantum' ||
+              name == '.widget_preview') {
+            continue;
+          }
+          if (entity is Directory) {
+            await scanDir(entity);
+          } else if (entity is File) {
+            final lower = name.toLowerCase();
+            if (lower.endsWith('.apk') || lower.endsWith('.zip') || lower.endsWith('.pdf') || lower.endsWith('.doc')) {
+              continue;
+            }
+            try {
+              final extStat = await entity.stat();
+              if (extStat.size <= 0) continue;
+
+              final rel = p.relative(entity.path, from: externalProjectPath);
+              final intFile = File(p.join(internalWorkspacePath, rel));
+
+              bool shouldPull = false;
+              if (!await intFile.exists()) {
+                shouldPull = true;
+              } else {
+                final intStat = await intFile.stat();
+                if (intStat.size == 0 && extStat.size > 0) {
+                  shouldPull = true;
+                } else if (extStat.modified.isAfter(intStat.modified.add(const Duration(seconds: 1)))) {
+                  shouldPull = true;
+                }
+              }
+
+              if (shouldPull) {
+                if (!await intFile.parent.exists()) {
+                  await intFile.parent.create(recursive: true);
+                }
+                await entity.copy(intFile.path);
+                try {
+                  await intFile.setLastModified(extStat.modified);
+                } catch (_) {}
+                updatedPaths.add(intFile.path);
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+
+    await scanDir(extDir);
+    return updatedPaths;
   }
 
   Future<void> mirrorDelete(String internalPath) async {

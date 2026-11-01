@@ -50,7 +50,7 @@ class SettingsState {
     this.glassmorphismOpacity = 0.15,
     this.glassmorphismBlur = 0.0,
     this.hotkeysJson = '{}',
-    this.sdCardSync = false,
+    this.sdCardSync = true,
     this.formatOnSave = true,
     this.isInitialized = false,
   });
@@ -166,7 +166,7 @@ class SettingsService extends StateNotifier<SettingsState> {
       glassmorphismOpacity: prefs.getDouble(_keyGlassmorphismOpacity) ?? 0.15,
       glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? 0.0,
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
-      sdCardSync: prefs.getBool(_keySdCardSync) ?? false,
+      sdCardSync: prefs.getBool(_keySdCardSync) ?? true,
       formatOnSave: prefs.getBool(_keyFormatOnSave) ?? true,
       isInitialized: true,
     );

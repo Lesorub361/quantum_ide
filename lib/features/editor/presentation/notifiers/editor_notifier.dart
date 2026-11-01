@@ -27,6 +27,7 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/collaboration_service.dart';
 import 'package:quantum_ide/core/services/fast_syntax_engine.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
+import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 
 class EditorFile {
   final String path;
@@ -133,6 +134,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   Pty? _agentPty;
   StreamSubscription<Uint8List>? _agentPtySubscription;
   StreamSubscription<FileSystemEvent>? _workspaceWatcherSubscription;
+  Timer? _externalSyncTimer;
+  bool _isReloadingFromDisk = false;
 
   EditorNotifier(this.ref) : super(EditorState()) {
     _init();
@@ -140,16 +143,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     
     // Listen for workspace changes
     ref.listen<WorkspaceState>(workspaceProvider, (previous, next) {
-      final prevPath = previous?.currentPath;
-      final nextPath = next.currentPath;
-      if (prevPath != nextPath) {
-        _workspaceWatcherSubscription?.cancel();
-        _workspaceWatcherSubscription = null;
-        if (nextPath != null) {
-          _startWorkspaceWatcher(nextPath);
-        }
-      }
-
       if (next.currentPath == null) {
         clearWorkspace();
       } else if (previous?.currentPath != next.currentPath) {
@@ -179,11 +172,14 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       updateDiagnostics(fileDiagnostics.path, fileDiagnostics.diagnostics);
     });
 
+    // Connect LiveTelemetryService instant sync & reload callbacks
+    LiveTelemetryService.instance.onSyncRequested = () => syncExternalNow(reloadAllTabs: true);
+    LiveTelemetryService.instance.onFileUpdated = reloadFileFromDisk;
+
     // Defer heavy workspace loading to avoid blocking initial UI render
     Future.microtask(() {
       final activeWorkspace = ref.read(workspaceProvider).currentPath;
       if (activeWorkspace != null) {
-        _startWorkspaceWatcher(activeWorkspace);
         loadWorkspaceFiles(activeWorkspace);
       }
     });
@@ -322,6 +318,34 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   Future<String?> _readTextFile(String path) async {
     try {
       final file = File(path);
+      if (Platform.isAndroid) {
+        try {
+          final runtime = ref.read(runtimeServiceProvider);
+          final extPath = PathMapper.mapToExternal(path, runtime.appDirectory);
+          if (extPath != path) {
+            final extFile = File(extPath);
+            if (await extFile.exists()) {
+              final extStat = await extFile.stat();
+              if (extStat.size > 0) {
+                if (!await file.exists()) {
+                  await file.parent.create(recursive: true);
+                  await extFile.copy(path);
+                } else {
+                  final intStat = await file.stat();
+                  if (intStat.size == 0 ||
+                      extStat.modified.isAfter(intStat.modified.add(const Duration(seconds: 1)))) {
+                    await extFile.copy(path);
+                    try {
+                      await file.setLastModified(extStat.modified);
+                    } catch (_) {}
+                  }
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
       if (!await file.exists()) return null;
       
       final raf = file.openSync(mode: FileMode.read);
@@ -351,6 +375,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   }
 
   void _handleContentChange(String path, {bool triggerAutoSave = true}) {
+    if (_isReloadingFromDisk) return;
     final index = state.openFiles.indexWhere((f) => f.path == path);
     if (index == -1) return;
 
@@ -650,19 +675,23 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
   Future<void> loadWorkspaceFiles(String workspacePath) async {
     try {
+      // Pull any external fixes or 0-byte repairs from /storage/emulated/0/QuantumIDE/<project> first
+      await ref.read(projectServiceProvider.notifier).syncExternalIntoWorkspace(workspacePath);
+
       final prefs = await SharedPreferences.getInstance();
       final keyPaths = 'open_files_$workspacePath';
       final keyActive = 'active_tab_$workspacePath';
       final paths = prefs.getStringList(keyPaths) ?? [];
       final activeIndex = prefs.getInt(keyActive) ?? 0;
       
+      clearWorkspace();
+      _startWorkspaceWatcher(workspacePath);
+
       final validPaths = <String>[];
       for (final p in paths) {
         if (await File(p).exists()) validPaths.add(p);
       }
       if (validPaths.isEmpty) return;
-      
-      clearWorkspace();
       
       // Load active file first for better perceived performance
       int targetIndex = activeIndex < validPaths.length ? activeIndex : 0;
@@ -775,8 +804,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         debugPrint('LSP error opening file: $e');
       });
 
-
-      
       return editorFile;
     } catch (e) {
       debugPrint('Error loading file $path: $e');
@@ -787,6 +814,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   void clearWorkspace() {
     _workspaceWatcherSubscription?.cancel();
     _workspaceWatcherSubscription = null;
+    _externalSyncTimer?.cancel();
+    _externalSyncTimer = null;
     stopAgent();
     for (final timer in _autoSaveTimers.values) {
       timer.cancel();
@@ -797,10 +826,11 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
   void _startWorkspaceWatcher(String workspacePath) {
     _workspaceWatcherSubscription?.cancel();
+    _externalSyncTimer?.cancel();
     try {
       _workspaceWatcherSubscription = Directory(workspacePath).watch().listen(
         (event) {
-          _handleExternalFileChange(event.path);
+          reloadFileFromDisk(event.path);
         },
         onError: (e) {
           debugPrint('Workspace watcher error: $e');
@@ -809,31 +839,78 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     } catch (e) {
       debugPrint('Failed to start workspace watcher: $e');
     }
+
+    // Fast 3-second bidirectional sync with /storage/emulated/0/QuantumIDE/<project>
+    _externalSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      syncExternalNow();
+    });
   }
 
-  DateTime _lastExternalChange = DateTime(0);
-  
-  void _handleExternalFileChange(String path) async {
-    final now = DateTime.now();
-    if (now.difference(_lastExternalChange).inMilliseconds < 500) return;
-    _lastExternalChange = now;
+  bool _isSyncingExternal = false;
 
+  Future<List<String>> syncExternalNow({bool reloadAllTabs = false}) async {
+    if (_isSyncingExternal) return const [];
+    final workspacePath = ref.read(workspaceProvider).currentPath;
+    if (workspacePath == null) return const [];
+
+    _isSyncingExternal = true;
+    try {
+      final updatedPaths = await ref
+          .read(projectServiceProvider.notifier)
+          .syncExternalIntoWorkspace(workspacePath);
+
+      for (final updatedPath in updatedPaths) {
+        await reloadFileFromDisk(updatedPath);
+      }
+
+      if (reloadAllTabs) {
+        for (final openFile in List<EditorFile>.from(state.openFiles)) {
+          await reloadFileFromDisk(openFile.path);
+        }
+        // Re-validate any files with cached diagnostics so fixed files clear their errors
+        for (final diagPath in List<String>.from(state.allDiagnostics.keys)) {
+          await reloadFileFromDisk(diagPath);
+        }
+      }
+
+      return updatedPaths;
+    } catch (_) {
+      return const [];
+    } finally {
+      _isSyncingExternal = false;
+    }
+  }
+
+  Future<void> reloadFileFromDisk(String path) async {
     final normalisedPath = p.normalize(path);
-    final index = state.openFiles.indexWhere((f) => p.normalize(f.path) == normalisedPath);
-    if (index == -1) return;
-
     try {
       final content = await _readTextFile(normalisedPath);
       if (content == null) return;
 
+      // Always re-run FastSyntaxEngine so stale diagnostics on fixed files disappear immediately
+      final fastDiags = FastSyntaxEngine.instance.analyze(normalisedPath, content);
+      updateDiagnostics(normalisedPath, fastDiags);
+
+      final index = state.openFiles.indexWhere((f) => p.normalize(f.path) == normalisedPath);
+      if (index == -1) return;
+
       final openFile = state.openFiles[index];
-      
       if (openFile.controller.text != content) {
-        openFile.controller.text = content;
-        
+        _autoSaveTimers[normalisedPath]?.cancel();
+        _autoSaveTimers.remove(normalisedPath);
+
+        _isReloadingFromDisk = true;
+        try {
+          openFile.controller.text = content;
+          _lastCodeLines[normalisedPath] = openFile.controller.codeLines;
+        } finally {
+          _isReloadingFromDisk = false;
+        }
+
         final updatedFile = openFile.copyWith(
           originalContent: content,
           isModified: false,
+          diagnostics: fastDiags,
         );
         final newOpenFiles = List<EditorFile>.from(state.openFiles);
         newOpenFiles[index] = updatedFile;

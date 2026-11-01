@@ -19,6 +19,7 @@ import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
+import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 // Standalone Sidebar Run Panel
@@ -92,8 +93,9 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
     return ProjectType.other;
   }
 
-  void _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) {
+  Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
     ref.read(projectSyncProvider.notifier).cancelSync();
+    await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
     final runtime = ref.read(runtimeServiceProvider);
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
@@ -617,8 +619,9 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   int _buildSubTab = 0;
   int _buildViewerMode = 0; // 0 = Pipeline (GitHub Actions), 1 = Raw Terminal
 
-  void _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) {
+  Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
     ref.read(projectSyncProvider.notifier).cancelSync();
+    await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
     final runtime = ref.read(runtimeServiceProvider);
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';

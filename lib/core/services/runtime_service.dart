@@ -797,6 +797,21 @@ gradlew() {
 
 # Flutter build wrapper to auto-ensure ARM64 target, disable daemon, and use native aapt2 on mobile Android PRoot
 flutter() {
+    local proj_name="$(basename "$PWD")"
+    for ext_root in "/sdcard/QuantumIDE/$proj_name" "/storage/emulated/0/QuantumIDE/$proj_name" "/root/projects/external/$proj_name"; do
+        if [ -d "$ext_root" ] && [ "$PWD" != "$ext_root" ]; then
+            if [ -d "$ext_root/lib" ]; then
+                cp -ru "$ext_root/lib/." "./lib/" 2>/dev/null || true
+            fi
+            for rf in README.md devtools_options.yaml .gitignore pubspec.yaml analysis_options.yaml; do
+                if [ -s "$ext_root/$rf" ] && ( [ ! -s "./$rf" ] || [ "$ext_root/$rf" -nt "./$rf" ] ); then
+                    cp -f "$ext_root/$rf" "./$rf" 2>/dev/null || true
+                fi
+            done
+            break
+        fi
+    done
+
     if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
         # Free background memory and daemons before heavy compilation
         pkill -9 -f "dart.*language-server" 2>/dev/null || true
