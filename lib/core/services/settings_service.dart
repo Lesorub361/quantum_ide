@@ -52,6 +52,7 @@ class SettingsState {
     this.glassmorphismOpacity = 0.15,
     this.glassmorphismBlur = 0.0,
     this.hotkeysJson = '{}',
+    this.sdCardSync = true,
     this.formatOnSave = true,
     this.deepseekApiKey = '',
     this.openrouterApiKey = '',

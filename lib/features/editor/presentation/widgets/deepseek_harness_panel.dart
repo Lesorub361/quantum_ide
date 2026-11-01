@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:quantum_ide/core/services/deepseek_harness_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
-import 'package:quantum_ide/shared/providers/workspace_provider.dart';
+import 'package:quantum_ide/core/services/workspace_service.dart';
 
 class DeepSeekHarnessPanel extends ConsumerStatefulWidget {
   const DeepSeekHarnessPanel({super.key});
@@ -194,7 +194,6 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
       initialUrlRequest: URLRequest(url: WebUri(dsh.serverUrl)),
       initialSettings: InAppWebViewSettings(
         transparentBackground: false,
-        backgroundColor: const Color(0xFF0C0E15),
         useShouldOverrideUrlLoading: true,
         mediaPlaybackRequiresUserGesture: false,
         allowsInlineMediaPlayback: true,
@@ -349,7 +348,7 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
                               height: 12,
                               child: CircularProgressIndicator(color: Colors.purpleAccent, strokeWidth: 1.5),
                             )
-                          : const Icon(LucideIcons.download_cloud, size: 13),
+                          : const Icon(LucideIcons.download, size: 13),
                       label: Text(
                         dsh.isUpdating ? 'Обновление...' : 'Обновить dsh',
                         style: const TextStyle(fontSize: 11.5),
