@@ -31,7 +31,6 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_pan
 import 'package:quantum_ide/features/editor/presentation/widgets/live_share_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/extensions_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/app_logs_panel.dart';
-import 'package:quantum_ide/features/agent/presentation/widgets/quantum_agent_panel.dart';
 
 
 class FileDrawer extends ConsumerStatefulWidget {
@@ -230,15 +229,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
-            if (index == 12) {
-              // Чат-бот открывается справа с возможностью растягивания ширины!
-              ref.read(rightAgentPanelOpenProvider.notifier).state = true;
-              final scaffold = Scaffold.maybeOf(context);
-              if (scaffold != null && scaffold.isDrawerOpen) {
-                scaffold.closeDrawer();
-              }
-              return;
-            }
             ref.read(drawerTabProvider.notifier).state = index;
           },
           child: SizedBox(
@@ -365,8 +355,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                   const SizedBox(height: 8),
                   if (!disabledTabs.contains('explorer'))
                     _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0, isMobile: isMobile),
-                  if (!disabledTabs.contains('agent'))
-                    _buildActivityIcon(ref, 12, LucideIcons.sparkles, 'Quantum Agent (ИИ)', selectedTab == 12, isMobile: isMobile),
                   if (!disabledTabs.contains('search'))
                     _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1, isMobile: isMobile),
                   if (!disabledTabs.contains('structure'))
@@ -459,9 +447,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         break;
       case 11:
         activePanel = const ExtensionsPanel();
-        break;
-      case 12:
-        activePanel = const QuantumAgentPanel();
         break;
       case 13:
         activePanel = const AppLogsPanel();

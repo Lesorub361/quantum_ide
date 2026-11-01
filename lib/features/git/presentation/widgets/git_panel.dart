@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/git_status.dart';
-import 'package:quantum_ide/features/agent/services/quantum_agent_service.dart';
 import 'package:quantum_ide/core/services/github_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
@@ -117,43 +116,6 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     setState(() => _isGeneratingCommitMessage = true);
 
     try {
-      final notifier = ref.read(gitProvider.notifier);
-      final diffSnippets = <String>[];
-      for (final file in allChanged.take(5)) {
-        final d = await notifier.getFileDiff(
-          file,
-          staged: status.stagedFiles.contains(file),
-        );
-        if (d.trim().isNotEmpty) {
-          final truncated = d.length > 700 ? '${d.substring(0, 700)}\n...' : d;
-          diffSnippets.add('--- $file ---\n$truncated');
-        }
-      }
-
-      try {
-        final agent = ref.read(quantumAgentProvider.notifier);
-        final prompt =
-            'Сгенерируй краткое профессиональное сообщение коммита в формате Conventional Commits (например: "feat: ...", "fix: ...", "refactor: ...") на русском или английском языке (1 строка, без кавычек и без markdown). '
-            'Список файлов: ${allChanged.take(12).join(', ')}.\n'
-            '${diffSnippets.isNotEmpty ? "Фрагменты diff:\n${diffSnippets.join('\n')}" : ""}';
-        final response = await agent
-            .quickComplete(prompt)
-            .timeout(const Duration(seconds: 10));
-        final clean = response
-            .trim()
-            .replaceAll('```', '')
-            .replaceAll('"', '')
-            .split('\n')
-            .first
-            .trim();
-        if (clean.isNotEmpty && !clean.startsWith('Error')) {
-          _commitController.text = clean;
-          setState(() => _isGeneratingCommitMessage = false);
-          return;
-        }
-      } catch (_) {}
-
-      // Fallback heuristic conventional commit generator
       final names = allChanged.map((f) => p.basename(f)).take(3).join(', ');
       final suffix = allChanged.length > 3 ? ' (+${allChanged.length - 3})' : '';
       String prefix = 'chore';

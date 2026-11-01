@@ -42,8 +42,6 @@ import 'package:quantum_ide/core/services/app_update_service.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/project_sync_panel.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
-import 'package:quantum_ide/features/agent/presentation/widgets/quantum_agent_panel.dart';
-import 'package:quantum_ide/features/agent/services/quantum_agent_service.dart';
 
 
 
@@ -251,9 +249,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   bool _isZenMode = false;
 
   double _leftSidebarWidth = 260.0;
-  double _rightSidebarWidth = 340.0;
   bool _isResizingLeft = false;
-  bool _isResizingRight = false;
 
   @override
   void initState() {
@@ -693,11 +689,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           return;
         }
 
-        if (ref.read(rightAgentPanelOpenProvider)) {
-          ref.read(rightAgentPanelOpenProvider.notifier).state = false;
-          return;
-        }
-
         if (panelState.isOpened) {
           panelNotifier.closePanel();
           return;
@@ -771,22 +762,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 panelNotifier.selectTab(PanelTab.terminal);
                                 panelNotifier.openPanel();
                               }
-                            },
-                          ),
-                          ActionIconButton(
-                            icon: LucideIcons.sparkles,
-                            color: ref.watch(rightAgentPanelOpenProvider)
-                                ? Colors.cyanAccent
-                                : Colors.purpleAccent,
-                            backgroundColor: ref.watch(rightAgentPanelOpenProvider)
-                                ? Colors.cyanAccent.withValues(alpha: 0.2)
-                                : Colors.purpleAccent.withValues(alpha: 0.16),
-                            borderColor: ref.watch(rightAgentPanelOpenProvider)
-                                ? Colors.cyanAccent.withValues(alpha: 0.5)
-                                : Colors.purpleAccent.withValues(alpha: 0.4),
-                            tooltip: 'Quantum AI Hub (Правая панель чат-бота)',
-                            onTap: () {
-                              ref.read(rightAgentPanelOpenProvider.notifier).update((v) => !v);
                             },
                           ),
                           ActionIconButton(
@@ -868,9 +843,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 case 'redo':
                                   try { activeFile?.controller.redo(); } catch (_) {}
                                   break;
-                                case 'agent':
-                                  ref.read(rightAgentPanelOpenProvider.notifier).update((v) => !v);
-                                  break;
                                 case 'git':
                                   if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
                                     panelNotifier.closePanel();
@@ -902,16 +874,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               }
                             },
                             itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'agent',
-                                child: Row(
-                                  children: [
-                                    Icon(LucideIcons.sparkles, size: 16, color: Colors.purpleAccent),
-                                    SizedBox(width: 10),
-                                    Text('Чат-бот ИИ (Правая панель)', style: TextStyle(fontSize: 13, color: Colors.white)),
-                                  ],
-                                ),
-                              ),
                               if (screenWidth < 400) ...[
                                 PopupMenuItem(
                                   value: 'git',
@@ -971,12 +933,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         ),
       ),
       endDrawer: null,
-      body: _buildMultiSplitWithRightAgent(
+      body: _buildWorkspaceLayout(
         mainBody,
-        isDesktop: isDesktop,
         leftOpen: isDesktop && ref.watch(leftPanelOpenProvider),
-        rightAgentOpen: ref.watch(rightAgentPanelOpenProvider),
-        screenWidth: screenWidth,
       ),
       bottomNavigationBar: _isZenMode ? null : const StatusBar(),
     ),
@@ -1043,18 +1002,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   }
 
 
-  Widget _buildMultiSplitWithRightAgent(
+  Widget _buildWorkspaceLayout(
     Widget mainContent, {
-    required bool isDesktop,
     required bool leftOpen,
-    required bool rightAgentOpen,
-    required double screenWidth,
   }) {
-    final rawAgentWidth = ref.watch(rightAgentPanelWidthProvider);
-    final minAgentWidth = screenWidth < 460 ? 230.0 : 260.0;
-    final maxAgentWidth = (screenWidth * 0.90).clamp(minAgentWidth + 20.0, 960.0);
-    final effectiveAgentWidth = rawAgentWidth.clamp(minAgentWidth, maxAgentWidth);
-
     return Row(
       children: [
         if (leftOpen) ...[
@@ -1109,68 +1060,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         Expanded(
           child: mainContent,
         ),
-        if (rightAgentOpen) ...[
-          // ── Горизонтальный ползунок растягивания правой панели Чат-бота ──
-          MouseRegion(
-            cursor: SystemMouseCursors.resizeColumn,
-            onEnter: (_) => setState(() => _isResizingRight = true),
-            onExit: (_) {
-              if (!_isDragging) setState(() => _isResizingRight = false);
-            },
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onHorizontalDragStart: (_) => setState(() {
-                _isDragging = true;
-                _isResizingRight = true;
-              }),
-              onHorizontalDragUpdate: (details) {
-                final cur = ref.read(rightAgentPanelWidthProvider).clamp(minAgentWidth, maxAgentWidth);
-                final updated = (cur - details.delta.dx).clamp(minAgentWidth, maxAgentWidth);
-                ref.read(rightAgentPanelWidthProvider.notifier).state = updated;
-              },
-              onHorizontalDragEnd: (_) => setState(() {
-                _isDragging = false;
-                _isResizingRight = false;
-              }),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 100),
-                width: 10,
-                decoration: BoxDecoration(
-                  color: _isResizingRight
-                      ? Colors.purpleAccent.withValues(alpha: 0.28)
-                      : const Color(0xFF10131C),
-                  border: Border(
-                    left: BorderSide(
-                      color: _isResizingRight ? Colors.purpleAccent : Colors.white.withValues(alpha: 0.1),
-                      width: 0.8,
-                    ),
-                    right: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      width: 0.5,
-                    ),
-                  ),
-                ),
-                child: Center(
-                  child: Container(
-                    width: 3,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: _isResizingRight ? Colors.cyanAccent : Colors.purpleAccent.withValues(alpha: 0.65),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // ── Правая растягиваемая панель Чат-бота (Quantum AI Hub) ──
-          SizedBox(
-            width: effectiveAgentWidth,
-            child: QuantumAgentPanel(
-              onClose: () => ref.read(rightAgentPanelOpenProvider.notifier).state = false,
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -1633,12 +1522,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     },
                   ),
                   _buildDashboardActionCard(
-                    icon: LucideIcons.sparkles,
-                    iconColor: Colors.purpleAccent,
-                    title: 'Quantum AI Hub (ИИ справа)',
-                    subtitle: 'Чат-бот, GGUF модели, API Vault и Diff',
+                    icon: LucideIcons.smartphone,
+                    iconColor: Colors.cyanAccent,
+                    title: 'Зеркалирование экрана (USB)',
+                    subtitle: 'Управление телефоном и трансляция',
                     onTap: () {
-                      ref.read(rightAgentPanelOpenProvider.notifier).state = true;
+                      ref.read(panelProvider.notifier).selectTab(PanelTab.deviceMirror);
+                      ref.read(panelProvider.notifier).openPanel();
                     },
                   ),
                   _buildDashboardActionCard(

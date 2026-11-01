@@ -111,12 +111,6 @@ jobs:
             done
           fi
 
-      - name: Ensure native llama dependencies
-        run: |
-          if [ -d "local_plugins/llama_flutter_android" ]; then
-            bash scripts/setup_llama.sh
-          fi
-
       - name: Get dependencies
         run: flutter pub get
 

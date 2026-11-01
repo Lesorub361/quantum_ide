@@ -31,12 +31,6 @@ jobs:
           flutter-version: '3.44.9'
           cache: true
 
-      - name: Setup Llama dependencies
-        run: |
-          if [ ! -d "local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp" ] || [ -z "$(ls -A local_plugins/llama_flutter_android/android/src/main/cpp/llama.cpp 2>/dev/null)" ]; then
-            bash scripts/setup_llama.sh
-          fi
-
       - name: Get Flutter dependencies
         run: flutter pub get
 
