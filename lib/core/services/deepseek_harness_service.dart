@@ -33,6 +33,8 @@ class DeepSeekHarnessService extends ChangeNotifier {
   String get statusMessage => _statusMessage;
   List<String> get logs => List.unmodifiable(_logs);
 
+  void addLog(String line) => _addLog(line);
+
   void _addLog(String line) {
     final trimmed = line.trim();
     if (trimmed.isEmpty) return;

@@ -32,20 +32,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.159 - Модернизация зависимостей и интеграция DeepSeek Harness
+        ## 🚀 QuantumIDE v1.2.160 - Исправление отображения DeepSeek Harness и внешнего браузера
 
         ### ✨ Что нового и исправлено:
+        - **Исправление чёрного экрана DeepSeek Harness WebView**:
+          - Убран блокирующий флаг `useShouldOverrideUrlLoading: true`, препятствовавший рендерингу SPA приложения.
+          - Добавлена поддержка жестов масштабирования и скролла (`VerticalDrag`, `HorizontalDrag`, `Scale`, `Pan`).
+          - Добавлен индикатор прогресса загрузки страниц и логирование сообщений консоли JS.
+          - В верхнюю панель добавлена кнопка **«Открыть в браузере»** (Chrome / системный браузер) для прямого доступа к сессии с токеном.
         - **Оптимизация и обновление пакетов (`pubspec.yaml`)**:
           - Удалены устаревшие пакеты `contextmenu` и `flutter_linkify`.
-          - Добавлен `flutter_animate` (декларативные 120 FPS анимации, шиммеры и эффекты загрузки).
-          - Добавлен `flutter_math_fork` (высокопроизводительный нативный рендеринг формул LaTeX / KaTeX для DeepSeek R1).
-          - Добавлены `hive_ce` и `hive_ce_flutter` (сверхбыстрое бинарное NoSQL хранилище сессий и кэша).
-          - Контекстные меню переведены на нативный системный механизм `showMenu` с haptic-откликом.
-        - **Исправление работы агента DeepSeek Harness**:
-          - Выполнение команд переведено на внутреннюю Linux-среду Quantum IDE (`RuntimeService` / `init-host`), устраняя ошибку `127: npx/npm inaccessible or not found`.
-          - Реализован автоматический перехват защитного токена `?token=...` из вывода процесса `dsh web`.
-          - Устранена ошибка `net::ERR_CONNECTION_REFUSED`: таймаут готовности поднят до 35с, добавлен самовосстанавливающийся экран ожидания с автоповтором подключения.
-          - Проброс API-ключей провайдеров (`DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`).
+          - Добавлены `flutter_animate`, `flutter_math_fork`, `hive_ce` и `hive_ce_flutter`.
+          - Системные контекстные меню `showMenu` с haptic-откликом.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

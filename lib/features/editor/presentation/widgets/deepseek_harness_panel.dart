@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -21,6 +24,7 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
   bool _hasConnectionError = false;
   String? _loadedUrl;
   Timer? _retryTimer;
+  double _loadProgress = 0.0;
 
   @override
   void dispose() {
@@ -170,6 +174,18 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
           // Actions
           if (dsh.isRunning) ...[
             IconButton(
+              icon: const Icon(LucideIcons.external_link, size: 13, color: Colors.cyanAccent),
+              tooltip: 'Открыть в браузере (Chrome)',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+              onPressed: () async {
+                final uri = Uri.tryParse(dsh.serverUrl);
+                if (uri != null) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+            ),
+            IconButton(
               icon: const Icon(LucideIcons.rotate_cw, size: 13, color: Colors.white70),
               tooltip: 'Обновить страницу',
               padding: EdgeInsets.zero,
@@ -216,15 +232,25 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
         InAppWebView(
           key: ValueKey(dsh.serverUrl),
           initialUrlRequest: URLRequest(url: WebUri(dsh.serverUrl)),
+          gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+            Factory<VerticalDragGestureRecognizer>(() => VerticalDragGestureRecognizer()),
+            Factory<HorizontalDragGestureRecognizer>(() => HorizontalDragGestureRecognizer()),
+            Factory<ScaleGestureRecognizer>(() => ScaleGestureRecognizer()),
+            Factory<PanGestureRecognizer>(() => PanGestureRecognizer()),
+          },
           initialSettings: InAppWebViewSettings(
             transparentBackground: false,
-            useShouldOverrideUrlLoading: true,
-            mediaPlaybackRequiresUserGesture: false,
-            allowsInlineMediaPlayback: true,
             javaScriptEnabled: true,
             domStorageEnabled: true,
             databaseEnabled: true,
-            cacheEnabled: false,
+            cacheEnabled: true,
+            supportZoom: true,
+            useWideViewPort: true,
+            allowsInlineMediaPlayback: true,
+            mediaPlaybackRequiresUserGesture: false,
+            mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+            allowFileAccess: true,
+            allowContentAccess: true,
           ),
           onWebViewCreated: (controller) {
             _webViewController = controller;
@@ -234,6 +260,14 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
             if (_hasConnectionError) {
               setState(() => _hasConnectionError = false);
             }
+          },
+          onProgressChanged: (controller, progress) {
+            setState(() {
+              _loadProgress = progress / 100.0;
+            });
+          },
+          onConsoleMessage: (controller, consoleMessage) {
+            dsh.addLog('[JS ${consoleMessage.messageLevel.name}] ${consoleMessage.message}');
           },
           onReceivedError: (controller, request, error) {
             final isMain = request.isForMainFrame ?? true;
@@ -250,6 +284,18 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
             }
           },
         ),
+        if (_loadProgress < 1.0 && !_hasConnectionError)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: LinearProgressIndicator(
+              value: _loadProgress,
+              minHeight: 2.5,
+              backgroundColor: Colors.transparent,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyanAccent),
+            ),
+          ),
         if (_hasConnectionError)
           Positioned.fill(
             child: Container(
