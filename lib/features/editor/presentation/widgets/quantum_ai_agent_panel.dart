@@ -227,7 +227,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             'Прямой API',
           ];
 
-          final allModels = QuantumAiAgentService.predefinedModels;
+          final allModels = QuantumModelItem.predefinedModels;
           final filteredModels = allModels.where((m) {
             final matchesCategory = selectedCategory == 'Все' || m.category == selectedCategory;
             final matchesQuery = searchQuery.isEmpty ||

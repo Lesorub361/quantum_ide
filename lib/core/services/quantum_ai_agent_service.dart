@@ -320,6 +320,8 @@ class QuantumAiAgentService extends ChangeNotifier {
     _initDefaultGreeting();
   }
 
+  static List<QuantumModelItem> get predefinedModels => QuantumModelItem.predefinedModels;
+
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 20),
     receiveTimeout: const Duration(seconds: 120),
