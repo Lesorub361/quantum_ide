@@ -5,6 +5,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/quick_switcher_dialog.dart';
 import 'package:path/path.dart' as p;
 
 class EditorAppBarTitle extends ConsumerWidget {

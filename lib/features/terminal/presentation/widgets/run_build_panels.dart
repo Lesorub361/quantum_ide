@@ -20,6 +20,7 @@ import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 // Standalone Sidebar Run Panel
@@ -625,7 +626,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   int _buildViewerMode = 0; // 0 = Pipeline (GitHub Actions), 1 = Raw Terminal
 
   void _stopCommand() {
-    _sendRawKeyToDedicatedTerminal(String.fromCharCode(3));
+    ref.read(dedicatedTerminalProvider.notifier).sendRawChar(DedicatedTerminalType.build, String.fromCharCode(3));
     ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
   }
 
