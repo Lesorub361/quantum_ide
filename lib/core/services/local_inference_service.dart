@@ -9,8 +9,6 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'inference_engine.dart';
 import 'package:quantum_ide/core/utils/resumable_downloader.dart';
-import 'package:quantum_ide/core/services/chat_settings_service.dart';
-import 'package:quantum_ide/core/services/ai_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 // model_catalog_service types are used only via re-export in local_models_dialog; no direct import needed here
 
@@ -690,9 +688,8 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
       }
 
       final prefs = await SharedPreferences.getInstance();
-      final settings = _ref.read(chatSettingsProvider);
       final isLiteRt = model.filename.endsWith('.litertlm');
-      final liteRtMode = settings.liteRtPerformanceMode;
+      final liteRtMode = prefs.getString('chat_litert_perf_mode') ?? 'gpu';
 
       // ── GPU Crash Persistence ──
       // IMPORTANT: We save the crash-detection flag BEFORE calling loadModel.
@@ -893,7 +890,6 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
           contextTokensUsed: 0,
           contextTokensTotal: safeContextSize,
         );
-        await _ref.read(aiServiceProvider).setProvider('local_edge');
         debugPrint('[LocalInference] ✓ Model loaded: ${result.runtime} (${result.backend}),'
           ' GPU: ${result.gpuName}, layers: ${result.gpuLayers}, ctx=$safeContextSize');
       } else {

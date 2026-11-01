@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/git_status.dart';
-import 'package:quantum_ide/core/services/ai_service.dart';
+import 'package:quantum_ide/features/agent/services/quantum_agent_service.dart';
 import 'package:quantum_ide/core/services/github_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
@@ -131,13 +131,13 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
       }
 
       try {
-        final aiService = ref.read(aiServiceProvider);
+        final agent = ref.read(quantumAgentProvider.notifier);
         final prompt =
             'Сгенерируй краткое профессиональное сообщение коммита в формате Conventional Commits (например: "feat: ...", "fix: ...", "refactor: ...") на русском или английском языке (1 строка, без кавычек и без markdown). '
             'Список файлов: ${allChanged.take(12).join(', ')}.\n'
             '${diffSnippets.isNotEmpty ? "Фрагменты diff:\n${diffSnippets.join('\n')}" : ""}';
-        final response = await aiService
-            .getCompletion(prompt)
+        final response = await agent
+            .quickComplete(prompt)
             .timeout(const Duration(seconds: 10));
         final clean = response
             .trim()

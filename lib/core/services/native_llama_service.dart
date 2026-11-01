@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
-import 'package:quantum_ide/core/services/ai_service.dart';
 
 class NativeGpuInfo {
   final bool vulkanSupported;

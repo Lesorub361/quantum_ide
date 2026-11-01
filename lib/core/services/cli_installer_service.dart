@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 
 class CliUpdateInfo {

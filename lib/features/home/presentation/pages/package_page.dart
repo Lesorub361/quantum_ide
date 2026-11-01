@@ -12,7 +12,6 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/home/presentation/widgets/package_install_dialog.dart';
 import 'package:quantum_ide/features/home/presentation/widgets/package_details_dialog.dart';
-import 'package:quantum_ide/core/models/agent_activity_item.dart';
 import 'package:quantum_ide/core/services/cli_installer_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';

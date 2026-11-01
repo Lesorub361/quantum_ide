@@ -10,7 +10,6 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import '../notifiers/editor_notifier.dart';
-import 'package:quantum_ide/models/chat_message.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:quantum_ide/core/utils/share_utils.dart';

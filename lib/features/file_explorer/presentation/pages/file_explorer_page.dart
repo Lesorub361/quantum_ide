@@ -19,7 +19,6 @@ import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
-import 'package:quantum_ide/models/chat_message.dart';
 
 class FileExplorerPage extends ConsumerStatefulWidget {
   const FileExplorerPage({super.key});
