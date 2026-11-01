@@ -3,18 +3,27 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/utils/path_mapper.dart';
 
 class DeepSeekHarnessService extends ChangeNotifier {
+  final RuntimeService _runtime;
+
+  DeepSeekHarnessService(this._runtime);
+
   Process? _process;
+  StreamingCommand? _activeCommand;
   String? _currentProjectPath;
   int _currentPort = 3080;
   bool _isStarting = false;
+  bool _isServerReady = false;
   bool _isUpdating = false;
   String _statusMessage = 'Остановлен';
   final List<String> _logs = [];
 
-  bool get isRunning => _process != null;
+  bool get isRunning => _process != null && _isServerReady;
   bool get isStarting => _isStarting;
   bool get isUpdating => _isUpdating;
   String? get currentProjectPath => _currentProjectPath;
@@ -27,7 +36,7 @@ class DeepSeekHarnessService extends ChangeNotifier {
     final trimmed = line.trim();
     if (trimmed.isEmpty) return;
     _logs.add(trimmed);
-    if (_logs.length > 200) {
+    if (_logs.length > 250) {
       _logs.removeAt(0);
     }
     notifyListeners();
@@ -38,79 +47,110 @@ class DeepSeekHarnessService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Проверяет, установлен ли Node.js в системе
+  /// Проверяет, доступен ли Node.js в окружении Quantum IDE
   Future<bool> isNodeAvailable() async {
     try {
-      final res = await Process.run('node', ['--version'], runInShell: true);
-      return res.exitCode == 0;
+      if (Platform.isAndroid || Platform.isIOS) {
+        final out = await _runtime.runCommand('node --version');
+        return out.trim().isNotEmpty && !out.contains('not found');
+      } else {
+        final res = await Process.run('node', ['--version'], runInShell: true);
+        return res.exitCode == 0;
+      }
     } catch (_) {
       return false;
     }
   }
 
-  /// Проверяет, установлен ли dsh глобально
+  /// Проверяет, установлен ли dsh глобально в окружении
   Future<bool> isDshAvailable() async {
     try {
-      final res = await Process.run('dsh', ['--version'], runInShell: true);
-      return res.exitCode == 0;
+      if (Platform.isAndroid || Platform.isIOS) {
+        final out = await _runtime.runCommand(
+          'which dsh || command -v dsh || (test -f /usr/local/bin/dsh && echo /usr/local/bin/dsh) || (test -f /usr/bin/dsh && echo /usr/bin/dsh)',
+        );
+        return out.trim().isNotEmpty && !out.contains('not found');
+      } else {
+        final res = await Process.run('dsh', ['--version'], runInShell: true);
+        return res.exitCode == 0;
+      }
     } catch (_) {
       return false;
     }
   }
 
-  /// Обновляет или устанавливает @deepseek-ai/dsh до @latest версии
+  /// Обновляет или устанавливает @deepseek-ai/dsh до @latest версии через внутреннее окружение
   Future<bool> updateOrInstallDsh({void Function(String)? onProgress}) async {
     if (_isUpdating) return false;
     _isUpdating = true;
-    _statusMessage = 'Обновление DeepSeek Harness (@deepseek-ai/dsh@latest)...';
+    _statusMessage = 'Установка / обновление @deepseek-ai/dsh@latest...';
     notifyListeners();
 
     try {
-      _addLog('[DSH] Запуск npm install -g @deepseek-ai/dsh@latest...');
-      final process = await Process.start(
-        'npm',
-        ['install', '-g', '@deepseek-ai/dsh@latest'],
-        runInShell: true,
-      );
+      _addLog('[DSH] Запуск npm install -g @deepseek-ai/dsh@latest в окружении...');
 
-      process.stdout.transform(utf8.decoder).listen((data) {
-        _addLog(data);
-        onProgress?.call(data);
-      });
+      final installCmd = 'npm install -g @deepseek-ai/dsh@latest && '
+          '(ln -sf \$(which dsh 2>/dev/null || echo /usr/local/lib/nodejs/bin/dsh) /usr/local/bin/dsh 2>/dev/null || true) && '
+          '(ln -sf \$(which dsh 2>/dev/null || echo /usr/local/lib/nodejs/bin/dsh) /usr/bin/dsh 2>/dev/null || true)';
 
-      process.stderr.transform(utf8.decoder).listen((data) {
-        _addLog('[stderr] $data');
-        onProgress?.call(data);
-      });
+      int exitCode;
+      if (Platform.isAndroid || Platform.isIOS) {
+        final stream = _runtime.runCommandStream(
+          installCmd,
+          onLine: (line, {bool isError = false, bool replace = false}) {
+            final formatted = isError ? '[stderr] $line' : line;
+            _addLog(formatted);
+            onProgress?.call(line);
+          },
+        );
+        _activeCommand = stream;
+        exitCode = await stream.exitCode;
+      } else {
+        final process = await Process.start(
+          Platform.isWindows ? 'cmd' : 'bash',
+          Platform.isWindows ? ['/c', installCmd] : ['-c', installCmd],
+          environment: _runtime.desktopEnv,
+        );
+        process.stdout.transform(utf8.decoder).listen((data) {
+          _addLog(data);
+          onProgress?.call(data);
+        });
+        process.stderr.transform(utf8.decoder).listen((data) {
+          _addLog('[stderr] $data');
+          onProgress?.call(data);
+        });
+        exitCode = await process.exitCode;
+      }
 
-      final exitCode = await process.exitCode;
       _isUpdating = false;
+      _activeCommand = null;
       if (exitCode == 0) {
         _addLog('[DSH] DeepSeek Harness успешно установлен / обновлен!');
         _statusMessage = 'Обновлен до актуальной версии';
         notifyListeners();
         return true;
       } else {
-        _addLog('[DSH] Ошибка установки, код: $exitCode');
-        _statusMessage = 'Ошибка обновления';
+        _addLog('[DSH] Ошибка установки, код завершения: $exitCode');
+        _statusMessage = 'Ошибка обновления (код $exitCode)';
         notifyListeners();
         return false;
       }
     } catch (e) {
       _isUpdating = false;
-      _addLog('[DSH] Ошибка запуска npm: $e');
+      _activeCommand = null;
+      _addLog('[DSH] Ошибка: $e');
       _statusMessage = 'Ошибка: $e';
       notifyListeners();
       return false;
     }
   }
 
-  /// Запускает сервер DeepSeek Harness в папке указанного проекта
+  /// Запускает веб-сервер DeepSeek Harness в окружении Quantum IDE для указанного проекта
   Future<bool> startServer({
     required String projectPath,
     required SettingsState settings,
   }) async {
-    if (_process != null) {
+    if (_process != null && _isServerReady) {
       if (_currentProjectPath == projectPath) {
         return true;
       }
@@ -118,28 +158,14 @@ class DeepSeekHarnessService extends ChangeNotifier {
     }
 
     _isStarting = true;
+    _isServerReady = false;
     _currentProjectPath = projectPath;
     _currentPort = settings.dshPort > 0 ? settings.dshPort : 3080;
     _statusMessage = 'Запуск на порту $_currentPort в $projectPath...';
     _addLog('[DSH] Инициализация агента в директории: $projectPath');
     notifyListeners();
 
-    // Формируем переменные окружения с ключами провайдеров
-    final env = Map<String, String>.from(Platform.environment);
-    if (settings.deepseekApiKey.isNotEmpty) {
-      env['DEEPSEEK_API_KEY'] = settings.deepseekApiKey;
-    }
-    if (settings.openrouterApiKey.isNotEmpty) {
-      env['OPENROUTER_API_KEY'] = settings.openrouterApiKey;
-    }
-    if (settings.openaiApiKey.isNotEmpty) {
-      env['OPENAI_API_KEY'] = settings.openaiApiKey;
-    }
-    if (settings.anthropicApiKey.isNotEmpty) {
-      env['ANTHROPIC_API_KEY'] = settings.anthropicApiKey;
-    }
-
-    // Проверяем, существует ли папка проекта
+    // Проверяем / создаем директорию проекта
     final dir = Directory(projectPath);
     if (!await dir.exists()) {
       try {
@@ -149,23 +175,76 @@ class DeepSeekHarnessService extends ChangeNotifier {
       }
     }
 
+    // Собираем экспорты API-ключей
+    final List<String> exportList = [];
+    if (settings.deepseekApiKey.isNotEmpty) {
+      exportList.add('export DEEPSEEK_API_KEY="${settings.deepseekApiKey.replaceAll('"', r'\"')}"');
+    }
+    if (settings.openrouterApiKey.isNotEmpty) {
+      exportList.add('export OPENROUTER_API_KEY="${settings.openrouterApiKey.replaceAll('"', r'\"')}"');
+    }
+    if (settings.openaiApiKey.isNotEmpty) {
+      exportList.add('export OPENAI_API_KEY="${settings.openaiApiKey.replaceAll('"', r'\"')}"');
+    }
+    if (settings.anthropicApiKey.isNotEmpty) {
+      exportList.add('export ANTHROPIC_API_KEY="${settings.anthropicApiKey.replaceAll('"', r'\"')}"');
+    }
+    exportList.add('export PORT="$_currentPort"');
+    exportList.add('export HOST="127.0.0.1"');
+
+    final exportsPrefix = exportList.isNotEmpty ? '${exportList.join('; ')}; ' : '';
+    final runCmd = '${exportsPrefix}if command -v dsh >/dev/null 2>&1; then exec dsh web --port $_currentPort --no-open; else exec npx --yes @deepseek-ai/dsh web --port $_currentPort --no-open; fi';
+
+    _addLog('[DSH] Команда: dsh web --port $_currentPort --no-open');
+
     try {
-      // Пытаемся запустить через глобальный бинарник dsh, либо через npx
-      final bool hasDsh = await isDshAvailable();
-      final String executable = hasDsh ? 'dsh' : 'npx';
-      final List<String> args = hasDsh
-          ? ['web', '--port', '$_currentPort', '--no-open']
-          : ['@deepseek-ai/dsh', 'web', '--port', '$_currentPort', '--no-open'];
+      if (Platform.isAndroid || Platform.isIOS) {
+        final initHost = p.join(_runtime.filesDir, 'bin', 'init-host');
+        if (Platform.isAndroid && await File(initHost).exists()) {
+          final guestCwd = PathMapper.mapToGuest(projectPath, _runtime.filesDir);
+          _addLog('[DSH] Запуск через Linux-окружение Quantum IDE (guest cwd: $guestCwd)...');
+          _process = await Process.start(
+            'sh',
+            [
+              initHost,
+              _runtime.filesDir,
+              guestCwd,
+              '/bin/bash',
+              '-c',
+              runCmd,
+            ],
+          );
+        } else {
+          _addLog('[DSH] Запуск напрямую...');
+          final env = Map<String, String>.from(Platform.environment);
+          if (settings.deepseekApiKey.isNotEmpty) env['DEEPSEEK_API_KEY'] = settings.deepseekApiKey;
+          if (settings.openrouterApiKey.isNotEmpty) env['OPENROUTER_API_KEY'] = settings.openrouterApiKey;
+          if (settings.openaiApiKey.isNotEmpty) env['OPENAI_API_KEY'] = settings.openaiApiKey;
+          if (settings.anthropicApiKey.isNotEmpty) env['ANTHROPIC_API_KEY'] = settings.anthropicApiKey;
+          env['PORT'] = '$_currentPort';
+          _process = await Process.start(
+            'sh',
+            ['-c', runCmd],
+            workingDirectory: projectPath,
+            environment: env,
+          );
+        }
+      } else {
+        // Desktop
+        final env = _runtime.desktopEnv;
+        if (settings.deepseekApiKey.isNotEmpty) env['DEEPSEEK_API_KEY'] = settings.deepseekApiKey;
+        if (settings.openrouterApiKey.isNotEmpty) env['OPENROUTER_API_KEY'] = settings.openrouterApiKey;
+        if (settings.openaiApiKey.isNotEmpty) env['OPENAI_API_KEY'] = settings.openaiApiKey;
+        if (settings.anthropicApiKey.isNotEmpty) env['ANTHROPIC_API_KEY'] = settings.anthropicApiKey;
+        env['PORT'] = '$_currentPort';
 
-      _addLog('[DSH] Выполняем: $executable ${args.join(' ')}');
-
-      _process = await Process.start(
-        executable,
-        args,
-        workingDirectory: projectPath,
-        environment: env,
-        runInShell: true,
-      );
+        _process = await Process.start(
+          Platform.isWindows ? 'cmd' : 'bash',
+          Platform.isWindows ? ['/c', runCmd] : ['-c', runCmd],
+          workingDirectory: projectPath,
+          environment: env,
+        );
+      }
 
       _process?.stdout.transform(utf8.decoder).listen((data) {
         _addLog(data);
@@ -178,27 +257,35 @@ class DeepSeekHarnessService extends ChangeNotifier {
       _process?.exitCode.then((code) {
         _addLog('[DSH] Процесс завершился с кодом: $code');
         _process = null;
+        _isServerReady = false;
         _isStarting = false;
         _statusMessage = 'Остановлен (код $code)';
         notifyListeners();
       });
 
-      // Ожидание старта сервера (health check)
+      // Ожидание готовности веб-сервера
       final bool ready = await _waitForServerReady(_currentPort);
       _isStarting = false;
 
       if (ready) {
+        _isServerReady = true;
         _statusMessage = 'Работает (порт $_currentPort)';
         _addLog('[DSH] Сервер готов к работе на $serverUrl');
         notifyListeners();
         return true;
       } else {
-        _statusMessage = 'Запущен (ожидание подключения)';
+        if (_process == null) {
+          _statusMessage = 'Ошибка запуска (процесс завершился)';
+        } else {
+          _statusMessage = 'Запущен (ожидание порта $_currentPort)';
+          _isServerReady = true;
+        }
         notifyListeners();
-        return true;
+        return _isServerReady;
       }
     } catch (e) {
       _isStarting = false;
+      _isServerReady = false;
       _process = null;
       _statusMessage = 'Ошибка запуска: $e';
       _addLog('[DSH Error] Исключение при запуске: $e');
@@ -207,9 +294,10 @@ class DeepSeekHarnessService extends ChangeNotifier {
     }
   }
 
-  Future<bool> _waitForServerReady(int port, {int timeoutSeconds = 12}) async {
+  Future<bool> _waitForServerReady(int port, {int timeoutSeconds = 15}) async {
     final deadline = DateTime.now().add(Duration(seconds: timeoutSeconds));
     while (DateTime.now().isBefore(deadline)) {
+      if (_process == null) return false;
       try {
         final socket = await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 500));
         socket.destroy();
@@ -230,6 +318,12 @@ class DeepSeekHarnessService extends ChangeNotifier {
       _process?.kill(ProcessSignal.sigkill);
       _process = null;
     }
+    if (Platform.isAndroid) {
+      try {
+        await _runtime.runCommand('pkill -f "@deepseek-ai/dsh" || pkill -f "dsh web" || true');
+      } catch (_) {}
+    }
+    _isServerReady = false;
     _isStarting = false;
     _statusMessage = 'Остановлен';
     _addLog('[DSH] Сервер остановлен.');
@@ -242,7 +336,7 @@ class DeepSeekHarnessService extends ChangeNotifier {
     required SettingsState settings,
   }) async {
     await stopServer();
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 400));
     return await startServer(projectPath: projectPath, settings: settings);
   }
 
@@ -254,5 +348,6 @@ class DeepSeekHarnessService extends ChangeNotifier {
 }
 
 final deepseekHarnessServiceProvider = ChangeNotifierProvider<DeepSeekHarnessService>((ref) {
-  return DeepSeekHarnessService();
+  final runtime = ref.watch(runtimeServiceProvider);
+  return DeepSeekHarnessService(runtime);
 });

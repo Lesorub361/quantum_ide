@@ -332,7 +332,10 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
                   ),
                   onPressed: dsh.isStarting
                       ? null
-                      : () => dsh.startServer(projectPath: projectPath, settings: settings),
+                      : () {
+                          setState(() => _showLogs = true);
+                          dsh.startServer(projectPath: projectPath, settings: settings);
+                        },
                 ),
               ),
               const SizedBox(height: 8),
@@ -360,7 +363,10 @@ class _DeepSeekHarnessPanelState extends ConsumerState<DeepSeekHarnessPanel> {
                       ),
                       onPressed: dsh.isUpdating
                           ? null
-                          : () => dsh.updateOrInstallDsh(),
+                          : () {
+                              setState(() => _showLogs = true);
+                              dsh.updateOrInstallDsh();
+                            },
                     ),
                   ),
                   const SizedBox(width: 8),
