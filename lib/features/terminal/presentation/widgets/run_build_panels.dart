@@ -629,7 +629,8 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     final safeLabel = label.replaceAll('"', '\\"');
     const clearScreen = 'printf "\\033[2J\\033[H\\033[3J"';
     final banner = 'printf "\\033[1;36m▶ %s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeLabel"';
-    final finalCmd = cdCmd.isNotEmpty ? '$clearScreen && $cdCmd && $banner && $cmd' : '$clearScreen && $banner && $cmd';
+    const restoreTty = '; (stty sane 2>/dev/null || true); printf "\\r\\n"';
+    final finalCmd = cdCmd.isNotEmpty ? '$clearScreen && $cdCmd && $banner && ($cmd)$restoreTty' : '$clearScreen && $banner && ($cmd)$restoreTty';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.build, finalCmd, interrupt: true, clear: false);
   }
 

@@ -192,20 +192,17 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           }
         },
       );
-      bool lastCharWasCr = false;
+      bool lastChunkEndedWithCr = false;
       String normalizeCrLf(String input) {
         if (xtermTerm.isUsingAltBuffer || input.isEmpty) return input;
-        final sb = StringBuffer();
-        for (int i = 0; i < input.length; i++) {
-          final cu = input.codeUnitAt(i);
-          if (cu == 0x0A && !lastCharWasCr) {
-            sb.write('\r\n');
-          } else {
-            sb.writeCharCode(cu);
-          }
-          lastCharWasCr = (cu == 0x0D);
+        String s = input;
+        if (lastChunkEndedWithCr && s.startsWith('\n')) {
+          s = '\n${s.substring(1).replaceAll(RegExp(r'(?<!\r)\n'), '\r\n')}';
+        } else {
+          s = s.replaceAll(RegExp(r'(?<!\r)\n'), '\r\n');
         }
-        return sb.toString();
+        lastChunkEndedWithCr = input.endsWith('\r');
+        return s;
       }
 
       // ptyOutSub is stored in TerminalSession

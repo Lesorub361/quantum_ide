@@ -1309,7 +1309,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final safeLabel = shown.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll(r'$', r'\$');
     const clearScreen = 'printf "\\033[2J\\033[H\\033[3J"';
     final banner = 'printf "\\033[1;36m▶ %s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeLabel"';
-    final fullCmd = cdCmd.isNotEmpty ? '$clearScreen && $cdCmd && $banner && $cmd' : '$clearScreen && $banner && $cmd';
+    const restoreTty = '; (stty sane 2>/dev/null || true); printf "\\r\\n"';
+    final fullCmd = cdCmd.isNotEmpty ? '$clearScreen && $cdCmd && $banner && ($cmd)$restoreTty' : '$clearScreen && $banner && ($cmd)$restoreTty';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(type, fullCmd, interrupt: true, clear: false);
   }
 
