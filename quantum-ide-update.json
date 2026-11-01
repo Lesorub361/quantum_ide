@@ -1,10 +1,10 @@
 {
-  "versionCode": 181,
-  "versionName": "1.2.164",
-  "notes": "QuantumIDE v1.2.164:\n• Исправлены ошибки сборки: приведение Uint8List потока к List<int> в Utf8Decoder, замена file_code_2 на file_code в панели ИИ, удаление вызова FuzzyOptions в терминале.\n• Добавлен полный набор пакетов IDE: dart_style (автоформатирование кода), pretty_diff_text (красивый Diff), mime и glob (сканирование файлов), yaml и yaml_writer, skeletonizer, badges, speech_to_text (голосовой ввод для ИИ-агента).",
+  "versionCode": 182,
+  "versionName": "1.2.165",
+  "notes": "QuantumIDE v1.2.165:\n• Внедрён полноэкранный предпросмотр Markdown (иконка «глазик» в верхней панели): мгновенное переключение между редактором и красивым рендерингом (.md файлов) как в GitHub/VS Code.\n• Добавлен встроенный веб-сервер shelf и shelf_static для локального хостинга веб-проектов без Node.js.\n• Добавлены flutter_fancy_tree_view (виртуализированное дерево файлов для 10k+ файлов), substring_highlight, ansicolor, xml, json_path.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.164/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.165/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

@@ -33,6 +33,7 @@ import 'package:quantum_ide/features/editor/presentation/widgets/file_drawer.dar
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_app_bar.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/stable_editor_widget.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/markdown_preview_widget.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
@@ -335,6 +336,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final activeFile = (openFilesCount > 0 && safeActiveIndex < openFilesCount)
         ? openFiles[safeActiveIndex]
         : null;
+
+    final isMarkdownFile = activeFile != null &&
+        (activeFile.path.toLowerCase().endsWith('.md') ||
+         activeFile.path.toLowerCase().endsWith('.markdown'));
     
     final settings = ref.watch(settingsProvider);
     final workspacePath = ref.watch(workspaceProvider).currentPath;
@@ -769,6 +774,21 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             tooltip: AppLocalizations.of(context)!.saveTooltip,
                             onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
                           ),
+                          if (isMarkdownFile)
+                            ActionIconButton(
+                              icon: activeFile.isMarkdownPreview ? LucideIcons.code : LucideIcons.eye,
+                              color: activeFile.isMarkdownPreview ? Colors.cyanAccent : Colors.cyanAccent.withValues(alpha: 0.9),
+                              backgroundColor: activeFile.isMarkdownPreview
+                                  ? Colors.cyanAccent.withValues(alpha: 0.18)
+                                  : Colors.cyanAccent.withValues(alpha: 0.08),
+                              borderColor: Colors.cyanAccent.withValues(alpha: 0.38),
+                              tooltip: activeFile.isMarkdownPreview
+                                  ? 'Режим редактора (Код)'
+                                  : 'Предпросмотр Markdown (Глазик)',
+                              onTap: () {
+                                ref.read(editorProvider.notifier).toggleMarkdownPreview(activeFile.path);
+                              },
+                            ),
                           if (screenWidth >= 400) ...[
                             ActionIconButton(
                               icon: LucideIcons.git_branch,
@@ -897,9 +917,25 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     context.go('/');
                                   }
                                   break;
+                                case 'toggle_markdown':
+                                  if (activeFile != null) {
+                                    ref.read(editorProvider.notifier).toggleMarkdownPreview(activeFile.path);
+                                  }
+                                  break;
                               }
                             },
                             itemBuilder: (context) => [
+                              if (isMarkdownFile)
+                                PopupMenuItem(
+                                  value: 'toggle_markdown',
+                                  child: Row(
+                                    children: [
+                                      Icon(activeFile!.isMarkdownPreview ? LucideIcons.code : LucideIcons.eye, size: 16, color: Colors.cyanAccent),
+                                      const SizedBox(width: 10),
+                                      Text(activeFile.isMarkdownPreview ? 'Редактировать код' : 'Предпросмотр (Глазик)', style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                    ],
+                                  ),
+                                ),
                               if (screenWidth < 400) ...[
                                 PopupMenuItem(
                                   value: 'git',
@@ -1845,6 +1881,17 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   Widget _buildSingleEditor(WidgetRef ref, SettingsState settings, EditorFile activeFile) {
     final file = activeFile;
+
+    if (file.isMarkdownPreview) {
+      return MarkdownPreviewWidget(
+        key: ValueKey('md_preview_${file.path}'),
+        content: file.controller.text,
+        filePath: file.path,
+        onClose: () {
+          ref.read(editorProvider.notifier).setMarkdownPreview(file.path, false);
+        },
+      );
+    }
 
     if (file.isDiffView) {
       final workspacePath = ref.read(workspaceProvider).currentPath;

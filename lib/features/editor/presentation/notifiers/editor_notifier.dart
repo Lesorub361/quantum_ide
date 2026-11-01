@@ -39,6 +39,7 @@ class EditorFile {
   final bool isModified;
   final bool isImage;
   final bool isDiffView;
+  final bool isMarkdownPreview;
 
   EditorFile({
     required this.path,
@@ -50,6 +51,7 @@ class EditorFile {
     this.isModified = false,
     this.isImage = false,
     this.isDiffView = false,
+    this.isMarkdownPreview = false,
   });
 
   EditorFile copyWith({
@@ -60,6 +62,7 @@ class EditorFile {
     String? originalContent,
     bool? isImage,
     bool? isDiffView,
+    bool? isMarkdownPreview,
   }) {
     return EditorFile(
       path: path,
@@ -71,6 +74,7 @@ class EditorFile {
       diagnostics: diagnostics ?? this.diagnostics,
       isImage: isImage ?? this.isImage,
       isDiffView: isDiffView ?? this.isDiffView,
+      isMarkdownPreview: isMarkdownPreview ?? this.isMarkdownPreview,
     );
   }
 }
@@ -393,6 +397,26 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     final file = state.openFiles[index];
     final newOpenFiles = [...state.openFiles];
     newOpenFiles[index] = file.copyWith(isDiffView: isDiffView);
+    state = state.copyWith(openFiles: newOpenFiles);
+  }
+
+  void setMarkdownPreview(String path, bool isPreview) {
+    final index = state.openFiles.indexWhere((f) => f.path == path);
+    if (index == -1) return;
+
+    final file = state.openFiles[index];
+    final newOpenFiles = [...state.openFiles];
+    newOpenFiles[index] = file.copyWith(isMarkdownPreview: isPreview);
+    state = state.copyWith(openFiles: newOpenFiles);
+  }
+
+  void toggleMarkdownPreview(String path) {
+    final index = state.openFiles.indexWhere((f) => f.path == path);
+    if (index == -1) return;
+
+    final file = state.openFiles[index];
+    final newOpenFiles = [...state.openFiles];
+    newOpenFiles[index] = file.copyWith(isMarkdownPreview: !file.isMarkdownPreview);
     state = state.copyWith(openFiles: newOpenFiles);
   }
 

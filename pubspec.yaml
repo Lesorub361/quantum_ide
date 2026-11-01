@@ -1,7 +1,7 @@
 name: quantum_ide
 description: "QuantumIDE - A next-generation AI-powered mobile IDE for web development built with Flutter."
 publish_to: 'none'
-version: 1.2.164+181
+version: 1.2.165+182
 
 environment:
   sdk: ^3.11.4
@@ -85,6 +85,15 @@ dependencies:
   skeletonizer: ^3.0.0
   badges: ^4.0.1
   speech_to_text: ^7.5.0
+
+  # Embedded Web Server, Virtualized Tree & Advanced DevTools
+  shelf: ^1.4.3
+  shelf_static: ^1.2.0
+  flutter_fancy_tree_view: ^1.6.0
+  substring_highlight: ^1.0.33
+  ansicolor: ^2.0.3
+  xml: ^7.1.0
+  json_path: ^0.9.0
 
   # Next-gen UI, Math & Fast Storage
   flutter_animate: ^4.5.2
