@@ -203,13 +203,27 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           xtermTerm.write(text);
           if (type == DedicatedTerminalType.build) {
             LiveTelemetryService.instance.appendBuildOutput(text);
+            if (text.contains('✓ Built build/app/outputs/') ||
+                text.contains('✓ APK готов:') ||
+                text.contains('✓ Debug APK готов:') ||
+                text.contains('✓ Release APK:') ||
+                text.contains('✓ Debug APK:') ||
+                text.contains('BUILD SUCCESSFUL')) {
+              LiveTelemetryService.instance.onBuildFinished(0);
+            } else if (text.contains('BUILD FAILED') ||
+                text.contains('Gradle task assembleRelease failed') ||
+                text.contains('Gradle task assembleDebug failed')) {
+              LiveTelemetryService.instance.onBuildFinished(1);
+            }
           }
         },
         onDone: () {
           _markAsExited(type);
-          xtermTerm.write('\r\n\x1b[1;31m[Process exited]\x1b[0m\r\n');
+          xtermTerm.write(
+            '\r\n\x1b[1;33m[Сессия терминала перезапущена — нажмите кнопку сборки повторно]\x1b[0m\r\n',
+          );
           if (type == DedicatedTerminalType.build) {
-            LiveTelemetryService.instance.onBuildFinished(0);
+            LiveTelemetryService.instance.onBuildFinished(-1);
           }
         },
       );

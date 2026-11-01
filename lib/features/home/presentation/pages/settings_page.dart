@@ -514,7 +514,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 : 'Quantum IDE uses ${stats.appRamFormatted} • Device free: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} GB',
             trailing: _badge(context, isRu ? 'ОЧИСТИТЬ' : 'FREE RAM', Colors.cyanAccent),
             onTap: () async {
-              await ref.read(systemStatsProvider.notifier).freeBackgroundMemory();
+              await ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

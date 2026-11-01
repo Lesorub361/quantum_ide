@@ -586,7 +586,7 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                 ),
                 TextButton.icon(
                   onPressed: () async {
-                    await ref.read(systemStatsProvider.notifier).freeBackgroundMemory();
+                    await ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(

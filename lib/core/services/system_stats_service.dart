@@ -139,11 +139,15 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   /// Останавливает зависшие фоновые демоны сборки (AAPT2, Gradle, Kotlin, Java, Dart),
   /// которые могут держать гигабайты ОЗУ и грузить CPU в фоне после сборки APK.
-  Future<void> freeBackgroundMemory() async {
+  Future<void> freeBackgroundMemory({bool force = false}) async {
     try {
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
     } catch (_) {}
+    // Никогда не убиваем процессы сборки, если сейчас идёт сборка APK и пользователь не нажал очистку вручную!
+    if (!force && LiveTelemetryService.instance.currentBuildStatus == 'Running') {
+      return;
+    }
     try {
       if (!Platform.isWindows) {
         await Process.run('sh', [
@@ -151,9 +155,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
           'pkill -9 -f aapt2 2>/dev/null || true; '
               'pkill -9 -f GradleDaemon 2>/dev/null || true; '
               'pkill -9 -f KotlinCompileDaemon 2>/dev/null || true; '
-              'pkill -9 -f "dart analysis_server" 2>/dev/null || true; '
-              'pkill -9 -f "flutter_tools.snapshot" 2>/dev/null || true; '
-              'pkill -9 -f git 2>/dev/null || true'
+              'pkill -9 -f "dart analysis_server" 2>/dev/null || true'
         ]);
       } else {
         await Process.run('taskkill', ['/F', '/IM', 'aapt2.exe']).catchError((_) => ProcessResult(0, 0, '', ''));

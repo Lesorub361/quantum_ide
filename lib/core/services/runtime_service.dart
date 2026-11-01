@@ -760,11 +760,11 @@ PROMPT_COMMAND="__update_quantum_ps1"
 export FLUTTER_ALLOW_SU_ROOT=1
 export FLUTTER_SUPPRESS_ANALYTICS=true
 export CI=true
-_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 export _JAVA_OPTIONS
-GRADLE_OPTS="-Xmx2048m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
+GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
 export GRADLE_OPTS
-export DART_VM_OPTIONS="--old_gen_heap_size=1024"
+export DART_VM_OPTIONS="--old_gen_heap_size=768"
 
 alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
@@ -818,8 +818,26 @@ flutter() {
         pkill -9 -f "analysis_server" 2>/dev/null || true
         pkill -9 -f GradleDaemon 2>/dev/null || true
         pkill -9 -f KotlinCompileDaemon 2>/dev/null || true
-        export DART_VM_OPTIONS="--old_gen_heap_size=1024"
-        export GRADLE_OPTS="-Xmx2048m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false"
+
+        # Dynamically choose safe JVM heap based on real free Android RAM (/proc/meminfo)
+        local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
+        local mem_avail_mb=$(( ${mem_avail_kb:-1800000} / 1024 ))
+        local jvm_xmx="1280m"
+        local jvm_meta="384m"
+        local dart_heap="768"
+        if [ "$mem_avail_mb" -ge 2600 ]; then
+            jvm_xmx="1536m"
+            jvm_meta="448m"
+            dart_heap="896"
+        elif [ "$mem_avail_mb" -lt 1350 ]; then
+            jvm_xmx="1024m"
+            jvm_meta="320m"
+            dart_heap="640"
+        fi
+
+        export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
+        export DART_VM_OPTIONS="--old_gen_heap_size=${dart_heap}"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dkotlin.compiler.execution.strategy=in-process"
 
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
@@ -830,7 +848,9 @@ flutter() {
                 touch "$gp" 2>/dev/null || true
                 sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
                 sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
-                echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> "$gp"
+                sed -i '/kotlin.compiler.execution.strategy/d' "$gp" 2>/dev/null || true
+                echo "org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8" >> "$gp"
+                echo "kotlin.compiler.execution.strategy=in-process" >> "$gp"
                 grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
                 grep -q "org.gradle.workers.max" "$gp" 2>/dev/null || echo "org.gradle.workers.max=1" >> "$gp"
                 grep -q "org.gradle.parallel" "$gp" 2>/dev/null || echo "org.gradle.parallel=false" >> "$gp"
@@ -843,12 +863,17 @@ flutter() {
         local has_plat=false
         local has_val=false
         local has_tree=false
+        local has_pub=false
+        local cleaned_args=()
         for a in "$@"; do
             case "$a" in
+                -Dorg.gradle.jvmargs=*) continue ;;
                 *target-platform*|*--split-per-abi*) has_plat=true ;;
                 *android-skip-build-dependency-validation*) has_val=true ;;
                 *no-tree-shake-icons*) has_tree=true ;;
+                *--pub*|*--no-pub*) has_pub=true ;;
             esac
+            cleaned_args+=("$a")
         done
 
         local extra_flags=()
@@ -861,6 +886,9 @@ flutter() {
         if [ "$has_tree" = "false" ]; then
             extra_flags+=("--no-tree-shake-icons")
         fi
+        if [ "$has_pub" = "false" ] && [ -s ".dart_tool/package_config.json" ]; then
+            extra_flags+=("--no-pub")
+        fi
 
         extra_flags+=(
             "-Pandroid.aapt2FromMaven=false"
@@ -869,12 +897,13 @@ flutter() {
             "-Pandroid.enableJetifier=false"
             "-Porg.gradle.workers.max=1"
             "-Porg.gradle.parallel=false"
+            "-Pkotlin.compiler.execution.strategy=in-process"
             "-Dorg.gradle.daemon=false"
-            "-Dorg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m"
+            "-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}"
         )
 
-        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 с защитой от сбоя памяти (heap=1024MB, jvm=2048MB, daemon=off)..."
-        command flutter "$@" "${extra_flags[@]}"
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → dart=${dart_heap}MB, jvm=${jvm_xmx}, kotlin=in-process, daemon=off)..."
+        command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
         local ret=$?
 
         if [ $ret -eq 0 ]; then
@@ -891,6 +920,8 @@ flutter() {
                 cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
                 echo -e "\033[1;32m✓ AppBundle готов:\033[0m ./app-release.aab"
             fi
+        else
+            echo -e "\033[1;31m✗ Сборка завершилась с кодом $ret\033[0m"
         fi
 
         pkill -9 -f aapt2 2>/dev/null || true
@@ -1113,7 +1144,7 @@ PROMPT='%F{green}boss@ubuntu%f:%F{blue}%~%f%F{yellow}${vcs_info_msg_0_}%f$ '
 export FLUTTER_ALLOW_SU_ROOT=1
 export FLUTTER_SUPPRESS_ANALYTICS=true
 export CI=true
-_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 export _JAVA_OPTIONS
 GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
 export GRADLE_OPTS
@@ -1153,11 +1184,26 @@ flutter() {
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
+        local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
+        local mem_avail_mb=$(( ${mem_avail_kb:-1800000} / 1024 ))
+        local jvm_xmx="1280m"
+        local jvm_meta="384m"
+        if [ "$mem_avail_mb" -ge 2600 ]; then
+            jvm_xmx="1536m"
+            jvm_meta="448m"
+        elif [ "$mem_avail_mb" -lt 1350 ]; then
+            jvm_xmx="1024m"
+            jvm_meta="320m"
+        fi
+        export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
+
         mkdir -p ~/.gradle 2>/dev/null || true
         for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
             if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
                 touch "$gp" 2>/dev/null || true
                 sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
+                sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
+                echo "org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8" >> "$gp"
                 grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
                 grep -q "org.gradle.workers.max" "$gp" 2>/dev/null || echo "org.gradle.workers.max=1" >> "$gp"
                 grep -q "org.gradle.parallel" "$gp" 2>/dev/null || echo "org.gradle.parallel=false" >> "$gp"
@@ -1170,12 +1216,17 @@ flutter() {
         local has_plat=false
         local has_val=false
         local has_tree=false
+        local has_pub=false
+        local cleaned_args=()
         for a in "$@"; do
             case "$a" in
+                -Dorg.gradle.jvmargs=*) continue ;;
                 *target-platform*|*--split-per-abi*) has_plat=true ;;
                 *android-skip-build-dependency-validation*) has_val=true ;;
                 *no-tree-shake-icons*) has_tree=true ;;
+                *--pub*|*--no-pub*) has_pub=true ;;
             esac
+            cleaned_args+=("$a")
         done
 
         local extra_flags=()
@@ -1188,6 +1239,9 @@ flutter() {
         if [ "$has_tree" = "false" ]; then
             extra_flags+=("--no-tree-shake-icons")
         fi
+        if [ "$has_pub" = "false" ] && [ -s ".dart_tool/package_config.json" ]; then
+            extra_flags+=("--no-pub")
+        fi
 
         extra_flags+=(
             "-Pandroid.aapt2FromMaven=false"
@@ -1196,11 +1250,13 @@ flutter() {
             "-Pandroid.enableJetifier=false"
             "-Porg.gradle.workers.max=1"
             "-Porg.gradle.parallel=false"
+            "-Pkotlin.compiler.execution.strategy=in-process"
             "-Dorg.gradle.daemon=false"
+            "-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}"
         )
 
-        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 с защитой от сбоя памяти (daemon=off, aapt2=native, platform=arm64)..."
-        command flutter "$@" "${extra_flags[@]}"
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → jvm=${jvm_xmx}, daemon=off)..."
+        command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
         local ret=$?
 
         if [ $ret -eq 0 ]; then
@@ -1657,18 +1713,18 @@ export ANDROID_SDK_ROOT="/root/android-sdk"
 
 FLUTTER_ALLOW_SU_ROOT=true
 export FLUTTER_ALLOW_SU_ROOT
-# Force IPv4 and standard 2GB memory heap for smooth builds
-_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m"
+# Force IPv4 only in _JAVA_OPTIONS (never put -Xmx here, otherwise every child Java process reserves a huge heap)
+_JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 export _JAVA_OPTIONS
-export DART_VM_OPTIONS="--old_gen_heap_size=1024"
+export DART_VM_OPTIONS="--old_gen_heap_size=768"
 if [ -f /usr/bin/aapt2 ]; then
-    GRADLE_OPTS="-Xmx2048m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+    GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dkotlin.compiler.execution.strategy=in-process -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
 else
     BUILD_TOOLS_AAPT2=\$(find /root/android-sdk/build-tools -name "aapt2" 2>/dev/null | sort -V | tail -n 1)
     if [ -n "\$BUILD_TOOLS_AAPT2" ]; then
-        GRADLE_OPTS="-Xmx2048m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
+        GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dkotlin.compiler.execution.strategy=in-process -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=\$BUILD_TOOLS_AAPT2"
     else
-        GRADLE_OPTS="-Xmx2048m -XX:MaxMetaspaceSize=512m -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
+        GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dkotlin.compiler.execution.strategy=in-process -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false"
     fi
 fi
 export GRADLE_OPTS
@@ -1989,10 +2045,10 @@ fi
       'LANG': 'C.UTF-8',
       'LC_ALL': 'C.UTF-8',
       'FLUTTER_ALLOW_SU_ROOT': 'true',
-      // Force IPv4 and 2GB JVM heap for Java/Gradle
-      '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true -Xmx2048m -XX:MaxMetaspaceSize=512m',
+      // Force IPv4 only (never put -Xmx in _JAVA_OPTIONS, otherwise every child Java process reserves a huge heap)
+      '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true',
       'GRADLE_OPTS':
-          '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
+          '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=false -Dorg.gradle.workers.max=1 -Dkotlin.compiler.execution.strategy=in-process -Dandroid.aapt2.daemon=false -Dandroid.aapt2FromMaven=false -Dandroid.enableJetifier=false -Dandroid.aapt2FromMavenOverride=$_detectedAapt2',
     };
   }
 
