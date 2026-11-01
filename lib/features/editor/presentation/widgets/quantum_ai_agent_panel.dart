@@ -7,7 +7,9 @@ import 'package:url_launcher/url_launcher_string.dart';
 import 'package:quantum_ide/core/services/quantum_ai_agent_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'dart:io';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/ai_diff_dialog.dart';
 
 class QuantumAiAgentPanel extends ConsumerStatefulWidget {
   const QuantumAiAgentPanel({super.key});
@@ -727,6 +729,52 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (!action.isExecuted) ...[
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFA78BFA),
+                  side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                icon: const Icon(LucideIcons.git_compare, size: 11),
+                label: const Text('Diff', style: TextStyle(fontSize: 10.5)),
+                onPressed: () async {
+                  String oldContent = '';
+                  final ws = ref.read(workspaceProvider).currentPath;
+                  if (ws != null) {
+                    final fullPath = File(action.path ?? '').isAbsolute
+                        ? (action.path ?? '')
+                        : '$ws/${action.path}';
+                    final f = File(fullPath);
+                    if (await f.exists()) {
+                      oldContent = await f.readAsString();
+                    }
+                  }
+                  if (context.mounted) {
+                    showDialog(
+                      context: context,
+                      builder: (_) => AiDiffDialog(
+                        filePath: action.path ?? '',
+                        oldContent: oldContent,
+                        newContent: action.content ?? '',
+                        onApply: () async {
+                          final ok = await agent.executeWriteAction(action);
+                          if (ok && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Файл ${action.path} успешно записан!')),
+                            );
+                          }
+                        },
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(width: 6),
+            ],
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: action.isExecuted ? Colors.white12 : Colors.greenAccent,

@@ -121,6 +121,10 @@ jobs:
 
       - name: Build release APK (Universal & Split ABIs)
         run: |
+          sed -i 's/-Xmx896m/-Xmx4096m/g' android/gradle.properties
+          sed -i 's/org.gradle.daemon=false/org.gradle.daemon=true/g' android/gradle.properties
+          sed -i 's/org.gradle.parallel=false/org.gradle.parallel=true/g' android/gradle.properties
+          sed -i 's/org.gradle.workers.max=1/org.gradle.workers.max=4/g' android/gradle.properties
           flutter build apk --release --no-tree-shake-icons
           cp build/app/outputs/flutter-apk/app-release.apk /tmp/app-universal-release.apk
           flutter build apk --release --split-per-abi --no-tree-shake-icons
