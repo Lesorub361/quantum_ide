@@ -192,6 +192,22 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           }
         },
       );
+      bool lastCharWasCr = false;
+      String normalizeCrLf(String input) {
+        if (xtermTerm.isUsingAltBuffer || input.isEmpty) return input;
+        final sb = StringBuffer();
+        for (int i = 0; i < input.length; i++) {
+          final cu = input.codeUnitAt(i);
+          if (cu == 0x0A && !lastCharWasCr) {
+            sb.write('\r\n');
+          } else {
+            sb.writeCharCode(cu);
+          }
+          lastCharWasCr = (cu == 0x0D);
+        }
+        return sb.toString();
+      }
+
       // ptyOutSub is stored in TerminalSession
       // and cancelled in dispose() via session.ptyOutSubscription?.cancel()
       // ignore: cancel_subscriptions
@@ -200,17 +216,19 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen(
         (text) {
-          xtermTerm.write(text);
+          xtermTerm.write(normalizeCrLf(text));
           if (type == DedicatedTerminalType.build) {
             LiveTelemetryService.instance.appendBuildOutput(text);
             if (text.contains('✓ Built build/app/outputs/') ||
                 text.contains('✓ APK готов:') ||
                 text.contains('✓ Debug APK готов:') ||
+                text.contains('✓ AppBundle готов:') ||
                 text.contains('✓ Release APK:') ||
                 text.contains('✓ Debug APK:') ||
                 text.contains('BUILD SUCCESSFUL')) {
               LiveTelemetryService.instance.onBuildFinished(0);
             } else if (text.contains('BUILD FAILED') ||
+                text.contains('✗ Сборка завершилась с кодом') ||
                 text.contains('Gradle task assembleRelease failed') ||
                 text.contains('Gradle task assembleDebug failed')) {
               LiveTelemetryService.instance.onBuildFinished(1);
@@ -219,11 +237,13 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         },
         onDone: () {
           _markAsExited(type);
-          xtermTerm.write(
-            '\r\n\x1b[1;33m[Сессия терминала перезапущена — нажмите кнопку сборки повторно]\x1b[0m\r\n',
-          );
           if (type == DedicatedTerminalType.build) {
-            LiveTelemetryService.instance.onBuildFinished(-1);
+            if (LiveTelemetryService.instance.isBuilding) {
+              xtermTerm.write(
+                '\r\n\x1b[1;33m[Сессия терминала перезапущена — нажмите кнопку сборки повторно]\x1b[0m\r\n',
+              );
+              LiveTelemetryService.instance.onBuildFinished(-1);
+            }
           }
         },
       );

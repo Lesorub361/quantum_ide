@@ -1076,6 +1076,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                           ? (_buildViewerMode == 0
                               ? GithubActionsPipelineViewer(
                                   session: session,
+                                  projectType: projectType,
                                   onSwitchToTerminal: () => setState(() => _buildViewerMode = 1),
                                 )
                               : Container(

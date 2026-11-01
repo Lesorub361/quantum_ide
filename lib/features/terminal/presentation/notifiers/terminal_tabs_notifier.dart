@@ -229,10 +229,27 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       Timer? gitRefreshDebounceTimer;
       String syncFrameBuffer = '';
       Timer? syncFlushTimer;
+      bool lastCharWasCr = false;
+
+      String normalizeCrLf(String input) {
+        if (xtermTerm.isUsingAltBuffer || input.isEmpty) return input;
+        final sb = StringBuffer();
+        for (int i = 0; i < input.length; i++) {
+          final cu = input.codeUnitAt(i);
+          if (cu == 0x0A && !lastCharWasCr) {
+            sb.write('\r\n');
+          } else {
+            sb.writeCharCode(cu);
+          }
+          lastCharWasCr = (cu == 0x0D);
+        }
+        return sb.toString();
+      }
 
       void flushTermFrame(String chunk) {
-        _applyInlineTuiScrollbackGuard(xtermTerm, chunk);
-        xtermTerm.write(chunk);
+        final normalized = normalizeCrLf(chunk);
+        _applyInlineTuiScrollbackGuard(xtermTerm, normalized);
+        xtermTerm.write(normalized);
       }
 
       final sub = pty.output

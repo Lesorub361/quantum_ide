@@ -660,7 +660,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '20';
+    const bashrcVersion = '21';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -694,7 +694,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=18
+# BASHRC_VERSION=21
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -744,6 +744,7 @@ shopt -s checkwinsize 2>/dev/null || true
 
 # Zero-fork pure-bash git branch prompt using PROMPT_COMMAND for 100% precise readline cursor tracking
 __update_quantum_ps1() {
+    stty sane onlcr icrnl opost 2>/dev/null || true
     local git_str=""
     if [ -f ".git/HEAD" ]; then
         local head_ref
@@ -753,7 +754,7 @@ __update_quantum_ps1() {
             git_str=" \[\033[35m\]git:(\[\033[1;31m\]$branch\[\033[0m\033[35m\])\[\033[0m\]"
         fi
     fi
-    PS1="\[\033[1;36m\]➜ \[\033[1;32m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
+    PS1="\[\r\]\[\033[1;36m\]➜ \[\033[1;32m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
 }
 PROMPT_COMMAND="__update_quantum_ps1"
 
@@ -924,7 +925,8 @@ flutter() {
             echo -e "\033[1;31m✗ Сборка завершилась с кодом $ret\033[0m"
         fi
 
-        pkill -9 -f aapt2 2>/dev/null || true
+        pkill -9 -x aapt2 2>/dev/null || true
+        stty sane onlcr icrnl opost 2>/dev/null || true
         return $ret
     fi
     command flutter "$@"
@@ -1275,7 +1277,8 @@ flutter() {
             fi
         fi
 
-        pkill -9 -f aapt2 2>/dev/null || true
+        pkill -9 -x aapt2 2>/dev/null || true
+        stty sane onlcr icrnl opost 2>/dev/null || true
         return $ret
     fi
     command flutter "$@"
@@ -1811,21 +1814,19 @@ if [ \$# -gt 2 ]; then
             export HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp
             export PATH="\$1" JAVA_HOME="\$2" ANDROID_HOME="\$3" ANDROID_SDK_ROOT="\$4"
             export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
-            FLUTTER_ALLOW_SU_ROOT=true
-            GRADLE_OPTS="\$5"
-            _JAVA_OPTIONS="\$6"
-            export FLUTTER_ALLOW_SU_ROOT GRADLE_OPTS _JAVA_OPTIONS
+            export FLUTTER_ALLOW_SU_ROOT=true
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
-            shift 6
+            stty sane onlcr icrnl opost 2>/dev/null || true
+            shift 4
             if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
                 shift 2
                 eval "\$*"
             else
                 exec "\$@"
             fi
-        ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$GRADLE_OPTS" "\$_JAVA_OPTIONS" "\$@"
+        ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$@"
 else
     # Auto-setup ARM64 environment in background
     (
@@ -1861,16 +1862,13 @@ else
             export HOME=/root USER=root TMPDIR=/tmp TEMP=/tmp
             export PATH="\$1" JAVA_HOME="\$2" ANDROID_HOME="\$3" ANDROID_SDK_ROOT="\$4"
             export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
-            FLUTTER_ALLOW_SU_ROOT=true
-            GRADLE_OPTS="\$5"
-            _JAVA_OPTIONS="\$6"
-            export FLUTTER_ALLOW_SU_ROOT GRADLE_OPTS _JAVA_OPTIONS
+            export FLUTTER_ALLOW_SU_ROOT=true
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
-            stty sane onlcr 2>/dev/null || true
+            stty sane onlcr icrnl opost 2>/dev/null || true
             exec /bin/bash --rcfile /root/.bashrc
-        ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$GRADLE_OPTS" "\$_JAVA_OPTIONS"
+        ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT"
 fi
 ''';
   }
