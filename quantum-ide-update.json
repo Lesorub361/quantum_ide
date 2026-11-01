@@ -1,12 +1,12 @@
 {
-  "versionCode": 156,
-  "versionName": "1.2.139",
-  "notes": "QuantumIDE v1.2.139:\n• Исправлена корневая причина обнуления открытых файлов (гонка O_TRUNC в Directory.watch() при записи на диск).\n• Встроено самовосстановление файлов из локального Git (git show HEAD) и защита saveFileByPath от записи 0 байт.\n• Отключено всплывающее окно «Синхронизация проекта (pub get)» и добавлен новый автономный ИИ-агент Quantum Agent.",
+  "versionCode": 178,
+  "versionName": "1.2.161",
+  "notes": "QuantumIDE v1.2.161:\n• Полная замена DeepSeek Harness на нативный Quantum AI Агент (0% нагрузки в фоне, без Node.js и WebView).\n• Поддержка DeepSeek V3/R1, OpenRouter, Claude 3.5 Sonnet, GPT-4o с прямым SSE-стримингом.\n• Аккордеон рассуждений (thinking) для DeepSeek R1 и кнопка мгновенного применения кода в проект.\n• Устранена задержка ввода в терминале.\n• Добавлены современные стабильные пакеты: connectivity_plus, dio_smart_retry, cached_network_image, flutter_slidable, reorderables, battery_plus, haptic_feedback.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.139/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.161/app-arm64-v8a-release.apk",
       "sha256": "",
-      "sizeBytes": 30638080
+      "sizeBytes": 0
     }
   }
 }

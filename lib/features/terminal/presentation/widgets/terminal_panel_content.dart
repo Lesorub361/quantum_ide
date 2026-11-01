@@ -39,8 +39,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/deepseek_harness_panel.dart';
-import 'package:fuzzy/fuzzy.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 const String _ktRepairCmd =
@@ -540,16 +539,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             .take(6)
             .toList();
 
-        final fuse = Fuzzy<String>(
-          _pathBinaries,
-          options: FuzzyOptions(
-            threshold: 0.35,
-            isCaseSensitive: false,
-          ),
-        );
-        final fuzzyMatches = fuse.search(queryLower).map((r) => r.item).take(8).toList();
+        final containsMatches = _pathBinaries
+            .where((bin) => bin.toLowerCase().contains(queryLower) && !bin.toLowerCase().startsWith(queryLower))
+            .take(8)
+            .toList();
 
-        final combined = <String>{...prefixMatches, ...fuzzyMatches};
+        final combined = <String>{...prefixMatches, ...containsMatches};
         matches = combined.take(10).toList();
       }
     }
@@ -927,8 +922,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         return const DebuggerPanel(key: ValueKey('debug'));
       case PanelTab.deviceMirror:
         return const DeviceMirrorPanel(key: ValueKey('deviceMirror'));
-      case PanelTab.deepseekHarness:
-        return const DeepSeekHarnessPanel(key: ValueKey('deepseekHarness'));
+      case PanelTab.aiAgent:
+        return const QuantumAiAgentPanel(key: ValueKey('aiAgent'));
     }
   }
 

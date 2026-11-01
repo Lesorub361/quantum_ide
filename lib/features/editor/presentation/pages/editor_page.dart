@@ -814,18 +814,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             },
                           ),
                           ActionIconButton(
-                            icon: LucideIcons.bot,
-                            color: panelState.selectedTab == PanelTab.deepseekHarness && panelState.isOpened
-                                ? Colors.purpleAccent
-                                : Colors.purpleAccent.withValues(alpha: 0.85),
-                            backgroundColor: Colors.purpleAccent.withValues(alpha: 0.14),
-                            borderColor: Colors.purpleAccent.withValues(alpha: 0.35),
-                            tooltip: 'DeepSeek Harness (AI Agent)',
+                            icon: LucideIcons.sparkles,
+                            color: panelState.selectedTab == PanelTab.aiAgent && panelState.isOpened
+                                ? const Color(0xFF8B5CF6)
+                                : const Color(0xFF8B5CF6).withValues(alpha: 0.85),
+                            backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                            borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+                            tooltip: 'Quantum AI Агент',
                             onTap: () {
-                              if (panelState.isOpened && panelState.selectedTab == PanelTab.deepseekHarness) {
+                              if (panelState.isOpened && panelState.selectedTab == PanelTab.aiAgent) {
                                 panelNotifier.closePanel();
                               } else {
-                                panelNotifier.selectTab(PanelTab.deepseekHarness);
+                                panelNotifier.selectTab(PanelTab.aiAgent);
                                 panelNotifier.openPanel();
                               }
                             },
@@ -876,11 +876,12 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     panelNotifier.openPanel();
                                   }
                                   break;
+                                case 'ai_agent':
                                 case 'dsh':
-                                  if (panelState.isOpened && panelState.selectedTab == PanelTab.deepseekHarness) {
+                                  if (panelState.isOpened && panelState.selectedTab == PanelTab.aiAgent) {
                                     panelNotifier.closePanel();
                                   } else {
-                                    panelNotifier.selectTab(PanelTab.deepseekHarness);
+                                    panelNotifier.selectTab(PanelTab.aiAgent);
                                     panelNotifier.openPanel();
                                   }
                                   break;
@@ -1374,7 +1375,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.problems: return LucideIcons.circle_alert;
       case PanelTab.debug: return LucideIcons.bug;
       case PanelTab.deviceMirror: return LucideIcons.smartphone;
-      case PanelTab.deepseekHarness: return LucideIcons.bot;
+      case PanelTab.aiAgent: return LucideIcons.sparkles;
     }
   }
 
@@ -1388,7 +1389,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.problems: return Colors.redAccent;
       case PanelTab.debug: return Colors.orangeAccent;
       case PanelTab.deviceMirror: return Colors.greenAccent;
-      case PanelTab.deepseekHarness: return Colors.purpleAccent;
+      case PanelTab.aiAgent: return const Color(0xFF8B5CF6);
     }
   }
 
@@ -1403,7 +1404,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       case PanelTab.problems: return l10n.problems;
       case PanelTab.debug: return l10n.debugger;
       case PanelTab.deviceMirror: return 'Экран и USB';
-      case PanelTab.deepseekHarness: return 'DeepSeek Harness';
+      case PanelTab.aiAgent: return 'Quantum AI Агент';
     }
   }
 

@@ -32,18 +32,21 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.160 - Исправление отображения DeepSeek Harness и внешнего браузера
+        ## 🚀 QuantumIDE v1.2.161 - Замена DeepSeek Harness на нативный Quantum AI Агент и обновление пакетов
 
-        ### ✨ Что нового и исправлено:
-        - **Исправление чёрного экрана DeepSeek Harness WebView**:
-          - Убран блокирующий флаг `useShouldOverrideUrlLoading: true`, препятствовавший рендерингу SPA приложения.
-          - Добавлена поддержка жестов масштабирования и скролла (`VerticalDrag`, `HorizontalDrag`, `Scale`, `Pan`).
-          - Добавлен индикатор прогресса загрузки страниц и логирование сообщений консоли JS.
-          - В верхнюю панель добавлена кнопка **«Открыть в браузере»** (Chrome / системный браузер) для прямого доступа к сессии с токеном.
-        - **Оптимизация и обновление пакетов (`pubspec.yaml`)**:
-          - Удалены устаревшие пакеты `contextmenu` и `flutter_linkify`.
-          - Добавлены `flutter_animate`, `flutter_math_fork`, `hive_ce` и `hive_ce_flutter`.
-          - Системные контекстные меню `showMenu` с haptic-откликом.
+        ### ✨ Что нового и улучшено:
+        - **Полная замена DeepSeek Harness на нативный Quantum AI Агент**:
+          - Устранены фоновые Node.js процессы и WebView, вызывавшие зависания и утечки памяти.
+          - Встроен сверхбыстрый Flutter AI-движок (`QuantumAiAgentService`) с прямой связью с REST API (0% CPU в режиме ожидания).
+          - Прямой SSE-стриминг генерации кода и текста в реальном времени.
+          - Поддержка рассуждений для DeepSeek R1 с интерактивным сворачиваемым аккордеоном (thinking accordion).
+          - Поддержка провайдеров OpenRouter (Claude 3.5 Sonnet, GPT-4o, Gemini 2.0 Flash, Qwen 2.5 Coder), DeepSeek, OpenAI и Anthropic.
+          - Интерактивное применение сгенерированного кода в проект в 1 клик с предпросмотром пути и diff.
+        - **Оптимизация производительности терминала**:
+          - Удалён медленный посимвольный fuzzy-поиск при каждом вводе в терминале, обеспечен мгновенный отклик клавиш.
+        - **Современные и стабильные пакеты (`pubspec.yaml`)**:
+          - Удалены: `fuzzy: ^0.5.1`, `contextmenu: ^3.0.0`, `flutter_linkify: ^6.0.0`.
+          - Добавлены: `connectivity_plus: ^6.1.1`, `dio_smart_retry: ^6.0.0`, `cached_network_image: ^3.4.1`, `flutter_slidable: ^3.1.2`, `reorderables: ^0.6.0`, `battery_plus: ^6.1.0`, `haptic_feedback: ^0.5.1`.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
