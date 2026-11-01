@@ -32,23 +32,24 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.163 - Внедрение пакетов LangChain, StreamDown и MarkdownStream для Quantum AI Агента
+        ## 🚀 QuantumIDE v1.2.164 - Добавлен полный набор пакетов IDE и исправление сборки
 
         ### ✨ Что нового и улучшено:
-        - **Пакеты агентской логики и стриминга для Quantum AI Агента**:
-          - **`langchain` & `langchain_openai`**: официальный порт LangChain на Dart для оркестрации ReAct агентов и вызова инструментов (Tools / Function Calling: чтение/запись файлов, команды терминала).
-          - **`streamdown`**: специализированный инкрементальный рендерер Markdown для LLM, корректно обрабатывающий незавершённые блоки кода, подсветку синтаксиса и LaTeX-формулы в потоке.
-          - **`flutter_markdown_stream`**: компонент потокового отображения текста без мерцания (flicker-free) с поддержкой цепочки мыслей (`<think>`) у reasoning-моделей.
-          - **`gpt_markdown`**: парсер стриминга сообщений нейросетей без рывков интерфейса.
-          - **`dio_smart_retry`**: умный повтор сетевых запросов при переключении или обрывах мобильной сети.
-          - **`connectivity_plus`**: мгновенная проверка интернет-соединения перед запросами к ИИ.
-        - **Полная замена DeepSeek Harness на нативный Quantum AI Агент**:
-          - Устранены фоновые Node.js процессы и WebView (0% CPU в фоне).
-          - Прямой SSE-стриминг генерации кода в реальном времени.
-          - Поддержка DeepSeek V3/R1, OpenRouter (Claude 3.5 Sonnet, GPT-4o, Gemini 2.0 Flash, Qwen 2.5 Coder), OpenAI и Anthropic.
-          - Интерактивное применение сгенерированного кода в проект в 1 клик с предпросмотром пути и diff.
-        - **Современные стабильные пакеты (`pubspec.yaml`)**:
-          - Добавлены: `langchain: ^0.9.0`, `langchain_openai: ^0.9.0`, `streamdown: ^0.1.1`, `flutter_markdown_stream: ^0.6.1`, `gpt_markdown: ^1.4.0`, `connectivity_plus: ^6.1.1`, `dio_smart_retry: ^6.0.0`, `cached_network_image: ^3.4.1`, `flutter_slidable: ^3.1.2`, `reorderables: ^0.6.0`, `battery_plus: ^6.1.0`, `haptic_feedback: ^0.5.1`.
+        - **Исправление всех ошибок сборки**:
+          - Исправлено приведение потока `Uint8List` к `List<int>` для `utf8.decoder` в стриминге ИИ-агента.
+          - Исправлено имя иконки файла (`LucideIcons.file_code`) в карточках действий агента.
+          - Удалён остаточный вызов `FuzzyOptions` в автодополнении путей терминала.
+          - Добавлены разрешения и intents для `RECORD_AUDIO` и `RecognitionService` в `AndroidManifest.xml`.
+        - **Профессиональный набор инструментов IDE (`pubspec.yaml`)**:
+          - **`dart_style`**: официальный автоформаттер кода от Dart Team (`dart format`).
+          - **`pretty_diff_text`**: наглядное отображение Git Diff с зеленой/красной подсветкой.
+          - **`mime`** & **`glob`**: определение MIME-типов файлов и быстрый поиск по маскам с поддержкой `.gitignore`.
+          - **`yaml`** & **`yaml_writer`**: надёжное чтение и программная правка конфигурационных файлов.
+          - **`skeletonizer`**: современные мерцающие скелетоны загрузки вместо спиннеров.
+          - **`badges`**: индикаторы изменений и статуса на вкладках.
+          - **`speech_to_text`**: голосовой ввод промптов для Quantum AI Агента.
+        - **Полный агентский стек**:
+          - `langchain`, `langchain_openai`, `streamdown`, `flutter_markdown_stream`, `gpt_markdown`, `dio_smart_retry`, `connectivity_plus`.
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -332,7 +332,7 @@ class QuantumAiAgentService extends ChangeNotifier {
     final thinkBuffer = StringBuffer();
     bool insideThink = false;
 
-    await for (final chunk in stream.transform(utf8.decoder).transform(const LineSplitter())) {
+    await for (final chunk in stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
       final line = chunk.trim();
       if (line.isEmpty || line == 'data: [DONE]') continue;
       if (!line.startsWith('data: ')) continue;

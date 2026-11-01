@@ -522,11 +522,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       final pathSuggestions = await _getPathSuggestions(session, _currentInput);
       if (pathSuggestions.isNotEmpty) {
         if (query.length >= 2) {
-          final fuse = Fuzzy<String>(pathSuggestions, options: FuzzyOptions(threshold: 0.45));
-          final results = fuse.search(query);
-          matches = results.isNotEmpty
-              ? results.map((r) => r.item).take(10).toList()
-              : pathSuggestions.take(10).toList();
+          final queryLower = query.toLowerCase();
+          matches = pathSuggestions
+              .where((p) => p.toLowerCase().contains(queryLower))
+              .take(10)
+              .toList();
         } else {
           matches = pathSuggestions.take(10).toList();
         }

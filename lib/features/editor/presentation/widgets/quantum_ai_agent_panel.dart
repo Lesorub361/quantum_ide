@@ -374,7 +374,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         ),
         child: Row(
           children: [
-            const Icon(LucideIcons.file_code_2, size: 14, color: Colors.greenAccent),
+            const Icon(LucideIcons.file_code, size: 14, color: Colors.greenAccent),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
