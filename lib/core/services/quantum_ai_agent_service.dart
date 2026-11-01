@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:dio_smart_retry/dio_smart_retry.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -71,6 +73,19 @@ class QuantumAiAgentService extends ChangeNotifier {
   final String? Function() _getWorkspacePath;
 
   QuantumAiAgentService(this._runtime, this._getSettings, this._getWorkspacePath) {
+    // Умный повтор сетевых запросов при сбоях связи (dio_smart_retry)
+    _dio.interceptors.add(
+      RetryInterceptor(
+        dio: _dio,
+        logPrint: (msg) => debugPrint('[QuantumAI-Retry] $msg'),
+        retries: 3,
+        retryDelays: const [
+          Duration(seconds: 1),
+          Duration(seconds: 2),
+          Duration(seconds: 3),
+        ],
+      ),
+    );
     _initDefaultGreeting();
   }
 
@@ -127,6 +142,27 @@ class QuantumAiAgentService extends ChangeNotifier {
   Future<void> sendMessage(String text) async {
     final query = text.trim();
     if (query.isEmpty || _isGenerating) return;
+
+    // Проверка наличия сети через connectivity_plus
+    try {
+      final connectivityResults = await Connectivity().checkConnectivity();
+      if (connectivityResults.isNotEmpty &&
+          connectivityResults.every((r) => r == ConnectivityResult.none)) {
+        _statusMessage = 'Ошибка: нет подключения к сети';
+        _messages.add(
+          ChatMessage(
+            id: 'msg_offline_${DateTime.now().millisecondsSinceEpoch}',
+            role: MessageRole.assistant,
+            text: '⚠️ Нет активного подключения к интернету. Проверьте соединение с Wi-Fi или мобильной сетью для отправки запросов к ИИ.',
+            timestamp: DateTime.now(),
+          ),
+        );
+        notifyListeners();
+        return;
+      }
+    } catch (e) {
+      debugPrint('[QuantumAI] Connectivity check error: $e');
+    }
 
     final userMsg = ChatMessage(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',

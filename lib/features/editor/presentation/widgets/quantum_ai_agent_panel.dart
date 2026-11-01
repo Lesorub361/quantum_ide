@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import 'package:quantum_ide/core/services/quantum_ai_agent_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
@@ -269,22 +270,14 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
 
                   // Main Text Content
                   if (msg.text.isNotEmpty)
-                    MarkdownBody(
-                      data: _cleanText(msg.text),
-                      selectable: true,
-                      styleSheet: MarkdownStyleSheet(
-                        p: GoogleFonts.inter(color: Colors.white, fontSize: 12.5, height: 1.45),
-                        code: GoogleFonts.jetBrainsMono(
-                          backgroundColor: const Color(0xFF090C14),
-                          color: Colors.cyanAccent,
-                          fontSize: 11,
-                        ),
-                        codeblockDecoration: BoxDecoration(
-                          color: const Color(0xFF090C14),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white12),
-                        ),
+                    GptMarkdown(
+                      _cleanText(msg.text),
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        height: 1.45,
                       ),
+                      onLinkTap: (url, title) => launchUrlString(url),
                     )
                   else if (msg.isStreaming)
                     Row(

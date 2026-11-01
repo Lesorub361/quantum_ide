@@ -1,10 +1,10 @@
 {
-  "versionCode": 178,
-  "versionName": "1.2.161",
-  "notes": "QuantumIDE v1.2.161:\n• Полная замена DeepSeek Harness на нативный Quantum AI Агент (0% нагрузки в фоне, без Node.js и WebView).\n• Поддержка DeepSeek V3/R1, OpenRouter, Claude 3.5 Sonnet, GPT-4o с прямым SSE-стримингом.\n• Аккордеон рассуждений (thinking) для DeepSeek R1 и кнопка мгновенного применения кода в проект.\n• Устранена задержка ввода в терминале.\n• Добавлены современные стабильные пакеты: connectivity_plus, dio_smart_retry, cached_network_image, flutter_slidable, reorderables, battery_plus, haptic_feedback.",
+  "versionCode": 179,
+  "versionName": "1.2.162",
+  "notes": "QuantumIDE v1.2.162:\n• Внедрён gpt_markdown для идеального плавного стриминга сообщений ИИ-агента без дёрганья экрана, с поддержкой незавершённого кода и LaTeX.\n• Подключен dio_smart_retry для автоматического повтора запросов при сбоях связи к LLM-провайдерам.\n• Интегрирован connectivity_plus для мгновенного контроля интернет-соединения.\n• Полная замена DeepSeek Harness на нативный Quantum AI Агент (0% CPU в фоне, прямой SSE стриминг R1/V3, Claude 3.5 Sonnet, GPT-4o).",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.161/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.162/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
