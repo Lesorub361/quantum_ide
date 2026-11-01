@@ -229,7 +229,18 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => ref.read(drawerTabProvider.notifier).state = index,
+          onTap: () {
+            if (index == 12) {
+              // Чат-бот открывается справа с возможностью растягивания ширины!
+              ref.read(rightAgentPanelOpenProvider.notifier).state = true;
+              final scaffold = Scaffold.maybeOf(context);
+              if (scaffold != null && scaffold.isDrawerOpen) {
+                scaffold.closeDrawer();
+              }
+              return;
+            }
+            ref.read(drawerTabProvider.notifier).state = index;
+          },
           child: SizedBox(
             width: itemSize,
             height: itemSize,

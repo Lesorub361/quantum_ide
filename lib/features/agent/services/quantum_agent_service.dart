@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,11 +29,16 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
   bool _cancelRequested = false;
   Timer? _outboxTimer;
   String _lastOutboxId = '';
+  HttpServer? _localOpenAiServer;
+  final Map<String, CancelToken> _downloadTokens = {};
 
-  static const String _prefProvider = 'q_agent_provider_v2';
-  static const String _prefModel = 'q_agent_model_v2';
+  static const String _prefProvider = 'q_agent_provider_v3';
+  static const String _prefModel = 'q_agent_model_v3';
   static const String _prefKeyPrefix = 'q_agent_key_';
+  static const String _prefVaultPrefix = 'q_agent_vault_';
+  static const String _prefDiscoveredPrefix = 'q_agent_disc_';
   static const String _sharedDir = '/storage/emulated/0/QuantumIDE';
+  static const String _modelsDir = '/storage/emulated/0/QuantumIDE/models';
 
   QuantumAgentNotifier(this._ref) : super(const QuantumAgentState()) {
     _init();
@@ -43,30 +49,94 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
     final providerId = prefs.getString(_prefProvider) ?? 'antigravity_doctor';
     final preset = QuantumAgentProviderPreset.byId(providerId);
     final savedModel = prefs.getString(_prefModel);
-    final modelId = (savedModel != null && preset.models.contains(savedModel))
+    final modelId = (savedModel != null && savedModel.isNotEmpty)
         ? savedModel
         : preset.models.first;
     final apiKey = prefs.getString('$_prefKeyPrefix$providerId') ?? '';
 
+    final inferenceMode = prefs.getString('q_inference_mode') ?? 'cloud';
+    final selectedHarness = prefs.getString('q_selected_harness') ?? 'native';
+    final antigravityEffort = prefs.getString('q_agy_effort') ?? 'high';
+    final temperature = prefs.getDouble('q_temperature') ?? 0.2;
+    final maxTokens = prefs.getInt('q_max_tokens') ?? 2048;
+    final contextSize = prefs.getInt('q_context_size') ?? 8192;
+    final performanceMode = prefs.getString('q_perf_mode') ?? 'auto_fast';
+    final systemPromptPreset = prefs.getString('q_sys_preset') ?? 'agent';
+    final customSystemPrompt = prefs.getString('q_sys_custom') ?? '';
+    final stopSeqRaw = prefs.getStringList('q_stop_seq') ?? const [];
+    final openRouterOrder = prefs.getString('q_or_order') ?? '';
+    final openRouterFallback = prefs.getBool('q_or_fallback') ?? true;
+    final freeFirst = prefs.getBool('q_free_first') ?? true;
+    final customBaseUrl = prefs.getString('q_custom_url') ?? '';
+    final customProtocol = prefs.getString('q_custom_proto') ?? 'openai-completions';
+    final activeLocalModel = prefs.getString('q_active_local_model') ?? 'lfm2.5-1.2b-instruct-q4_k_m.gguf';
+    final serverPort = prefs.getInt('q_srv_port') ?? 8080;
+    final serverAllowNet = prefs.getBool('q_srv_net') ?? false;
+    final serverReqKey = prefs.getBool('q_srv_req_key') ?? false;
+    final serverApiKey = prefs.getString('q_srv_api_key') ?? 'qide-${Random().nextInt(899999) + 100000}';
+
+    // Загружаем сохранённые мульти-ключи (Vault из Mobile-Harness)
+    final vaultMap = <String, List<SavedApiKeyEntry>>{};
+    final discMap = <String, List<String>>{};
+    for (final pPreset in QuantumAgentProviderPreset.presets) {
+      final rawVault = prefs.getString('$_prefVaultPrefix${pPreset.id}');
+      if (rawVault != null && rawVault.isNotEmpty) {
+        try {
+          final list = (jsonDecode(rawVault) as List)
+              .map((e) => SavedApiKeyEntry.fromJson((e as Map).cast<String, dynamic>()))
+              .toList();
+          vaultMap[pPreset.id] = list;
+        } catch (_) {}
+      }
+      final rawDisc = prefs.getStringList('$_prefDiscoveredPrefix${pPreset.id}');
+      if (rawDisc != null && rawDisc.isNotEmpty) {
+        discMap[pPreset.id] = rawDisc;
+      } else {
+        discMap[pPreset.id] = List.of(pPreset.models);
+      }
+    }
+
     state = state.copyWith(
+      inferenceMode: inferenceMode,
       providerId: providerId,
       modelId: modelId,
       apiKey: apiKey,
+      selectedHarness: selectedHarness,
+      antigravityEffort: antigravityEffort,
+      temperature: temperature,
+      maxTokens: maxTokens,
+      contextSize: contextSize,
+      performanceMode: performanceMode,
+      systemPromptPreset: systemPromptPreset,
+      customSystemPrompt: customSystemPrompt,
+      stopSequences: stopSeqRaw,
+      openRouterProviderOrder: openRouterOrder,
+      openRouterAllowFallbacks: openRouterFallback,
+      freeModelsFirst: freeFirst,
+      customBaseUrl: customBaseUrl,
+      customProtocol: customProtocol,
+      activeLocalModel: activeLocalModel,
+      savedKeysByProvider: vaultMap,
+      discoveredModelsByProvider: discMap,
+      localServerPort: serverPort,
+      localServerAllowNetwork: serverAllowNet,
+      localServerRequireKey: serverReqKey,
+      localServerApiKey: serverApiKey,
       messages: [
         AgentChatMessage(
           id: 'welcome',
           role: 'assistant',
-          content: 'Привет! Я **Quantum Agent** — автономный ИИ-разработчик в стиле Antigravity / Cline.\n\n'
-              'Я умею:\n'
-              '• **Читать и редактировать файлы** проекта с мгновенной синхронизацией в редакторе и `/storage/emulated/0/QuantumIDE`\n'
-              '• **Анализировать и чинить ошибки сборки APK** в реальном времени\n'
-              '• **Запускать команды в терминале** (`flutter pub get`, `flutter build apk`, `git`)\n\n'
-              'Выберите быстрое действие ниже или напишите любую задачу!',
+          content: 'Привет! Я **Quantum Agent** — единый ИИ-центр (`PrivateLM` + `Mobile Harness` + `Antigravity`).\n\n'
+              '• **Чат & Код**: пишу и правлю файлы с авто-чекпоинтами и построчным Diff (`Changes`)\n'
+              '• **Модели**: 11 облачных провайдеров + каталог из 19 локальных моделей (`GGUF` / `LiteRT-LM` / `SD 1.5`)\n'
+              '• **Харнессы**: `Native Autopilot`, `Antigravity CLI`, `Claude Code`, `DeepSeek Harness`\n'
+              '• **OpenAI Server**: локальный сервер `/v1/chat/completions` прямо на телефоне!',
           timestamp: DateTime.now(),
         ),
       ],
     );
 
+    await refreshLocalModels();
     _startOutboxWatcher();
   }
 
@@ -86,11 +156,12 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
         final reply = data['content']?.toString() ?? '';
         if (reply.isNotEmpty) {
           await _ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
+          final parsed = _parseThought(reply);
           final msg = AgentChatMessage(
             id: msgId,
             role: 'assistant',
-            content: reply,
-            thinking: data['thinking']?.toString(),
+            content: parsed.cleanContent,
+            thinking: data['thinking']?.toString() ?? parsed.thinking,
             modifiedFiles: (data['modifiedFiles'] as List?)?.map((e) => e.toString()).toList() ?? const [],
             timestamp: DateTime.now(),
           );
@@ -103,28 +174,575 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
   @override
   void dispose() {
     _outboxTimer?.cancel();
+    _localOpenAiServer?.close(force: true);
     super.dispose();
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // УПРАВЛЕНИЕ НАСТРОЙКАМИ, МОДЕЛЯМИ, МУЛЬТИ-КЛЮЧАМИ И СЕРВЕРОМ
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> updateConfig({
     required String providerId,
     required String modelId,
     required String apiKey,
+    String? inferenceMode,
+    String? selectedHarness,
+    String? antigravityEffort,
+    String? customBaseUrl,
+    String? customProtocol,
+    String? openRouterProviderOrder,
+    bool? openRouterAllowFallbacks,
+    bool? freeModelsFirst,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefProvider, providerId);
     await prefs.setString(_prefModel, modelId);
     await prefs.setString('$_prefKeyPrefix$providerId', apiKey.trim());
+    if (inferenceMode != null) await prefs.setString('q_inference_mode', inferenceMode);
+    if (selectedHarness != null) await prefs.setString('q_selected_harness', selectedHarness);
+    if (antigravityEffort != null) await prefs.setString('q_agy_effort', antigravityEffort);
+    if (customBaseUrl != null) await prefs.setString('q_custom_url', customBaseUrl);
+    if (customProtocol != null) await prefs.setString('q_custom_proto', customProtocol);
+    if (openRouterProviderOrder != null) await prefs.setString('q_or_order', openRouterProviderOrder);
+    if (openRouterAllowFallbacks != null) await prefs.setBool('q_or_fallback', openRouterAllowFallbacks);
+    if (freeModelsFirst != null) await prefs.setBool('q_free_first', freeModelsFirst);
+
     state = state.copyWith(
       providerId: providerId,
       modelId: modelId,
       apiKey: apiKey.trim(),
+      inferenceMode: inferenceMode ?? state.inferenceMode,
+      selectedHarness: selectedHarness ?? state.selectedHarness,
+      antigravityEffort: antigravityEffort ?? state.antigravityEffort,
+      customBaseUrl: customBaseUrl ?? state.customBaseUrl,
+      customProtocol: customProtocol ?? state.customProtocol,
+      openRouterProviderOrder: openRouterProviderOrder ?? state.openRouterProviderOrder,
+      openRouterAllowFallbacks: openRouterAllowFallbacks ?? state.openRouterAllowFallbacks,
+      freeModelsFirst: freeModelsFirst ?? state.freeModelsFirst,
+    );
+  }
+
+  Future<void> updateGenerationParams({
+    double? temperature,
+    int? maxTokens,
+    int? contextSize,
+    String? performanceMode,
+    String? systemPromptPreset,
+    String? customSystemPrompt,
+    List<String>? stopSequences,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (temperature != null) await prefs.setDouble('q_temperature', temperature);
+    if (maxTokens != null) await prefs.setInt('q_max_tokens', maxTokens);
+    if (contextSize != null) await prefs.setInt('q_context_size', contextSize);
+    if (performanceMode != null) await prefs.setString('q_perf_mode', performanceMode);
+    if (systemPromptPreset != null) await prefs.setString('q_sys_preset', systemPromptPreset);
+    if (customSystemPrompt != null) await prefs.setString('q_sys_custom', customSystemPrompt);
+    if (stopSequences != null) await prefs.setStringList('q_stop_seq', stopSequences);
+
+    state = state.copyWith(
+      temperature: temperature ?? state.temperature,
+      maxTokens: maxTokens ?? state.maxTokens,
+      contextSize: contextSize ?? state.contextSize,
+      performanceMode: performanceMode ?? state.performanceMode,
+      systemPromptPreset: systemPromptPreset ?? state.systemPromptPreset,
+      customSystemPrompt: customSystemPrompt ?? state.customSystemPrompt,
+      stopSequences: stopSequences ?? state.stopSequences,
     );
   }
 
   Future<String> getSavedKeyForProvider(String providerId) async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('$_prefKeyPrefix$providerId') ?? '';
+  }
+
+  // ─── Multi-Key API Vault (из Mobile-Harness ApiKeyVault.kt) ────────────────
+
+  Future<void> addVaultKey(String providerId, String name, String key) async {
+    final cleanKey = key.trim();
+    if (cleanKey.isEmpty) return;
+    final label = name.trim().isEmpty ? 'Key ${(state.savedKeysByProvider[providerId]?.length ?? 0) + 1}' : name.trim();
+    final existing = List<SavedApiKeyEntry>.from(state.savedKeysByProvider[providerId] ?? const []);
+    final updated = existing.map((e) => e.copyWith(isActive: false)).toList()
+      ..add(SavedApiKeyEntry(name: label, key: cleanKey, isActive: true));
+
+    final map = Map<String, List<SavedApiKeyEntry>>.from(state.savedKeysByProvider);
+    map[providerId] = updated;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_prefVaultPrefix$providerId', jsonEncode(updated.map((e) => e.toJson()).toList()));
+    await prefs.setString('$_prefKeyPrefix$providerId', cleanKey);
+
+    state = state.copyWith(
+      savedKeysByProvider: map,
+      apiKey: providerId == state.providerId ? cleanKey : state.apiKey,
+    );
+  }
+
+  Future<void> activateVaultKey(String providerId, String keyName) async {
+    final existing = List<SavedApiKeyEntry>.from(state.savedKeysByProvider[providerId] ?? const []);
+    String activeSecret = '';
+    final updated = existing.map((e) {
+      final match = e.name == keyName;
+      if (match) activeSecret = e.key;
+      return e.copyWith(isActive: match);
+    }).toList();
+
+    final map = Map<String, List<SavedApiKeyEntry>>.from(state.savedKeysByProvider);
+    map[providerId] = updated;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_prefVaultPrefix$providerId', jsonEncode(updated.map((e) => e.toJson()).toList()));
+    if (activeSecret.isNotEmpty) {
+      await prefs.setString('$_prefKeyPrefix$providerId', activeSecret);
+    }
+
+    state = state.copyWith(
+      savedKeysByProvider: map,
+      apiKey: (providerId == state.providerId && activeSecret.isNotEmpty) ? activeSecret : state.apiKey,
+    );
+  }
+
+  Future<void> removeVaultKey(String providerId, String keyName) async {
+    final existing = List<SavedApiKeyEntry>.from(state.savedKeysByProvider[providerId] ?? const []);
+    existing.removeWhere((e) => e.name == keyName);
+    final map = Map<String, List<SavedApiKeyEntry>>.from(state.savedKeysByProvider);
+    map[providerId] = existing;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_prefVaultPrefix$providerId', jsonEncode(existing.map((e) => e.toJson()).toList()));
+    state = state.copyWith(savedKeysByProvider: map);
+  }
+
+  // ─── Авто-обнаружение моделей и проверка соединения (Verify & Discover) ───
+
+  Future<void> discoverModelsForProvider(String providerId) async {
+    final preset = QuantumAgentProviderPreset.byId(providerId);
+    if (preset.modelsUrl.isEmpty && providerId != 'custom') return;
+    state = state.copyWith(isDiscoveringModels: true);
+
+    try {
+      final key = providerId == state.providerId
+          ? state.apiKey
+          : await getSavedKeyForProvider(providerId);
+      String url = preset.modelsUrl;
+      if (providerId == 'custom' && state.customBaseUrl.isNotEmpty) {
+        final base = state.customBaseUrl.replaceAll(RegExp(r'/chat/completions/?$'), '');
+        url = '$base/models';
+      }
+      if (providerId == 'gemini' && key.isNotEmpty) {
+        url = 'https://generativelanguage.googleapis.com/v1beta/models?key=$key';
+      }
+
+      final headers = <String, String>{'Accept': 'application/json'};
+      if (key.isNotEmpty && providerId != 'gemini') {
+        if (providerId == 'anthropic') {
+          headers['x-api-key'] = key;
+          headers['anthropic-version'] = '2023-06-01';
+        } else {
+          headers['Authorization'] = 'Bearer $key';
+        }
+      }
+
+      final sw = Stopwatch()..start();
+      final res = await _dio.get(url, options: Options(headers: headers));
+      sw.stop();
+
+      final list = <String>[];
+      final data = res.data;
+      if (data is Map) {
+        final rawList = (data['data'] ?? data['models']) as List?;
+        if (rawList != null) {
+          for (final item in rawList) {
+            if (item is Map) {
+              final id = (item['id'] ?? item['name'])?.toString() ?? '';
+              if (id.isNotEmpty) {
+                list.add(id.replaceFirst('models/', ''));
+              }
+            }
+          }
+        }
+      }
+
+      if (list.isNotEmpty) {
+        final map = Map<String, List<String>>.from(state.discoveredModelsByProvider);
+        map[providerId] = list;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('$_prefDiscoveredPrefix$providerId', list.take(200).toList());
+        state = state.copyWith(
+          discoveredModelsByProvider: map,
+          isDiscoveringModels: false,
+          connectionVerified: true,
+          connectionStatusText: 'Загружено ${list.length} моделей (${sw.elapsedMilliseconds} мс)',
+        );
+      } else {
+        state = state.copyWith(
+          isDiscoveringModels: false,
+          connectionVerified: true,
+          connectionStatusText: 'Подключено (${sw.elapsedMilliseconds} мс)',
+        );
+      }
+    } catch (e) {
+      state = state.copyWith(
+        isDiscoveringModels: false,
+        connectionVerified: false,
+        connectionStatusText: 'Ошибка запроса моделей: $e',
+      );
+    }
+  }
+
+  Future<void> verifyProviderConnection() async {
+    final preset = QuantumAgentProviderPreset.byId(state.providerId);
+    if (!preset.requiresKey) {
+      state = state.copyWith(
+        connectionVerified: true,
+        connectionStatusText: 'Встроенный мост активен (0 мс)',
+      );
+      return;
+    }
+    state = state.copyWith(isVerifyingConnection: true, connectionStatusText: 'Проверка ключа...');
+    await discoverModelsForProvider(state.providerId);
+    state = state.copyWith(isVerifyingConnection: false);
+  }
+
+  // ─── Локальные модели GGUF / LiteRT / SD (из cross-platform-llm-client) ────
+
+  Future<void> refreshLocalModels() async {
+    try {
+      final dir = Directory(_modelsDir);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final files = <String>[];
+      await for (final entity in dir.list(followLinks: false)) {
+        if (entity is File) {
+          final name = p.basename(entity.path);
+          if (name.endsWith('.gguf') || name.endsWith('.litertlm') || name.endsWith('.safetensors')) {
+            files.add(name);
+          }
+        }
+      }
+      state = state.copyWith(downloadedLocalModels: files);
+    } catch (_) {}
+  }
+
+  void setLocalModelFilter(String filter) {
+    state = state.copyWith(localModelFilter: filter);
+  }
+
+  Future<void> selectActiveLocalModel(String filename) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('q_active_local_model', filename);
+    state = state.copyWith(
+      activeLocalModel: filename,
+      inferenceMode: 'local',
+      providerId: 'local_gguf',
+      modelId: filename,
+    );
+  }
+
+  Future<void> downloadLocalModel(LocalAiModel model) async {
+    if (_downloadTokens.containsKey(model.filename)) return;
+    final token = CancelToken();
+    _downloadTokens[model.filename] = token;
+
+    final prog = Map<String, double>.from(state.downloadProgressByFile);
+    prog[model.filename] = 0.01;
+    state = state.copyWith(downloadProgressByFile: prog);
+
+    try {
+      final dir = Directory(_modelsDir);
+      await dir.create(recursive: true);
+      final targetPath = p.join(_modelsDir, model.filename);
+      await _dio.download(
+        model.url,
+        targetPath,
+        cancelToken: token,
+        onReceiveProgress: (received, total) {
+          if (total > 0) {
+            final nextProg = Map<String, double>.from(state.downloadProgressByFile);
+            nextProg[model.filename] = (received / total).clamp(0.01, 1.0);
+            state = state.copyWith(downloadProgressByFile: nextProg);
+          }
+        },
+      );
+      _downloadTokens.remove(model.filename);
+      final doneProg = Map<String, double>.from(state.downloadProgressByFile)..remove(model.filename);
+      state = state.copyWith(downloadProgressByFile: doneProg);
+      await refreshLocalModels();
+      await selectActiveLocalModel(model.filename);
+    } catch (_) {
+      _downloadTokens.remove(model.filename);
+      final doneProg = Map<String, double>.from(state.downloadProgressByFile)..remove(model.filename);
+      state = state.copyWith(downloadProgressByFile: doneProg);
+    }
+  }
+
+  void cancelLocalDownload(String filename) {
+    _downloadTokens.remove(filename)?.cancel();
+    final doneProg = Map<String, double>.from(state.downloadProgressByFile)..remove(filename);
+    state = state.copyWith(downloadProgressByFile: doneProg);
+  }
+
+  Future<void> deleteLocalModel(String filename) async {
+    try {
+      final f = File(p.join(_modelsDir, filename));
+      if (await f.exists()) await f.delete();
+      await refreshLocalModels();
+    } catch (_) {}
+  }
+
+  Future<void> importLocalModelFromStorage() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.any);
+      final path = result?.files.single.path;
+      if (path == null || path.isEmpty) return;
+      final dir = Directory(_modelsDir);
+      await dir.create(recursive: true);
+      final name = p.basename(path);
+      await File(path).copy(p.join(_modelsDir, name));
+      await refreshLocalModels();
+      await selectActiveLocalModel(name);
+    } catch (_) {}
+  }
+
+  // ─── Локальный OpenAI API Сервер (из cross-platform-llm-client ServerView) ─
+
+  Future<void> toggleLocalOpenAiServer(bool enable) async {
+    if (!enable) {
+      await _localOpenAiServer?.close(force: true);
+      _localOpenAiServer = null;
+      state = state.copyWith(isLocalServerRunning: false);
+      return;
+    }
+
+    try {
+      await _localOpenAiServer?.close(force: true);
+      final host = state.localServerAllowNetwork ? InternetAddress.anyIPv4 : InternetAddress.loopbackIPv4;
+      final server = await HttpServer.bind(host, state.localServerPort, shared: true);
+      _localOpenAiServer = server;
+      state = state.copyWith(isLocalServerRunning: true);
+
+      server.listen((HttpRequest req) async {
+        req.response.headers.set('Access-Control-Allow-Origin', '*');
+        req.response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        if (req.method == 'OPTIONS') {
+          req.response.statusCode = 204;
+          await req.response.close();
+          return;
+        }
+
+        if (state.localServerRequireKey) {
+          final auth = req.headers.value('authorization') ?? '';
+          if (auth != 'Bearer ${state.localServerApiKey}') {
+            req.response.statusCode = 401;
+            req.response.write(jsonEncode({'error': 'Unauthorized: invalid Bearer key'}));
+            await req.response.close();
+            return;
+          }
+        }
+
+        state = state.copyWith(localServerRequestsCount: state.localServerRequestsCount + 1);
+        final path = req.uri.path;
+
+        if (path == '/health' || path == '/v1/health') {
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'status': 'ok',
+            'model': state.modelId,
+            'provider': state.providerId,
+          }));
+          await req.response.close();
+          return;
+        }
+
+        if (path == '/v1/models') {
+          req.response.headers.contentType = ContentType.json;
+          final models = state.discoveredModelsByProvider[state.providerId] ?? [state.modelId];
+          req.response.write(jsonEncode({
+            'object': 'list',
+            'data': models.map((m) => {'id': m, 'object': 'model', 'owned_by': 'quantum-ide'}).toList(),
+          }));
+          await req.response.close();
+          return;
+        }
+
+        if (path == '/v1/chat/completions' && req.method == 'POST') {
+          final bodyStr = await utf8.decoder.bind(req).join();
+          final body = jsonDecode(bodyStr) as Map<String, dynamic>? ?? {};
+          final msgs = (body['messages'] as List?) ?? const [];
+          final lastUser = msgs.isNotEmpty ? (msgs.last['content']?.toString() ?? '') : '';
+          final reply = await quickComplete(lastUser);
+          req.response.headers.contentType = ContentType.json;
+          req.response.write(jsonEncode({
+            'id': 'chatcmpl-${DateTime.now().millisecondsSinceEpoch}',
+            'object': 'chat.completion',
+            'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            'model': state.modelId,
+            'choices': [
+              {
+                'index': 0,
+                'message': {
+                  'role': 'assistant',
+                  'content': reply.isEmpty
+                      ? 'QuantumIDE Local OpenAI Server (${state.modelId}) обработал запрос: "$lastUser"'
+                      : reply,
+                },
+                'finish_reason': 'stop',
+              }
+            ],
+          }));
+          await req.response.close();
+          return;
+        }
+
+        req.response.statusCode = 404;
+        req.response.write(jsonEncode({'error': 'Not found'}));
+        await req.response.close();
+      });
+    } catch (_) {
+      state = state.copyWith(isLocalServerRunning: false);
+    }
+  }
+
+  Future<void> updateServerConfig({
+    bool? allowNetwork,
+    bool? requireKey,
+    String? apiKey,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (allowNetwork != null) await prefs.setBool('q_srv_net', allowNetwork);
+    if (requireKey != null) await prefs.setBool('q_srv_req_key', requireKey);
+    if (apiKey != null) await prefs.setString('q_srv_api_key', apiKey);
+    state = state.copyWith(
+      localServerAllowNetwork: allowNetwork ?? state.localServerAllowNetwork,
+      localServerRequireKey: requireKey ?? state.localServerRequireKey,
+      localServerApiKey: apiKey ?? state.localServerApiKey,
+    );
+    if (state.isLocalServerRunning) {
+      await toggleLocalOpenAiServer(true);
+    }
+  }
+
+  Future<void> generateNewServerKey() async {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final rnd = Random();
+    final key = 'qide-${List.generate(20, (_) => chars[rnd.nextInt(chars.length)]).join()}';
+    await updateServerConfig(apiKey: key);
+  }
+
+  // ─── Чекпоинты и построчный Diff (из Mobile-Harness WorkspaceCheckpoints) ──
+
+  void _recordCheckpointDiff(String ws, String fullPath, String beforeContent, String afterContent) {
+    final rel = p.relative(fullPath, from: ws);
+    final beforeLines = beforeContent.isEmpty ? <String>[] : beforeContent.split('\n');
+    final afterLines = afterContent.isEmpty ? <String>[] : afterContent.split('\n');
+
+    final existingIdx = state.pendingChanges.indexWhere((c) => c.relativePath == rel);
+    final baseline = existingIdx >= 0 ? state.pendingChanges[existingIdx].beforeContent : beforeContent;
+    final baseLines = baseline.isEmpty ? <String>[] : baseline.split('\n');
+
+    int additions = 0;
+    int deletions = 0;
+    final diffLines = <AgentDiffLine>[];
+
+    final maxLen = max(baseLines.length, afterLines.length);
+    for (int i = 0; i < maxLen && diffLines.length < 220; i++) {
+      final oldL = i < baseLines.length ? baseLines[i] : null;
+      final newL = i < afterLines.length ? afterLines[i] : null;
+      if (oldL == newL && oldL != null) {
+        diffLines.add(AgentDiffLine(
+          type: AgentDiffLineType.context,
+          text: oldL,
+          oldLine: i + 1,
+          newLine: i + 1,
+        ));
+      } else {
+        if (oldL != null) {
+          deletions++;
+          diffLines.add(AgentDiffLine(
+            type: AgentDiffLineType.deletion,
+            text: oldL,
+            oldLine: i + 1,
+          ));
+        }
+        if (newL != null) {
+          additions++;
+          diffLines.add(AgentDiffLine(
+            type: AgentDiffLineType.addition,
+            text: newL,
+            newLine: i + 1,
+          ));
+        }
+      }
+    }
+
+    final item = WorkspaceChangeItem(
+      relativePath: rel,
+      beforeContent: baseline,
+      afterContent: afterContent,
+      additions: additions,
+      deletions: deletions,
+      diffLines: diffLines,
+      timestamp: DateTime.now(),
+    );
+
+    final updated = List<WorkspaceChangeItem>.from(state.pendingChanges);
+    if (existingIdx >= 0) {
+      updated[existingIdx] = item;
+    } else {
+      updated.insert(0, item);
+    }
+    state = state.copyWith(pendingChanges: updated);
+  }
+
+  void acceptChange(String relativePath) {
+    final updated = state.pendingChanges.where((c) => c.relativePath != relativePath).toList();
+    state = state.copyWith(pendingChanges: updated);
+  }
+
+  Future<void> undoChange(String relativePath) async {
+    final ws = _ref.read(workspaceProvider).currentPath;
+    if (ws == null) return;
+    final idx = state.pendingChanges.indexWhere((c) => c.relativePath == relativePath);
+    if (idx < 0) return;
+    final item = state.pendingChanges[idx];
+    final fullPath = p.join(ws, item.relativePath);
+    try {
+      final file = File(fullPath);
+      if (item.beforeContent.isEmpty) {
+        if (await file.exists()) await file.delete();
+      } else {
+        await file.writeAsString(item.beforeContent, flush: true);
+        await _mirrorAndReloadInIde(ws, fullPath, item.beforeContent, []);
+      }
+    } catch (_) {}
+    final updated = List<WorkspaceChangeItem>.from(state.pendingChanges)..removeAt(idx);
+    state = state.copyWith(pendingChanges: updated);
+  }
+
+  void acceptAllChanges() {
+    state = state.copyWith(pendingChanges: const []);
+  }
+
+  Future<void> undoAllChanges() async {
+    for (final item in List<WorkspaceChangeItem>.from(state.pendingChanges)) {
+      await undoChange(item.relativePath);
+    }
+  }
+
+  // ─── Разбор <think>...</think> (из cross-platform-llm-client ThoughtParser) ─
+
+  ({String cleanContent, String? thinking}) _parseThought(String raw) {
+    final thinkRegex = RegExp(r'<think>([\s\S]*?)</think>', caseSensitive: false);
+    final match = thinkRegex.firstMatch(raw);
+    if (match != null) {
+      final thought = match.group(1)?.trim();
+      final cleaned = raw.replaceAll(thinkRegex, '').trim();
+      return (cleanContent: cleaned, thinking: (thought != null && thought.isNotEmpty) ? thought : null);
+    }
+    return (cleanContent: raw, thinking: null);
   }
 
   void clearHistory() {
@@ -145,15 +763,18 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
     state = state.copyWith(isWorking: false, statusText: 'Остановлено');
   }
 
-  /// Быстрая генерация текста (например, для сообщения коммита в GitPanel)
+  /// Быстрая генерация текста (например, для сообщения коммита в GitPanel или локального сервера)
   Future<String> quickComplete(String prompt) async {
     if (state.apiKey.isEmpty || state.providerId == 'antigravity_doctor') {
       return '';
     }
     try {
       final preset = QuantumAgentProviderPreset.byId(state.providerId);
+      final targetUrl = (state.providerId == 'custom' && state.customBaseUrl.isNotEmpty)
+          ? state.customBaseUrl
+          : preset.baseUrl;
       final res = await _dio.post(
-        preset.baseUrl,
+        targetUrl,
         options: Options(headers: {
           'Authorization': 'Bearer ${state.apiKey}',
           'Content-Type': 'application/json',
@@ -163,8 +784,8 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
           'messages': [
             {'role': 'user', 'content': prompt},
           ],
-          'temperature': 0.2,
-          'max_tokens': 200,
+          'temperature': state.temperature,
+          'max_tokens': 250,
         },
       );
       final choices = res.data['choices'] as List?;
@@ -192,7 +813,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       id: assistantMsgId,
       role: 'assistant',
       content: '',
-      thinking: 'Анализирую задачу и рабочее пространство...',
+      thinking: 'Анализирую задачу и рабочее пространство (${state.modelId})...',
       isStreaming: true,
       timestamp: DateTime.now(),
     );
@@ -203,12 +824,11 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       statusText: 'Анализ проекта...',
     );
 
-    // Save request to /storage/emulated/0/QuantumIDE/agent_inbox.json for Antigravity bridge
     _writeBridgeInbox(clean);
 
     try {
       final preset = QuantumAgentProviderPreset.byId(state.providerId);
-      if (preset.id == 'antigravity_doctor' || state.apiKey.trim().isEmpty) {
+      if (preset.id == 'antigravity_doctor' || (preset.requiresKey && state.apiKey.trim().isEmpty)) {
         await _runAutonomousDoctorAndBridge(assistantMsgId, clean);
       } else {
         await _runLlmAgentLoop(assistantMsgId, clean, preset);
@@ -216,7 +836,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
     } catch (e) {
       _updateAssistantMessage(
         assistantMsgId,
-        content: '⚠️ Произошла ошибка при выполнении: `$e`\n\nЗапускаю встроенный локальный Авто-Доктор...',
+        content: '⚠️ Произошла ошибка при обращении к API: `$e`\n\nЗапускаю встроенный локальный Авто-Доктор...',
         isStreaming: false,
       );
       await _runAutonomousDoctorAndBridge(assistantMsgId, clean, appendMode: true);
@@ -234,6 +854,10 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
         'id': 'req_${DateTime.now().millisecondsSinceEpoch}',
         'timestamp': DateTime.now().toIso8601String(),
         'workspace': ws,
+        'provider': state.providerId,
+        'model': state.modelId,
+        'harness': state.selectedHarness,
+        'effort': state.antigravityEffort,
         'prompt': prompt,
         'buildStatus': LiveTelemetryService.instance.currentBuildStatus,
       };
@@ -246,6 +870,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
     String id, {
     String? content,
     String? thinking,
+    int? thinkingDurationMs,
     List<AgentToolCall>? toolCalls,
     List<String>? modifiedFiles,
     bool? isStreaming,
@@ -255,6 +880,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       return m.copyWith(
         content: content ?? m.content,
         thinking: thinking ?? m.thinking,
+        thinkingDurationMs: thinkingDurationMs ?? m.thinkingDurationMs,
         toolCalls: toolCalls ?? m.toolCalls,
         modifiedFiles: modifiedFiles ?? m.modifiedFiles,
         isStreaming: isStreaming ?? m.isStreaming,
@@ -271,6 +897,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
     String userPrompt, {
     bool appendMode = false,
   }) async {
+    final sw = Stopwatch()..start();
     final ws = _ref.read(workspaceProvider).currentPath;
     if (ws == null || ws.isEmpty) {
       _updateAssistantMessage(
@@ -296,7 +923,6 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       _updateAssistantMessage(msgId, toolCalls: List.of(toolCalls));
     }
 
-    // Шаг 1: Мгновенная синхронизация внешнего хранилища /storage/emulated/0/QuantumIDE/<project>
     state = state.copyWith(statusText: 'Синхронизация файлов проекта...');
     final syncCall = AgentToolCall(
       id: 'tc_sync',
@@ -318,7 +944,6 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
           : 'Обновлено/восстановлено файлов: ${syncedFiles.length} (${syncedFiles.join(", ")})',
     ));
 
-    // Если пользователь просит запустить сборку APK
     if (lower.contains('собрать apk') || lower.contains('сборка apk') || lower == 'build apk') {
       final buildCall = AgentToolCall(
         id: 'tc_build_apk',
@@ -335,20 +960,21 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       }, ws, modified);
 
       addOrUpdateTool(buildCall.copyWith(isRunning: false, result: buildRes));
+      sw.stop();
       _updateAssistantMessage(
         msgId,
-        thinking: 'Синхронизация и запуск сборщика выполнены.',
+        thinking: 'Синхронизация и запуск сборщика выполнены (${state.modelId}, effort=${state.antigravityEffort}).',
+        thinkingDurationMs: sw.elapsedMilliseconds,
         content: '🚀 **Сборка APK запущена в терминале сборки!**\n\n'
-            '• Перед стартом я синхронизировал все файлы из `/storage/emulated/0/QuantumIDE/${p.basename(ws)}`.\n'
+            '• Перед стартом синхронизированы все файлы из `/storage/emulated/0/QuantumIDE/${p.basename(ws)}`.\n'
             '• Вывод компиляции в реальном времени записывается в `LiveTelemetryService`.\n'
-            '• Если возникнет ошибка компиляции — нажмите **«🔧 Исправить ошибки сборки»**, и я сразу разберу лог!',
+            '• Если возникнет ошибка компиляции — нажмите **«🔧 Исправить ошибки»**, и я сразу разберу лог!',
         modifiedFiles: modified,
         isStreaming: false,
       );
       return;
     }
 
-    // Шаг 2: Диагностика синтаксиса всех Dart-файлов и логов сборки
     state = state.copyWith(statusText: 'Проверка синтаксиса и логов сборки...');
     final diagCall = AgentToolCall(
       id: 'tc_diag',
@@ -365,7 +991,6 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       result: diagReport.summaryShort,
     ));
 
-    // Шаг 3: Проверка и лечение конфигурации Gradle / памяти для стабильной сборки
     state = state.copyWith(statusText: 'Проверка конфигурации Android/Gradle...');
     final gradleCall = AgentToolCall(
       id: 'tc_gradle',
@@ -384,12 +1009,14 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
 
     final telemetry = LiveTelemetryService.instance;
     final buildTail = await _readLastBuildErrorLines();
+    sw.stop();
 
     final buffer = StringBuffer();
     if (appendMode) {
       buffer.writeln('---');
     }
     buffer.writeln('### ⚡ Отчёт Quantum Agent по проекту `${p.basename(ws)}`\n');
+    buffer.writeln('🤖 **Активный движок:** `${state.selectedHarness}` · **Модель:** `${state.modelId}`\n');
 
     if (syncedFiles.isNotEmpty) {
       buffer.writeln('✅ **Синхронизировано и восстановлено из `/storage/emulated/0/QuantumIDE/${p.basename(ws)}`:**');
@@ -398,7 +1025,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       }
       buffer.writeln();
     } else {
-      buffer.writeln('✅ **Синхронизация файлов:** Все файлы во внутренней памяти и `/storage/emulated/0/QuantumIDE/${p.basename(ws)}` полностью идентичны (пустых файлов 0 байт нет).\n');
+      buffer.writeln('✅ **Синхронизация файлов:** Все файлы во внутренней памяти и `/storage/emulated/0/QuantumIDE/${p.basename(ws)}` полностью идентичны (0-байтовых файлов нет).\n');
     }
 
     buffer.writeln('🔍 **Проверка кода (`FastSyntaxEngine`):**');
@@ -420,12 +1047,10 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       buffer.writeln('\n📋 **Последние строки сборщика:**\n```text\n$buildTail\n```');
     }
 
-    buffer.writeln('\n💡 *Ваш запрос также сохранён в мост Antigravity (`/storage/emulated/0/QuantumIDE/agent_inbox.json`). '
-        'Чтобы включить генерацию любого нового кода прямо внутри этого окна через облачные ИИ (DeepSeek / Qwen / Gemini / Llama 3.3), нажмите на шестерёнку ⚙️ вверху панели чата и выберите провайдера.*');
-
     _updateAssistantMessage(
       msgId,
-      thinking: 'Диагностика, синхронизация и проверка сборщика завершены.',
+      thinking: 'Диагностика, синхронизация и проверка сборщика завершены (${sw.elapsedMilliseconds} мс).',
+      thinkingDurationMs: sw.elapsedMilliseconds,
       content: buffer.toString(),
       modifiedFiles: modified,
       isStreaming: false,
@@ -433,13 +1058,14 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 2. ПОЛНЫЙ АВТОНОМНЫЙ ЦИКЛ LLM-АГЕНТА (ReAct + Tool Calling как в Cline/AGY)
+  // 2. ПОЛНЫЙ АВТОНОМНЫЙ ЦИКЛ LLM-АГЕНТА (ReAct + Tool Calling + OpenRouter)
   // ═══════════════════════════════════════════════════════════════════════════
   Future<void> _runLlmAgentLoop(
     String msgId,
     String userPrompt,
     QuantumAgentProviderPreset preset,
   ) async {
+    final sw = Stopwatch()..start();
     final ws = _ref.read(workspaceProvider).currentPath;
     if (ws == null || ws.isEmpty) {
       _updateAssistantMessage(
@@ -451,7 +1077,6 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       return;
     }
 
-    // Сначала синхронизируем внешние изменения
     await _ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
 
     final toolCallsUi = <AgentToolCall>[];
@@ -474,25 +1099,30 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       return s.openFiles[s.activeTabIndex];
     });
 
+    final extraSystem = state.systemPromptPreset == 'custom' && state.customSystemPrompt.trim().isNotEmpty
+        ? '\nДОПОЛНИТЕЛЬНАЯ ИНСТРУКЦИЯ ПОЛЬЗОВАТЕЛЯ:\n${state.customSystemPrompt.trim()}\n'
+        : state.systemPromptPreset == 'uncensored'
+            ? '\nРежим: Uncensored (отвечай прямо и без лишних дисклеймеров).\n'
+            : '';
+
     final systemPrompt = '''
-Ты — Quantum Agent, автономный ИИ-инженер внутри мобильной среды разработки Quantum IDE (построен по архитектуре Antigravity / Cline).
+Ты — Quantum Agent (PrivateLM + Mobile Harness), автономный ИИ-инженер внутри мобильной среды разработки Quantum IDE.
 Текущий проект: $ws (зеркало во внешней памяти: /storage/emulated/0/QuantumIDE/${p.basename(ws)}).
 Открытый файл в редакторе: ${activeFile != null ? p.relative(activeFile.path, from: ws) : 'нет'}.
-Статус последней сборки: ${LiveTelemetryService.instance.currentBuildStatus}.
+Статус последней сборки: ${LiveTelemetryService.instance.currentBuildStatus}.$extraSystem
 
-ТВОИ ИНСТРУМЕНТЫ (вызывай через XML блок <tool_call> или стандартный JSON tool_calls):
-Чтобы вызвать инструмент, выведи блок:
+ТВОИ ИНСТРУМЕНТЫ (вызывай через XML блок <tool_call>):
 <tool_call>
 {"name": "ИМЯ_ИНСТРУМЕНТА", "arguments": {...}}
 </tool_call>
 
 Доступные инструменты:
 1. "list_files": {"subdir": "опциональная подпапка, например lib"} — список файлов проекта.
-2. "search_code": {"query": "строка или regex поиска", "subdir": "lib"} — поиск текста по файлам проекта.
+2. "search_code": {"query": "строка поиска", "subdir": "lib"} — поиск текста по файлам проекта.
 3. "read_file": {"path": "относительный путь, например lib/main.dart", "start_line": 1, "end_line": 200} — чтение файла с номерами строк.
 4. "edit_file": {"path": "относительный путь", "target": "точный фрагмент старого кода", "replacement": "новый код"} — точечная замена кода в файле.
 5. "write_file": {"path": "относительный путь", "content": "полный текст файла"} — создание или перезапись файла.
-6. "run_command": {"command": "команда bash/flutter", "in_terminal": false} — запуск команды в проекте (если in_terminal=true — отправит команду в терминал сборки IDE).
+6. "run_command": {"command": "команда bash/flutter", "in_terminal": false} — запуск команды в проекте.
 7. "get_diagnostics": {} — получить все текущие ошибки синтаксиса Dart и последние строки лога сборки APK.
 
 ПРАВИЛА РАБОТЫ:
@@ -505,7 +1135,6 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       {'role': 'system', 'content': systemPrompt},
     ];
 
-    // Добавляем последние сообщения из истории
     final history = state.messages.where((m) => m.id != msgId && m.id != 'welcome').toList();
     for (final h in history.skip(history.length > 6 ? history.length - 6 : 0)) {
       conversation.add({
@@ -516,24 +1145,46 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
 
     String finalAnswer = '';
     const maxSteps = 8;
+    final targetUrl = (state.providerId == 'custom' && state.customBaseUrl.isNotEmpty)
+        ? state.customBaseUrl
+        : preset.baseUrl;
 
     for (int step = 1; step <= maxSteps; step++) {
       if (_cancelRequested) break;
       state = state.copyWith(statusText: 'Шаг $step: размышление (${state.modelId})...');
 
+      final payload = <String, dynamic>{
+        'model': state.modelId,
+        'messages': conversation,
+        'temperature': state.temperature,
+        'max_tokens': state.maxTokens,
+        if (state.stopSequences.isNotEmpty) 'stop': state.stopSequences,
+      };
+
+      // OpenRouter Routing Gateway (из Mobile-Harness OpenRouterRoutingGateway.kt)
+      if (preset.id == 'openrouter' && state.openRouterProviderOrder.trim().isNotEmpty) {
+        final order = state.openRouterProviderOrder
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (order.isNotEmpty) {
+          payload['provider'] = {
+            'order': order,
+            'allow_fallbacks': state.openRouterAllowFallbacks,
+          };
+        }
+      }
+
       final response = await _dio.post(
-        preset.baseUrl,
+        targetUrl,
         options: Options(headers: {
-          'Authorization': 'Bearer ${state.apiKey}',
+          if (state.apiKey.isNotEmpty) 'Authorization': 'Bearer ${state.apiKey}',
           'Content-Type': 'application/json',
           if (preset.id == 'openrouter') 'HTTP-Referer': 'https://github.com/Lesorub361/quantum_ide',
           if (preset.id == 'openrouter') 'X-Title': 'QuantumIDE Agent',
         }),
-        data: {
-          'model': state.modelId,
-          'messages': conversation,
-          'temperature': 0.15,
-        },
+        data: payload,
       );
 
       final choices = response.data['choices'] as List?;
@@ -542,14 +1193,22 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       final rawContent = msgObj['content']?.toString() ?? '';
       final reasoning = msgObj['reasoning_content']?.toString();
 
-      // Извлекаем все вызовы <tool_call>...</tool_call>
-      final parsedCalls = _extractXmlToolCalls(rawContent);
-      final cleanText = rawContent
+      final thoughtParsed = _parseThought(rawContent);
+      final parsedCalls = _extractXmlToolCalls(thoughtParsed.cleanContent);
+      final cleanText = thoughtParsed.cleanContent
           .replaceAll(RegExp(r'<tool_call>[\s\S]*?</tool_call>'), '')
           .trim();
 
-      if (reasoning != null && reasoning.isNotEmpty) {
-        _updateAssistantMessage(msgId, thinking: reasoning);
+      final combinedThinking = (reasoning != null && reasoning.isNotEmpty)
+          ? reasoning
+          : thoughtParsed.thinking;
+
+      if (combinedThinking != null && combinedThinking.isNotEmpty) {
+        _updateAssistantMessage(
+          msgId,
+          thinking: combinedThinking,
+          thinkingDurationMs: sw.elapsedMilliseconds,
+        );
       }
 
       if (cleanText.isNotEmpty) {
@@ -558,7 +1217,6 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       }
 
       if (parsedCalls.isEmpty) {
-        // Агент завершил работу и дал финальный ответ
         break;
       }
 
@@ -569,7 +1227,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
         if (_cancelRequested) break;
         final name = callSpec['name']?.toString() ?? '';
         final args = (callSpec['arguments'] as Map?)?.cast<String, dynamic>() ?? const {};
-        final tcId = 'tc_${DateTime.now().millisecondsSinceEpoch}_${ toolCallsUi.length}';
+        final tcId = 'tc_${DateTime.now().millisecondsSinceEpoch}_${toolCallsUi.length}';
         final title = _formatToolTitle(name, args);
 
         state = state.copyWith(statusText: title);
@@ -599,9 +1257,11 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       });
     }
 
+    sw.stop();
     _updateAssistantMessage(
       msgId,
       content: finalAnswer.isEmpty ? '✅ Задача выполнена.' : finalAnswer,
+      thinkingDurationMs: sw.elapsedMilliseconds,
       modifiedFiles: modifiedFiles,
       isStreaming: false,
     );
@@ -646,7 +1306,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 3. РЕАЛИЗАЦИЯ ИНСТРУМЕНТОВ АГЕНТА (ФАЙЛЫ, ПОИСК, ТЕРМИНАЛ, ДИАГНОСТИКА)
+  // 3. РЕАЛИЗАЦИЯ ИНСТРУМЕНТОВ АГЕНТА + ЧЕКПОИНТЫ DIFF
   // ═══════════════════════════════════════════════════════════════════════════
   Future<String> _executeTool(
     String name,
@@ -749,6 +1409,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
           if (newContent.trim().isEmpty && content.trim().isNotEmpty) {
             return 'ERROR: Защита от пустых файлов (0 байт) заблокировала очистку файла.';
           }
+          _recordCheckpointDiff(ws, fullPath, content, newContent);
           await file.writeAsString(newContent, flush: true);
           await _mirrorAndReloadInIde(ws, fullPath, newContent, modifiedFiles);
           final syntaxDiags = FastSyntaxEngine.instance.analyze(fullPath, newContent);
@@ -757,7 +1418,7 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
             return 'Файл $reqPath обновлён, но анализатор нашёл синтаксические ошибки:\n'
                 '${errs.map((e) => "Строка ${e.range.index + 1}: ${e.message}").join("\n")}';
           }
-          return 'SUCCESS: Файл $reqPath успешно обновлён и синхронизирован (ошибок синтаксиса: 0).';
+          return 'SUCCESS: Файл $reqPath успешно обновлён, добавлен в Changes (Diff) и синхронизирован.';
         }
 
         case 'write_file': {
@@ -768,10 +1429,12 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
           }
           final fullPath = p.isAbsolute(reqPath) ? reqPath : p.join(ws, reqPath);
           final file = File(fullPath);
+          final oldContent = await file.exists() ? await file.readAsString() : '';
           await file.parent.create(recursive: true);
+          _recordCheckpointDiff(ws, fullPath, oldContent, content);
           await file.writeAsString(content, flush: true);
           await _mirrorAndReloadInIde(ws, fullPath, content, modifiedFiles);
-          return 'SUCCESS: Файл $reqPath записан (${content.length} байт) и синхронизирован.';
+          return 'SUCCESS: Файл $reqPath записан (${content.length} байт), сохранён в Changes (Diff) и синхронизирован.';
         }
 
         case 'run_command': {
@@ -878,15 +1541,16 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       }
       final gpFile = File(p.join(androidDir.path, 'gradle.properties'));
       String content = await gpFile.exists() ? await gpFile.readAsString() : '';
+      final oldContent = content;
       bool changed = false;
 
-      if (!content.contains('org.gradle.jvmargs=-Xmx2048m')) {
+      if (!content.contains('org.gradle.jvmargs=-Xmx1280m') && !content.contains('org.gradle.jvmargs=-Xmx1536m')) {
         content = content.replaceAll(RegExp(r'org\.gradle\.jvmargs=.*'), '');
-        content = '${content.trim()}\norg.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m\n';
+        content = '${content.trim()}\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\n';
         changed = true;
       }
       if (!content.contains('org.gradle.daemon=false')) {
-        content = '${content.trim()}\norg.gradle.daemon=false\norg.gradle.workers.max=1\norg.gradle.parallel=false\n';
+        content = '${content.trim()}\norg.gradle.daemon=false\norg.gradle.workers.max=1\norg.gradle.parallel=false\nkotlin.compiler.execution.strategy=in-process\n';
         changed = true;
       }
       if (!content.contains('android.aapt2FromMaven=false')) {
@@ -895,11 +1559,12 @@ class QuantumAgentNotifier extends StateNotifier<QuantumAgentState> {
       }
 
       if (changed) {
+        _recordCheckpointDiff(ws, gpFile.path, oldContent, content);
         await gpFile.writeAsString(content, flush: true);
         await _mirrorAndReloadInIde(ws, gpFile.path, content, modified);
-        return 'Оптимизированы флаги памяти (-Xmx2048m, daemon=false, native aapt2) в android/gradle.properties.';
+        return 'Оптимизированы флаги памяти (-Xmx1280m, in-process Kotlin, daemon=false) в android/gradle.properties.';
       }
-      return 'android/gradle.properties уже оптимален (-Xmx2048m, daemon=false, native aapt2).';
+      return 'android/gradle.properties уже оптимален (-Xmx1280m, daemon=false, native aapt2).';
     } catch (e) {
       return 'Проверка gradle.properties: $e';
     }
