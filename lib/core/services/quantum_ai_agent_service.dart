@@ -11,6 +11,237 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 
+class QuantumModelItem {
+  final String id;
+  final String name;
+  final String providerName; // 'OpenRouter', 'DeepSeek Direct', 'OpenAI Direct', 'Anthropic Direct', 'Local'
+  final String category; // 'Популярные', 'Рассуждения', 'Кодинг', 'Бесплатные', 'Флагманы', 'Прямой API'
+  final String badge;
+  final int badgeColorValue;
+  final bool isReasoning;
+  final bool isOpenRouter;
+
+  const QuantumModelItem({
+    required this.id,
+    required this.name,
+    required this.providerName,
+    required this.category,
+    required this.badge,
+    required this.badgeColorValue,
+    this.isReasoning = false,
+    this.isOpenRouter = true,
+  });
+
+  static const List<QuantumModelItem> predefinedModels = [
+    // OpenRouter - DeepSeek
+    QuantumModelItem(
+      id: 'deepseek/deepseek-chat',
+      name: 'DeepSeek V3 (671B)',
+      providerName: 'OpenRouter',
+      category: 'Кодинг',
+      badge: 'V3 671B',
+      badgeColorValue: 0xFF3B82F6,
+    ),
+    QuantumModelItem(
+      id: 'deepseek/deepseek-r1',
+      name: 'DeepSeek R1 (Reasoning)',
+      providerName: 'OpenRouter',
+      category: 'Рассуждения',
+      badge: 'R1 Reasoning',
+      badgeColorValue: 0xFF8B5CF6,
+      isReasoning: true,
+    ),
+    QuantumModelItem(
+      id: 'deepseek/deepseek-r1:free',
+      name: 'DeepSeek R1 (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE',
+      badgeColorValue: 0xFF10B981,
+      isReasoning: true,
+    ),
+
+    // Claude
+    QuantumModelItem(
+      id: 'anthropic/claude-3.7-sonnet',
+      name: 'Claude 3.7 Sonnet',
+      providerName: 'OpenRouter',
+      category: 'Флагманы',
+      badge: 'Hybrid 3.7',
+      badgeColorValue: 0xFFD97706,
+      isReasoning: true,
+    ),
+    QuantumModelItem(
+      id: 'anthropic/claude-3.5-sonnet',
+      name: 'Claude 3.5 Sonnet',
+      providerName: 'OpenRouter',
+      category: 'Кодинг',
+      badge: 'Top Code',
+      badgeColorValue: 0xFFD97706,
+    ),
+    QuantumModelItem(
+      id: 'anthropic/claude-3.5-haiku',
+      name: 'Claude 3.5 Haiku',
+      providerName: 'OpenRouter',
+      category: 'Быстрые',
+      badge: 'Fast',
+      badgeColorValue: 0xFFF59E0B,
+    ),
+
+    // OpenAI
+    QuantumModelItem(
+      id: 'openai/gpt-4o',
+      name: 'GPT-4o (Omni)',
+      providerName: 'OpenRouter',
+      category: 'Флагманы',
+      badge: 'Omni',
+      badgeColorValue: 0xFF059669,
+    ),
+    QuantumModelItem(
+      id: 'openai/gpt-4o-mini',
+      name: 'GPT-4o Mini',
+      providerName: 'OpenRouter',
+      category: 'Быстрые',
+      badge: 'Fast',
+      badgeColorValue: 0xFF059669,
+    ),
+    QuantumModelItem(
+      id: 'openai/o3-mini',
+      name: 'o3-mini (Reasoning)',
+      providerName: 'OpenRouter',
+      category: 'Рассуждения',
+      badge: 'o3 Reasoning',
+      badgeColorValue: 0xFF10B981,
+      isReasoning: true,
+    ),
+    QuantumModelItem(
+      id: 'openai/o1',
+      name: 'o1 (Deep Reasoning)',
+      providerName: 'OpenRouter',
+      category: 'Рассуждения',
+      badge: 'o1',
+      badgeColorValue: 0xFF10B981,
+      isReasoning: true,
+    ),
+
+    // Google Gemini
+    QuantumModelItem(
+      id: 'google/gemini-2.0-flash-001',
+      name: 'Gemini 2.0 Flash',
+      providerName: 'OpenRouter',
+      category: 'Быстрые',
+      badge: 'Flash 2.0',
+      badgeColorValue: 0xFF2563EB,
+    ),
+    QuantumModelItem(
+      id: 'google/gemini-2.0-flash-exp:free',
+      name: 'Gemini 2.0 Flash (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE',
+      badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'google/gemini-2.5-pro',
+      name: 'Gemini 2.5 Pro',
+      providerName: 'OpenRouter',
+      category: 'Флагманы',
+      badge: 'Pro 2.5',
+      badgeColorValue: 0xFF2563EB,
+    ),
+
+    // Qwen & Llama
+    QuantumModelItem(
+      id: 'qwen/qwen-2.5-coder-32b-instruct',
+      name: 'Qwen 2.5 Coder 32B',
+      providerName: 'OpenRouter',
+      category: 'Кодинг',
+      badge: 'Top Coder',
+      badgeColorValue: 0xFF6366F1,
+    ),
+    QuantumModelItem(
+      id: 'qwen/qwen-2.5-coder-32b-instruct:free',
+      name: 'Qwen 2.5 Coder (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE',
+      badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'meta-llama/llama-3.3-70b-instruct',
+      name: 'Llama 3.3 70B',
+      providerName: 'OpenRouter',
+      category: 'Популярные',
+      badge: '70B',
+      badgeColorValue: 0xFFEC4899,
+    ),
+    QuantumModelItem(
+      id: 'meta-llama/llama-3.3-70b-instruct:free',
+      name: 'Llama 3.3 70B (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE',
+      badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'mistralai/codestral-2501',
+      name: 'Codestral 2501',
+      providerName: 'OpenRouter',
+      category: 'Кодинг',
+      badge: 'Codestral',
+      badgeColorValue: 0xFFF97316,
+    ),
+
+    // Direct API Models
+    QuantumModelItem(
+      id: 'deepseek-chat',
+      name: 'DeepSeek V3 (Direct)',
+      providerName: 'DeepSeek Direct',
+      category: 'Прямой API',
+      badge: 'Direct API',
+      badgeColorValue: 0xFF3B82F6,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'deepseek-reasoner',
+      name: 'DeepSeek R1 (Direct)',
+      providerName: 'DeepSeek Direct',
+      category: 'Прямой API',
+      badge: 'R1 Direct',
+      badgeColorValue: 0xFF8B5CF6,
+      isReasoning: true,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'gpt-4o',
+      name: 'OpenAI GPT-4o (Direct)',
+      providerName: 'OpenAI Direct',
+      category: 'Прямой API',
+      badge: 'Direct API',
+      badgeColorValue: 0xFF059669,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'claude-3-5-sonnet-20241022',
+      name: 'Claude 3.5 Sonnet (Direct)',
+      providerName: 'Anthropic Direct',
+      category: 'Прямой API',
+      badge: 'Direct API',
+      badgeColorValue: 0xFFD97706,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'default',
+      name: 'Локальный / Custom API',
+      providerName: 'Local',
+      category: 'Локальный',
+      badge: 'Local',
+      badgeColorValue: 0xFF6B7280,
+      isOpenRouter: false,
+    ),
+  ];
+}
+
 enum AiProvider {
   deepseek('DeepSeek', 'deepseek-chat'),
   deepseekR1('DeepSeek R1', 'deepseek-reasoner'),
@@ -95,6 +326,7 @@ class QuantumAiAgentService extends ChangeNotifier {
   ));
 
   CancelToken? _currentCancelToken;
+  QuantumModelItem _selectedModel = QuantumModelItem.predefinedModels[0]; // DeepSeek V3 by default
   AiProvider _selectedProvider = AiProvider.deepseek;
   final List<ChatMessage> _messages = [];
   bool _isGenerating = false;
@@ -103,10 +335,66 @@ class QuantumAiAgentService extends ChangeNotifier {
   List<ChatMessage> get messages => List.unmodifiable(_messages);
   bool get isGenerating => _isGenerating;
   String get statusMessage => _statusMessage;
+  QuantumModelItem get selectedModel => _selectedModel;
   AiProvider get selectedProvider => _selectedProvider;
+
+  void selectModel(QuantumModelItem model) {
+    _selectedModel = model;
+    notifyListeners();
+  }
+
+  void setCustomModel(String modelId) {
+    final trimmed = modelId.trim();
+    if (trimmed.isEmpty) return;
+    final isR1 = trimmed.toLowerCase().contains('r1') ||
+        trimmed.toLowerCase().contains('reasoning') ||
+        trimmed.toLowerCase().contains('o3') ||
+        trimmed.toLowerCase().contains('o1');
+
+    _selectedModel = QuantumModelItem(
+      id: trimmed,
+      name: trimmed.contains('/') ? trimmed.split('/').last : trimmed,
+      providerName: 'OpenRouter',
+      category: 'Пользовательские',
+      badge: isR1 ? 'Reasoning' : 'Custom',
+      badgeColorValue: isR1 ? 0xFF8B5CF6 : 0xFF10B981,
+      isReasoning: isR1,
+      isOpenRouter: true,
+    );
+    notifyListeners();
+  }
 
   void selectProvider(AiProvider provider) {
     _selectedProvider = provider;
+    switch (provider) {
+      case AiProvider.deepseek:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'deepseek/deepseek-chat', orElse: () => QuantumModelItem.predefinedModels[0]);
+        break;
+      case AiProvider.deepseekR1:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'deepseek/deepseek-r1', orElse: () => QuantumModelItem.predefinedModels[1]);
+        break;
+      case AiProvider.openrouterClaude:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'anthropic/claude-3.5-sonnet', orElse: () => QuantumModelItem.predefinedModels[4]);
+        break;
+      case AiProvider.openrouterGpt4o:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'openai/gpt-4o', orElse: () => QuantumModelItem.predefinedModels[6]);
+        break;
+      case AiProvider.openrouterQwen:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'qwen/qwen-2.5-coder-32b-instruct', orElse: () => QuantumModelItem.predefinedModels[13]);
+        break;
+      case AiProvider.openrouterGemini:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'google/gemini-2.0-flash-001', orElse: () => QuantumModelItem.predefinedModels[10]);
+        break;
+      case AiProvider.openai:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'gpt-4o', orElse: () => QuantumModelItem.predefinedModels[19]);
+        break;
+      case AiProvider.anthropic:
+        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'claude-3-5-sonnet-20241022', orElse: () => QuantumModelItem.predefinedModels[20]);
+        break;
+      case AiProvider.custom:
+        _selectedModel = QuantumModelItem.predefinedModels.last;
+        break;
+    }
     notifyListeners();
   }
 
@@ -256,54 +544,86 @@ class QuantumAiAgentService extends ChangeNotifier {
   }) async {
     String endpoint;
     String apiKey;
-    String model;
+    String model = _selectedModel.id;
 
-    switch (_selectedProvider) {
-      case AiProvider.deepseek:
+    if (_selectedModel.isOpenRouter) {
+      endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+      apiKey = settings.openrouterApiKey;
+      // Smart fallback: if user has no OpenRouter key but has DeepSeek direct key
+      if (apiKey.isEmpty && settings.deepseekApiKey.isNotEmpty && model.startsWith('deepseek/')) {
         endpoint = 'https://api.deepseek.com/chat/completions';
         apiKey = settings.deepseekApiKey;
-        model = 'deepseek-chat';
-        break;
-      case AiProvider.deepseekR1:
-        endpoint = 'https://api.deepseek.com/chat/completions';
-        apiKey = settings.deepseekApiKey;
-        model = 'deepseek-reasoner';
-        break;
-      case AiProvider.openrouterClaude:
-      case AiProvider.openrouterGpt4o:
-      case AiProvider.openrouterQwen:
-      case AiProvider.openrouterGemini:
-        endpoint = 'https://openrouter.ai/api/v1/chat/completions';
-        apiKey = settings.openrouterApiKey;
-        model = _selectedProvider.defaultModel;
-        break;
-      case AiProvider.openai:
-        endpoint = 'https://api.openai.com/v1/chat/completions';
-        apiKey = settings.openaiApiKey;
-        model = 'gpt-4o';
-        break;
-      case AiProvider.anthropic:
-        endpoint = 'https://api.anthropic.com/v1/messages';
-        apiKey = settings.anthropicApiKey;
-        model = 'claude-3-5-sonnet-20241022';
-        break;
-      case AiProvider.custom:
+        model = model.contains('r1') ? 'deepseek-reasoner' : 'deepseek-chat';
+      }
+    } else {
+      // Direct API model
+      if (_selectedModel.id.startsWith('deepseek')) {
+        if (settings.deepseekApiKey.isNotEmpty) {
+          endpoint = 'https://api.deepseek.com/chat/completions';
+          apiKey = settings.deepseekApiKey;
+          model = _selectedModel.id;
+        } else if (settings.openrouterApiKey.isNotEmpty) {
+          // SMART FALLBACK: user entered OpenRouter key, route DeepSeek through OpenRouter!
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+          apiKey = settings.openrouterApiKey;
+          model = _selectedModel.id == 'deepseek-reasoner'
+              ? 'deepseek/deepseek-r1'
+              : 'deepseek/deepseek-chat';
+        } else {
+          endpoint = 'https://api.deepseek.com/chat/completions';
+          apiKey = '';
+          model = _selectedModel.id;
+        }
+      } else if (_selectedModel.id.startsWith('gpt')) {
+        if (settings.openaiApiKey.isNotEmpty) {
+          endpoint = 'https://api.openai.com/v1/chat/completions';
+          apiKey = settings.openaiApiKey;
+        } else if (settings.openrouterApiKey.isNotEmpty) {
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+          apiKey = settings.openrouterApiKey;
+          model = 'openai/${_selectedModel.id}';
+        } else {
+          endpoint = 'https://api.openai.com/v1/chat/completions';
+          apiKey = '';
+        }
+      } else if (_selectedModel.id.startsWith('claude')) {
+        if (settings.anthropicApiKey.isNotEmpty) {
+          endpoint = 'https://api.anthropic.com/v1/messages';
+          apiKey = settings.anthropicApiKey;
+        } else if (settings.openrouterApiKey.isNotEmpty) {
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+          apiKey = settings.openrouterApiKey;
+          model = 'anthropic/${_selectedModel.id}';
+        } else {
+          endpoint = 'https://api.anthropic.com/v1/messages';
+          apiKey = '';
+        }
+      } else {
         endpoint = 'http://127.0.0.1:11434/v1/chat/completions';
-        apiKey = settings.deepseekApiKey;
-        model = 'default';
-        break;
+        apiKey = settings.deepseekApiKey.isNotEmpty ? settings.deepseekApiKey : 'ollama';
+      }
     }
 
-    if (apiKey.isEmpty && _selectedProvider != AiProvider.custom) {
-      throw Exception('Не указан API ключ для ${_selectedProvider.label}. Нажмите на иконку настроек ⚙️ вверху, чтобы ввести ключ.');
+    if (apiKey.isEmpty && _selectedModel.id != 'default') {
+      if (_selectedModel.isOpenRouter) {
+        throw Exception(
+          'Не указан OpenRouter API ключ. Введите его в настройках ⚙️ (вверху справа). '
+          'С ключом OpenRouter вам доступны все модели: DeepSeek V3/R1, Claude 3.7, GPT-4o, Gemini 2.0, Qwen!',
+        );
+      } else {
+        throw Exception(
+          'Не указан API ключ для ${_selectedModel.name}. Введите ключ в настройках ⚙️ (или используйте ключ OpenRouter, поддерживающий любые модели).',
+        );
+      }
     }
 
+    final isUsingOpenRouter = endpoint.contains('openrouter.ai');
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $apiKey',
     };
 
-    if (_selectedProvider.label.contains('OpenRouter')) {
+    if (isUsingOpenRouter) {
       headers['HTTP-Referer'] = 'https://github.com/Lesorub361/quantum_ide';
       headers['X-Title'] = 'Quantum IDE';
     }

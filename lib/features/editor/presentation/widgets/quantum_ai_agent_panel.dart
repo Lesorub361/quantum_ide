@@ -85,6 +85,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     SettingsState settings,
     String projectName,
   ) {
+    final currentModel = agent.selectedModel;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -105,30 +106,51 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
           ),
           const SizedBox(width: 8),
 
-          // Provider & Model Dropdown
-          Container(
-            height: 28,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0A0D14),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<AiProvider>(
-                value: agent.selectedProvider,
-                dropdownColor: const Color(0xFF161A26),
-                icon: const Icon(LucideIcons.chevron_down, size: 12, color: Colors.white60),
-                style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white, fontWeight: FontWeight.w600),
-                items: AiProvider.values.map((p) {
-                  return DropdownMenuItem<AiProvider>(
-                    value: p,
-                    child: Text(p.label),
-                  );
-                }).toList(),
-                onChanged: (p) {
-                  if (p != null) agent.selectProvider(p);
-                },
+          // Interactive Model Selector Pill Button
+          InkWell(
+            onTap: () => _showModelSelectorDialog(context, agent),
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A0D14),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    child: Text(
+                      currentModel.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  if (currentModel.badge != null) ...[
+                    const SizedBox(width: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: Color(currentModel.badgeColorValue ?? 0xFF8B5CF6).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        currentModel.badge!,
+                        style: TextStyle(
+                          color: Color(currentModel.badgeColorValue ?? 0xFFA78BFA),
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 4),
+                  const Icon(LucideIcons.chevron_down, size: 12, color: Colors.white60),
+                ],
               ),
             ),
           ),
@@ -148,12 +170,12 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 const Icon(LucideIcons.folder, size: 10, color: Colors.cyanAccent),
                 const SizedBox(width: 4),
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 80),
+                  constraints: const BoxConstraints(maxWidth: 65),
                   child: Text(
                     projectName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10.5),
+                    style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10),
                   ),
                 ),
               ],
@@ -180,6 +202,328 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             onPressed: () => _showApiKeysDialog(context, settings),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showModelSelectorDialog(BuildContext context, QuantumAiAgentService agent) {
+    String searchQuery = '';
+    String selectedCategory = 'Все';
+    final customModelCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final categories = [
+            'Все',
+            'Популярные',
+            'Рассуждения',
+            'Кодинг',
+            'Бесплатные',
+            'Флагманы',
+            'Прямой API',
+          ];
+
+          final allModels = QuantumAiAgentService.predefinedModels;
+          final filteredModels = allModels.where((m) {
+            final matchesCategory = selectedCategory == 'Все' || m.category == selectedCategory;
+            final matchesQuery = searchQuery.isEmpty ||
+                m.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                m.id.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                (m.badge != null && m.badge!.toLowerCase().contains(searchQuery.toLowerCase()));
+            return matchesCategory && matchesQuery;
+          }).toList();
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF131722),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(LucideIcons.cpu, color: Color(0xFFA78BFA), size: 18),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Каталог ИИ-Моделей',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Все модели доступны по ключу OpenRouter',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 10.5),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 480,
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  // Search field
+                  Container(
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0A0D14),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.search, size: 14, color: Colors.white38),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            onChanged: (val) {
+                              setDialogState(() {
+                                searchQuery = val.trim();
+                              });
+                            },
+                            style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+                            decoration: const InputDecoration(
+                              hintText: 'Поиск (DeepSeek, Claude, Free, Coder)...',
+                              hintStyle: TextStyle(color: Colors.white38, fontSize: 11),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Category horizontal chips
+                  SizedBox(
+                    height: 28,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      itemCount: categories.length,
+                      itemBuilder: (context, idx) {
+                        final cat = categories[idx];
+                        final isSelected = selectedCategory == cat;
+                        return InkWell(
+                          onTap: () {
+                            setDialogState(() {
+                              selectedCategory = cat;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.25)
+                                  : Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFF8B5CF6)
+                                    : Colors.white.withValues(alpha: 0.08),
+                              ),
+                            ),
+                            child: Text(
+                              cat,
+                              style: TextStyle(
+                                color: isSelected ? const Color(0xFFA78BFA) : Colors.white70,
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Models List
+                  Expanded(
+                    child: filteredModels.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Модели не найдены',
+                              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
+                            ),
+                          )
+                        : ListView.separated(
+                            physics: const BouncingScrollPhysics(),
+                            itemCount: filteredModels.length,
+                            separatorBuilder: (_, __) => Divider(
+                              height: 1,
+                              color: Colors.white.withValues(alpha: 0.05),
+                            ),
+                            itemBuilder: (context, idx) {
+                              final item = filteredModels[idx];
+                              final isCurrent = agent.selectedModel.id == item.id;
+                              final badgeColor = Color(item.badgeColorValue ?? 0xFF8B5CF6);
+
+                              return InkWell(
+                                onTap: () {
+                                  agent.selectModel(item);
+                                  Navigator.pop(ctx);
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: isCurrent
+                                        ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    item.name,
+                                                    style: GoogleFonts.inter(
+                                                      color: Colors.white,
+                                                      fontSize: 12.5,
+                                                      fontWeight: isCurrent
+                                                          ? FontWeight.bold
+                                                          : FontWeight.w500,
+                                                    ),
+                                                  ),
+                                                ),
+                                                if (item.badge != null) ...[
+                                                  const SizedBox(width: 6),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(
+                                                      horizontal: 5,
+                                                      vertical: 1.5,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: badgeColor.withValues(alpha: 0.2),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(
+                                                        color: badgeColor.withValues(alpha: 0.4),
+                                                        width: 0.5,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      item.badge!,
+                                                      style: TextStyle(
+                                                        color: badgeColor,
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${item.providerName} • ${item.id}',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.jetBrainsMono(
+                                                color: Colors.white38,
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isCurrent)
+                                        const Icon(
+                                          LucideIcons.check,
+                                          color: Colors.greenAccent,
+                                          size: 16,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Custom OpenRouter Model ID input
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0A0D14),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: customModelCtrl,
+                            style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 11),
+                            decoration: const InputDecoration(
+                              hintText: 'Кастомный slug (напр. moonshotai/...)',
+                              hintStyle: TextStyle(color: Colors.white38, fontSize: 10.5),
+                              border: InputBorder.none,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF8B5CF6),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () {
+                            final slug = customModelCtrl.text.trim();
+                            if (slug.isNotEmpty) {
+                              agent.setCustomModel(slug);
+                              Navigator.pop(ctx);
+                            }
+                          },
+                          child: const Text('Применить', style: TextStyle(fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -555,14 +899,35 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.sparkles, color: Color(0xFFA78BFA), size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '💡 Ключ OpenRouter открывает доступ сразу ко всем моделям: DeepSeek V3/R1, Claude 3.7, GPT-4o, Gemini 2.0, Qwen и бесплатным моделям!',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               const Text(
                 'Ключи сохраняются локально и шифруются на устройстве:',
                 style: TextStyle(color: Colors.white60, fontSize: 11.5),
               ),
               const SizedBox(height: 12),
-              _buildField('DeepSeek API Key (DEEPSEEK_API_KEY)', dsCtrl),
+              _buildField('OpenRouter Key (универсальный ключ ко всем моделям)', orCtrl),
               const SizedBox(height: 8),
-              _buildField('OpenRouter Key (доступ ко всем моделям)', orCtrl),
+              _buildField('DeepSeek API Key (DEEPSEEK_API_KEY)', dsCtrl),
               const SizedBox(height: 8),
               _buildField('OpenAI Key (OPENAI_API_KEY)', oaCtrl),
               const SizedBox(height: 8),

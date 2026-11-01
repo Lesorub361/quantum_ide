@@ -1,10 +1,10 @@
 {
-  "versionCode": 182,
-  "versionName": "1.2.165",
-  "notes": "QuantumIDE v1.2.165:\n• Внедрён полноэкранный предпросмотр Markdown (иконка «глазик» в верхней панели): мгновенное переключение между редактором и красивым рендерингом (.md файлов) как в GitHub/VS Code.\n• Добавлен встроенный веб-сервер shelf и shelf_static для локального хостинга веб-проектов без Node.js.\n• Добавлены flutter_fancy_tree_view (виртуализированное дерево файлов для 10k+ файлов), substring_highlight, ansicolor, xml, json_path.",
+  "versionCode": 183,
+  "versionName": "1.2.166",
+  "notes": "QuantumIDE v1.2.166:\n• 🌟 Полноценный интерактивный Каталог Моделей в ИИ Агенте с поиском, категориями (🔥 Популярные, 🧠 Рассуждения, 💻 Кодинг, 🎁 Бесплатные Free, ⭐ Флагманы, Прямой API) и бейджами.\n• 🔑 Умная маршрутизация ключей: при вводе OpenRouter Key автоматически работают ВСЕ модели (DeepSeek V3, DeepSeek R1, Claude 3.7, GPT-4o, Gemini 2.0, Qwen 2.5 Coder, Llama 3.3) без необходимости заводить отдельные ключи!\n• ✍️ Поддержка любого кастомного OpenRouter slug прямо из панели.\n• 👁️ Глазик предпросмотра Markdown (.md) файлов в один клик.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.165/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.166/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
