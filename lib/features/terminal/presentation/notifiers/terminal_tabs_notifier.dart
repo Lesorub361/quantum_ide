@@ -250,11 +250,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onDone: () {
           resizeDebounceTimer?.cancel();
           gitRefreshDebounceTimer?.cancel();
-          syncFlushTimer?.cancel();
-          if (syncFrameBuffer.isNotEmpty) {
-            flushTermFrame(syncFrameBuffer);
-            syncFrameBuffer = '';
-          }
           _markSessionAsExited(id);
           xtermTerm.write('\r\n\x1b[1;31m[Process exited]\x1b[0m\r\n');
           try {
@@ -264,7 +259,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onError: (e) {
           resizeDebounceTimer?.cancel();
           gitRefreshDebounceTimer?.cancel();
-          syncFlushTimer?.cancel();
           xtermTerm.write('\r\n\x1b[1;31m[Error: $e]\r\n');
         },
       );
