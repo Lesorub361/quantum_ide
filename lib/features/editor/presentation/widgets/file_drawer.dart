@@ -339,7 +339,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     ));
 
     // Activity bar on the left
-    final activityBarWidth = isMobile ? 38.0 : 42.0;
+    final activityBarWidth = isMobile ? 38.0 : 44.0;
     final activityBar = Container(
       width: activityBarWidth,
       decoration: BoxDecoration(
@@ -689,8 +689,8 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
 
     final screenWidth = MediaQuery.of(context).size.width;
     final drawerWidth = isMobile
-        ? (screenWidth * 0.84).clamp(260.0, 340.0).clamp(0.0, screenWidth)
-        : 300.0;
+        ? (screenWidth * 0.84).clamp(280.0, 380.0).clamp(0.0, screenWidth)
+        : 340.0;
     
     return GlassContainer(
       blur: 30,

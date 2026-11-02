@@ -249,7 +249,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   int _splitTabIndex = -1;
   bool _isZenMode = false;
 
-  double _leftSidebarWidth = 260.0;
+  double _leftSidebarWidth = 320.0;
   bool _isResizingLeft = false;
 
   @override
@@ -347,7 +347,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final panelNotifier = ref.read(panelProvider.notifier);
     
     final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth > 800;
+    final isDesktop = screenWidth >= 768;
     final isCompactPhone = screenWidth < 620;
     final l10n = AppLocalizations.of(context)!;
 
@@ -1034,7 +1034,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     double maxAllowedPanelHeight,
   ) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-    final isDesktop = MediaQuery.of(context).size.width > 800;
+    final isDesktop = MediaQuery.of(context).size.width >= 768;
     final isMobileTerminalWithKeyboard =
         (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
         isKeyboardOpen &&
@@ -1227,7 +1227,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 child: Material(
                                   color: Colors.transparent,
                                   child: InkWell(
-                                    onTap: () => panelNotifier.selectTab(tab),
+                                    onTap: () {
+                                      FocusManager.instance.primaryFocus?.unfocus();
+                                      panelNotifier.selectTab(tab);
+                                    },
                                     borderRadius: BorderRadius.circular(6),
                                     child: AnimatedContainer(
                                       duration: const Duration(milliseconds: 140),

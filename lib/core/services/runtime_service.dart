@@ -739,12 +739,12 @@ export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
 
 # Ensure output newline translates to CR+NL (eliminates staircase prompt in terminals)
-stty sane onlcr icrnl opost 2>/dev/null || true
+stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
 shopt -s checkwinsize 2>/dev/null || true
 
 # Zero-fork pure-bash git branch prompt using PROMPT_COMMAND for 100% precise readline cursor tracking
 __update_quantum_ps1() {
-    stty sane onlcr icrnl opost 2>/dev/null || true
+    stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
     local git_str=""
     if [ -f ".git/HEAD" ]; then
         local head_ref
@@ -754,7 +754,7 @@ __update_quantum_ps1() {
             git_str=" \[\033[35m\]git:(\[\033[1;31m\]$branch\[\033[0m\033[35m\])\[\033[0m\]"
         fi
     fi
-    PS1="\[\r\]\[\033[1;36m\]➜ \[\033[1;32m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
+    PS1="\[\033[1;36m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
 }
 PROMPT_COMMAND="__update_quantum_ps1"
 
@@ -926,7 +926,7 @@ flutter() {
         fi
 
         pkill -9 -x aapt2 2>/dev/null || true
-        stty sane onlcr icrnl opost 2>/dev/null || true
+        stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
         return $ret
     fi
     command flutter "$@"
@@ -1278,7 +1278,7 @@ flutter() {
         fi
 
         pkill -9 -x aapt2 2>/dev/null || true
-        stty sane onlcr icrnl opost 2>/dev/null || true
+        stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
         return $ret
     fi
     command flutter "$@"
@@ -1315,7 +1315,7 @@ fi
         for (final inputrc in inputrcTargets) {
           try {
             if (await inputrc.parent.exists()) {
-              await inputrc.writeAsString('set input-meta on\nset output-meta on\nset convert-meta off\nset enable-bracketed-paste on\n');
+              await inputrc.writeAsString('set input-meta on\nset output-meta on\nset convert-meta off\nset enable-bracketed-paste on\n"\\C-?": backward-delete-char\n"\\C-h": backward-delete-char\n"\\e[3~": delete-char\n');
             }
           } catch (_) {}
         }
@@ -1818,7 +1818,7 @@ if [ \$# -gt 2 ]; then
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
-            stty sane onlcr icrnl opost 2>/dev/null || true
+            stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
             shift 4
             if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
                 shift 2
@@ -1866,7 +1866,7 @@ else
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
-            stty sane onlcr icrnl opost 2>/dev/null || true
+            stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
             exec /bin/bash --rcfile /root/.bashrc
         ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT"
 fi

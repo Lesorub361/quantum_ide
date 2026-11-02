@@ -208,6 +208,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
     }
 
+    // Clear focus from background editor/inputs so keystrokes route directly to terminal
+    FocusManager.instance.primaryFocus?.unfocus();
+
     final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = true;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
@@ -219,11 +222,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     focusNode.requestFocus();
     _getTerminalKey(keyId).currentState?.requestKeyboard();
     SystemChannels.textInput.invokeMethod('TextInput.show');
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        focusNode.allowAutoKeyboard = false;
-      }
-    });
     if (mounted && !wasActive) setState(() {});
   }
 
@@ -231,8 +229,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
+    final focusNode = _getFocusNode(keyId);
+    focusNode.allowAutoKeyboard = !isMobile;
     _getTerminalKey(keyId).currentState?.closeKeyboard();
-    FocusManager.instance.primaryFocus?.unfocus();
+    focusNode.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');
     if (mounted && wasActive) setState(() {});
   }
@@ -2115,9 +2115,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       onInvoke: (intent) => _selectAllInTerminal(session),
                     ),
                   },
-                  child: Focus(
-                    autofocus: !isMobile,
-                    child: Shortcuts(
+                  child: Shortcuts(
                       shortcuts: <LogicalKeySet, Intent>{
                         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const CopyTextIntent(),
                         LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const CopyTextIntent(),
@@ -2157,6 +2155,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
                                 hardwareKeyboardOnly: false,
+                                keyboardType: TextInputType.visiblePassword,
                                 onTapUp: (details, offset) {
                                   if (session.xtermViewController.selection != null) {
                                     session.xtermViewController.clearSelection();
@@ -2218,7 +2217,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         ),
                       ),
                     ),
-                  ),
                 ),
               ),
             ),
