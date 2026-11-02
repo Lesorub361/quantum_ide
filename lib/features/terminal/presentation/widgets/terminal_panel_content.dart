@@ -12,7 +12,7 @@ import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
 
-import 'package:kterm/kterm.dart' as xt;
+import 'package:xterm/xterm.dart' as xt;
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/virtual_keys.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
@@ -2155,7 +2155,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
                                 hardwareKeyboardOnly: false,
-                                keyboardType: TextInputType.visiblePassword,
+                                onKeyEvent: (focusNode, event) {
+                                  if (event is! KeyUpEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
+                                    session.pty.write(Uint8List.fromList([127]));
+                                    _handleInputForAutocomplete(session, '\x7f');
+                                    return KeyEventResult.handled;
+                                  }
+                                  return KeyEventResult.ignored;
+                                },
                                 onTapUp: (details, offset) {
                                   if (session.xtermViewController.selection != null) {
                                     session.xtermViewController.clearSelection();
@@ -2196,7 +2203,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                     'monospace',
                                   ],
                                 ),
-                                deleteDetection: true,
                               );
 
                               if (kbInset > 20 && fullHeight > viewConstraints.maxHeight) {

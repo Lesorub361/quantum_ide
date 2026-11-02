@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
-import 'package:kterm/kterm.dart' as xt;
+import 'package:xterm/xterm.dart' as xt;
 
 import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';
@@ -226,20 +226,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         xtermViewController: xtermVc,
       );
 
-      xtermTerm.setLineFeedMode(true);
-      bool lastChunkEndedWithCr = false;
-      String normalizeCrLf(String input) {
-        if (xtermTerm.isUsingAltBuffer || input.isEmpty) return input;
-        String s = input;
-        if (lastChunkEndedWithCr && s.startsWith('\n')) {
-          s = '\n${s.substring(1).replaceAll(RegExp(r'(?<!\r)\n'), '\r\n')}';
-        } else {
-          s = s.replaceAll(RegExp(r'(?<!\r)\n'), '\r\n');
-        }
-        lastChunkEndedWithCr = input.endsWith('\r');
-        return s;
-      }
-
       Timer? gitRefreshDebounceTimer;
       final sub = pty.output
           .cast<List<int>>()
@@ -247,8 +233,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .listen(
         (text) {
           try {
-            final normalized = normalizeCrLf(text);
-            xtermTerm.write(normalized);
+            xtermTerm.write(text);
           } catch (e) {
             try {
               xtermTerm.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
@@ -409,20 +394,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         );
       } catch (_) {}
 
-      term.setLineFeedMode(true);
-      bool lastChunkEndedWithCr = false;
-      String restartNormalizeCrLf(String input) {
-        if (term.isUsingAltBuffer || input.isEmpty) return input;
-        String s = input;
-        if (lastChunkEndedWithCr && s.startsWith('\n')) {
-          s = '\n${s.substring(1).replaceAll(RegExp(r'(?<!\r)\n'), '\r\n')}';
-        } else {
-          s = s.replaceAll(RegExp(r'(?<!\r)\n'), '\r\n');
-        }
-        lastChunkEndedWithCr = input.endsWith('\r');
-        return s;
-      }
-
       // ignore: cancel_subscriptions
       final ptyOutSub = newPty.output
           .cast<List<int>>()
@@ -430,8 +401,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .listen(
         (text) {
           try {
-            final normalized = restartNormalizeCrLf(text);
-            term.write(normalized);
+            term.write(text);
           } catch (e) {
             try {
               term.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));

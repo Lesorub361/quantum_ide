@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
-import 'package:kterm/kterm.dart' as xt;
+import 'package:xterm/xterm.dart' as xt;
 
 import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';
@@ -192,19 +192,6 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           }
         },
       );
-      bool lastChunkEndedWithCr = false;
-      String normalizeCrLf(String input) {
-        if (xtermTerm.isUsingAltBuffer || input.isEmpty) return input;
-        String s = input;
-        if (lastChunkEndedWithCr && s.startsWith('\n')) {
-          s = '\n${s.substring(1).replaceAll(RegExp(r'(?<!\r)\n'), '\r\n')}';
-        } else {
-          s = s.replaceAll(RegExp(r'(?<!\r)\n'), '\r\n');
-        }
-        lastChunkEndedWithCr = input.endsWith('\r');
-        return s;
-      }
-
       // ptyOutSub is stored in TerminalSession
       // and cancelled in dispose() via session.ptyOutSubscription?.cancel()
       // ignore: cancel_subscriptions
@@ -214,10 +201,10 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           .listen(
         (text) {
           try {
-            xtermTerm.write(normalizeCrLf(text));
+            xtermTerm.write(text);
           } catch (e) {
             try {
-              xtermTerm.write(normalizeCrLf(text).replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
+              xtermTerm.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
             } catch (_) {}
           }
           if (type == DedicatedTerminalType.build) {

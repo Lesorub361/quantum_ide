@@ -660,7 +660,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '22';
+    const bashrcVersion = '23';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -744,7 +744,6 @@ shopt -s checkwinsize 2>/dev/null || true
 
 # Zero-fork pure-bash git branch prompt using PROMPT_COMMAND for 100% precise readline cursor tracking
 __update_quantum_ps1() {
-    stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
     local git_str=""
     if [ -f ".git/HEAD" ]; then
         local head_ref
@@ -1867,7 +1866,7 @@ else
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
             stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
-            exec /bin/bash --rcfile /root/.bashrc
+            exec /bin/bash --rcfile /root/.bashrc -i
         ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT"
 fi
 ''';
