@@ -17,6 +17,7 @@ class LiveTelemetryService {
   HttpServer? _httpServer;
 
   Timer? _periodicTimer;
+  String? _lastFlushedJson;
   final List<String> _recentLogs = [];
   final List<String> _buildOutputTail = [];
 
@@ -55,7 +56,7 @@ class LiveTelemetryService {
 
   void _startTimer() {
     _periodicTimer?.cancel();
-    _periodicTimer = Timer.periodic(const Duration(seconds: 2), (_) => flushStatus());
+    _periodicTimer = Timer.periodic(const Duration(seconds: 8), (_) => flushStatus());
   }
 
   Future<void> _startLocalServer() async {
@@ -273,7 +274,9 @@ class LiveTelemetryService {
     if (f == null) return;
     try {
       final jsonStr = const JsonEncoder.withIndent('  ').convert(_buildStatusMap());
-      await f.writeAsString(jsonStr, mode: FileMode.write, flush: true);
+      if (jsonStr == _lastFlushedJson) return;
+      _lastFlushedJson = jsonStr;
+      await f.writeAsString(jsonStr, mode: FileMode.write, flush: false);
     } catch (_) {}
   }
 }

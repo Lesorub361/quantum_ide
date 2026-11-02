@@ -213,7 +213,13 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen(
         (text) {
-          xtermTerm.write(normalizeCrLf(text));
+          try {
+            xtermTerm.write(normalizeCrLf(text));
+          } catch (e) {
+            try {
+              xtermTerm.write(normalizeCrLf(text).replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
+            } catch (_) {}
+          }
           if (type == DedicatedTerminalType.build) {
             LiveTelemetryService.instance.appendBuildOutput(text);
             if (text.contains('✓ Built build/app/outputs/') ||

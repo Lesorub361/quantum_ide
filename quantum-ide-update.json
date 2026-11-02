@@ -1,10 +1,10 @@
 {
-  "versionCode": 188,
-  "versionName": "1.2.171",
-  "notes": "QuantumIDE v1.2.171:\n• ⌨️ Архитектура терминала полностью переписана по эталону openclaw-termux: убран кастомный IME wrapper, TerminalView напрямую работает с экранной клавиатурой Flutter и Android IME.\n• ⌫ Исправлен баг залипания и дублирования текста: клавиша Backspace мгновенно и чисто удаляет символы без фантомных дублей команд.\n• 🖥️ Прямой стриминг PTY без порчи буфера строк xterm: вывод agy, htop, tui и cli утилит больше не двоится, не накладывается и не разлетается по экрану.",
+  "versionCode": 189,
+  "versionName": "1.2.172",
+  "notes": "QuantumIDE v1.2.172:\n• 🚀 Оптимизация производительности: устранена фоновая нагрузка на процессор — опрос ADB и USB-устройств теперь работает только при открытой вкладке «Экран и USB».\n• 🛡️ Защита терминала: устранены падения RangeError в буфере xterm при стирании строк и выполнении TUI команд.\n• ⚡ Дедупликация Git: предотвращены параллельные повторные запуски скриптов git status в PRoot.\n• 💾 Снижение нагрузки на диск: оптимизирована частота записи телеметрии в live_status.json.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.171/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.172/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }

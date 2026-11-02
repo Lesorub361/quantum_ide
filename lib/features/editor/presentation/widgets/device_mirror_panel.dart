@@ -18,7 +18,8 @@ enum _DevicePanelSubTab {
 }
 
 class DeviceMirrorPanel extends ConsumerStatefulWidget {
-  const DeviceMirrorPanel({super.key});
+  final bool isActive;
+  const DeviceMirrorPanel({super.key, this.isActive = false});
 
   @override
   ConsumerState<DeviceMirrorPanel> createState() => _DeviceMirrorPanelState();
@@ -51,10 +52,27 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initDevice();
+        ref.read(adbDeviceServiceProvider.notifier).startPolling(interval: const Duration(seconds: 15));
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(DeviceMirrorPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
       _initDevice();
-      ref.read(adbDeviceServiceProvider.notifier).startPolling(interval: const Duration(seconds: 8));
-    });
+      ref.read(adbDeviceServiceProvider.notifier).startPolling(interval: const Duration(seconds: 15));
+    } else if (!widget.isActive && oldWidget.isActive) {
+      try {
+        ref.read(adbDeviceServiceProvider.notifier).stopPolling();
+      } catch (_) {}
+      _streamTimer?.cancel();
+      _logcatTimer?.cancel();
+    }
   }
 
   @override

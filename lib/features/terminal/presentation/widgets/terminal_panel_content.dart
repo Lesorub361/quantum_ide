@@ -894,11 +894,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     return IndexedStack(
       index: index,
-      children: tabs.map((tab) => _getTabWidget(tab, sessions, notifier, editorState)).toList(),
+      children: tabs.map((tab) => _getTabWidget(tab, sessions, notifier, editorState, tab == state.selectedTab)).toList(),
     );
   }
 
-  Widget _getTabWidget(PanelTab tab, List<TerminalSession> sessions, TerminalTabsNotifier notifier, EditorState editorState) {
+  Widget _getTabWidget(PanelTab tab, List<TerminalSession> sessions, TerminalTabsNotifier notifier, EditorState editorState, [bool isCurrent = false]) {
     switch (tab) {
       case PanelTab.terminal:
         return _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'));
@@ -915,7 +915,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       case PanelTab.debug:
         return const DebuggerPanel(key: ValueKey('debug'));
       case PanelTab.deviceMirror:
-        return const DeviceMirrorPanel(key: ValueKey('deviceMirror'));
+        return DeviceMirrorPanel(key: const ValueKey('deviceMirror'), isActive: isCurrent);
       case PanelTab.aiAgent:
         return const QuantumAiAgentPanel(key: ValueKey('aiAgent'));
     }

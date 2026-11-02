@@ -20,6 +20,7 @@ class GitService {
   static String? _cachedPath;
   static DateTime? _lastStatusTime;
   static const Duration _statusCacheTtl = Duration(seconds: 15);
+  static Future<GitStatus?>? _inFlightStatus;
 
   String? _resolveRepoHostPath() {
     final workspace = ref.read(workspaceProvider);
@@ -103,6 +104,22 @@ class GitService {
       return _cachedStatus;
     }
 
+    if (_inFlightStatus != null) {
+      return _inFlightStatus;
+    }
+
+    final future = _executeGetStatus(hostPath);
+    _inFlightStatus = future;
+    try {
+      return await future;
+    } finally {
+      if (_inFlightStatus == future) {
+        _inFlightStatus = null;
+      }
+    }
+  }
+
+  Future<GitStatus?> _executeGetStatus(String hostPath) async {
     final guestPath = await _getGuestPath(hostPath);
 
     try {

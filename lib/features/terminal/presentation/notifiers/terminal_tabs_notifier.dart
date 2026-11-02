@@ -232,7 +232,13 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen(
         (text) {
-          xtermTerm.write(text);
+          try {
+            xtermTerm.write(text);
+          } catch (e) {
+            try {
+              xtermTerm.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
+            } catch (_) {}
+          }
 
           if (hadUserCommandRecently) {
             gitRefreshDebounceTimer?.cancel();
@@ -394,7 +400,13 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen(
         (text) {
-          term.write(text);
+          try {
+            term.write(text);
+          } catch (e) {
+            try {
+              term.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
+            } catch (_) {}
+          }
         },
         onDone: () {
           restartResizeDebounce?.cancel();

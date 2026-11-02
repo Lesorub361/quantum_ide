@@ -310,7 +310,7 @@ class AppUpdateService extends StateNotifier<AppUpdateState> {
           }
         }
       } catch (ghError) {
-        debugPrint('[AppUpdateService] GitHub API check fallback: $ghError');
+        debugPrint('[AppUpdateService] GitHub API rate-limited or unavailable, falling back to raw manifest');
       }
 
       // 2. Fallback to raw manifest if GitHub API failed or rate-limited
