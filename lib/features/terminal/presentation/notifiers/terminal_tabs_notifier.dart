@@ -226,6 +226,20 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         xtermViewController: xtermVc,
       );
 
+      xtermTerm.setLineFeedMode(true);
+      bool lastChunkEndedWithCr = false;
+      String normalizeCrLf(String input) {
+        if (xtermTerm.isUsingAltBuffer || input.isEmpty) return input;
+        String s = input;
+        if (lastChunkEndedWithCr && s.startsWith('\n')) {
+          s = '\n${s.substring(1).replaceAll(RegExp(r'(?<!\r)\n'), '\r\n')}';
+        } else {
+          s = s.replaceAll(RegExp(r'(?<!\r)\n'), '\r\n');
+        }
+        lastChunkEndedWithCr = input.endsWith('\r');
+        return s;
+      }
+
       Timer? gitRefreshDebounceTimer;
       final sub = pty.output
           .cast<List<int>>()
@@ -233,7 +247,8 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .listen(
         (text) {
           try {
-            xtermTerm.write(text);
+            final normalized = normalizeCrLf(text);
+            xtermTerm.write(normalized);
           } catch (e) {
             try {
               xtermTerm.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
@@ -394,6 +409,20 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         );
       } catch (_) {}
 
+      term.setLineFeedMode(true);
+      bool lastChunkEndedWithCr = false;
+      String restartNormalizeCrLf(String input) {
+        if (term.isUsingAltBuffer || input.isEmpty) return input;
+        String s = input;
+        if (lastChunkEndedWithCr && s.startsWith('\n')) {
+          s = '\n${s.substring(1).replaceAll(RegExp(r'(?<!\r)\n'), '\r\n')}';
+        } else {
+          s = s.replaceAll(RegExp(r'(?<!\r)\n'), '\r\n');
+        }
+        lastChunkEndedWithCr = input.endsWith('\r');
+        return s;
+      }
+
       // ignore: cancel_subscriptions
       final ptyOutSub = newPty.output
           .cast<List<int>>()
@@ -401,7 +430,8 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .listen(
         (text) {
           try {
-            term.write(text);
+            final normalized = restartNormalizeCrLf(text);
+            term.write(normalized);
           } catch (e) {
             try {
               term.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
