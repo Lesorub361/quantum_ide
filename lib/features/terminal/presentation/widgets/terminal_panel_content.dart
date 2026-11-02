@@ -230,7 +230,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
-    focusNode.allowAutoKeyboard = !isMobile;
+    focusNode.allowAutoKeyboard = !(Platform.isAndroid || Platform.isIOS);
     _getTerminalKey(keyId).currentState?.closeKeyboard();
     focusNode.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');

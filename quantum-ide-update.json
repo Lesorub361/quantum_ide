@@ -9,8 +9,8 @@
       "sizeBytes": 0
     }
   },
-  "version": "1.2.173",
-  "buildNumber": 190,
-  "tag_name": "v1.2.173",
+  "version": "1.2.174",
+  "buildNumber": 191,
+  "tag_name": "v1.2.174",
   "releaseNotes": "Fix terminal backspace erase issue, disable soft keyboard composing buffer, unfocus background editor, VS Code responsive tablet sidebar"
 }
