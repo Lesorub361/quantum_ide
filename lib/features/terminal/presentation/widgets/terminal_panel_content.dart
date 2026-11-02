@@ -3481,7 +3481,7 @@ class _AndroidTerminalDirectInput extends StatefulWidget {
 
 class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput>
     with TextInputClient {
-  static const String _sentinel = '  ';
+  static const String _sentinel = '          ';
   static const TextEditingValue _initEditingState = TextEditingValue(
     text: _sentinel,
     selection: TextSelection.collapsed(offset: _sentinel.length),
@@ -3489,6 +3489,7 @@ class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput
 
   TextInputConnection? _connection;
   TextEditingValue _currentEditingState = _initEditingState;
+  DateTime? _lastEnterSentAt;
 
   bool get hasInputConnection => _connection != null && _connection!.attached;
 
@@ -3542,40 +3543,52 @@ class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput
   @override
   void updateEditingValue(TextEditingValue value) {
     if (!widget.enabled) return;
-    final text = value.text;
-    if (text == _sentinel) {
-      _currentEditingState = _initEditingState;
-      if (!value.composing.isCollapsed) {
-        _connection?.setEditingState(_initEditingState);
-      }
+
+    final oldText = _currentEditingState.text;
+    final newText = value.text;
+
+    // No text change (e.g. cursor movement only)
+    if (oldText == newText) {
+      _currentEditingState = value;
       return;
     }
 
-    if (text.length < _sentinel.length) {
-      final delCount = (_sentinel.length - text.length).clamp(1, 2);
-      for (int i = 0; i < delCount; i++) {
-        widget.terminal.keyInput(xt.TerminalKey.backspace);
-      }
+    // 1. Calculate common prefix
+    int prefixLen = 0;
+    final minLen = oldText.length < newText.length ? oldText.length : newText.length;
+    while (prefixLen < minLen && oldText.codeUnitAt(prefixLen) == newText.codeUnitAt(prefixLen)) {
+      prefixLen++;
+    }
+
+    // 2. Calculate common suffix
+    int suffixLen = 0;
+    final maxSuffixLen = minLen - prefixLen;
+    while (suffixLen < maxSuffixLen &&
+        oldText.codeUnitAt(oldText.length - 1 - suffixLen) ==
+            newText.codeUnitAt(newText.length - 1 - suffixLen)) {
+      suffixLen++;
+    }
+
+    final deletedCount = oldText.length - prefixLen - suffixLen;
+    final insertedText = newText.substring(prefixLen, newText.length - suffixLen);
+
+    // Send backspaces for deleted characters
+    for (int i = 0; i < deletedCount; i++) {
+      widget.terminal.keyInput(xt.TerminalKey.backspace);
+    }
+
+    // Send inserted characters
+    if (insertedText.isNotEmpty) {
+      _sendText(insertedText);
+    }
+
+    final bool hasNewline = insertedText.contains('\n') || insertedText.contains('\r');
+    if (hasNewline || newText.length < (_sentinel.length ~/ 2) || newText.length > 50) {
       _resetState();
-      return;
-    }
-
-    String delta;
-    if (text.startsWith(_sentinel)) {
-      delta = text.substring(_sentinel.length);
-    } else if (text.startsWith(' ')) {
-      delta = text.substring(1);
     } else {
-      delta = text;
+      _currentEditingState = value;
     }
-
-    if (delta.isNotEmpty) {
-      _sendText(delta);
-    }
-    _resetState();
   }
-
-  DateTime? _lastEnterSentAt;
 
   void _sendText(String delta) {
     if (delta.isEmpty) return;
@@ -3647,6 +3660,7 @@ class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput
       }
       _lastEnterSentAt = DateTime.now();
       widget.terminal.keyInput(xt.TerminalKey.enter);
+      _resetState();
     }
   }
 

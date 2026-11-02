@@ -246,7 +246,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       void flushTermFrame(String chunk) {
         try {
           final normalized = normalizeCrLf(chunk);
-          _applyInlineTuiScrollbackGuard(xtermTerm, normalized);
           xtermTerm.write(normalized);
         } catch (e) {
           debugPrint('[Terminal] write error: $e');
@@ -339,37 +338,8 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
   /// frame repaint moves the cursor up (`\x1b[<N>A`) more rows than the current
   /// viewport cursorY.
   void _applyInlineTuiScrollbackGuard(xt.Terminal term, String chunk) {
-    if (term.isUsingAltBuffer) return;
-    final buf = term.buffer;
-    if (buf.scrollBack <= 0) return;
-
-    // Inspect the control sequence prefix before new multi-line text is drawn
-    final firstNl = chunk.indexOf('\n');
-    final prefix = firstNl >= 0 ? chunk.substring(0, firstNl) : chunk;
-    if (!prefix.contains('\x1b[')) return;
-
-    final hasErase = prefix.contains('\x1b[2K') ||
-        prefix.contains('\x1b[K') ||
-        prefix.contains('\x1b[0K') ||
-        prefix.contains('\x1b[J') ||
-        prefix.contains('\x1b[0J');
-    if (!hasErase) return;
-
-    int totalUp = 0;
-    for (final m in _cursorUpRegex.allMatches(prefix)) {
-      final raw = m.group(1);
-      final n = (raw == null || raw.isEmpty) ? 1 : (int.tryParse(raw) ?? 1);
-      totalUp += n;
-    }
-
-    if (totalUp > buf.cursorY) {
-      final overflow = (totalUp - buf.cursorY).clamp(0, buf.scrollBack);
-      if (overflow > 0) {
-        try {
-          buf.lines.remove(buf.scrollBack - overflow, overflow);
-        } catch (_) {}
-      }
-    }
+    // No-op: directly mutating buf.lines corrupts xterm.dart buffer state
+    // and causes text duplication and ghost lines during streaming commands.
   }
 
   void _initializeUbuntuSession(TerminalSession session) {
