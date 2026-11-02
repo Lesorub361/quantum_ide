@@ -534,7 +534,7 @@ class _CleanTerminalKeyboardMenuState extends State<CleanTerminalKeyboardMenu> {
                 _buildTextKey(':', onTap: () => widget.onSendSequence(':'), minWidth: 36),
                 _buildTextKey('"', onTap: () => widget.onSendSequence('"'), minWidth: 36),
                 _buildTextKey("'", onTap: () => widget.onSendSequence("'"), minWidth: 36),
-                _buildTextKey('$', onTap: () => widget.onSendSequence('\$'), minWidth: 36),
+                _buildTextKey(r'$', onTap: () => widget.onSendSequence('\$'), minWidth: 36),
               ],
             ),
           ),
