@@ -227,56 +227,12 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       );
 
       Timer? gitRefreshDebounceTimer;
-      Timer? syncFlushTimer;
-      String syncFrameBuffer = '';
-      bool lastChunkEndedWithCr = false;
-
-      String normalizeCrLf(String input) {
-        if (xtermTerm.isUsingAltBuffer || input.isEmpty) return input;
-        String s = input;
-        if (lastChunkEndedWithCr && s.startsWith('\n')) {
-          s = '\n${s.substring(1).replaceAll(RegExp(r'(?<!\r)\n'), '\r\n')}';
-        } else {
-          s = s.replaceAll(RegExp(r'(?<!\r)\n'), '\r\n');
-        }
-        lastChunkEndedWithCr = input.endsWith('\r');
-        return s;
-      }
-
-      void flushTermFrame(String chunk) {
-        try {
-          final normalized = normalizeCrLf(chunk);
-          xtermTerm.write(normalized);
-        } catch (e) {
-          debugPrint('[Terminal] write error: $e');
-        }
-      }
-
       final sub = pty.output
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen(
         (text) {
-          if (syncFrameBuffer.isNotEmpty || text.contains('\x1b[?2026h')) {
-            syncFrameBuffer += text;
-            if (syncFrameBuffer.contains('\x1b[?2026l') || syncFrameBuffer.length > 65536) {
-              syncFlushTimer?.cancel();
-              final frame = syncFrameBuffer;
-              syncFrameBuffer = '';
-              flushTermFrame(frame);
-            } else {
-              syncFlushTimer?.cancel();
-              syncFlushTimer = Timer(const Duration(milliseconds: 24), () {
-                if (syncFrameBuffer.isNotEmpty) {
-                  final frame = syncFrameBuffer;
-                  syncFrameBuffer = '';
-                  flushTermFrame(frame);
-                }
-              });
-            }
-          } else {
-            flushTermFrame(text);
-          }
+          xtermTerm.write(text);
 
           if (hadUserCommandRecently) {
             gitRefreshDebounceTimer?.cancel();
@@ -331,16 +287,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
     }
   }
 
-  static final _cursorUpRegex = RegExp(r'\x1b\[(\d*)[AF]');
 
-  /// Prevents inline TUI renderers (such as `agy` / BubbleTea / Ink) from
-  /// duplicating long responses into the scrollback buffer when a multi-line
-  /// frame repaint moves the cursor up (`\x1b[<N>A`) more rows than the current
-  /// viewport cursorY.
-  void _applyInlineTuiScrollbackGuard(xt.Terminal term, String chunk) {
-    // No-op: directly mutating buf.lines corrupts xterm.dart buffer state
-    // and causes text duplication and ghost lines during streaming commands.
-  }
 
   void _initializeUbuntuSession(TerminalSession session) {
     // Initialization is now handled via .bashrc for stability
@@ -447,47 +394,20 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         );
       } catch (_) {}
 
-      String restartSyncBuffer = '';
-      Timer? restartSyncTimer;
-
       // ignore: cancel_subscriptions
       final ptyOutSub = newPty.output
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen(
         (text) {
-          if (restartSyncBuffer.isNotEmpty || text.contains('\x1b[?2026h')) {
-            restartSyncBuffer += text;
-            if (restartSyncBuffer.contains('\x1b[?2026l') || restartSyncBuffer.length > 65536) {
-              restartSyncTimer?.cancel();
-              final frame = restartSyncBuffer;
-              restartSyncBuffer = '';
-              _applyInlineTuiScrollbackGuard(term, frame);
-              term.write(frame);
-            } else {
-              restartSyncTimer?.cancel();
-              restartSyncTimer = Timer(const Duration(milliseconds: 24), () {
-                if (restartSyncBuffer.isNotEmpty) {
-                  final frame = restartSyncBuffer;
-                  restartSyncBuffer = '';
-                  _applyInlineTuiScrollbackGuard(term, frame);
-                  term.write(frame);
-                }
-              });
-            }
-          } else {
-            _applyInlineTuiScrollbackGuard(term, text);
-            term.write(text);
-          }
+          term.write(text);
         },
         onDone: () {
           restartResizeDebounce?.cancel();
-          restartSyncTimer?.cancel();
           _markSessionAsExited(oldSession.id);
         },
         onError: (_) {
           restartResizeDebounce?.cancel();
-          restartSyncTimer?.cancel();
         },
       );
 

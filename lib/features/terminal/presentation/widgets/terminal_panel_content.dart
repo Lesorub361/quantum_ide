@@ -184,15 +184,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
-  final Map<String, GlobalKey<_AndroidTerminalDirectInputState>> _directInputKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
 
   GlobalKey<xt.TerminalViewState> _getTerminalKey(String id) {
     return _terminalKeys.putIfAbsent(id, () => GlobalKey<xt.TerminalViewState>());
-  }
-
-  GlobalKey<_AndroidTerminalDirectInputState> _getDirectInputKey(String id) {
-    return _directInputKeys.putIfAbsent(id, () => GlobalKey<_AndroidTerminalDirectInputState>());
   }
 
   TerminalFocusNode _getFocusNode(String id) {
@@ -222,11 +217,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       focusNode.unfocus();
     }
     focusNode.requestFocus();
-    if (Platform.isAndroid || Platform.isIOS) {
-      _getDirectInputKey(keyId).currentState?.requestKeyboard();
-    } else {
-      _getTerminalKey(keyId).currentState?.requestKeyboard();
-    }
+    _getTerminalKey(keyId).currentState?.requestKeyboard();
     SystemChannels.textInput.invokeMethod('TextInput.show');
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
@@ -240,11 +231,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
-    if (Platform.isAndroid || Platform.isIOS) {
-      _getDirectInputKey(keyId).currentState?.closeKeyboard();
-    } else {
-      _getTerminalKey(keyId).currentState?.closeKeyboard();
-    }
+    _getTerminalKey(keyId).currentState?.closeKeyboard();
     FocusManager.instance.primaryFocus?.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');
     if (mounted && wasActive) setState(() {});
@@ -2152,88 +2139,81 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               _pasteToTerminal(session);
                             }
                           },
-                          child: _AndroidTerminalDirectInput(
-                            key: _getDirectInputKey(keyId),
-                            terminal: session.xtermTerminal,
-                            focusNode: _getFocusNode(keyId),
-                            enabled: Platform.isAndroid || Platform.isIOS,
-                            child: LayoutBuilder(
-                              builder: (context, viewConstraints) {
-                                final kbInset = widget.onlyTerminal
-                                    ? MediaQuery.of(context).viewInsets.bottom
-                                    : 0.0;
-                                final fullHeight = viewConstraints.maxHeight + kbInset;
-                                final buf = session.xtermTerminal.buffer;
-                                final alignBottom = kbInset > 20 &&
-                                    (session.xtermTerminal.isUsingAltBuffer ||
-                                        buf.scrollBack > 0 ||
-                                        buf.cursorY > (buf.viewHeight * 0.4));
-                                final termView = xt.TerminalView(
-                                  key: _getTerminalKey(keyId),
-                                  session.xtermTerminal,
-                                  controller: session.xtermViewController,
-                                  focusNode: _getFocusNode(keyId),
-                                  autofocus: !isMobile,
-                                  hardwareKeyboardOnly: Platform.isAndroid || Platform.isIOS,
-                                  onTapUp: (details, offset) {
-                                    if (session.xtermViewController.selection != null) {
-                                      session.xtermViewController.clearSelection();
+                          child: LayoutBuilder(
+                            builder: (context, viewConstraints) {
+                              final kbInset = widget.onlyTerminal
+                                  ? MediaQuery.of(context).viewInsets.bottom
+                                  : 0.0;
+                              final fullHeight = viewConstraints.maxHeight + kbInset;
+                              final buf = session.xtermTerminal.buffer;
+                              final alignBottom = kbInset > 20 &&
+                                  (session.xtermTerminal.isUsingAltBuffer ||
+                                      buf.scrollBack > 0 ||
+                                      buf.cursorY > (buf.viewHeight * 0.4));
+                              final termView = xt.TerminalView(
+                                key: _getTerminalKey(keyId),
+                                session.xtermTerminal,
+                                controller: session.xtermViewController,
+                                focusNode: _getFocusNode(keyId),
+                                autofocus: !isMobile,
+                                hardwareKeyboardOnly: false,
+                                onTapUp: (details, offset) {
+                                  if (session.xtermViewController.selection != null) {
+                                    session.xtermViewController.clearSelection();
+                                    return;
+                                  }
+
+                                  final lineIndex = offset.y;
+                                  final colIndex = offset.x;
+                                  final buffer = session.xtermTerminal.buffer;
+                                  if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
+                                    final lineText = buffer.lines[lineIndex].toString();
+                                    final link = QuantumLinkDetector.findLinkAt(lineText, colIndex);
+                                    if (link != null) {
+                                      QuantumLinkDetector.handleLinkTap(context, ref, link);
                                       return;
                                     }
+                                  }
 
-                                    final lineIndex = offset.y;
-                                    final colIndex = offset.x;
-                                    final buffer = session.xtermTerminal.buffer;
-                                    if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
-                                      final lineText = buffer.lines[lineIndex].toString();
-                                      final link = QuantumLinkDetector.findLinkAt(lineText, colIndex);
-                                      if (link != null) {
-                                        QuantumLinkDetector.handleLinkTap(context, ref, link);
-                                        return;
-                                      }
-                                    }
+                                  _openTerminalKeyboard(session, isSecondary: isSecondary);
+                                },
+                                padding: const EdgeInsets.all(10),
+                                theme: theme,
+                                backgroundOpacity: 0,
+                                textStyle: xt.TerminalStyle(
+                                  fontSize: terminalFontSize,
+                                  fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
+                                  fontFamilyFallback: const [
+                                    'SymbolsNerdFont',
+                                    'Symbols Nerd Font',
+                                    'jetBrainsMono',
+                                    'firaCode',
+                                    'cascadia',
+                                    'dejaVuSansMono',
+                                    'inconsolata',
+                                    'sourceCodePro',
+                                    'Noto Sans Mono',
+                                    'DejaVu Sans Mono',
+                                    'monospace',
+                                  ],
+                                ),
+                                deleteDetection: true,
+                              );
 
-                                    _openTerminalKeyboard(session, isSecondary: isSecondary);
-                                  },
-                                  padding: const EdgeInsets.all(10),
-                                  theme: theme,
-                                  backgroundOpacity: 0,
-                                  textStyle: xt.TerminalStyle(
-                                    fontSize: terminalFontSize,
-                                    fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                                    fontFamilyFallback: const [
-                                      'SymbolsNerdFont',
-                                      'Symbols Nerd Font',
-                                      'jetBrainsMono',
-                                      'firaCode',
-                                      'cascadia',
-                                      'dejaVuSansMono',
-                                      'inconsolata',
-                                      'sourceCodePro',
-                                      'Noto Sans Mono',
-                                      'DejaVu Sans Mono',
-                                      'monospace',
-                                    ],
+                              if (kbInset > 20 && fullHeight > viewConstraints.maxHeight) {
+                                return ClipRect(
+                                  child: OverflowBox(
+                                    minHeight: fullHeight,
+                                    maxHeight: fullHeight,
+                                    alignment: alignBottom
+                                        ? Alignment.bottomCenter
+                                        : Alignment.topCenter,
+                                    child: termView,
                                   ),
-                                  keyboardType: TextInputType.visiblePassword,
-                                  deleteDetection: true,
                                 );
-
-                                if (kbInset > 20 && fullHeight > viewConstraints.maxHeight) {
-                                  return ClipRect(
-                                    child: OverflowBox(
-                                      minHeight: fullHeight,
-                                      maxHeight: fullHeight,
-                                      alignment: alignBottom
-                                          ? Alignment.bottomCenter
-                                          : Alignment.topCenter,
-                                      child: termView,
-                                    ),
-                                  );
-                                }
-                                return termView;
-                              },
-                            ),
+                              }
+                              return termView;
+                            },
                           ),
                         ),
                       ),
@@ -3457,227 +3437,3 @@ class _CollapsibleConsoleState extends State<CollapsibleConsole> {
   }
 }
 
-/// Direct Android/iOS TextInputClient that commits every character immediately
-/// without buffering IME composing regions at the VT100 cursor position.
-/// This prevents Cyrillic/Gboard composing text from floating at random top/bottom/right
-/// coordinates when using TUI apps like `agy`, `vim`, `htop`, or `claude`.
-class _AndroidTerminalDirectInput extends StatefulWidget {
-  final xt.Terminal terminal;
-  final FocusNode focusNode;
-  final bool enabled;
-  final Widget child;
-
-  const _AndroidTerminalDirectInput({
-    super.key,
-    required this.terminal,
-    required this.focusNode,
-    required this.enabled,
-    required this.child,
-  });
-
-  @override
-  State<_AndroidTerminalDirectInput> createState() => _AndroidTerminalDirectInputState();
-}
-
-class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput>
-    with TextInputClient {
-  static const String _sentinel = '          ';
-  static const TextEditingValue _initEditingState = TextEditingValue(
-    text: _sentinel,
-    selection: TextSelection.collapsed(offset: _sentinel.length),
-  );
-
-  TextInputConnection? _connection;
-  TextEditingValue _currentEditingState = _initEditingState;
-  DateTime? _lastEnterSentAt;
-
-  bool get hasInputConnection => _connection != null && _connection!.attached;
-
-  @override
-  void dispose() {
-    closeKeyboard();
-    super.dispose();
-  }
-
-  void requestKeyboard() {
-    if (!widget.enabled) return;
-    if (!widget.focusNode.hasFocus) {
-      widget.focusNode.requestFocus();
-    }
-    if (hasInputConnection) {
-      _connection!.show();
-      _resetState();
-    } else {
-      const config = TextInputConfiguration(
-        inputType: TextInputType.visiblePassword,
-        inputAction: TextInputAction.newline,
-        keyboardAppearance: Brightness.dark,
-        autocorrect: false,
-        enableSuggestions: false,
-        enableIMEPersonalizedLearning: false,
-      );
-      _connection = TextInput.attach(this, config);
-      _connection!.show();
-      _resetState();
-    }
-  }
-
-  void closeKeyboard() {
-    if (_connection != null && _connection!.attached) {
-      _connection!.close();
-    }
-    _connection = null;
-  }
-
-  void _resetState() {
-    _currentEditingState = _initEditingState;
-    _connection?.setEditingState(_initEditingState);
-  }
-
-  @override
-  TextEditingValue? get currentTextEditingValue => _currentEditingState;
-
-  @override
-  AutofillScope? get currentAutofillScope => null;
-
-  @override
-  void updateEditingValue(TextEditingValue value) {
-    if (!widget.enabled) return;
-
-    final oldText = _currentEditingState.text;
-    final newText = value.text;
-
-    // No text change (e.g. cursor movement only)
-    if (oldText == newText) {
-      _currentEditingState = value;
-      return;
-    }
-
-    // 1. Calculate common prefix
-    int prefixLen = 0;
-    final minLen = oldText.length < newText.length ? oldText.length : newText.length;
-    while (prefixLen < minLen && oldText.codeUnitAt(prefixLen) == newText.codeUnitAt(prefixLen)) {
-      prefixLen++;
-    }
-
-    // 2. Calculate common suffix
-    int suffixLen = 0;
-    final maxSuffixLen = minLen - prefixLen;
-    while (suffixLen < maxSuffixLen &&
-        oldText.codeUnitAt(oldText.length - 1 - suffixLen) ==
-            newText.codeUnitAt(newText.length - 1 - suffixLen)) {
-      suffixLen++;
-    }
-
-    final deletedCount = oldText.length - prefixLen - suffixLen;
-    final insertedText = newText.substring(prefixLen, newText.length - suffixLen);
-
-    // Send backspaces for deleted characters
-    for (int i = 0; i < deletedCount; i++) {
-      widget.terminal.keyInput(xt.TerminalKey.backspace);
-    }
-
-    // Send inserted characters
-    if (insertedText.isNotEmpty) {
-      _sendText(insertedText);
-    }
-
-    final bool hasNewline = insertedText.contains('\n') || insertedText.contains('\r');
-    if (hasNewline || newText.length < (_sentinel.length ~/ 2) || newText.length > 50) {
-      _resetState();
-    } else {
-      _currentEditingState = value;
-    }
-  }
-
-  void _sendText(String delta) {
-    if (delta.isEmpty) return;
-
-    if (delta == '\r\n' || delta == '\n' || delta == '\r') {
-      _lastEnterSentAt = DateTime.now();
-      widget.terminal.keyInput(xt.TerminalKey.enter);
-      return;
-    }
-
-    final sanitized = _TerminalPanelContentState._sanitizeTerminalInput(delta);
-    final bool hasTrailingNewline = delta.endsWith('\n') || delta.endsWith('\r');
-
-    // If multi-character input (pasted, IME predictive text, autocompletion)
-    if (sanitized.length > 1) {
-      final trimmed = sanitized.replaceAll(RegExp(r'[\r\n]+$'), '');
-
-      if (trimmed.isNotEmpty) {
-        if (widget.terminal.bracketedPasteMode) {
-          widget.terminal.paste(trimmed);
-        } else {
-          if (!trimmed.contains('\n') && !trimmed.contains('\r')) {
-            widget.terminal.textInput(trimmed);
-          } else {
-            final lines = trimmed.split(RegExp(r'\r?\n'));
-            for (int i = 0; i < lines.length; i++) {
-              if (lines[i].isNotEmpty) {
-                widget.terminal.textInput(lines[i]);
-              }
-              if (i < lines.length - 1) {
-                _lastEnterSentAt = DateTime.now();
-                widget.terminal.keyInput(xt.TerminalKey.enter);
-              }
-            }
-          }
-        }
-      }
-
-      if (hasTrailingNewline) {
-        _lastEnterSentAt = DateTime.now();
-        widget.terminal.keyInput(xt.TerminalKey.enter);
-      }
-      return;
-    }
-
-    final ch = sanitized;
-    if (ch == '\n' || ch == '\r') {
-      _lastEnterSentAt = DateTime.now();
-      widget.terminal.keyInput(xt.TerminalKey.enter);
-    } else if (ch == '\t') {
-      widget.terminal.keyInput(xt.TerminalKey.tab);
-    } else if (ch == '\x7f' || ch == '\b') {
-      widget.terminal.keyInput(xt.TerminalKey.backspace);
-    } else {
-      widget.terminal.textInput(ch);
-    }
-  }
-
-  @override
-  void performAction(TextInputAction action) {
-    if (action == TextInputAction.newline ||
-        action == TextInputAction.done ||
-        action == TextInputAction.go ||
-        action == TextInputAction.send ||
-        action == TextInputAction.search) {
-      if (_lastEnterSentAt != null &&
-          DateTime.now().difference(_lastEnterSentAt!).inMilliseconds < 120) {
-        return;
-      }
-      _lastEnterSentAt = DateTime.now();
-      widget.terminal.keyInput(xt.TerminalKey.enter);
-      _resetState();
-    }
-  }
-
-  @override
-  void updateFloatingCursor(RawFloatingCursorPoint point) {}
-
-  @override
-  void performPrivateCommand(String action, Map<String, dynamic> data) {}
-
-  @override
-  void showAutocorrectionPromptRect(int start, int end) {}
-
-  @override
-  void connectionClosed() {
-    _connection = null;
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
