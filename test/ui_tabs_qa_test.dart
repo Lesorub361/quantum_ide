@@ -11,7 +11,6 @@ import 'package:quantum_ide/core/services/log_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_app_bar.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
-import 'package:quantum_ide/shared/providers/ai_panel_provider.dart';
 import 'package:quantum_ide/shared/widgets/mobile_bottom_nav.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -176,11 +175,10 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Verify 4 main tabs exist: Files, Editor, Terminal, AI Chat
+      // Verify main tabs exist: Files, Editor, Terminal
       expect(find.text('Files'), findsOneWidget);
       expect(find.text('Editor'), findsOneWidget);
       expect(find.text('Terminal'), findsOneWidget);
-      expect(find.text('AI Chat'), findsOneWidget);
 
       // Save initial bottom nav screenshot
       await tester.runAsync(() async {
@@ -192,11 +190,6 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(container.read(panelProvider).isOpened, isTrue);
       expect(container.read(panelProvider).selectedTab, equals(PanelTab.terminal));
-
-      // Click AI Chat tab
-      await tester.tap(find.text('AI Chat'));
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(container.read(rightChatPanelOpenProvider), isTrue);
 
       // Verify no overflow
       expect(GhostQAService.instance.getErrors().where((e) => e['isOverflow'] == true), isEmpty);

@@ -244,9 +244,13 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       }
 
       void flushTermFrame(String chunk) {
-        final normalized = normalizeCrLf(chunk);
-        _applyInlineTuiScrollbackGuard(xtermTerm, normalized);
-        xtermTerm.write(normalized);
+        try {
+          final normalized = normalizeCrLf(chunk);
+          _applyInlineTuiScrollbackGuard(xtermTerm, normalized);
+          xtermTerm.write(normalized);
+        } catch (e) {
+          debugPrint('[Terminal] write error: $e');
+        }
       }
 
       final sub = pty.output

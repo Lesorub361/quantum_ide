@@ -56,6 +56,8 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
   final Ref _ref;
   static const MethodChannel _nativeChannel = MethodChannel('com.example.quantum_ide/native');
   Timer? _pollingTimer;
+  bool _isRefreshing = false;
+  bool _hasInitialServerStarted = false;
 
   AdbDeviceService(this._ref) : super(const AdbDeviceState()) {
     init();
@@ -76,7 +78,7 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     await refreshDevices();
   }
 
-  void startPolling({Duration interval = const Duration(seconds: 4)}) {
+  void startPolling({Duration interval = const Duration(seconds: 10)}) {
     _pollingTimer?.cancel();
     _pollingTimer = Timer.periodic(interval, (_) => refreshDevices(silent: true));
   }
@@ -164,6 +166,9 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
 
   /// Refreshes ADB device list (`adb devices -l`)
   Future<void> refreshDevices({bool silent = false}) async {
+    if (_isRefreshing) return;
+    _isRefreshing = true;
+
     if (!silent) {
       state = state.copyWith(isChecking: true, lastError: null);
     }
@@ -172,20 +177,22 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
     try {
       await checkUsbHostSupport(autoRequestPermission: !silent);
 
-      // Ensure ADB server is running and clear stale emulator entries
-      await runtime.runCommand('adb start-server 2>/dev/null || true');
-      await runtime.runCommand('adb disconnect emulator-5556 2>/dev/null; adb disconnect 127.0.0.1:5556 2>/dev/null || true');
+      // Start ADB server once on initial run or manual explicit refresh
+      if (!_hasInitialServerStarted || !silent) {
+        _hasInitialServerStarted = true;
+        await runtime.runCommand('timeout 3 adb start-server 2>/dev/null || true');
+      }
 
       // Connect any active native USB-OTG bridges (e.g. 127.0.0.1:15555)
       for (final usbDev in state.rawUsbDevices) {
         final bridgeActive = usbDev['bridgeActive'] == true;
         final bridgeAddr = (usbDev['bridgeAddress'] ?? '').toString().trim();
         if (bridgeActive && bridgeAddr.isNotEmpty) {
-          await runtime.runCommand('adb connect $bridgeAddr 2>/dev/null || true');
+          await runtime.runCommand('timeout 2 adb connect $bridgeAddr 2>/dev/null || true');
         }
       }
 
-      final String output = await runtime.runCommand('adb devices -l').catchError((e) => '');
+      final String output = await runtime.runCommand('timeout 3 adb devices -l 2>/dev/null || true').catchError((e) => '');
       final List<AdbDevice> parsed = [];
 
       final lines = output.split('\n');
@@ -220,10 +227,10 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
       for (final dev in parsed) {
         if (dev.isOnline) {
           try {
-            final versionOut = await runtime.runCommand('adb -s ${dev.id} shell getprop ro.build.version.release 2>/dev/null || true');
+            final versionOut = await runtime.runCommand('timeout 2 adb -s ${dev.id} shell getprop ro.build.version.release 2>/dev/null || true');
             final cleanVersion = versionOut.trim();
             final modelOut = dev.model.isEmpty
-                ? (await runtime.runCommand('adb -s ${dev.id} shell getprop ro.product.model 2>/dev/null || true')).trim()
+                ? (await runtime.runCommand('timeout 2 adb -s ${dev.id} shell getprop ro.product.model 2>/dev/null || true')).trim()
                 : dev.model;
             final devWithVersion = dev.copyWith(
               model: modelOut.isNotEmpty ? modelOut : dev.model,
@@ -267,6 +274,8 @@ class AdbDeviceService extends StateNotifier<AdbDeviceState> {
         lastError: e.toString(),
         lastChecked: DateTime.now(),
       );
+    } finally {
+      _isRefreshing = false;
     }
   }
 

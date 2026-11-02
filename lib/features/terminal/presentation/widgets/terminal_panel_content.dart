@@ -3580,31 +3580,43 @@ class _AndroidTerminalDirectInputState extends State<_AndroidTerminalDirectInput
   void _sendText(String delta) {
     if (delta.isEmpty) return;
 
+    if (delta == '\r\n' || delta == '\n' || delta == '\r') {
+      _lastEnterSentAt = DateTime.now();
+      widget.terminal.keyInput(xt.TerminalKey.enter);
+      return;
+    }
+
     final sanitized = _TerminalPanelContentState._sanitizeTerminalInput(delta);
+    final bool hasTrailingNewline = delta.endsWith('\n') || delta.endsWith('\r');
 
     // If multi-character input (pasted, IME predictive text, autocompletion)
     if (sanitized.length > 1) {
-      // Strip trailing newlines so pasted commands don't auto-execute before review
       final trimmed = sanitized.replaceAll(RegExp(r'[\r\n]+$'), '');
-      if (trimmed.isEmpty) return;
 
-      if (widget.terminal.bracketedPasteMode) {
-        widget.terminal.paste(trimmed);
-      } else {
-        if (!trimmed.contains('\n') && !trimmed.contains('\r')) {
-          widget.terminal.textInput(trimmed);
+      if (trimmed.isNotEmpty) {
+        if (widget.terminal.bracketedPasteMode) {
+          widget.terminal.paste(trimmed);
         } else {
-          final lines = trimmed.split(RegExp(r'\r?\n'));
-          for (int i = 0; i < lines.length; i++) {
-            if (lines[i].isNotEmpty) {
-              widget.terminal.textInput(lines[i]);
-            }
-            if (i < lines.length - 1) {
-              _lastEnterSentAt = DateTime.now();
-              widget.terminal.keyInput(xt.TerminalKey.enter);
+          if (!trimmed.contains('\n') && !trimmed.contains('\r')) {
+            widget.terminal.textInput(trimmed);
+          } else {
+            final lines = trimmed.split(RegExp(r'\r?\n'));
+            for (int i = 0; i < lines.length; i++) {
+              if (lines[i].isNotEmpty) {
+                widget.terminal.textInput(lines[i]);
+              }
+              if (i < lines.length - 1) {
+                _lastEnterSentAt = DateTime.now();
+                widget.terminal.keyInput(xt.TerminalKey.enter);
+              }
             }
           }
         }
+      }
+
+      if (hasTrailingNewline) {
+        _lastEnterSentAt = DateTime.now();
+        widget.terminal.keyInput(xt.TerminalKey.enter);
       }
       return;
     }

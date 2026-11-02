@@ -731,7 +731,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
       // ── Safe contextSize for mobile ──
       // On first-ever load cap at 2048 to avoid OOM on unknown hardware.
       // Once model has loaded at least once, trust the user's settings fully.
-      final int userContextSize = settings.contextSize.clamp(512, 8192);
+      final int userContextSize = (prefs.getInt('chat_context_size') ?? 4096).clamp(512, 8192);
       final int safeContextSize = hasEverLoadedSuccessfully
           ? userContextSize
           : userContextSize.clamp(512, 2048);
@@ -872,7 +872,7 @@ class LocalInferenceNotifier extends StateNotifier<LocalInferenceState> {
           await prefs.setBool('gpu_crash_detected', false);
         }
 
-        final loadInfo = safeContextSize < settings.contextSize
+        final loadInfo = safeContextSize < userContextSize
             ? 'Loaded with safe context ($safeContextSize tokens). '
               'Increase context in Settings → Local Model if needed.'
             : null;

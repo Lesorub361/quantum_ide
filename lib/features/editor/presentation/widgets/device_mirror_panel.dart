@@ -53,7 +53,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initDevice();
-      ref.read(adbDeviceServiceProvider.notifier).startPolling(interval: const Duration(seconds: 2));
+      ref.read(adbDeviceServiceProvider.notifier).startPolling(interval: const Duration(seconds: 8));
     });
   }
 

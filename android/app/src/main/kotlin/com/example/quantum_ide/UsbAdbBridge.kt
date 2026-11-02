@@ -467,7 +467,15 @@ class UsbAdbBridge(
                     } catch (_: Exception) {
                         break
                     }
-                    Thread { handleControlClient(client) }.start()
+                    Thread({
+                        try {
+                            handleControlClient(client)
+                        } catch (e: Exception) {
+                            Log.d(TAG, "Control client interaction error: ${e.message}")
+                        } finally {
+                            try { client.close() } catch (_: Exception) {}
+                        }
+                    }, "UsbAdbControlWorker").start()
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Control server stopped: ${e.message}")
@@ -476,38 +484,42 @@ class UsbAdbBridge(
     }
 
     private fun handleControlClient(client: Socket) {
-        client.use { sock ->
-            sock.soTimeout = 5000
-            val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
-            val reqLine = reader.readLine() ?: return
-            val path = reqLine.split(" ").getOrNull(1) ?: "/status"
+        try {
+            client.use { sock ->
+                sock.soTimeout = 5000
+                val reader = BufferedReader(InputStreamReader(sock.getInputStream()))
+                val reqLine = reader.readLine() ?: return
+                val path = reqLine.split(" ").getOrNull(1) ?: "/status"
 
-            val responseJson = when {
-                path.startsWith("/connect") -> {
-                    val list = scanAndConnectUsbDevices(autoRequestPermission = true)
-                    buildStatusJson(list)
-                }
-                path.startsWith("/disconnect") -> {
-                    for (k in activeBridges.keys().toList()) {
-                        stopBridgeForDevice(k)
+                val responseJson = when {
+                    path.startsWith("/connect") -> {
+                        val list = scanAndConnectUsbDevices(autoRequestPermission = true)
+                        buildStatusJson(list)
                     }
-                    buildStatusJson()
+                    path.startsWith("/disconnect") -> {
+                        for (k in activeBridges.keys().toList()) {
+                            stopBridgeForDevice(k)
+                        }
+                        buildStatusJson()
+                    }
+                    else -> {
+                        val list = scanAndConnectUsbDevices(autoRequestPermission = true)
+                        buildStatusJson(list)
+                    }
                 }
-                else -> {
-                    val list = scanAndConnectUsbDevices(autoRequestPermission = true)
-                    buildStatusJson(list)
-                }
-            }
 
-            val body = responseJson.toString(2).toByteArray(Charsets.UTF_8)
-            val header = "HTTP/1.1 200 OK\r\n" +
-                "Content-Type: application/json; charset=utf-8\r\n" +
-                "Content-Length: ${body.size}\r\n" +
-                "Connection: close\r\n\r\n"
-            val out = sock.getOutputStream()
-            out.write(header.toByteArray(Charsets.UTF_8))
-            out.write(body)
-            out.flush()
+                val body = responseJson.toString(2).toByteArray(Charsets.UTF_8)
+                val header = "HTTP/1.1 200 OK\r\n" +
+                    "Content-Type: application/json; charset=utf-8\r\n" +
+                    "Content-Length: ${body.size}\r\n" +
+                    "Connection: close\r\n\r\n"
+                val out = sock.getOutputStream()
+                out.write(header.toByteArray(Charsets.UTF_8))
+                out.write(body)
+                out.flush()
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "UsbAdbBridge control client handler: ${e.message}")
         }
     }
 

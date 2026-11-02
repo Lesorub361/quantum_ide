@@ -7,6 +7,7 @@ import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
 class MobileBottomNav extends ConsumerWidget {
   final VoidCallback? onTerminalToggle;
+  final VoidCallback? onAiToggle;
   final VoidCallback? onExplorerToggle;
 
   const MobileBottomNav({
