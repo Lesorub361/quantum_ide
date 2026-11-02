@@ -5,7 +5,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:xterm/xterm.dart' as xt;
+import 'package:kterm/kterm.dart' as xt;
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 
 /// Overlay widget for interactive touch selection in terminal views.
