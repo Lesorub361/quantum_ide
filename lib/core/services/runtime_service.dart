@@ -660,7 +660,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '24';
+    const bashrcVersion = '25';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -694,7 +694,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=24
+# BASHRC_VERSION=25
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -721,6 +721,8 @@ fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 
 # Auto-detect terminal capability and heal missing terminfo
+[ -d /lib/terminfo ] && [ ! -d /usr/share/terminfo/x ] && ln -sf /lib/terminfo/* /usr/share/terminfo/ 2>/dev/null || true
+[ -d /usr/share/terminfo ] && [ ! -d /lib/terminfo/x ] && ln -sf /usr/share/terminfo/* /lib/terminfo/ 2>/dev/null || true
 export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
 if [ -e /usr/share/terminfo/x/xterm-256color ] || [ -e /lib/terminfo/x/xterm-256color ] || [ -e /etc/terminfo/x/xterm-256color ]; then
     export TERM=xterm-256color
@@ -976,15 +978,17 @@ term_fetch() {
     [ -z "$HOST_MODEL" ] && HOST_MODEL="$(hostname 2>/dev/null || echo 'localhost')"
 
     local UPTIME_STR="unknown"
-    if [ -f /proc/uptime ]; then
-        local UP_SECS=$(cut -d. -f1 /proc/uptime)
-        local DAYS=$((UP_SECS / 86400))
-        local HOURS=$(( (UP_SECS % 86400) / 3600 ))
-        local MINS=$(( (UP_SECS % 3600) / 60 ))
-        UPTIME_STR=""
-        [ $DAYS -gt 0 ] && UPTIME_STR="${DAYS}d "
-        [ $HOURS -gt 0 ] && UPTIME_STR="${UPTIME_STR}${HOURS}h "
-        UPTIME_STR="${UPTIME_STR}${MINS}m"
+    if [ -s /proc/uptime ]; then
+        local UP_SECS=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+        if [ -n "$UP_SECS" ] && [ "$UP_SECS" -eq "$UP_SECS" ] 2>/dev/null; then
+            local DAYS=$((UP_SECS / 86400))
+            local HOURS=$(( (UP_SECS % 86400) / 3600 ))
+            local MINS=$(( (UP_SECS % 3600) / 60 ))
+            UPTIME_STR=""
+            [ $DAYS -gt 0 ] && UPTIME_STR="${DAYS}d "
+            [ $HOURS -gt 0 ] && UPTIME_STR="${UPTIME_STR}${HOURS}h "
+            UPTIME_STR="${UPTIME_STR}${MINS}m"
+        fi
     fi
 
     local CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "1")
@@ -1490,15 +1494,17 @@ fi
 [ -z "$HOST_MODEL" ] && HOST_MODEL="$(hostname 2>/dev/null || echo 'localhost')"
 
 # 3. Uptime
-if [ -f /proc/uptime ]; then
-    UP_SECS=$(cut -d. -f1 /proc/uptime)
-    DAYS=$((UP_SECS / 86400))
-    HOURS=$(( (UP_SECS % 86400) / 3600 ))
-    MINS=$(( (UP_SECS % 3600) / 60 ))
-    UPTIME_STR=""
-    [ $DAYS -gt 0 ] && UPTIME_STR="${DAYS}d "
-    [ $HOURS -gt 0 ] && UPTIME_STR="${UPTIME_STR}${HOURS}h "
-    UPTIME_STR="${UPTIME_STR}${MINS}m"
+if [ -s /proc/uptime ]; then
+    UP_SECS=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+    if [ -n "$UP_SECS" ] && [ "$UP_SECS" -eq "$UP_SECS" ] 2>/dev/null; then
+        DAYS=$((UP_SECS / 86400))
+        HOURS=$(( (UP_SECS % 86400) / 3600 ))
+        MINS=$(( (UP_SECS % 3600) / 60 ))
+        UPTIME_STR=""
+        [ $DAYS -gt 0 ] && UPTIME_STR="${DAYS}d "
+        [ $HOURS -gt 0 ] && UPTIME_STR="${UPTIME_STR}${HOURS}h "
+        UPTIME_STR="${UPTIME_STR}${MINS}m"
+    fi
 else
     UPTIME_STR="unknown"
 fi
@@ -2625,18 +2631,23 @@ fi
 echo "$$" > "$LOCKFILE"
 touch "$DONE_FLAG"
 
-# Ensure terminfo database is installed and linked so clear/nano/htop never fail
-if [ ! -d /usr/share/terminfo/x ] && [ ! -d /lib/terminfo/x ] && [ ! -d /etc/terminfo/x ]; then
+# Ensure terminfo database and essential terminal utilities are installed and linked
+if [ ! -e /lib/terminfo/x/xterm-256color ] && [ ! -e /usr/share/terminfo/x/xterm-256color ]; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
-    apt-get install -y --no-install-recommends ncurses-base ncurses-bin ncurses-term >/dev/null 2>&1 || true
+    apt-get install --reinstall -y ncurses-base ncurses-term >/dev/null 2>&1 || true
 fi
-if [ -d /usr/share/terminfo ] && [ ! -e /lib/terminfo ]; then
-    ln -sf /usr/share/terminfo /lib/terminfo 2>/dev/null || true
+if ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y --no-install-recommends less nano >/dev/null 2>&1 || true
 fi
-if [ -d /lib/terminfo ] && [ ! -e /usr/share/terminfo ]; then
-    mkdir -p /usr/share 2>/dev/null || true
-    ln -sf /lib/terminfo /usr/share/terminfo 2>/dev/null || true
+if [ -d /lib/terminfo ] && [ ! -e /usr/share/terminfo/x ]; then
+    mkdir -p /usr/share/terminfo 2>/dev/null || true
+    ln -sf /lib/terminfo/* /usr/share/terminfo/ 2>/dev/null || true
+fi
+if [ -d /usr/share/terminfo ] && [ ! -e /lib/terminfo/x ]; then
+    mkdir -p /lib/terminfo 2>/dev/null || true
+    ln -sf /usr/share/terminfo/* /lib/terminfo/ 2>/dev/null || true
 fi
 
 # Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail

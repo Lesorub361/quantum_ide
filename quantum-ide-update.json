@@ -1,16 +1,16 @@
 {
-  "versionCode": 197,
-  "versionName": "1.2.180",
-  "notes": "QuantumIDE v1.2.180:\n• ⌨️ Полностью исправлено удаление символов (Backspace) на экранной клавиатуре Android (Gboard, Samsung Keyboard и др.): активированы deleteDetection и visiblePassword в TerminalView, благодаря чему сигнал стирания гарантированно передаётся в PTY.\n• 🪜 Устранена «лесенка» приглашения bash (staircase prompt) при нажатии Enter на пустой строке: включён lineFeedMode в xterm и добавлен возврат каретки (\\r) в PS1.\n• 🐚 Синхронизирована версия .bashrc (v24).",
+  "versionCode": 198,
+  "versionName": "1.2.181",
+  "notes": "QuantumIDE v1.2.181:\n• 🖥️ Восстановление terminfo: автоматическое лечение и переустановка определений xterm-256color (ncurses-base, ncurses-term), исключающее ошибку 'unknown terminal type' для clear/htop/top/nano.\n• 📦 Добавлены базовые терминальные утилиты: автоматическая установка less и nano для стабильного git log/diff и быстрого редактирования.\n• ⏱️ Исправлен расчёт Uptime на Android 14 в PRoot (защита от пустых файлов /proc/uptime).\n• 🐚 Синхронизирована версия .bashrc (v25) с динамическим линкованием terminfo.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.180/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.181/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.180",
-  "buildNumber": 197,
-  "tag_name": "v1.2.180",
-  "releaseNotes": "Fix mobile IME backspace deletion (deleteDetection + visiblePassword), eliminate staircase prompt on empty Enter (lineFeedMode + \\r in PS1), sync bashrc v24"
+  "version": "1.2.181",
+  "buildNumber": 198,
+  "tag_name": "v1.2.181",
+  "releaseNotes": "Auto-heal missing terminfo (xterm-256color), install less/nano, fix Android 14 PRoot /proc/uptime arithmetic in fetch/bashrc, bump bashrc v25"
 }
