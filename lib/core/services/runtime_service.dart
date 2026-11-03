@@ -663,7 +663,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '26';
+    const bashrcVersion = '27';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -791,6 +791,11 @@ alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
 alias cls="printf '\033[2J\033[H'"
 alias clear="printf '\033[2J\033[H'"
+alias adb-devices="adb devices -l"
+alias adb-install="adb install -r"
+alias adb-wifi="adb tcpip 5555"
+alias fastboot-devices="fastboot devices"
+alias check-usb="lsusb"
 
 # gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
 gradlew() {
@@ -2723,8 +2728,8 @@ fi
 echo "$$" > "$LOCKFILE"
 touch "$DONE_FLAG"
 
-# Ensure all essential terminal utilities and terminfo databases are installed
-if ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1 || ! command -v infocmp >/dev/null 2>&1 || [ ! -f /etc/bash_completion ]; then
+# Ensure all essential terminal utilities, ADB/Fastboot, and firmware flashing tools are installed
+if ! command -v adb >/dev/null 2>&1 || ! command -v fastboot >/dev/null 2>&1 || ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1 || ! command -v infocmp >/dev/null 2>&1 || [ ! -f /etc/bash_completion ]; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
     apt-get install -y --no-install-recommends \
@@ -2734,7 +2739,9 @@ if ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1 || ! c
         less nano vim tmux htop tree jq ncdu \
         procps psmisc \
         file ca-certificates \
-        locales ripgrep fzf iproute2 iputils-ping net-tools lsof >/dev/null 2>&1 || true
+        locales ripgrep fzf iproute2 iputils-ping net-tools lsof \
+        android-tools-adb android-tools-fastboot \
+        usbutils aria2 p7zip-full zstd brotli libusb-1.0-0 >/dev/null 2>&1 || true
 fi
 
 # Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail

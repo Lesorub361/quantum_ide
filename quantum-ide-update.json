@@ -1,16 +1,16 @@
 {
-  "versionCode": 207,
-  "versionName": "1.2.190",
-  "notes": "QuantumIDE v1.2.190:\n• 🇷🇺 Поддержка UTF-8 и русские буквы: включен флаг stty iutf8, клавиша Backspace корректно удаляет русские буквы без фантомных символов.\n• 🎯 Чистый PS1 prompt: удалён символ \\r из начала строки приглашения, устранено наложение и съезжание текста при переносе строк и изменении масштаба.\n• 📱 Адаптивный баннер term_fetch: автоопределение реальной ширины экрана через stty size, предотвращение обрезки и переполнения экрана при зуме шрифта.\n• ⚙️ Переменные редактора и пейджера: по умолчанию настроены EDITOR=nano, VISUAL=nano, PAGER=less.\n• 📦 Расширенный пакетный набор: в автоустановку добавлены tmux, vim, htop, tree, jq, ncdu, ripgrep, fzf, iproute2, ping, net-tools, lsof.",
+  "versionCode": 208,
+  "versionName": "1.2.191",
+  "notes": "QuantumIDE v1.2.191:\n• ⚡ Поддержка подключения телефонов по Type-C (OTG): предустановлены android-tools-adb, android-tools-fastboot, usbutils.\n• 📱 Прошивка и установка APK: прямо из терминала доступны adb devices, adb install, fastboot flash, adb-wifi, check-usb.\n• 🚀 Утилиты для работы с прошивками: aria2 (многопоточная загрузка), p7zip-full, zstd, brotli, libusb.\n• ⌨️ Новые быстрые алиасы: adb-devices, adb-install, adb-wifi, fastboot-devices, check-usb.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.190/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.191/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.190",
-  "buildNumber": 207,
-  "tag_name": "v1.2.190",
-  "releaseNotes": "Fix UTF-8 multibyte backspace deletion with stty iutf8, remove \\r from PS1, auto-fit term_fetch width to terminal cols, set default EDITOR/PAGER, and bundle terminal utilities."
+  "version": "1.2.191",
+  "buildNumber": 208,
+  "tag_name": "v1.2.191",
+  "releaseNotes": "Add ADB, Fastboot, USB-OTG flashing tools (usbutils, aria2, p7zip, zstd, brotli) and device control aliases."
 }
