@@ -183,13 +183,12 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows < 10 ? 10 : rows;
           final safeCols = cols < 20 ? 20 : cols;
-          // On mobile devices, software keyboard appearing drops visible rows while cols remain unchanged.
-          // Resizing PTY here sends SIGWINCH to bash, causing readline to reprint a duplicate prompt.
+          // On mobile devices, software keyboard appearing or disappearing drops/restores visible rows
+          // while columns remain constant. Never resize PTY on keyboard height fluctuations to prevent
+          // sending SIGWINCH to bash, which causes readline to reprint duplicate prompts ("лестница строк").
           if ((Platform.isAndroid || Platform.isIOS) &&
               lastCols == safeCols &&
-              lastRows > 0 &&
-              safeRows < lastRows &&
-              (lastRows - safeRows) > 4) {
+              lastRows > 0) {
             return;
           }
           if (safeRows != lastRows || safeCols != lastCols) {

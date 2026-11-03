@@ -197,13 +197,12 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows.clamp(6, 250);
           final safeCols = cols.clamp(20, 400);
-          // On mobile devices, software keyboard appearing drops visible rows while cols remain unchanged.
-          // Resizing PTY here sends SIGWINCH to bash, causing readline to reprint a duplicate prompt.
+          // On mobile devices, software keyboard appearing or disappearing drops/restores visible rows
+          // while columns remain constant. Never resize PTY on keyboard height fluctuations to prevent
+          // sending SIGWINCH to bash, which causes readline to reprint duplicate prompts ("лестница строк").
           if ((Platform.isAndroid || Platform.isIOS) &&
               lastCols == safeCols &&
-              lastRows > 0 &&
-              safeRows < lastRows &&
-              (lastRows - safeRows) > 4) {
+              lastRows > 0) {
             return;
           }
           if (safeRows != lastRows || safeCols != lastCols) {
@@ -375,6 +374,11 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       term.onResize = (cols, rows, int pixelWidth, int pixelHeight) {
         final safeRows = rows.clamp(6, 250);
         final safeCols = cols.clamp(20, 400);
+        if ((Platform.isAndroid || Platform.isIOS) &&
+            lastRestartCols == safeCols &&
+            lastRestartRows > 0) {
+          return;
+        }
         restartResizeDebounce?.cancel();
         restartResizeDebounce = Timer(const Duration(milliseconds: 150), () {
           if (safeRows != lastRestartRows || safeCols != lastRestartCols) {

@@ -80,7 +80,7 @@ class TerminalPanelContent extends ConsumerStatefulWidget {
   ConsumerState<TerminalPanelContent> createState() => _TerminalPanelContentState();
 }
 
-class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
+class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> with WidgetsBindingObserver {
   final Set<String> _activeModifiers = {};
   bool _isSidebarOpen = false;
   bool _isTerminalSplit = false;
@@ -211,7 +211,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     // Clear focus from background editor/inputs so keystrokes route directly to terminal
     FocusManager.instance.primaryFocus?.unfocus();
 
-    final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = true;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
@@ -225,20 +224,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       SystemChannels.textInput.invokeMethod('TextInput.show');
     }
 
-    if (mounted && !wasActive) {
-      setState(() {});
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _isMobileKeyboardActive) {
-          requestInput();
-        }
-      });
-    } else {
-      requestInput();
-    }
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        requestInput();
+      }
+    });
   }
 
   void _closeTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
-    final wasActive = _isMobileKeyboardActive;
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
@@ -246,7 +240,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     _getTerminalKey(keyId).currentState?.closeKeyboard();
     focusNode.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');
-    if (mounted && wasActive) setState(() {});
+    if (mounted) setState(() {});
   }
 
   void _toggleTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
@@ -257,7 +251,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       });
     }
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    if (bottomInset > 20 || _isMobileKeyboardActive) {
+    if (bottomInset > 20) {
       _closeTerminalKeyboard(session, isSecondary: isSecondary);
     } else {
       _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
@@ -275,6 +269,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadPathBinaries();
     WakelockPlus.enabled.then((val) {
       if (mounted) setState(() => _isWakelockEnabled = val);
@@ -328,7 +323,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    if (bottomInset <= 20 && _isMobileKeyboardActive) {
+      if (mounted) {
+        setState(() {
+          _isMobileKeyboardActive = false;
+        });
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     for (final node in _terminalFocusNodes.values) {
       node.dispose();
     }
@@ -2162,7 +2171,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
                                 deleteDetection: true,
-                                autoResize: !isMobile || MediaQuery.of(context).viewInsets.bottom == 0,
+                                autoResize: !isMobile ? true : (MediaQuery.of(context).viewInsets.bottom == 0 && !_isMobileKeyboardActive),
                                 hardwareKeyboardOnly: isMobile && !_isMobileKeyboardActive,
                                 onKeyEvent: (focusNode, event) {
                                   if (event is! KeyUpEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
@@ -3101,12 +3110,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     if (sessions.isEmpty || notifier.currentIndex >= sessions.length) return const SizedBox();
     final currentSession = sessions[notifier.currentIndex];
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final isKeyboardOpen = bottomInset > 20;
-    if (!isKeyboardOpen && _isMobileKeyboardActive) {
-      _isMobileKeyboardActive = false;
-    }
+    final isKeyboardOpen = (bottomInset > 20) || _isMobileKeyboardActive;
     return VirtualKeysView(
-      isCompact: isKeyboardOpen,
+      isCompact: bottomInset > 20,
       activeKeys: {
         ..._activeModifiers,
         if (isKeyboardOpen) 'KEYB',
