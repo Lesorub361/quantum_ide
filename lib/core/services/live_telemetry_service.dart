@@ -20,6 +20,10 @@ class LiveTelemetryService {
   String? _lastFlushedJson;
   final List<String> _recentLogs = [];
   final List<String> _buildOutputTail = [];
+  final StringBuffer _buildOutputBuffer = StringBuffer();
+  Timer? _buildOutputFlushTimer;
+  final StringBuffer _logBuffer = StringBuffer();
+  Timer? _logFlushTimer;
 
   double currentCpu = 0.0;
   double currentGpu = 0.0;
@@ -171,25 +175,28 @@ class LiveTelemetryService {
     currentBuildCommand = command;
     buildStartTime = DateTime.now();
     _buildOutputTail.clear();
+    _buildOutputBuffer.clear();
+    _buildOutputFlushTimer?.cancel();
     try {
-      _buildOutputFile?.writeAsStringSync(
+      _buildOutputFile?.writeAsString(
         '=== Сборка запущена: ${DateTime.now()} ===\nКоманда: $command\n\n',
         mode: FileMode.write,
-      );
+      ).catchError((_) => _buildOutputFile!);
     } catch (_) {}
     flushStatus();
   }
 
   void onBuildFinished(int exitCode) {
+    _flushBuildOutputBufferNow();
     final dur = buildStartTime != null
         ? DateTime.now().difference(buildStartTime!).inSeconds
         : 0;
     currentBuildStatus = exitCode == 0 ? 'Success (${dur}s)' : 'Failed (code $exitCode, ${dur}s)';
     try {
-      _buildOutputFile?.writeAsStringSync(
+      _buildOutputFile?.writeAsString(
         '\n=== Сборка завершена: $currentBuildStatus ===\n',
         mode: FileMode.append,
-      );
+      ).catchError((_) => _buildOutputFile!);
     } catch (_) {}
     flushStatus();
   }
@@ -221,8 +228,23 @@ class LiveTelemetryService {
       }
     }
 
+    _buildOutputBuffer.write(clean);
+    _scheduleBuildOutputFlush();
+  }
+
+  void _scheduleBuildOutputFlush() {
+    if (_buildOutputFlushTimer != null && _buildOutputFlushTimer!.isActive) return;
+    _buildOutputFlushTimer = Timer(const Duration(milliseconds: 300), _flushBuildOutputBufferNow);
+  }
+
+  void _flushBuildOutputBufferNow() {
+    _buildOutputFlushTimer?.cancel();
+    _buildOutputFlushTimer = null;
+    if (_buildOutputBuffer.isEmpty) return;
+    final textToWrite = _buildOutputBuffer.toString();
+    _buildOutputBuffer.clear();
     try {
-      _buildOutputFile?.writeAsStringSync(clean, mode: FileMode.append, flush: false);
+      _buildOutputFile?.writeAsString(textToWrite, mode: FileMode.append, flush: false).catchError((_) => _buildOutputFile!);
     } catch (_) {}
   }
 
@@ -234,8 +256,20 @@ class LiveTelemetryService {
       _recentLogs.removeAt(0);
     }
 
+    _logBuffer.writeln(entry);
+    if (_logFlushTimer == null || !_logFlushTimer!.isActive) {
+      _logFlushTimer = Timer(const Duration(seconds: 1), _flushLogBufferNow);
+    }
+  }
+
+  void _flushLogBufferNow() {
+    _logFlushTimer?.cancel();
+    _logFlushTimer = null;
+    if (_logBuffer.isEmpty) return;
+    final textToWrite = _logBuffer.toString();
+    _logBuffer.clear();
     try {
-      _globalLogFile?.writeAsStringSync('$entry\n', mode: FileMode.append, flush: false);
+      _globalLogFile?.writeAsString(textToWrite, mode: FileMode.append, flush: false).catchError((_) => _globalLogFile!);
     } catch (_) {}
   }
 

@@ -48,10 +48,18 @@ class SystemMonitorService extends ChangeNotifier {
   String _cachedSoc = '';
   bool _initializedStatic = false;
 
+  DateTime? _lastDiskCheck;
+  DateTime? _lastBatteryCheck;
+  double _cachedDiskFree = 0.0;
+  double _cachedDiskTotal = 0.0;
+  int _cachedBatteryLevel = 100;
+  bool _cachedIsCharging = false;
+
   SystemMonitorService() {
     _initStaticInfo();
     _updateMetrics();
-    _timer = Timer.periodic(const Duration(seconds: 3), (_) => _updateMetrics());
+    // 15-second interval instead of 3s to minimize battery usage and CPU wakeups
+    _timer = Timer.periodic(const Duration(seconds: 15), (_) => _updateMetrics());
   }
 
   @override
@@ -128,33 +136,44 @@ class SystemMonitorService extends ChangeNotifier {
       }
     } catch (_) {}
 
-    // 3. Disk space via df
-    try {
-      if (Platform.isAndroid || Platform.isLinux) {
-        final result = await Process.run('df', ['-k', '/data']);
-        if (result.exitCode == 0) {
-          final lines = (result.stdout as String).trim().split('\n');
-          if (lines.length > 1) {
-            final cols = lines[1].trim().split(RegExp(r'\s+'));
-            if (cols.length >= 4) {
-              final totalK = double.tryParse(cols[1]) ?? 0;
-              final availK = double.tryParse(cols[3]) ?? 0;
-              diskTotal = totalK / (1024 * 1024);
-              diskFree = availK / (1024 * 1024);
+    // 3. Disk space via df (cached for 60 seconds to avoid spawning processes every tick)
+    final now = DateTime.now();
+    if (_lastDiskCheck == null || now.difference(_lastDiskCheck!) > const Duration(seconds: 60)) {
+      try {
+        if (Platform.isAndroid || Platform.isLinux) {
+          final result = await Process.run('df', ['-k', '/data']).timeout(const Duration(seconds: 2));
+          if (result.exitCode == 0) {
+            final lines = (result.stdout as String).trim().split('\n');
+            if (lines.length > 1) {
+              final cols = lines[1].trim().split(RegExp(r'\s+'));
+              if (cols.length >= 4) {
+                final totalK = double.tryParse(cols[1]) ?? 0;
+                final availK = double.tryParse(cols[3]) ?? 0;
+                _cachedDiskTotal = totalK / (1024 * 1024);
+                _cachedDiskFree = availK / (1024 * 1024);
+                _lastDiskCheck = now;
+              }
             }
           }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
+    diskTotal = _cachedDiskTotal;
+    diskFree = _cachedDiskFree;
 
-    // 4. Battery
-    try {
-      batteryLevel = await _battery.batteryLevel;
-      final state = await _battery.batteryState;
-      isCharging = state == BatteryState.charging || state == BatteryState.full;
-    } catch (_) {}
+    // 4. Battery (cached for 30 seconds to minimize Platform Channel / JNI invocations)
+    if (_lastBatteryCheck == null || now.difference(_lastBatteryCheck!) > const Duration(seconds: 30)) {
+      try {
+        _cachedBatteryLevel = await _battery.batteryLevel;
+        final state = await _battery.batteryState;
+        _cachedIsCharging = state == BatteryState.charging || state == BatteryState.full;
+        _lastBatteryCheck = now;
+      } catch (_) {}
+    }
+    batteryLevel = _cachedBatteryLevel;
+    isCharging = _cachedIsCharging;
 
-    _metrics = SystemMetrics(
+    final newMetrics = SystemMetrics(
       ramUsedGb: ramUsed,
       ramTotalGb: ramTotal,
       ramUsagePercent: ramPercent,
@@ -169,7 +188,17 @@ class SystemMonitorService extends ChangeNotifier {
       socInfo: _cachedSoc,
     );
 
-    notifyListeners();
+    // Only notify if meaningful change occurred
+    final shouldNotify = (_metrics.ramUsagePercent - ramPercent).abs() > 0.5 ||
+        (_metrics.cpuLoad1m - cpuLoad).abs() > 0.1 ||
+        _metrics.batteryLevel != batteryLevel ||
+        _metrics.isCharging != isCharging;
+
+    _metrics = newMetrics;
+
+    if (shouldNotify) {
+      notifyListeners();
+    }
   }
 
   double _parseMemKb(String line) {

@@ -121,6 +121,7 @@ class PerformanceProfilerService extends StateNotifier<PerformanceProfilerState>
   void stopRecording() {
     _timer?.cancel();
     _timer = null;
+    SchedulerBinding.instance.removeTimingsCallback(_onFrameTimings);
     if (state.currentSession != null) {
       final completed = ProfilerSession(
         id: state.currentSession!.id,

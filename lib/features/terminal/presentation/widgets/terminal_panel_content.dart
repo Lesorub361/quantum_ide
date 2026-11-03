@@ -3106,33 +3106,46 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
+  static final Map<String, String> _fontCache = {};
+
   String _getFontFamily(String fontName) {
+    if (_fontCache.containsKey(fontName)) return _fontCache[fontName]!;
     final normalized = fontName.toLowerCase().replaceAll(' ', '');
+    String result;
     switch (normalized) {
       case 'jetbrainsmono':
-        return 'jetBrainsMono';
+        result = 'jetBrainsMono';
+        break;
       case 'firacode':
-        return 'firaCode';
+        result = 'firaCode';
+        break;
       case 'sourcecodepro':
-        return 'sourceCodePro';
+        result = 'sourceCodePro';
+        break;
       case 'inconsolata':
-        return 'inconsolata';
+        result = 'inconsolata';
+        break;
       case 'cascadiacode':
       case 'cascadia':
-        return 'cascadia';
+        result = 'cascadia';
+        break;
       case 'symbolsnerdfont':
       case 'nerdfont':
       case 'symbolsnerd':
-        return 'SymbolsNerdFont';
+        result = 'SymbolsNerdFont';
+        break;
       case 'monospace':
-        return 'monospace';
+        result = 'monospace';
+        break;
       default:
         try {
-          return GoogleFonts.getFont(fontName).fontFamily ?? 'monospace';
+          result = GoogleFonts.getFont(fontName).fontFamily ?? 'monospace';
         } catch (_) {
-          return 'monospace';
+          result = 'monospace';
         }
     }
+    _fontCache[fontName] = result;
+    return result;
   }
 
   Future<void> _copySelection(TerminalSession session) async {

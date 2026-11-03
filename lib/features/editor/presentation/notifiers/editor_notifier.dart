@@ -453,7 +453,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         final text = state.openFiles[latestIdx].controller.text;
         // Instant in-process FastSyntaxEngine (<1ms, <1MB RAM)
         final fastDiags = FastSyntaxEngine.instance.analyze(path, text);
-        if (fastDiags.isNotEmpty) {
+        if (fastDiags.isNotEmpty || (state.allDiagnostics[path]?.isNotEmpty ?? false)) {
           updateDiagnostics(path, fastDiags);
         }
         _lspService.onFileChanged(path, text).catchError((e) {
@@ -894,9 +894,12 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       debugPrint('Failed to start workspace watcher: $e');
     }
 
-    // Fast 3-second bidirectional sync with /storage/emulated/0/QuantumIDE/<project>
-    _externalSyncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      syncExternalNow();
+    // Gentle 45-second background sync fallback with /storage/emulated/0/QuantumIDE/<project>
+    // Immediate sync occurs on app resume (didChangeAppLifecycleState: resumed)
+    _externalSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      if (_diffTimer == null || !_diffTimer!.isActive) {
+        syncExternalNow();
+      }
     });
   }
 
@@ -904,6 +907,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
   Future<List<String>> syncExternalNow({bool reloadAllTabs = false}) async {
     if (_isSyncingExternal) return const [];
+    // Protect active typing session: never run external sync while the user is actively typing
+    if (!reloadAllTabs && _diffTimer != null && _diffTimer!.isActive) return const [];
     final workspacePath = ref.read(workspaceProvider).currentPath;
     if (workspacePath == null) return const [];
 
@@ -1102,6 +1107,9 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       for (int i = 0; i < this.state.openFiles.length; i++) {
         saveFile(i);
       }
+    } else if (state == AppLifecycleState.resumed) {
+      // Pick up any external edits immediately when returning to the IDE from external editors
+      syncExternalNow();
     }
   }
 
