@@ -2143,16 +2143,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           },
                           child: LayoutBuilder(
                             builder: (context, viewConstraints) {
-                              final kbInset = widget.onlyTerminal
-                                  ? MediaQuery.of(context).viewInsets.bottom
-                                  : 0.0;
-                              final fullHeight = viewConstraints.maxHeight + kbInset;
-                              final buf = session.xtermTerminal.buffer;
-                              final alignBottom = kbInset > 20 &&
-                                  (session.xtermTerminal.isUsingAltBuffer ||
-                                      buf.scrollBack > 0 ||
-                                      buf.cursorY > (buf.viewHeight * 0.4));
-                              final termView = xt.TerminalView(
+                              return xt.TerminalView(
                                 key: _getTerminalKey(keyId),
                                 session.xtermTerminal,
                                 controller: session.xtermViewController,
@@ -2210,20 +2201,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   ],
                                 ),
                               );
-
-                              if (kbInset > 20 && fullHeight > viewConstraints.maxHeight) {
-                                return ClipRect(
-                                  child: OverflowBox(
-                                    minHeight: fullHeight,
-                                    maxHeight: fullHeight,
-                                    alignment: alignBottom
-                                        ? Alignment.bottomCenter
-                                        : Alignment.topCenter,
-                                    child: termView,
-                                  ),
-                                );
-                              }
-                              return termView;
                             },
                           ),
                         ),

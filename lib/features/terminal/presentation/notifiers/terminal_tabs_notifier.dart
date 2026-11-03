@@ -199,12 +199,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           final safeCols = cols.clamp(20, 400);
           if (safeRows != lastRows || safeCols != lastCols) {
             resizeDebounceTimer?.cancel();
-            resizeDebounceTimer = Timer(const Duration(milliseconds: 250), () {
-              // Avoid sending SIGWINCH to TUI apps (like agy/claude) when only
-              // the height temporarily shrinks due to the soft keyboard opening.
-              if (safeCols == lastCols && lastRows > 0 && safeRows < lastRows) {
-                return;
-              }
+            resizeDebounceTimer = Timer(const Duration(milliseconds: 150), () {
               if (safeRows != lastRows || safeCols != lastCols) {
                 lastRows = safeRows;
                 lastCols = safeCols;
@@ -372,10 +367,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         final safeRows = rows.clamp(6, 250);
         final safeCols = cols.clamp(20, 400);
         restartResizeDebounce?.cancel();
-        restartResizeDebounce = Timer(const Duration(milliseconds: 250), () {
-          if (safeCols == lastRestartCols && lastRestartRows > 0 && safeRows < lastRestartRows) {
-            return;
-          }
+        restartResizeDebounce = Timer(const Duration(milliseconds: 150), () {
           if (safeRows != lastRestartRows || safeCols != lastRestartCols) {
             lastRestartRows = safeRows;
             lastRestartCols = safeCols;

@@ -1,16 +1,16 @@
 {
-  "versionCode": 199,
-  "versionName": "1.2.182",
-  "notes": "QuantumIDE v1.2.182:\n• 🛑 Исправлено дублирование текста («ответ повторяется на весь экран»): отключён принудительный lineFeedMode, восстановивший корректную работу ANSI TUI/Ink курсора при потоковом выводе.\n• ⌨️ Исправлено мерцание и скачки букв («буквы улетают»): возвращён стандартный text input без искажения composing-состояния русской экранной клавиатуры.\n• 📱 Исправлено самопроизвольное появление клавиатуры: при прокрутке и чтении диалога клавиатура больше не выскакивает; ввод с клавиатуры теперь активируется только при нажатии кнопки клавиатуры на панели виртуальных клавиш.",
+  "versionCode": 200,
+  "versionName": "1.2.183",
+  "notes": "QuantumIDE v1.2.183:\n• 🚀 Полная стабилизация терминала: удалён артефактный OverflowBox, устранивший вертикальные прыжки текста при открытии и закрытии клавиатуры.\n• 📐 Надёжный ресайз PTY: синхронизированы размеры строк и колонок при повороте экрана и открытии IME (устранён сбой отслеживания строк).\n• 🎯 Стабильный скролл и координаты курсора для всех диалогов и CLI-интерфейсов.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.182/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.183/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.182",
-  "buildNumber": 199,
-  "tag_name": "v1.2.182",
-  "releaseNotes": "Fix TUI response repetition by removing forced lineFeedMode, eliminate IME character jumping, prevent automatic keyboard popup on mobile scrolling"
+  "version": "1.2.183",
+  "buildNumber": 200,
+  "tag_name": "v1.2.183",
+  "releaseNotes": "Eliminate terminal OverflowBox layout jumps, improve PTY resize sync across orientation and keyboard state, stabilize cursor and viewport"
 }
