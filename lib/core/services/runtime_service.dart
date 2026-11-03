@@ -660,7 +660,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '23';
+    const bashrcVersion = '24';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -694,7 +694,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=22
+# BASHRC_VERSION=24
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -753,7 +753,7 @@ __update_quantum_ps1() {
             git_str=" \[\033[35m\]git:(\[\033[1;31m\]$branch\[\033[0m\033[35m\])\[\033[0m\]"
         fi
     fi
-    PS1="\[\033[1;36m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
+    PS1="\r\[\033[1;36m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
 }
 PROMPT_COMMAND="__update_quantum_ps1"
 

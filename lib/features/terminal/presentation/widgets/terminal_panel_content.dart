@@ -2155,6 +2155,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
                                 hardwareKeyboardOnly: false,
+                                keyboardType: TextInputType.visiblePassword,
+                                deleteDetection: true,
                                 onKeyEvent: (focusNode, event) {
                                   if (event is! KeyUpEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
                                     session.pty.write(Uint8List.fromList([127]));
