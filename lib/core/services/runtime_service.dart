@@ -2615,6 +2615,21 @@ if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
     fi
 fi
 
+# Always auto-heal terminfo database if missing xterm-256color or broken
+if [ ! -e /lib/terminfo/x/xterm-256color ] && [ ! -e /usr/share/terminfo/x/xterm-256color ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
+    apt-get install --reinstall -y ncurses-base ncurses-term >/dev/null 2>&1 || true
+fi
+if [ -d /usr/share/terminfo ] && [ ! -e /lib/terminfo/x ]; then
+    mkdir -p /lib/terminfo 2>/dev/null || true
+    ln -sf /usr/share/terminfo/* /lib/terminfo/ 2>/dev/null || true
+fi
+if [ -d /lib/terminfo ] && [ ! -e /usr/share/terminfo/x ]; then
+    mkdir -p /usr/share/terminfo 2>/dev/null || true
+    ln -sf /lib/terminfo/* /usr/share/terminfo/ 2>/dev/null || true
+fi
+
 # Prevent multiple instances of setup-arm64.sh running at once or re-running unnecessarily
 DONE_FLAG="/tmp/setup_arm64_done.flag"
 if [ -f "$DONE_FLAG" ] && [ "$1" != "--force" ]; then
@@ -2631,23 +2646,9 @@ fi
 echo "$$" > "$LOCKFILE"
 touch "$DONE_FLAG"
 
-# Ensure terminfo database and essential terminal utilities are installed and linked
-if [ ! -e /lib/terminfo/x/xterm-256color ] && [ ! -e /usr/share/terminfo/x/xterm-256color ]; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
-    apt-get install --reinstall -y ncurses-base ncurses-term >/dev/null 2>&1 || true
-fi
 if ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get install -y --no-install-recommends less nano >/dev/null 2>&1 || true
-fi
-if [ -d /lib/terminfo ] && [ ! -e /usr/share/terminfo/x ]; then
-    mkdir -p /usr/share/terminfo 2>/dev/null || true
-    ln -sf /lib/terminfo/* /usr/share/terminfo/ 2>/dev/null || true
-fi
-if [ -d /usr/share/terminfo ] && [ ! -e /lib/terminfo/x ]; then
-    mkdir -p /lib/terminfo 2>/dev/null || true
-    ln -sf /usr/share/terminfo/* /lib/terminfo/ 2>/dev/null || true
 fi
 
 # Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail

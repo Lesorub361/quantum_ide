@@ -142,7 +142,11 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       env.remove('PROOT_NO_SECCOMP');
       env.remove('LD_PRELOAD');
       env['PWD'] = dir;
-      env['TERM'] = 'xterm-256color';
+      final has256Terminfo = !Platform.isAndroid ||
+          File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'usr', 'share', 'terminfo', 'x', 'xterm-256color')).existsSync() ||
+          File(p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'lib', 'terminfo', 'x', 'xterm-256color')).existsSync();
+
+      env['TERM'] = has256Terminfo ? 'xterm-256color' : 'xterm';
       env['COLORTERM'] = 'truecolor';
       env['LANG'] = env['LANG'] ?? 'C.UTF-8';
       env['LC_ALL'] = env['LC_ALL'] ?? 'C.UTF-8';

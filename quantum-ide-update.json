@@ -1,16 +1,16 @@
 {
-  "versionCode": 204,
-  "versionName": "1.2.187",
-  "notes": "QuantumIDE v1.2.187:\n• 🛡️ Стабильная клавиатура: устранено мгновенное закрытие клавиатуры при открытии (убран паразитный сброс в didChangeMetrics, добавлен надёжный latch-триггер).\n• ⌨️ Панель команд и кнопок: команды не выскакивают обратно во время набора текста, клавиатура устойчиво остаётся открытой.\n• 🚫 Полная защита от повтора строк prompt: терминал не посылает SIGWINCH и не сдвигает курсор вниз.",
+  "versionCode": 205,
+  "versionName": "1.2.188",
+  "notes": "QuantumIDE v1.2.188:\n• 🎯 Автовосстановление terminfo: если на устройстве отсутствует пакет ncurses-term (нет описания xterm-256color), терминал автоматически переключается на xterm и доустанавливает базу terminfo в фоне.\n• ⌨️ Стабильная клавиатура: устранены сбои и случайные схлопывания мобильной клавиатуры.\n• ⌫ Чёткое стирание (Backspace): гарантированное удаление текста и чистый prompt root@localhost:~#.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.187/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.188/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.187",
-  "buildNumber": 204,
-  "tag_name": "v1.2.187",
-  "releaseNotes": "Fix keyboard auto-collapse glitch, remove premature metrics reset, and keep keyboard stably open on mobile."
+  "version": "1.2.188",
+  "buildNumber": 205,
+  "tag_name": "v1.2.188",
+  "releaseNotes": "Auto-heal missing terminfo (xterm fallback + ncurses auto-fix), stable keyboard focus, and prompt cleanups."
 }
