@@ -663,7 +663,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '25';
+    const bashrcVersion = '26';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -743,9 +743,13 @@ export HISTSIZE=5000
 export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
 
-# Ensure output newline translates to CR+NL (eliminates staircase prompt in terminals)
-stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
+# Ensure output newline translates to CR+NL, set UTF-8 TTY mode (iutf8 for proper Russian Backspace)
+stty sane onlcr icrnl opost erase ^? iutf8 2>/dev/null || true
 shopt -s checkwinsize 2>/dev/null || true
+
+export EDITOR=nano
+export VISUAL=nano
+export PAGER=less
 
 # Zero-fork pure-bash git branch prompt using PROMPT_COMMAND for 100% precise readline cursor tracking
 __update_quantum_ps1() {
@@ -758,7 +762,7 @@ __update_quantum_ps1() {
             git_str=" \[\033[35m\]git:(\[\033[1;31m\]$branch\[\033[0m\033[35m\])\[\033[0m\]"
         fi
     fi
-    PS1="\r\[\033[1;36m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
+    PS1="\[\033[1;36m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
 }
 PROMPT_COMMAND="__update_quantum_ps1"
 
@@ -945,8 +949,10 @@ fi
 
 # Modern Responsive System Fetch
 term_fetch() {
-    local COLS=$(tput cols 2>/dev/null || echo "${COLUMNS:-80}")
-    [ -z "$COLS" ] && COLS=80
+    local COLS=$(stty size 2>/dev/null | awk '{print $2}')
+    [ -z "$COLS" ] && COLS=$(tput cols 2>/dev/null)
+    [ -z "$COLS" ] && COLS="${COLUMNS}"
+    [ -z "$COLS" ] || [ "$COLS" -le 0 ] 2>/dev/null && COLS=50
 
     local C_RESET="\033[0m"
     local C_BOLD="\033[1m"
@@ -1033,7 +1039,7 @@ term_fetch() {
     command -v clang >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Clang "
     [ -z "$RUNTIMES" ] && RUNTIMES="Linux Core"
 
-    if [ "$COLS" -ge 65 ]; then
+    if [ "$COLS" -ge 72 ]; then
         local RAM_BAR=$(_q_bar $MEM_PERCENT 10)
         local DISK_BAR=$(_q_bar $DISK_PERCENT 10)
         echo -e "${C_CYAN}  ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗   ██╗███╗   ███╗${C_RESET}"
@@ -1516,9 +1522,10 @@ fi
 # QuantumIDE Cyberpunk System Fetch (term-fetch)
 # ==============================================================================
 
-COLS=$(tput cols 2>/dev/null)
-[ -z "$COLS" ] && COLS="${COLUMNS:-80}"
-[ "$COLS" -le 0 ] 2>/dev/null && COLS=80
+COLS=$(stty size 2>/dev/null | awk '{print $2}')
+[ -z "$COLS" ] && COLS=$(tput cols 2>/dev/null)
+[ -z "$COLS" ] && COLS="${COLUMNS}"
+[ -z "$COLS" ] || [ "$COLS" -le 0 ] 2>/dev/null && COLS=50
 
 # ANSI Escape Colors
 C_RESET="\033[0m"
@@ -1623,7 +1630,7 @@ command -v clang >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Clang "
 [ -z "$RUNTIMES" ] && RUNTIMES="Linux Core"
 
 # RENDER
-if [ "$COLS" -ge 65 ]; then
+if [ "$COLS" -ge 72 ]; then
     RAM_BAR=$(make_bar $MEM_PERCENT 10)
     DISK_BAR=$(make_bar $DISK_PERCENT 10)
 
@@ -2724,10 +2731,10 @@ if ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1 || ! c
         ncurses-base ncurses-term ncurses-bin \
         readline-common libreadline8 \
         bash-completion \
-        less nano \
+        less nano vim tmux htop tree jq ncdu \
         procps psmisc \
         file ca-certificates \
-        locales tree >/dev/null 2>&1 || true
+        locales ripgrep fzf iproute2 iputils-ping net-tools lsof >/dev/null 2>&1 || true
 fi
 
 # Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail
