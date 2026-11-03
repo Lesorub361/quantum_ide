@@ -197,6 +197,15 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows.clamp(6, 250);
           final safeCols = cols.clamp(20, 400);
+          // On mobile devices, software keyboard appearing drops visible rows while cols remain unchanged.
+          // Resizing PTY here sends SIGWINCH to bash, causing readline to reprint a duplicate prompt.
+          if ((Platform.isAndroid || Platform.isIOS) &&
+              lastCols == safeCols &&
+              lastRows > 0 &&
+              safeRows < lastRows &&
+              (lastRows - safeRows) > 4) {
+            return;
+          }
           if (safeRows != lastRows || safeCols != lastCols) {
             resizeDebounceTimer?.cancel();
             resizeDebounceTimer = Timer(const Duration(milliseconds: 150), () {

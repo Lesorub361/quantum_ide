@@ -216,13 +216,25 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
     focusNode.allowAutoKeyboard = true;
-    if (focusNode.hasFocus) {
-      focusNode.unfocus();
+
+    void requestInput() {
+      if (!focusNode.hasFocus) {
+        focusNode.requestFocus();
+      }
+      _getTerminalKey(keyId).currentState?.requestKeyboard();
+      SystemChannels.textInput.invokeMethod('TextInput.show');
     }
-    focusNode.requestFocus();
-    _getTerminalKey(keyId).currentState?.requestKeyboard();
-    SystemChannels.textInput.invokeMethod('TextInput.show');
-    if (mounted && !wasActive) setState(() {});
+
+    if (mounted && !wasActive) {
+      setState(() {});
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _isMobileKeyboardActive) {
+          requestInput();
+        }
+      });
+    } else {
+      requestInput();
+    }
   }
 
   void _closeTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
@@ -245,7 +257,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       });
     }
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    if (bottomInset > 20) {
+    if (bottomInset > 20 || _isMobileKeyboardActive) {
       _closeTerminalKeyboard(session, isSecondary: isSecondary);
     } else {
       _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
@@ -2149,6 +2161,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 controller: session.xtermViewController,
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
+                                deleteDetection: true,
+                                autoResize: !isMobile || MediaQuery.of(context).viewInsets.bottom == 0,
                                 hardwareKeyboardOnly: isMobile && !_isMobileKeyboardActive,
                                 onKeyEvent: (focusNode, event) {
                                   if (event is! KeyUpEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
