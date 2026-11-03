@@ -192,7 +192,6 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           }
         },
       );
-      xtermTerm.setLineFeedMode(true);
       // ptyOutSub is stored in TerminalSession
       // and cancelled in dispose() via session.ptyOutSubscription?.cancel()
       // ignore: cancel_subscriptions

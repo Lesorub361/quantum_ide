@@ -2128,7 +2128,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         child: GestureDetector(
                           behavior: HitTestBehavior.translucent,
                           onTap: () {
-                            _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
+                            if (!isMobile) {
+                              _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
+                            } else if (session.xtermViewController.selection != null) {
+                              session.xtermViewController.clearSelection();
+                            }
                           },
                           onSecondaryTapDown: (details) {
                             if (session.xtermViewController.selection != null) {
@@ -2154,9 +2158,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 controller: session.xtermViewController,
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
-                                hardwareKeyboardOnly: false,
-                                keyboardType: TextInputType.visiblePassword,
-                                deleteDetection: true,
+                                hardwareKeyboardOnly: isMobile && !_isMobileKeyboardActive,
                                 onKeyEvent: (focusNode, event) {
                                   if (event is! KeyUpEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
                                     session.pty.write(Uint8List.fromList([127]));
@@ -2183,7 +2185,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                     }
                                   }
 
-                                  _openTerminalKeyboard(session, isSecondary: isSecondary);
+                                  if (!isMobile || _isMobileKeyboardActive) {
+                                    _openTerminalKeyboard(session, isSecondary: isSecondary);
+                                  }
                                 },
                                 padding: const EdgeInsets.all(10),
                                 theme: theme,

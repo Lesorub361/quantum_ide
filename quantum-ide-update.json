@@ -1,16 +1,16 @@
 {
-  "versionCode": 198,
-  "versionName": "1.2.181",
-  "notes": "QuantumIDE v1.2.181:\n• 🖥️ Восстановление terminfo: автоматическое лечение и переустановка определений xterm-256color (ncurses-base, ncurses-term), исключающее ошибку 'unknown terminal type' для clear/htop/top/nano.\n• 📦 Добавлены базовые терминальные утилиты: автоматическая установка less и nano для стабильного git log/diff и быстрого редактирования.\n• ⏱️ Исправлен расчёт Uptime на Android 14 в PRoot (защита от пустых файлов /proc/uptime).\n• 🐚 Синхронизирована версия .bashrc (v25) с динамическим линкованием terminfo.",
+  "versionCode": 199,
+  "versionName": "1.2.182",
+  "notes": "QuantumIDE v1.2.182:\n• 🛑 Исправлено дублирование текста («ответ повторяется на весь экран»): отключён принудительный lineFeedMode, восстановивший корректную работу ANSI TUI/Ink курсора при потоковом выводе.\n• ⌨️ Исправлено мерцание и скачки букв («буквы улетают»): возвращён стандартный text input без искажения composing-состояния русской экранной клавиатуры.\n• 📱 Исправлено самопроизвольное появление клавиатуры: при прокрутке и чтении диалога клавиатура больше не выскакивает; ввод с клавиатуры теперь активируется только при нажатии кнопки клавиатуры на панели виртуальных клавиш.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.181/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.182/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.181",
-  "buildNumber": 198,
-  "tag_name": "v1.2.181",
-  "releaseNotes": "Auto-heal missing terminfo (xterm-256color), install less/nano, fix Android 14 PRoot /proc/uptime arithmetic in fetch/bashrc, bump bashrc v25"
+  "version": "1.2.182",
+  "buildNumber": 199,
+  "tag_name": "v1.2.182",
+  "releaseNotes": "Fix TUI response repetition by removing forced lineFeedMode, eliminate IME character jumping, prevent automatic keyboard popup on mobile scrolling"
 }

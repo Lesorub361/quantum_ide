@@ -226,8 +226,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         xtermViewController: xtermVc,
       );
 
-      xtermTerm.setLineFeedMode(true);
-
       Timer? gitRefreshDebounceTimer;
       final sub = pty.output
           .cast<List<int>>()
@@ -395,8 +393,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           term.viewWidth.clamp(20, 400),
         );
       } catch (_) {}
-
-      term.setLineFeedMode(true);
 
       // ignore: cancel_subscriptions
       final ptyOutSub = newPty.output
