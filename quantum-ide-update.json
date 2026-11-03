@@ -1,16 +1,16 @@
 {
-  "versionCode": 208,
-  "versionName": "1.2.191",
-  "notes": "QuantumIDE v1.2.191:\n• ⚡ Поддержка подключения телефонов по Type-C (OTG): предустановлены android-tools-adb, android-tools-fastboot, usbutils.\n• 📱 Прошивка и установка APK: прямо из терминала доступны adb devices, adb install, fastboot flash, adb-wifi, check-usb.\n• 🚀 Утилиты для работы с прошивками: aria2 (многопоточная загрузка), p7zip-full, zstd, brotli, libusb.\n• ⌨️ Новые быстрые алиасы: adb-devices, adb-install, adb-wifi, fastboot-devices, check-usb.",
+  "versionCode": 209,
+  "versionName": "1.2.192",
+  "notes": "QuantumIDE v1.2.192:\n• 🚀 Мгновенная настройка при чистой установке: при распаковке нового образа Ubuntu все скрипты (.bashrc с UTF-8, terminfo, setup-arm64) накатываются ДО запуска первого терминала. Никаких ошибок стирания или лестницы строк с первого открытия.\n• 📦 Честная фоновая загрузка пакетов: флаг завершения теперь ставится строго ПОСЛЕ успешной установки всех пакетов, а не до неё. Пакеты гарантированно скачиваются.\n• 📝 Прозрачный лог установки: ход загрузки пакетов пишется в /tmp/setup_arm64.log, а в терминале выводится подсказка о фоновой установке.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.191/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.192/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.191",
-  "buildNumber": 208,
-  "tag_name": "v1.2.191",
-  "releaseNotes": "Add ADB, Fastboot, USB-OTG flashing tools (usbutils, aria2, p7zip, zstd, brotli) and device control aliases."
+  "version": "1.2.192",
+  "buildNumber": 209,
+  "tag_name": "v1.2.192",
+  "releaseNotes": "Fix fresh install cold start (apply .bashrc and terminfo before first session), set setup_done flag after apt-get completes, and log background package downloads to /tmp/setup_arm64.log."
 }

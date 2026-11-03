@@ -91,6 +91,12 @@ class RuntimeService extends ChangeNotifier {
         }
 
         await _bootstrapRootfs();
+
+        // Fresh install: configure newly extracted rootfs immediately
+        // so the very first terminal session starts fully patched.
+        await _prepareFileSystem();
+        await _ensureBinaries();
+        await _repairTerminfoIfNeeded();
       } else {
         // Desktop platform — use a persistent directory in user home
         final desktopDataDir = Directory(PlatformUtils.desktopDataDir);
@@ -663,7 +669,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '27';
+    const bashrcVersion = '28';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -697,7 +703,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=25
+# BASHRC_VERSION=28
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -1092,6 +1098,9 @@ if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
     echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
     echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
     echo
+    if [ -f /tmp/setup_daemon.lock ]; then
+        echo -e '  \e[1;33m⏳ Фоновая установка пакетов терминала и инструментов прошивки (лог: cat /tmp/setup_arm64.log)\e[0m\n'
+    fi
 fi
 
 alias fetch="term_fetch"
@@ -1313,6 +1322,9 @@ if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
     echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
     echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
     echo
+    if [ -f /tmp/setup_daemon.lock ]; then
+        echo -e '  \e[1;33m⏳ Фоновая установка пакетов терминала и инструментов прошивки (лог: cat /tmp/setup_arm64.log)\e[0m\n'
+    fi
 fi
 ''';
         for (final target in zshrcTargets) {
@@ -1915,7 +1927,7 @@ else
       "\$PROOT" \\
           --link2symlink -L \\
           --rootfs="\$ROOTFS" \\
-          -0 /bin/bash -c 'PATH="\$1"; exec /bin/bash /root/setup-arm64.sh' dummy "\$PATH"
+          -0 /bin/bash -c 'PATH="\$1"; exec /bin/bash /root/setup-arm64.sh > /tmp/setup_arm64.log 2>&1' dummy "\$PATH"
     ) >/dev/null 2>&1 &
 
     exec "\$PROOT" \\
@@ -2726,7 +2738,7 @@ if [ -f "$LOCKFILE" ]; then
     fi
 fi
 echo "$$" > "$LOCKFILE"
-touch "$DONE_FLAG"
+trap 'rm -f "$LOCKFILE"' EXIT INT TERM
 
 # Ensure all essential terminal utilities, ADB/Fastboot, and firmware flashing tools are installed
 if ! command -v adb >/dev/null 2>&1 || ! command -v fastboot >/dev/null 2>&1 || ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1 || ! command -v infocmp >/dev/null 2>&1 || [ ! -f /etc/bash_completion ]; then
@@ -3277,6 +3289,11 @@ if "defaultConfig {" in content and "abiFilters" not in content:
         fi
     fi
 done
+
+# Setup completed successfully
+touch "$DONE_FLAG"
+rm -f "$LOCKFILE"
+echo "=== QuantumIDE ARM64 Environment Configuration Finished ==="
 ''';
   }
 
