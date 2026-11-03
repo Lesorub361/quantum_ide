@@ -30,6 +30,7 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/quantum_terminal_scroll_controller.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_text_selection_modal.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_selection_overlay.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart';
@@ -186,9 +187,17 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
+  final Map<String, QuantumTerminalScrollController> _terminalScrollControllers = {};
 
   GlobalKey<xt.TerminalViewState> _getTerminalKey(String id) {
     return _terminalKeys.putIfAbsent(id, () => GlobalKey<xt.TerminalViewState>());
+  }
+
+  QuantumTerminalScrollController _getScrollController(String id, xt.Terminal terminal) {
+    return _terminalScrollControllers.putIfAbsent(
+      id,
+      () => QuantumTerminalScrollController(terminal: terminal),
+    );
   }
 
   TerminalFocusNode _getFocusNode(String id) {
@@ -326,6 +335,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   @override
   void dispose() {
+    for (final controller in _terminalScrollControllers.values) {
+      controller.dispose();
+    }
+    _terminalScrollControllers.clear();
     for (final node in _terminalFocusNodes.values) {
       node.dispose();
     }
@@ -2163,6 +2176,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 key: _getTerminalKey(keyId),
                                 session.xtermTerminal,
                                 controller: session.xtermViewController,
+                                scrollController: _getScrollController(keyId, session.xtermTerminal),
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
                                 deleteDetection: true,

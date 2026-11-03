@@ -78,6 +78,9 @@ class RuntimeService extends ChangeNotifier {
         //    `execve("/usr/bin/env"): Function not implemented`.
         await _repairGuestLibcIfBroken();
 
+        // 4. Ensure terminfo databases are valid and symlinked before any terminal session starts
+        await _repairTerminfoIfNeeded();
+
         final bool complete = await _channel.invokeMethod('isBootstrapComplete');
         if (complete) {
           _isInitialized = true;
@@ -1330,6 +1333,67 @@ fi
 
   Future<void> updateScripts() async {
     await _ensureBinaries();
+    await _repairTerminfoIfNeeded();
+  }
+
+  Future<void> _repairTerminfoIfNeeded() async {
+    try {
+      final rootfs = p.join(_filesDir, 'rootfs', 'ubuntu');
+      final libDir = Directory(p.join(rootfs, 'lib', 'terminfo'));
+      final usrDir = Directory(p.join(rootfs, 'usr', 'share', 'terminfo'));
+
+      if (!libDir.existsSync() && !usrDir.existsSync()) return;
+
+      if (!libDir.existsSync()) {
+        try {
+          libDir.createSync(recursive: true);
+        } catch (_) {}
+      }
+      if (!usrDir.existsSync()) {
+        try {
+          usrDir.createSync(recursive: true);
+        } catch (_) {}
+      }
+
+      // Check for xterm in lib or usr
+      final libXterm = File(p.join(rootfs, 'lib', 'terminfo', 'x', 'xterm'));
+      final usrXterm = File(p.join(rootfs, 'usr', 'share', 'terminfo', 'x', 'xterm'));
+      final sourceXterm = libXterm.existsSync() ? libXterm : (usrXterm.existsSync() ? usrXterm : null);
+
+      if (sourceXterm != null) {
+        Directory(p.join(rootfs, 'lib', 'terminfo', 'x')).createSync(recursive: true);
+        Directory(p.join(rootfs, 'usr', 'share', 'terminfo', 'x')).createSync(recursive: true);
+
+        // Ensure both directories have xterm
+        if (!libXterm.existsSync()) {
+          try {
+            sourceXterm.copySync(libXterm.path);
+          } catch (_) {}
+        }
+        if (!usrXterm.existsSync()) {
+          try {
+            sourceXterm.copySync(usrXterm.path);
+          } catch (_) {}
+        }
+
+        // If xterm-256color is missing in either directory, copy xterm as fallback
+        final lib256 = File(p.join(rootfs, 'lib', 'terminfo', 'x', 'xterm-256color'));
+        final usr256 = File(p.join(rootfs, 'usr', 'share', 'terminfo', 'x', 'xterm-256color'));
+
+        if (!lib256.existsSync()) {
+          try {
+            sourceXterm.copySync(lib256.path);
+          } catch (_) {}
+        }
+        if (!usr256.existsSync()) {
+          try {
+            sourceXterm.copySync(usr256.path);
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('RuntimeService: _repairTerminfoIfNeeded warning: $e');
+    }
   }
 
   Future<void> _ensureAndroidLicenses() async {
@@ -2621,6 +2685,12 @@ if [ ! -e /lib/terminfo/x/xterm-256color ] && [ ! -e /usr/share/terminfo/x/xterm
     apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
     apt-get install --reinstall -y ncurses-base ncurses-term >/dev/null 2>&1 || true
 fi
+if [ ! -e /lib/terminfo/x/xterm-256color ] && [ -e /lib/terminfo/x/xterm ]; then
+    cp -f /lib/terminfo/x/xterm /lib/terminfo/x/xterm-256color 2>/dev/null || true
+fi
+if [ ! -e /usr/share/terminfo/x/xterm-256color ] && [ -e /usr/share/terminfo/x/xterm ]; then
+    cp -f /usr/share/terminfo/x/xterm /usr/share/terminfo/x/xterm-256color 2>/dev/null || true
+fi
 if [ -d /usr/share/terminfo ] && [ ! -e /lib/terminfo/x ]; then
     mkdir -p /lib/terminfo 2>/dev/null || true
     ln -sf /usr/share/terminfo/* /lib/terminfo/ 2>/dev/null || true
@@ -2646,9 +2716,18 @@ fi
 echo "$$" > "$LOCKFILE"
 touch "$DONE_FLAG"
 
-if ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1; then
+# Ensure all essential terminal utilities and terminfo databases are installed
+if ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1 || ! command -v infocmp >/dev/null 2>&1 || [ ! -f /etc/bash_completion ]; then
     export DEBIAN_FRONTEND=noninteractive
-    apt-get install -y --no-install-recommends less nano >/dev/null 2>&1 || true
+    apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
+    apt-get install -y --no-install-recommends \
+        ncurses-base ncurses-term ncurses-bin \
+        readline-common libreadline8 \
+        bash-completion \
+        less nano \
+        procps psmisc \
+        file ca-certificates \
+        locales tree >/dev/null 2>&1 || true
 fi
 
 # Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail
