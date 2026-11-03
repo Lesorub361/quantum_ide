@@ -80,11 +80,12 @@ class TerminalPanelContent extends ConsumerStatefulWidget {
   ConsumerState<TerminalPanelContent> createState() => _TerminalPanelContentState();
 }
 
-class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> with WidgetsBindingObserver {
+class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   final Set<String> _activeModifiers = {};
   bool _isSidebarOpen = false;
   bool _isTerminalSplit = false;
   bool _isMobileKeyboardActive = false;
+  bool _keyboardWasVisibleOnScreen = false;
   bool _inlineSelectionMode = false;
   String _inlineSelectedText = '';
   int _problemsSeverityFilter = 0; // 0: Все, 1: Ошибки, 2: Предупреждения, 3: Инфо
@@ -211,6 +212,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> wit
     // Clear focus from background editor/inputs so keystrokes route directly to terminal
     FocusManager.instance.primaryFocus?.unfocus();
 
+    _keyboardWasVisibleOnScreen = false;
     _isMobileKeyboardActive = true;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
@@ -233,6 +235,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> wit
   }
 
   void _closeTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+    _keyboardWasVisibleOnScreen = false;
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
@@ -269,7 +272,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> wit
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _loadPathBinaries();
     WakelockPlus.enabled.then((val) {
       if (mounted) setState(() => _isWakelockEnabled = val);
@@ -323,21 +325,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> wit
   }
 
   @override
-  void didChangeMetrics() {
-    super.didChangeMetrics();
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    if (bottomInset <= 20 && _isMobileKeyboardActive) {
-      if (mounted) {
-        setState(() {
-          _isMobileKeyboardActive = false;
-        });
-      }
-    }
-  }
-
-  @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     for (final node in _terminalFocusNodes.values) {
       node.dispose();
     }
@@ -878,6 +866,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> wit
     final notifier = ref.read(terminalTabsProvider.notifier);
     final editorState = ref.watch(editorProvider);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
+    if (bottomInset > 20) {
+      _keyboardWasVisibleOnScreen = true;
+    } else if (bottomInset <= 20 && _keyboardWasVisibleOnScreen) {
+      _keyboardWasVisibleOnScreen = false;
+      _isMobileKeyboardActive = false;
+    }
 
     return Container(
       decoration: const BoxDecoration(

@@ -1,16 +1,16 @@
 {
-  "versionCode": 203,
-  "versionName": "1.2.186",
-  "notes": "QuantumIDE v1.2.186:\n• ⌨️ Восстановлена работа кнопки «Клавиатура»: экранная клавиатура моментально открывается и скрывается по нажатию, а также отслеживает скрытие жестом назад.\n• 🚫 Полностью устранена «лестница строк» и дублирование prompt: PTY и буфер терминала не сжимаются при открытии клавиатуры, устранены паразитные SIGWINCH.\n• ⌫ Надёжное стирание (Backspace): гарантированное удаление текста с мобильных клавиатур (Gboard, Samsung и др.).",
+  "versionCode": 204,
+  "versionName": "1.2.187",
+  "notes": "QuantumIDE v1.2.187:\n• 🛡️ Стабильная клавиатура: устранено мгновенное закрытие клавиатуры при открытии (убран паразитный сброс в didChangeMetrics, добавлен надёжный latch-триггер).\n• ⌨️ Панель команд и кнопок: команды не выскакивают обратно во время набора текста, клавиатура устойчиво остаётся открытой.\n• 🚫 Полная защита от повтора строк prompt: терминал не посылает SIGWINCH и не сдвигает курсор вниз.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.186/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.187/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.186",
-  "buildNumber": 203,
-  "tag_name": "v1.2.186",
-  "releaseNotes": "Fix mobile keyboard button toggle, restore full IME connection, eliminate SIGWINCH prompt duplication staircase on keyboard toggle, and ensure backspace deletion."
+  "version": "1.2.187",
+  "buildNumber": 204,
+  "tag_name": "v1.2.187",
+  "releaseNotes": "Fix keyboard auto-collapse glitch, remove premature metrics reset, and keep keyboard stably open on mobile."
 }
