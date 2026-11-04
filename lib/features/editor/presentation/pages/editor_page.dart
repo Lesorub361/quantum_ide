@@ -14,6 +14,8 @@ import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
+import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:flutter/services.dart';
 import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart';
@@ -1206,12 +1208,30 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       child: Builder(
                         builder: (context) {
                           final isMobile = MediaQuery.of(context).size.width <= 800;
+                          final pluginState = ref.watch(quantumPluginServiceProvider);
+                          final termLayout = pluginState.terminalLayout;
+                          final disabledTabs = termLayout?.disabledPanelTabs ?? const [];
+
+                          List<PanelTab> visibleTabs = List.from(PanelTab.values);
+                          if (termLayout != null && termLayout.panelTabsOrder.isNotEmpty) {
+                            visibleTabs.sort((a, b) {
+                              final idxA = termLayout.panelTabsOrder.indexOf(a.name);
+                              final idxB = termLayout.panelTabsOrder.indexOf(b.name);
+                              if (idxA == -1 && idxB == -1) return 0;
+                              if (idxA == -1) return 1;
+                              if (idxB == -1) return -1;
+                              return idxA.compareTo(idxB);
+                            });
+                          }
+                          visibleTabs = visibleTabs.where((t) => !disabledTabs.contains(t.name)).toList();
+                          if (visibleTabs.isEmpty) visibleTabs = [PanelTab.terminal];
+
                           return ListView.builder(
                             scrollDirection: Axis.horizontal,
-                            itemCount: PanelTab.values.length,
+                            itemCount: visibleTabs.length,
                             physics: const BouncingScrollPhysics(),
                             itemBuilder: (context, index) {
-                              final tab = PanelTab.values[index];
+                              final tab = visibleTabs[index];
                               final isSelected = panelState.selectedTab == tab;
                               final tabColor = _getTabColor(tab);
 
@@ -1304,6 +1324,23 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     ),
                   ),
                   const SizedBox(width: 6),
+                  SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: IconButton(
+                      icon: const Icon(LucideIcons.sliders_horizontal, size: 13, color: Colors.cyanAccent),
+                      tooltip: Localizations.localeOf(context).languageCode == 'ru'
+                          ? 'Настроить кнопки и вкладки'
+                          : 'Customize buttons & tabs',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+                      onPressed: () => UiCustomizerModal.show(
+                        context,
+                        isRu: Localizations.localeOf(context).languageCode == 'ru',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   SizedBox(
                     width: 26,
                     height: 26,

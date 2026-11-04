@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -199,6 +200,210 @@ class CustomIdeTab {
   IconData get icon => PluginIconRegistry.getIconByName(iconName);
 }
 
+/// Custom Virtual Key definition for terminal action bar.
+class CustomVirtualKey {
+  final String id;
+  final String label;
+  final String value;
+  final String iconName;
+  final bool isToggle;
+  final bool isEnabled;
+  final int row; // 1 or 2 (0 = auto)
+  final String? tooltip;
+
+  const CustomVirtualKey({
+    required this.id,
+    required this.label,
+    required this.value,
+    this.iconName = '',
+    this.isToggle = false,
+    this.isEnabled = true,
+    this.row = 1,
+    this.tooltip,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'label': label,
+        'value': value,
+        'iconName': iconName,
+        'isToggle': isToggle,
+        'isEnabled': isEnabled,
+        'row': row,
+        if (tooltip != null) 'tooltip': tooltip,
+      };
+
+  factory CustomVirtualKey.fromJson(Map<String, dynamic> json) => CustomVirtualKey(
+        id: json['id'] as String? ?? '',
+        label: json['label'] as String? ?? '',
+        value: json['value'] as String? ?? '',
+        iconName: json['iconName'] as String? ?? '',
+        isToggle: json['isToggle'] as bool? ?? false,
+        isEnabled: json['isEnabled'] as bool? ?? true,
+        row: json['row'] as int? ?? 1,
+        tooltip: json['tooltip'] as String?,
+      );
+
+  CustomVirtualKey copyWith({
+    String? id,
+    String? label,
+    String? value,
+    String? iconName,
+    bool? isToggle,
+    bool? isEnabled,
+    int? row,
+    String? tooltip,
+  }) {
+    return CustomVirtualKey(
+      id: id ?? this.id,
+      label: label ?? this.label,
+      value: value ?? this.value,
+      iconName: iconName ?? this.iconName,
+      isToggle: isToggle ?? this.isToggle,
+      isEnabled: isEnabled ?? this.isEnabled,
+      row: row ?? this.row,
+      tooltip: tooltip ?? this.tooltip,
+    );
+  }
+
+  IconData? get icon {
+    if (iconName.isEmpty) return null;
+    return PluginIconRegistry.getIconByName(iconName);
+  }
+}
+
+/// Terminal UI layout and virtual keys configuration.
+class TerminalUiLayoutConfig {
+  final bool showVirtualKeys;
+  final bool showActionBar;
+  final bool isCompact;
+  final double keyHeight;
+  final double keyFontSize;
+  final List<CustomVirtualKey> keys;
+  final List<String> panelTabsOrder;
+  final List<String> disabledPanelTabs;
+
+  const TerminalUiLayoutConfig({
+    this.showVirtualKeys = true,
+    this.showActionBar = true,
+    this.isCompact = false,
+    this.keyHeight = 29.0,
+    this.keyFontSize = 11.0,
+    this.keys = const [],
+    this.panelTabsOrder = const [],
+    this.disabledPanelTabs = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'showVirtualKeys': showVirtualKeys,
+        'showActionBar': showActionBar,
+        'isCompact': isCompact,
+        'keyHeight': keyHeight,
+        'keyFontSize': keyFontSize,
+        'keys': keys.map((k) => k.toJson()).toList(),
+        'panelTabsOrder': panelTabsOrder,
+        'disabledPanelTabs': disabledPanelTabs,
+      };
+
+  factory TerminalUiLayoutConfig.fromJson(Map<String, dynamic> json) => TerminalUiLayoutConfig(
+        showVirtualKeys: json['showVirtualKeys'] as bool? ?? true,
+        showActionBar: json['showActionBar'] as bool? ?? true,
+        isCompact: json['isCompact'] as bool? ?? false,
+        keyHeight: (json['keyHeight'] as num?)?.toDouble() ?? 29.0,
+        keyFontSize: (json['keyFontSize'] as num?)?.toDouble() ?? 11.0,
+        keys: (json['keys'] as List?)
+                ?.map((k) => CustomVirtualKey.fromJson(Map<String, dynamic>.from(k)))
+                .toList() ??
+            const [],
+        panelTabsOrder: (json['panelTabsOrder'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        disabledPanelTabs: (json['disabledPanelTabs'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      );
+
+  TerminalUiLayoutConfig copyWith({
+    bool? showVirtualKeys,
+    bool? showActionBar,
+    bool? isCompact,
+    double? keyHeight,
+    double? keyFontSize,
+    List<CustomVirtualKey>? keys,
+    List<String>? panelTabsOrder,
+    List<String>? disabledPanelTabs,
+  }) {
+    return TerminalUiLayoutConfig(
+      showVirtualKeys: showVirtualKeys ?? this.showVirtualKeys,
+      showActionBar: showActionBar ?? this.showActionBar,
+      isCompact: isCompact ?? this.isCompact,
+      keyHeight: keyHeight ?? this.keyHeight,
+      keyFontSize: keyFontSize ?? this.keyFontSize,
+      keys: keys ?? this.keys,
+      panelTabsOrder: panelTabsOrder ?? this.panelTabsOrder,
+      disabledPanelTabs: disabledPanelTabs ?? this.disabledPanelTabs,
+    );
+  }
+}
+
+/// Sidebar tabs and sections layout configuration.
+class SidebarUiLayoutConfig {
+  final List<String> sectionOrder;
+  final List<String> disabledSections;
+
+  const SidebarUiLayoutConfig({
+    this.sectionOrder = const [],
+    this.disabledSections = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'sectionOrder': sectionOrder,
+        'disabledSections': disabledSections,
+      };
+
+  factory SidebarUiLayoutConfig.fromJson(Map<String, dynamic> json) => SidebarUiLayoutConfig(
+        sectionOrder: (json['sectionOrder'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+        disabledSections: (json['disabledSections'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      );
+
+  SidebarUiLayoutConfig copyWith({
+    List<String>? sectionOrder,
+    List<String>? disabledSections,
+  }) {
+    return SidebarUiLayoutConfig(
+      sectionOrder: sectionOrder ?? this.sectionOrder,
+      disabledSections: disabledSections ?? this.disabledSections,
+    );
+  }
+}
+
+/// Mobile bottom navigation layout configuration.
+class BottomNavUiLayoutConfig {
+  final bool showBottomNav;
+  final List<String> disabledButtons;
+
+  const BottomNavUiLayoutConfig({
+    this.showBottomNav = true,
+    this.disabledButtons = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+        'showBottomNav': showBottomNav,
+        'disabledButtons': disabledButtons,
+      };
+
+  factory BottomNavUiLayoutConfig.fromJson(Map<String, dynamic> json) => BottomNavUiLayoutConfig(
+        showBottomNav: json['showBottomNav'] as bool? ?? true,
+        disabledButtons: (json['disabledButtons'] as List?)?.map((e) => e.toString()).toList() ?? const [],
+      );
+
+  BottomNavUiLayoutConfig copyWith({
+    bool? showBottomNav,
+    List<String>? disabledButtons,
+  }) {
+    return BottomNavUiLayoutConfig(
+      showBottomNav: showBottomNav ?? this.showBottomNav,
+      disabledButtons: disabledButtons ?? this.disabledButtons,
+    );
+  }
+}
+
 /// Complete Quantum IDE Plugin representation.
 class QuantumPlugin {
   final String id;
@@ -215,6 +420,9 @@ class QuantumPlugin {
   final List<CustomAiBotPersona> customBots;
   final List<String> disabledTabs;
   final List<CustomIdeTab> customTabs;
+  final TerminalUiLayoutConfig? terminalLayout;
+  final SidebarUiLayoutConfig? sidebarLayout;
+  final BottomNavUiLayoutConfig? bottomNavLayout;
 
   const QuantumPlugin({
     required this.id,
@@ -231,6 +439,9 @@ class QuantumPlugin {
     this.customBots = const [],
     this.disabledTabs = const [],
     this.customTabs = const [],
+    this.terminalLayout,
+    this.sidebarLayout,
+    this.bottomNavLayout,
   });
 
   QuantumPlugin copyWith({
@@ -247,6 +458,9 @@ class QuantumPlugin {
     List<CustomAiBotPersona>? customBots,
     List<String>? disabledTabs,
     List<CustomIdeTab>? customTabs,
+    TerminalUiLayoutConfig? terminalLayout,
+    SidebarUiLayoutConfig? sidebarLayout,
+    BottomNavUiLayoutConfig? bottomNavLayout,
   }) {
     return QuantumPlugin(
       id: id,
@@ -263,6 +477,9 @@ class QuantumPlugin {
       customBots: customBots ?? this.customBots,
       disabledTabs: disabledTabs ?? this.disabledTabs,
       customTabs: customTabs ?? this.customTabs,
+      terminalLayout: terminalLayout ?? this.terminalLayout,
+      sidebarLayout: sidebarLayout ?? this.sidebarLayout,
+      bottomNavLayout: bottomNavLayout ?? this.bottomNavLayout,
     );
   }
 
@@ -280,6 +497,9 @@ class QuantumPlugin {
         'customBots': customBots.map((b) => b.toJson()).toList(),
         'disabledTabs': disabledTabs,
         'customTabs': customTabs.map((t) => t.toJson()).toList(),
+        if (terminalLayout != null) 'terminalLayout': terminalLayout!.toJson(),
+        if (sidebarLayout != null) 'sidebarLayout': sidebarLayout!.toJson(),
+        if (bottomNavLayout != null) 'bottomNavLayout': bottomNavLayout!.toJson(),
       };
 
   factory QuantumPlugin.fromJson(Map<String, dynamic> json, {String filePath = ''}) {
@@ -328,6 +548,15 @@ class QuantumPlugin {
               ?.map((t) => CustomIdeTab.fromJson(Map<String, dynamic>.from(t)))
               .toList() ??
           [],
+      terminalLayout: json['terminalLayout'] is Map
+          ? TerminalUiLayoutConfig.fromJson(Map<String, dynamic>.from(json['terminalLayout'] as Map))
+          : null,
+      sidebarLayout: json['sidebarLayout'] is Map
+          ? SidebarUiLayoutConfig.fromJson(Map<String, dynamic>.from(json['sidebarLayout'] as Map))
+          : null,
+      bottomNavLayout: json['bottomNavLayout'] is Map
+          ? BottomNavUiLayoutConfig.fromJson(Map<String, dynamic>.from(json['bottomNavLayout'] as Map))
+          : null,
     );
   }
 }
@@ -442,8 +671,52 @@ class QuantumPluginState {
     final set = <String>{};
     for (final p in plugins.where((p) => p.isEnabled)) {
       set.addAll(p.disabledTabs);
+      if (p.sidebarLayout != null) {
+        set.addAll(p.sidebarLayout!.disabledSections);
+      }
     }
     return set;
+  }
+
+  /// Effective Terminal UI layout config from enabled plugins
+  TerminalUiLayoutConfig? get terminalLayout {
+    final active = plugins.where((p) => p.isEnabled && p.terminalLayout != null).toList();
+    if (active.isEmpty) return null;
+    final last = active.last.terminalLayout!;
+    final allDisabled = <String>{};
+    for (final p in active) {
+      allDisabled.addAll(p.terminalLayout!.disabledPanelTabs);
+    }
+    return last.copyWith(disabledPanelTabs: allDisabled.toList());
+  }
+
+  /// Effective Sidebar UI layout config from enabled plugins
+  SidebarUiLayoutConfig? get sidebarLayout {
+    final active = plugins.where((p) => p.isEnabled && p.sidebarLayout != null).toList();
+    if (active.isEmpty) return null;
+    final last = active.last.sidebarLayout!;
+    final allDisabled = <String>{};
+    for (final p in active) {
+      allDisabled.addAll(p.sidebarLayout!.disabledSections);
+    }
+    return last.copyWith(disabledSections: allDisabled.toList());
+  }
+
+  /// Effective Mobile Bottom Nav layout config from enabled plugins
+  BottomNavUiLayoutConfig? get bottomNavLayout {
+    final active = plugins.where((p) => p.isEnabled && p.bottomNavLayout != null).toList();
+    if (active.isEmpty) return null;
+    final last = active.last.bottomNavLayout!;
+    final allDisabled = <String>{};
+    bool show = true;
+    for (final p in active) {
+      allDisabled.addAll(p.bottomNavLayout!.disabledButtons);
+      if (!p.bottomNavLayout!.showBottomNav) show = false;
+    }
+    return last.copyWith(
+      showBottomNav: show,
+      disabledButtons: allDisabled.toList(),
+    );
   }
 
   QuantumPluginState copyWith({
@@ -462,9 +735,20 @@ class QuantumPluginState {
 /// Service managing discovering, loading, and executing user plugins.
 class QuantumPluginService extends StateNotifier<QuantumPluginState> {
   final Ref _ref;
+  StreamSubscription<FileSystemEvent>? _wsWatcherSub;
+  StreamSubscription<FileSystemEvent>? _globalWatcherSub;
+  Timer? _debounceTimer;
 
   QuantumPluginService(this._ref) : super(const QuantumPluginState()) {
     loadPlugins();
+  }
+
+  @override
+  void dispose() {
+    _wsWatcherSub?.cancel();
+    _globalWatcherSub?.cancel();
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
   String? get _workspacePath => _ref.read(workspaceProvider).currentPath;
@@ -475,41 +759,106 @@ class QuantumPluginService extends StateNotifier<QuantumPluginState> {
     return Directory(p.join(ws, '.quantum', 'plugins'));
   }
 
-  /// Reload all plugins from `<workspace>/.quantum/plugins/*.json`
+  Directory get _globalPluginsDirectory => Directory('/root/.quantum/plugins');
+  Directory get _sdcardPluginsDirectory => Directory('/sdcard/QuantumIDE/.quantum/plugins');
+
+  /// Set up file system watchers on plugin directories so changes made
+  /// by AI agents or users in terminal apply dynamically in real time.
+  void _setupWatchers(Directory? wsDir) {
+    _wsWatcherSub?.cancel();
+    _globalWatcherSub?.cancel();
+
+    if (wsDir != null && wsDir.existsSync()) {
+      try {
+        _wsWatcherSub = wsDir.watch().listen((_) => _onFsEvent());
+      } catch (_) {}
+    }
+
+    if (_globalPluginsDirectory.existsSync()) {
+      try {
+        _globalWatcherSub = _globalPluginsDirectory.watch().listen((_) => _onFsEvent());
+      } catch (_) {}
+    }
+  }
+
+  void _onFsEvent() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      loadPlugins();
+    });
+  }
+
+  /// Reload all plugins from `<workspace>/.quantum/plugins/*.json` and global configs
   Future<void> loadPlugins() async {
     state = state.copyWith(isLoading: true);
     final pluginsDir = _pluginsDirectory;
-    if (pluginsDir == null) {
-      state = state.copyWith(isLoading: false, plugins: []);
-      return;
+    final loaded = <QuantumPlugin>[];
+    final loadedIds = <String>{};
+
+    // 1. Load from workspace plugins
+    if (pluginsDir != null) {
+      try {
+        if (!await pluginsDir.exists()) {
+          await pluginsDir.create(recursive: true);
+          await _createDefaultStarterPlugin(pluginsDir.path);
+        }
+
+        final files = pluginsDir.listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
+        for (final file in files) {
+          try {
+            final content = await file.readAsString();
+            final jsonMap = jsonDecode(content) as Map<String, dynamic>;
+            final plugin = QuantumPlugin.fromJson(jsonMap, filePath: file.path);
+            loaded.add(plugin);
+            loadedIds.add(plugin.id);
+          } catch (e) {
+            debugPrint('QuantumPluginService: error parsing ${file.path}: $e');
+          }
+        }
+      } catch (e) {
+        debugPrint('QuantumPluginService workspace error: $e');
+      }
     }
 
+    // 2. Load from global guest rootfs /root/.quantum/plugins/
     try {
-      if (!await pluginsDir.exists()) {
-        await pluginsDir.create(recursive: true);
-        // Create an introductory sample plugin if folder is new!
-        await _createDefaultStarterPlugin(pluginsDir.path);
-      }
-
-      final files = pluginsDir.listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
-      final loaded = <QuantumPlugin>[];
-
-      for (final file in files) {
-        try {
-          final content = await file.readAsString();
-          final jsonMap = jsonDecode(content) as Map<String, dynamic>;
-          final plugin = QuantumPlugin.fromJson(jsonMap, filePath: file.path);
-          loaded.add(plugin);
-        } catch (e) {
-          debugPrint('QuantumPluginService: error parsing ${file.path}: $e');
+      if (await _globalPluginsDirectory.exists()) {
+        final files = _globalPluginsDirectory.listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
+        for (final file in files) {
+          try {
+            final content = await file.readAsString();
+            final jsonMap = jsonDecode(content) as Map<String, dynamic>;
+            final plugin = QuantumPlugin.fromJson(jsonMap, filePath: file.path);
+            if (!loadedIds.contains(plugin.id)) {
+              loaded.add(plugin);
+              loadedIds.add(plugin.id);
+            }
+          } catch (_) {}
         }
       }
+    } catch (_) {}
 
-      state = state.copyWith(plugins: loaded, isLoading: false);
-      _updateCustomIconRegistry();
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
-    }
+    // 3. Load from /sdcard/QuantumIDE/.quantum/plugins/ if accessible
+    try {
+      if (await _sdcardPluginsDirectory.exists()) {
+        final files = _sdcardPluginsDirectory.listSync().whereType<File>().where((f) => f.path.endsWith('.json'));
+        for (final file in files) {
+          try {
+            final content = await file.readAsString();
+            final jsonMap = jsonDecode(content) as Map<String, dynamic>;
+            final plugin = QuantumPlugin.fromJson(jsonMap, filePath: file.path);
+            if (!loadedIds.contains(plugin.id)) {
+              loaded.add(plugin);
+              loadedIds.add(plugin.id);
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+
+    state = state.copyWith(plugins: loaded, isLoading: false);
+    _updateCustomIconRegistry();
+    _setupWatchers(pluginsDir);
   }
 
   /// Toggle plugin enabled status
@@ -523,16 +872,22 @@ class QuantumPluginService extends StateNotifier<QuantumPluginState> {
 
   /// Save or update a plugin on disk
   Future<void> savePlugin(QuantumPlugin plugin) async {
-    final pluginsDir = _pluginsDirectory;
-    if (pluginsDir == null) return;
+    Directory targetDir = _pluginsDirectory ?? _globalPluginsDirectory;
 
-    if (!await pluginsDir.exists()) {
-      await pluginsDir.create(recursive: true);
+    if (!await targetDir.exists()) {
+      try {
+        await targetDir.create(recursive: true);
+      } catch (_) {
+        targetDir = _globalPluginsDirectory;
+        if (!await targetDir.exists()) {
+          await targetDir.create(recursive: true);
+        }
+      }
     }
 
     final targetPath = plugin.filePath.isNotEmpty
         ? plugin.filePath
-        : p.join(pluginsDir.path, '${plugin.id}.json');
+        : p.join(targetDir.path, '${plugin.id}.json');
 
     final jsonStr = const JsonEncoder.withIndent('  ').convert(plugin.toJson());
     await File(targetPath).writeAsString(jsonStr);
@@ -547,6 +902,40 @@ class QuantumPluginService extends StateNotifier<QuantumPluginState> {
 
     state = state.copyWith(plugins: updatedList);
     _updateCustomIconRegistry();
+  }
+
+  /// Save unified UI layout configuration plugin (used by visual customizer or terminal agent)
+  Future<void> saveUiLayoutPlugin({
+    TerminalUiLayoutConfig? terminalLayout,
+    SidebarUiLayoutConfig? sidebarLayout,
+    BottomNavUiLayoutConfig? bottomNavLayout,
+    String? pluginName,
+  }) async {
+    const layoutPluginId = 'ui_layout_custom';
+    final existingIdx = state.plugins.indexWhere((p) => p.id == layoutPluginId);
+    QuantumPlugin targetPlugin;
+
+    if (existingIdx != -1) {
+      final existing = state.plugins[existingIdx];
+      targetPlugin = existing.copyWith(
+        terminalLayout: terminalLayout ?? existing.terminalLayout,
+        sidebarLayout: sidebarLayout ?? existing.sidebarLayout,
+        bottomNavLayout: bottomNavLayout ?? existing.bottomNavLayout,
+      );
+    } else {
+      targetPlugin = QuantumPlugin(
+        id: layoutPluginId,
+        name: pluginName ?? 'Кастомная раскладка UI & Кнопки',
+        description: 'Пользовательская конфигурация расположения клавиш терминала, вкладок и панелей',
+        author: 'User & AI',
+        isEnabled: true,
+        terminalLayout: terminalLayout,
+        sidebarLayout: sidebarLayout,
+        bottomNavLayout: bottomNavLayout,
+      );
+    }
+
+    await savePlugin(targetPlugin);
   }
 
   /// Delete a plugin file
@@ -567,12 +956,35 @@ class QuantumPluginService extends StateNotifier<QuantumPluginState> {
     _updateCustomIconRegistry();
   }
 
-  /// Create a sample plugin by template type ('icons', 'chatbot', 'terminal', 'tabs', 'buttons')
+  /// Create a sample plugin by template type ('icons', 'chatbot', 'terminal', 'tabs', 'buttons', 'ui_layout')
   Future<QuantumPlugin> createPluginFromTemplate(String templateType, {String? customName}) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     QuantumPlugin newPlugin;
 
     switch (templateType) {
+      case 'ui_layout':
+        newPlugin = QuantumPlugin(
+          id: 'custom_layout_$timestamp',
+          name: customName ?? 'Настраиваемый интерфейс и клавиши',
+          description: 'Пользовательская конфигурация кнопок терминала, боковой панели и навигации',
+          author: 'Разработчик',
+          isEnabled: true,
+          terminalLayout: const TerminalUiLayoutConfig(
+            showVirtualKeys: true,
+            showActionBar: true,
+            isCompact: false,
+            keyHeight: 30.0,
+            keyFontSize: 11.5,
+          ),
+          sidebarLayout: const SidebarUiLayoutConfig(
+            disabledSections: [],
+          ),
+          bottomNavLayout: const BottomNavUiLayoutConfig(
+            showBottomNav: true,
+          ),
+        );
+        break;
+
       case 'icons':
         newPlugin = QuantumPlugin(
           id: 'custom_icons_$timestamp',
@@ -748,6 +1160,13 @@ class QuantumPluginService extends StateNotifier<QuantumPluginState> {
           tooltip: 'Автоформатирование кода (dart format lib/)',
         ),
       ],
+      terminalLayout: TerminalUiLayoutConfig(
+        showVirtualKeys: true,
+        showActionBar: true,
+        isCompact: false,
+        keyHeight: 29.0,
+        keyFontSize: 11.0,
+      ),
     );
 
     final jsonStr = const JsonEncoder.withIndent('  ').convert(starter.toJson());

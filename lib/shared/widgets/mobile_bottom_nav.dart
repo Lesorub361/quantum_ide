@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
@@ -19,6 +20,13 @@ class MobileBottomNav extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final pluginState = ref.watch(quantumPluginServiceProvider);
+    final navLayout = pluginState.bottomNavLayout;
+    if (navLayout != null && !navLayout.showBottomNav) {
+      return const SizedBox.shrink();
+    }
+    final disabled = navLayout?.disabledButtons ?? const [];
+
     final editorState = ref.watch(editorProvider);
     final openFilesCount = editorState.openFiles.length;
     final hasOpenFiles = openFilesCount > 0;
@@ -46,43 +54,46 @@ class MobileBottomNav extends ConsumerWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _NavButton(
-                icon: LucideIcons.folder_tree,
-                label: 'Files',
-                isActive: false,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  Scaffold.of(context).openDrawer();
-                },
-              ),
-              _NavButton(
-                icon: LucideIcons.file_code,
-                label: 'Editor',
-                isActive: hasOpenFiles,
-                badge: openFilesCount > 0 ? openFilesCount : 0,
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  if (!hasOpenFiles) {
+              if (!disabled.contains('files'))
+                _NavButton(
+                  icon: LucideIcons.folder_tree,
+                  label: 'Files',
+                  isActive: false,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
                     Scaffold.of(context).openDrawer();
-                  }
-                },
-              ),
-              _NavButton(
-                icon: LucideIcons.terminal,
-                label: 'Terminal',
-                isActive: isTerminalOpen,
-                activeColor: const Color(0xFF00E5FF),
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  final panelNotifier = ref.read(panelProvider.notifier);
-                  if (isTerminalOpen) {
-                    panelNotifier.closePanel();
-                  } else {
-                    panelNotifier.selectTab(PanelTab.terminal);
-                    panelNotifier.openPanel();
-                  }
-                },
-              ),
+                  },
+                ),
+              if (!disabled.contains('editor'))
+                _NavButton(
+                  icon: LucideIcons.file_code,
+                  label: 'Editor',
+                  isActive: hasOpenFiles,
+                  badge: openFilesCount > 0 ? openFilesCount : 0,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    if (!hasOpenFiles) {
+                      Scaffold.of(context).openDrawer();
+                    }
+                  },
+                ),
+              if (!disabled.contains('terminal'))
+                _NavButton(
+                  icon: LucideIcons.terminal,
+                  label: 'Terminal',
+                  isActive: isTerminalOpen,
+                  activeColor: const Color(0xFF00E5FF),
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    final panelNotifier = ref.read(panelProvider.notifier);
+                    if (isTerminalOpen) {
+                      panelNotifier.closePanel();
+                    } else {
+                      panelNotifier.selectTab(PanelTab.terminal);
+                      panelNotifier.openPanel();
+                    }
+                  },
+                ),
             ],
           ),
         ),

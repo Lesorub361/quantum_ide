@@ -10,6 +10,7 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/core/services/network_inspector_service.dart';
 import 'package:quantum_ide/features/preview/presentation/widgets/device_simulator_dialog.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -459,6 +460,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       widgets.addAll([
         _sectionHeader(context, isRu ? 'Терминал, Сборка APK и SDK' : 'Terminal, APK Build & SDK'),
         _settingsGroup(context, [
+          _tile(
+            context,
+            icon: LucideIcons.sliders_horizontal,
+            title: isRu ? 'Кастомизация UI и кнопок терминала' : 'Customize UI & Virtual Keys',
+            subtitle: isRu
+                ? 'Настройка высоты кнопок, шрифта, порядка и вкладок'
+                : 'Adjust button height, font size, tabs and layout',
+            onTap: () => UiCustomizerModal.show(context, isRu: isRu),
+          ),
           _tile(
             context,
             icon: LucideIcons.terminal,

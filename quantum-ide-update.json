@@ -1,16 +1,16 @@
 {
-  "versionCode": 209,
-  "versionName": "1.2.192",
-  "notes": "QuantumIDE v1.2.192:\n• 🚀 Мгновенная настройка при чистой установке: при распаковке нового образа Ubuntu все скрипты (.bashrc с UTF-8, terminfo, setup-arm64) накатываются ДО запуска первого терминала. Никаких ошибок стирания или лестницы строк с первого открытия.\n• 📦 Честная фоновая загрузка пакетов: флаг завершения теперь ставится строго ПОСЛЕ успешной установки всех пакетов, а не до неё. Пакеты гарантированно скачиваются.\n• 📝 Прозрачный лог установки: ход загрузки пакетов пишется в /tmp/setup_arm64.log, а в терминале выводится подсказка о фоновой установке.",
+  "versionCode": 210,
+  "versionName": "1.2.193",
+  "notes": "QuantumIDE v1.2.193:\n• 🎨 Живая интерактивная кастомизация UI и кнопок (UI Customizer): полная настройка высоты клавиш (слайдер 22–46px), размера шрифта (9–16pt), компактного режима, порядка и видимости кнопок в реальном времени с мгновенным предпросмотром!\n• 🧩 Настройка всех панелей: перетаскивание (drag-and-drop) и тумблеры включения/отключения вкладок терминала (Run, Build, ADB, Problems, Git, AI) и разделов боковой панели.\n• 🤖 Интеграция с терминальными ИИ-агентами (agy / Antigravity / Claude): автоэкспорт раскладки в .quantum/plugins/ui_layout.json, генерация готового промпта и мгновенное обновление UI «на лету» без перезапуска IDE благодаря встроенному файловому наблюдателю!",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.192/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.193/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.192",
-  "buildNumber": 209,
-  "tag_name": "v1.2.192",
-  "releaseNotes": "Fix fresh install cold start (apply .bashrc and terminfo before first session), set setup_done flag after apt-get completes, and log background package downloads to /tmp/setup_arm64.log."
+  "version": "1.2.193",
+  "buildNumber": 210,
+  "tag_name": "v1.2.193",
+  "releaseNotes": "Live UI & Virtual Keypad Customizer with drag-and-drop ordering, height/font sliders, tab toggles, in-terminal AI agent plugin integration (.quantum/plugins/ui_layout.json), and automatic real-time layout reload."
 }

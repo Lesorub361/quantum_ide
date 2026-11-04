@@ -6,6 +6,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 /// Configuration definition for a terminal action bar key/button.
@@ -786,6 +787,44 @@ class _TerminalBarCustomizerSheetState extends ConsumerState<TerminalBarCustomiz
                 ],
               ),
               const SizedBox(height: 8),
+
+              // Banner to open full UI customizer
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  UiCustomizerModal.show(context, isRu: widget.isRu);
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.cyanAccent.withValues(alpha: 0.15),
+                        Colors.purpleAccent.withValues(alpha: 0.15),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(LucideIcons.palette, size: 16, color: Colors.cyanAccent),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          widget.isRu
+                              ? '🎨 Полная кастомизация UI, вкладок и код для ИИ'
+                              : '🎨 Full UI customizer, tabs & code for AI',
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                      ),
+                      const Icon(LucideIcons.chevron_right, size: 14, color: Colors.cyanAccent),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
 
               // Quick Toggles: "Show More Button" and "Compact Row"
               Container(

@@ -8,6 +8,7 @@ import 'package:quantum_ide/core/services/test_runner_service.dart';
 import 'package:quantum_ide/core/services/dependency_checker_service.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class ExtensionsPanel extends ConsumerStatefulWidget {
@@ -164,6 +165,56 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+
+          // Visual UI Customizer Banner Card
+          InkWell(
+            onTap: () => UiCustomizerModal.show(context, isRu: true),
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                    const Color(0xFF8B5CF6).withValues(alpha: 0.15),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.cyanAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(LucideIcons.sliders_horizontal, size: 20, color: Colors.cyanAccent),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '🎨 Настройка интерфейса и кнопок',
+                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Живая настройка клавиш терминала, высоты, шрифта, вкладок и код для ИИ-агента',
+                          style: GoogleFonts.inter(fontSize: 10, color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(LucideIcons.chevron_right, size: 16, color: Colors.cyanAccent),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -375,6 +426,7 @@ class _ExtensionsPanelState extends ConsumerState<ExtensionsPanel> {
     final nameController = TextEditingController(text: 'Кастомные иконки');
 
     final templates = [
+      {'type': 'ui_layout', 'title': '🎨 Настройка UI & Кнопок', 'desc': 'Раскладка виртуальных клавиш, высоты, шрифта и панелей'},
       {'type': 'icons', 'title': '🎨 Кастомные иконки', 'desc': 'Свои иконки и цвета для папок и файлов'},
       {'type': 'chatbot', 'title': '🤖 Свой ИИ чат-бот', 'desc': 'Кастомный ментор с персональным системным промптом'},
       {'type': 'terminal', 'title': '💻 Команды терминала', 'desc': 'Кнопки быстрого запуска команд в терминале'},

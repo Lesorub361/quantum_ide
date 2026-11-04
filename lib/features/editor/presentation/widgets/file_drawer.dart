@@ -334,9 +334,14 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     ));
 
     final isMobile = MediaQuery.of(context).size.width < 700;
-    final disabledTabs = ref.watch(quantumPluginServiceProvider.select(
-      (s) => s.plugins.where((p) => p.isEnabled).expand((p) => p.disabledTabs).toSet(),
-    ));
+    final pluginState = ref.watch(quantumPluginServiceProvider);
+    final disabledTabs = pluginState.disabledTabIds;
+    final sidebarOrder = pluginState.sidebarLayout != null && pluginState.sidebarLayout!.sectionOrder.isNotEmpty
+        ? pluginState.sidebarLayout!.sectionOrder
+        : const [
+            'explorer', 'search', 'structure', 'disk', 'problems', 'git',
+            'preview', 'packages', 'run', 'build', 'liveShare', 'plugins', 'appLogs'
+          ];
 
     // Activity bar on the left
     final activityBarWidth = isMobile ? 38.0 : 44.0;
@@ -353,41 +358,45 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                  if (!disabledTabs.contains('explorer'))
-                    _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0, isMobile: isMobile),
-                  if (!disabledTabs.contains('search'))
-                    _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1, isMobile: isMobile),
-                  if (!disabledTabs.contains('structure'))
-                    _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2, isMobile: isMobile),
-                  if (!disabledTabs.contains('disk'))
-                    _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3, isMobile: isMobile),
-                  if (!disabledTabs.contains('problems'))
-                    _buildActivityIcon(
-                      ref,
-                      4,
-                      LucideIcons.circle_alert,
-                      AppLocalizations.of(context)!.problems,
-                      selectedTab == 4,
-                      badgeCount: totalProblems,
-                      badgeColor: problemsBadgeColor,
-                      isMobile: isMobile,
-                    ),
-                  if (!disabledTabs.contains('git'))
-                    _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount, isMobile: isMobile),
-                  if (!disabledTabs.contains('preview'))
-                    _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6, isMobile: isMobile),
-                  if (!disabledTabs.contains('packages'))
-                    _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7, isMobile: isMobile),
-                  if (!disabledTabs.contains('run'))
-                    _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8, isMobile: isMobile),
-                  if (!disabledTabs.contains('build'))
-                    _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9, isMobile: isMobile),
-                  if (!disabledTabs.contains('liveShare'))
-                    _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10, isMobile: isMobile),
-                  if (!disabledTabs.contains('plugins'))
-                    _buildActivityIcon(ref, 11, LucideIcons.puzzle, 'Плагины', selectedTab == 11, isMobile: isMobile),
-                  if (!disabledTabs.contains('appLogs'))
-                    _buildActivityIcon(ref, 13, LucideIcons.terminal, 'Логи IDE', selectedTab == 13, isMobile: isMobile),
+                  for (final sec in sidebarOrder) ...[
+                    if (!disabledTabs.contains(sec)) ...[
+                      if (sec == 'explorer')
+                        _buildActivityIcon(ref, 0, LucideIcons.files, AppLocalizations.of(context)!.explorer, selectedTab == 0, isMobile: isMobile),
+                      if (sec == 'search')
+                        _buildActivityIcon(ref, 1, LucideIcons.search, AppLocalizations.of(context)!.search, selectedTab == 1, isMobile: isMobile),
+                      if (sec == 'structure')
+                        _buildActivityIcon(ref, 2, LucideIcons.list, AppLocalizations.of(context)!.structure, selectedTab == 2, isMobile: isMobile),
+                      if (sec == 'disk')
+                        _buildActivityIcon(ref, 3, LucideIcons.chart_pie, AppLocalizations.of(context)!.disk, selectedTab == 3, isMobile: isMobile),
+                      if (sec == 'problems')
+                        _buildActivityIcon(
+                          ref,
+                          4,
+                          LucideIcons.circle_alert,
+                          AppLocalizations.of(context)!.problems,
+                          selectedTab == 4,
+                          badgeCount: totalProblems,
+                          badgeColor: problemsBadgeColor,
+                          isMobile: isMobile,
+                        ),
+                      if (sec == 'git')
+                        _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount, isMobile: isMobile),
+                      if (sec == 'preview')
+                        _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6, isMobile: isMobile),
+                      if (sec == 'packages')
+                        _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7, isMobile: isMobile),
+                      if (sec == 'run')
+                        _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8, isMobile: isMobile),
+                      if (sec == 'build')
+                        _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9, isMobile: isMobile),
+                      if (sec == 'liveShare')
+                        _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10, isMobile: isMobile),
+                      if (sec == 'plugins')
+                        _buildActivityIcon(ref, 11, LucideIcons.puzzle, 'Плагины', selectedTab == 11, isMobile: isMobile),
+                      if (sec == 'appLogs')
+                        _buildActivityIcon(ref, 13, LucideIcons.terminal, 'Логи IDE', selectedTab == 13, isMobile: isMobile),
+                    ],
+                  ],
                 ],
               ),
             ),

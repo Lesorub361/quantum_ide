@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
+import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
@@ -140,9 +142,14 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     );
   }
 
-  Widget _buildKeyRow(List<VirtualKey> rowKeys, {Widget? trailingFixed}) {
+  Widget _buildKeyRow(
+    List<VirtualKey> rowKeys, {
+    Widget? trailingFixed,
+    double height = 29,
+    double fontSize = 10.5,
+  }) {
     return SizedBox(
-      height: 29,
+      height: height,
       child: Row(
         children: [
           Expanded(
@@ -161,6 +168,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
                           Expanded(
                             child: _VirtualKeyButton(
                               keyData: rowKeys[i],
+                              height: (height - 5).clamp(20.0, 42.0),
+                              fontSize: fontSize,
                               isActive: widget.activeKeys.contains(rowKeys[i].label) ||
                                   (rowKeys[i].value != null && widget.activeKeys.contains(rowKeys[i].value)),
                               onTap: () => widget.onKeyTap(rowKeys[i].value ?? rowKeys[i].label),
@@ -184,6 +193,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
                         (key.value != null && widget.activeKeys.contains(key.value));
                     return _VirtualKeyButton(
                       keyData: key,
+                      height: (height - 5).clamp(20.0, 42.0),
+                      fontSize: fontSize,
                       isActive: isActive,
                       onTap: () => widget.onKeyTap(key.value ?? key.label),
                     );
@@ -220,8 +231,22 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
         widget.activeKeys.contains('KB') ||
         widget.activeKeys.contains(kbLabel);
 
+    final pluginState = ref.watch(quantumPluginServiceProvider);
+    final termLayout = pluginState.terminalLayout;
+    if (termLayout != null && !termLayout.showVirtualKeys) {
+      return const SizedBox.shrink();
+    }
+
+    final double effectiveHeight = termLayout?.keyHeight ?? 29.0;
+    final double effectiveFontSize = termLayout?.keyFontSize ?? 10.5;
+    final barConfig = ref.watch(quantumTerminalBarProvider);
+    final isCompactMode = widget.isCompact || barConfig.isCompact || (termLayout?.isCompact ?? false);
+    final showMore = (termLayout?.showActionBar ?? true) && barConfig.showMoreButton;
+
     final keybButton = _VirtualKeyButton(
       fixedWidth: 50,
+      height: (effectiveHeight - 5).clamp(20.0, 42.0),
+      fontSize: effectiveFontSize,
       keyData: VirtualKey(
         label: kbLabel,
         value: 'toggle_keyboard',
@@ -231,31 +256,46 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       isActive: isKeybActive,
       isHighlightedAction: true,
       onTap: () => widget.onKeyTap('toggle_keyboard'),
-      onLongPress: () => TerminalBarCustomizerSheet.show(context, isRu: isRu),
+      onLongPress: () => UiCustomizerModal.show(context, isRu: isRu),
     );
 
-    final barConfig = ref.watch(quantumTerminalBarProvider);
-    final showMore = barConfig.showMoreButton;
-
     bool isKeyEnabled(String id) {
+      if (termLayout != null && termLayout.keys.isNotEmpty) {
+        final match = termLayout.keys.where((k) => k.id == id);
+        if (match.isNotEmpty) return match.first.isEnabled;
+      }
       final match = barConfig.keys.where((k) => k.id == id);
       if (match.isEmpty) return true;
       return match.first.isEnabled;
     }
 
-    final customKeys = barConfig.keys
-        .where((k) => k.isEnabled && (k.isCommand || k.isPlugin || k.id.startsWith('custom_')))
-        .map((k) => VirtualKey(
-              label: k.label,
-              value: k.value,
-              icon: k.icon,
-              isCommand: k.isCommand,
-              tooltip: k.tooltip,
-            ))
-        .toList();
+    final customKeys = <VirtualKey>[];
+    if (termLayout != null && termLayout.keys.isNotEmpty) {
+      for (final k in termLayout.keys.where((k) => k.isEnabled && k.id.startsWith('custom_'))) {
+        customKeys.add(VirtualKey(
+          label: k.label,
+          value: k.value,
+          icon: k.icon,
+          isCommand: true,
+          tooltip: k.tooltip,
+        ));
+      }
+    } else {
+      for (final k in barConfig.keys.where((k) => k.isEnabled && (k.isCommand || k.isPlugin || k.id.startsWith('custom_')))) {
+        customKeys.add(VirtualKey(
+          label: k.label,
+          value: k.value,
+          icon: k.icon,
+          isCommand: k.isCommand,
+          tooltip: k.tooltip,
+        ));
+      }
+    }
 
     final moreButton = _VirtualKeyButton(
       fixedWidth: 50,
+      height: (effectiveHeight - 5).clamp(20.0, 42.0),
+      fontSize: effectiveFontSize,
       keyData: VirtualKey(
         label: l10n?.keypadMore ?? 'More',
         value: 'more_commands',
@@ -267,7 +307,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       onTap: () => _showMoreCommandsSheet(context, isRu),
     );
 
-    if (widget.isCompact || barConfig.isCompact) {
+    if (isCompactMode) {
       final compactKeys = _getCompactKeys(isRu).where((k) {
         final id = _keyToId(k.label);
         return isKeyEnabled(id);
@@ -292,6 +332,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
           ),
           child: _buildKeyRow(
             [...compactKeys, ...customKeys],
+            height: effectiveHeight,
+            fontSize: effectiveFontSize,
             trailingFixed: Row(
               mainAxisSize: MainAxisSize.min,
               children: trailingCompact,
@@ -306,6 +348,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     if (isKeyEnabled('del')) {
       trailingRow1List.add(_VirtualKeyButton(
         fixedWidth: 34,
+        height: (effectiveHeight - 5).clamp(20.0, 42.0),
+        fontSize: effectiveFontSize,
         keyData: VirtualKey(
           label: 'DEL',
           value: '\x7f',
@@ -320,6 +364,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       if (trailingRow1List.isNotEmpty) trailingRow1List.add(const SizedBox(width: 3));
       trailingRow1List.add(_VirtualKeyButton(
         fixedWidth: 34,
+        height: (effectiveHeight - 5).clamp(20.0, 42.0),
+        fontSize: effectiveFontSize,
         keyData: VirtualKey(
           label: '↑',
           value: '\x1b[A',
@@ -334,6 +380,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       if (trailingRow1List.isNotEmpty) trailingRow1List.add(const SizedBox(width: 3));
       trailingRow1List.add(_VirtualKeyButton(
         fixedWidth: 34,
+        height: (effectiveHeight - 5).clamp(20.0, 42.0),
+        fontSize: effectiveFontSize,
         keyData: VirtualKey(
           label: 'END',
           value: '\x1b[F',
@@ -356,6 +404,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     if (isKeyEnabled('arr_l')) {
       trailingRow2List.add(_VirtualKeyButton(
         fixedWidth: 34,
+        height: (effectiveHeight - 5).clamp(20.0, 42.0),
+        fontSize: effectiveFontSize,
         keyData: VirtualKey(
           label: '←',
           value: '\x1b[D',
@@ -370,6 +420,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       if (trailingRow2List.isNotEmpty) trailingRow2List.add(const SizedBox(width: 3));
       trailingRow2List.add(_VirtualKeyButton(
         fixedWidth: 34,
+        height: (effectiveHeight - 5).clamp(20.0, 42.0),
+        fontSize: effectiveFontSize,
         keyData: VirtualKey(
           label: '↓',
           value: '\x1b[B',
@@ -384,6 +436,8 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       if (trailingRow2List.isNotEmpty) trailingRow2List.add(const SizedBox(width: 3));
       trailingRow2List.add(_VirtualKeyButton(
         fixedWidth: 34,
+        height: (effectiveHeight - 5).clamp(20.0, 42.0),
+        fontSize: effectiveFontSize,
         keyData: VirtualKey(
           label: '→',
           value: '\x1b[C',
@@ -423,11 +477,15 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
           children: [
             _buildKeyRow(
               [...filteredRow1, ...customKeys],
+              height: effectiveHeight,
+              fontSize: effectiveFontSize,
               trailingFixed: trailingRow1,
             ),
             const SizedBox(height: 3),
             _buildKeyRow(
               filteredRow2,
+              height: effectiveHeight,
+              fontSize: effectiveFontSize,
               trailingFixed: trailingRow2,
             ),
           ],
@@ -689,6 +747,8 @@ class _VirtualKeyButton extends StatelessWidget {
   final bool isActive;
   final bool isHighlightedAction;
   final double? fixedWidth;
+  final double height;
+  final double fontSize;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
 
@@ -697,6 +757,8 @@ class _VirtualKeyButton extends StatelessWidget {
     required this.isActive,
     this.isHighlightedAction = false,
     this.fixedWidth,
+    this.height = 24,
+    this.fontSize = 10,
     required this.onTap,
     this.onLongPress,
   });
@@ -754,7 +816,7 @@ class _VirtualKeyButton extends StatelessWidget {
             : null,
         borderRadius: BorderRadius.circular(5),
         child: Container(
-          height: 24,
+          height: height,
           width: fixedWidth,
           constraints: fixedWidth == null ? const BoxConstraints(minWidth: 28) : null,
           padding: EdgeInsets.symmetric(horizontal: fixedWidth != null ? 2 : 6),
@@ -768,7 +830,7 @@ class _VirtualKeyButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (keyData.icon != null) ...[
-                Icon(keyData.icon, size: 12, color: themeColor),
+                Icon(keyData.icon, size: (fontSize + 2.0).clamp(11.0, 18.0), color: themeColor),
                 if (keyData.label.isNotEmpty && !isArrow && fixedWidth == null) const SizedBox(width: 3),
               ],
               if (keyData.icon == null || (keyData.label.isNotEmpty && !isArrow))
@@ -779,7 +841,7 @@ class _VirtualKeyButton extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.jetBrainsMono(
                       color: themeColor,
-                      fontSize: 10,
+                      fontSize: isArrow ? (fontSize + 1.5) : fontSize,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
