@@ -1040,6 +1040,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         return 'Atom One Dark';
       case 'tokyo-night':
         return 'Tokyo Night';
+      case 'dracula':
+        return 'Dracula';
+      case 'catppuccin':
+        return 'Catppuccin Mocha';
+      case 'aurora-neon':
+        return 'Aurora Neon ✨';
       case 'night-owl':
         return 'Night Owl';
       case 'github-dark':
@@ -1063,6 +1069,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       {'id': 'vs-dark', 'name': 'VS Code Dark+ (Standard)'},
       {'id': 'atom-one-dark', 'name': 'Atom One Dark'},
       {'id': 'tokyo-night', 'name': 'Tokyo Night Dark'},
+      {'id': 'dracula', 'name': 'Dracula'},
+      {'id': 'catppuccin', 'name': 'Catppuccin Mocha'},
+      {'id': 'aurora-neon', 'name': 'Aurora Neon ✨'},
       {'id': 'night-owl', 'name': 'Night Owl'},
       {'id': 'github-dark', 'name': 'GitHub Dark'},
       {'id': 'github-dark-dimmed', 'name': 'GitHub Dark Dimmed'},

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:quantum_ide/shared/widgets/unified_load_meter.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -701,30 +702,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
             ),
             Row(
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.cpu, size: 12, color: Colors.cyanAccent),
-                      const SizedBox(width: 4),
-                      Text(
-                        'CPU: ${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: stats.cpuUsage,
-                            minHeight: 2,
-                            backgroundColor: Colors.white.withValues(alpha: 0.05),
-                            valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.cpuUsage)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                Expanded(child: UnifiedLoadMeter(stats: stats, compact: true)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Row(

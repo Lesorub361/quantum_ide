@@ -27,6 +27,7 @@ import 'package:re_highlight/languages/cpp.dart';
 import 'package:re_highlight/languages/java.dart';
 import 'package:re_highlight/languages/php.dart';
 import 'package:re_highlight/styles/atom-one-dark.dart';
+import '../../../../core/theme/editor_syntax_themes.dart';
 import 'package:re_highlight/styles/vs2015.dart';
 import 'package:re_highlight/styles/github-dark.dart';
 import 'package:re_highlight/styles/github-dark-dimmed.dart';
@@ -254,6 +255,15 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         break;
       case 'tokyo-night':
         styleMap = tokyoNightDarkTheme;
+        break;
+      case 'dracula':
+        styleMap = draculaTheme;
+        break;
+      case 'catppuccin':
+        styleMap = catppuccinMochaTheme;
+        break;
+      case 'aurora-neon':
+        styleMap = auroraNeonTheme;
         break;
       case 'night-owl':
         styleMap = nightOwlTheme;

@@ -49,6 +49,20 @@ class QuantumApp extends ConsumerWidget {
                 ),
               );
             }
+            // Small screens (phones / small tablets): tighter widgets so more
+            // content fits and controls don't swallow the whole screen.
+            final width = viewport?.width ?? MediaQuery.sizeOf(context).width;
+            if (width < 700) {
+              final base = Theme.of(context);
+              content = Theme(
+                data: base.copyWith(
+                  visualDensity: width < 420 ? VisualDensity.compact : const VisualDensity(horizontal: -2, vertical: -2),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  listTileTheme: base.listTileTheme.copyWith(dense: true, minVerticalPadding: 0),
+                ),
+                child: content,
+              );
+            }
             return RepaintBoundary(
               key: GhostQAService.repaintKey,
               child: content,

@@ -56,6 +56,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         children: [
           // ── Header Bar ──────────────────────────────────────────────────────
           _buildTopBar(context, agent, settings, projectName),
+          _buildModeBar(context, agent),
 
           // ── Messages List ───────────────────────────────────────────────────
           Expanded(
@@ -76,6 +77,120 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
 
           // ── Bottom Input Bar ────────────────────────────────────────────────
           _buildInputBar(context, agent),
+        ],
+      ),
+    );
+  }
+
+  String _fmtTokens(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
+
+  Widget _buildModeBar(BuildContext context, QuantumAiAgentService agent) {
+    final undo = agent.undoableCount;
+    final hasPlan = agent.mode == AgentMode.plan &&
+        !agent.isGenerating &&
+        agent.messages.any((m) => m.role == MessageRole.assistant && m.text.contains('План готов'));
+    final fill = agent.contextFill;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      color: const Color(0xFF0F121B),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              for (final m in AgentMode.values) ...[
+                Tooltip(
+                  message: m.hint,
+                  child: ChoiceChip(
+                    label: Text(m.label, style: const TextStyle(fontSize: 11)),
+                    selected: agent.mode == m,
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    selectedColor: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+                    onSelected: agent.isGenerating ? null : (_) => agent.setMode(m),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              const Spacer(),
+              PopupMenuButton<AgentEngine>(
+                tooltip: 'Кто выполняет задачу',
+                enabled: !agent.isGenerating,
+                padding: EdgeInsets.zero,
+                onSelected: agent.setEngine,
+                itemBuilder: (_) => [
+                  for (final e in AgentEngine.values)
+                    PopupMenuItem(value: e, child: Text(e.label + (e == AgentEngine.builtin ? '' : ' (CLI)'))),
+                ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(LucideIcons.bot, size: 12, color: Colors.white54),
+                    const SizedBox(width: 3),
+                    Text(agent.engine.label, style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
+                  ]),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: 'Токены сессии: вход ${agent.promptTokens}, выход ${agent.completionTokens}'
+                    '${agent.usageEstimated ? ' (оценка)' : ''}\nКонтекст заполнен на ${(agent.contextFill * 100).toStringAsFixed(0)}%',
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(LucideIcons.coins, size: 12, color: Colors.white38),
+                  const SizedBox(width: 3),
+                  Text('${agent.usageEstimated ? '~' : ''}${_fmtTokens(agent.sessionTokens)}',
+                      style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white54)),
+                ]),
+              ),
+              if (undo > 0) ...[
+                const SizedBox(width: 6),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: Colors.orangeAccent,
+                  ),
+                  icon: const Icon(LucideIcons.undo_2, size: 12),
+                  label: Text('Откатить ($undo)', style: const TextStyle(fontSize: 10.5)),
+                  onPressed: () async {
+                    final n = await agent.undoAllAgentChanges();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Откачено правок агента: $n')));
+                    }
+                  },
+                ),
+              ],
+            ],
+          ),
+          if (fill > 0.6)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: LinearProgressIndicator(
+                value: fill,
+                minHeight: 2,
+                color: fill > 0.85 ? Colors.redAccent : Colors.orangeAccent,
+                backgroundColor: Colors.white10,
+              ),
+            ),
+          if (hasPlan)
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: const Color(0xFF8B5CF6),
+                ),
+                icon: const Icon(LucideIcons.play, size: 13),
+                label: const Text('Выполнить план', style: TextStyle(fontSize: 11.5)),
+                onPressed: agent.runPlan,
+              ),
+            ),
         ],
       ),
     );
@@ -596,6 +711,42 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
   ) {
     final isUser = msg.role == MessageRole.user;
 
+    // Результат инструмента: компактная плашка вместо большого пузыря.
+    if (msg.toolLabel != null) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6, left: 34),
+        child: Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            dense: true,
+            tilePadding: const EdgeInsets.symmetric(horizontal: 8),
+            childrenPadding: const EdgeInsets.all(8),
+            collapsedBackgroundColor: Colors.white.withValues(alpha: 0.04),
+            backgroundColor: Colors.white.withValues(alpha: 0.04),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            leading: const Icon(LucideIcons.wrench, size: 13, color: Color(0xFF8B5CF6)),
+            title: Text(msg.toolLabel!, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white70)),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SelectableText(
+                  msg.text.length > 2500 ? '${msg.text.substring(0, 2500)}…' : msg.text,
+                  style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white60),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    // Пустой пузырь (ответ состоял только из вызова инструмента) не показываем.
+    if (!isUser && !msg.isStreaming && _cleanText(msg.text).isEmpty &&
+        (msg.thinking == null || msg.thinking!.isEmpty) && msg.actions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -745,7 +896,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Файл: ${action.path}',
+                'Файл: ${action.path}  (${(action.content ?? '').split('\n').length} стр.)',
                 style: GoogleFonts.jetBrainsMono(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -806,7 +957,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
               ),
               icon: Icon(action.isExecuted ? LucideIcons.check : LucideIcons.save, size: 12),
-              label: Text(action.isExecuted ? 'Записан' : 'Применить', style: const TextStyle(fontSize: 10.5)),
+              label: Text(action.isExecuted ? 'Записан' : (action.isUndone ? 'Применить снова' : 'Применить'), style: const TextStyle(fontSize: 10.5)),
               onPressed: action.isExecuted
                   ? null
                   : () async {
@@ -818,6 +969,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                       }
                     },
             ),
+            if (action.isExecuted && action.backupTaken)
+              IconButton(
+                tooltip: 'Откатить этот файл',
+                visualDensity: VisualDensity.compact,
+                iconSize: 15,
+                color: Colors.orangeAccent,
+                icon: const Icon(LucideIcons.undo_2),
+                onPressed: () => agent.undoWriteAction(action),
+              ),
           ],
         ),
       );
@@ -938,6 +1098,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     // Убираем теги <action> из основного текста чтобы они не дублировались с карточками
     return raw
         .replaceAll(RegExp(r'<action[\s\S]*?<\/action>'), '')
+        .replaceAll(RegExp(r'<tool\s+name="\w+"(?:\s+\w+="[^"]*")*\s*(?:/>|>[\s\S]*?</tool>)'), '')
         .replaceAll(RegExp(r'<think>[\s\S]*?<\/think>'), '')
         .trim();
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:quantum_ide/shared/widgets/unified_load_meter.dart';
 import 'package:quantum_ide/features/editor/presentation/pages/editor_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -847,36 +848,7 @@ class DrawerStatsPanel extends ConsumerWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('CPU', style: GoogleFonts.inter(fontSize: 11, color: Colors.white38)),
-                        Expanded(
-                          child: Text(
-                            '${(stats.cpuUsage * 100).toStringAsFixed(0)}%', 
-                            textAlign: TextAlign.right,
-                            style: GoogleFonts.jetBrainsMono(fontSize: 11, color: _getLoadColor(stats.cpuUsage), fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: stats.cpuUsage,
-                        minHeight: 3,
-                        backgroundColor: Colors.white.withValues(alpha: 0.05),
-                        valueColor: AlwaysStoppedAnimation<Color>(_getLoadColor(stats.cpuUsage)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: UnifiedLoadMeter(stats: stats, compact: true)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

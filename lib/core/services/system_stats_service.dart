@@ -57,6 +57,14 @@ class SystemStats {
   final int builderRamMB;
   /// Нагрузка процессора от процессов сборщика (% CPU)
   final double builderCpuPercent;
+  /// Нагрузка процессора самим приложением IDE (% от ВСЕГО процессора устройства)
+  final double appCpuPercent;
+  /// Сколько ядер реально занято сборщиком (1.7 = 1.7 ядра из N)
+  final double builderCores;
+  /// Число логических ядер устройства
+  final int cpuCores;
+  /// Идёт ли сейчас сборка
+  final bool isBuilding;
   /// Список активных процессов и пакетов (как в Диспетчере задач Windows)
   final List<SystemProcessItem> processes;
 
@@ -74,8 +82,25 @@ class SystemStats {
     this.deviceRamUsage = 0.5,
     this.builderRamMB = 0,
     this.builderCpuPercent = 0.0,
+    this.appCpuPercent = 0.0,
+    this.builderCores = 0.0,
+    this.cpuCores = 8,
+    this.isBuilding = false,
     this.processes = const [],
   });
+
+  /// Нагрузка прочих процессов (всё, что не IDE и не сборщик), 0..100
+  double get otherCpuPercent =>
+      (cpuUsage * 100 - appCpuPercent - builderCpuPercent).clamp(0.0, 100.0);
+
+  /// Единая подпись для всех экранов: "21% · сборка 17% · IDE 3%"
+  String get cpuSummary {
+    final total = '${(cpuUsage * 100).toStringAsFixed(0)}%';
+    if (builderCpuPercent >= 1) {
+      return '$total · сборка ${builderCpuPercent.toStringAsFixed(0)}% (${builderCores.toStringAsFixed(1)}/$cpuCores ядер)';
+    }
+    return total;
+  }
 
   /// Удобное форматирование памяти приложения ("184 МБ" или "1.2 ГБ")
   String get appRamFormatted {
@@ -107,6 +132,10 @@ class SystemStats {
     double? deviceRamUsage,
     int? builderRamMB,
     double? builderCpuPercent,
+    double? appCpuPercent,
+    double? builderCores,
+    int? cpuCores,
+    bool? isBuilding,
     List<SystemProcessItem>? processes,
   }) {
     return SystemStats(
@@ -123,6 +152,10 @@ class SystemStats {
       deviceRamUsage: deviceRamUsage ?? this.deviceRamUsage,
       builderRamMB: builderRamMB ?? this.builderRamMB,
       builderCpuPercent: builderCpuPercent ?? this.builderCpuPercent,
+      appCpuPercent: appCpuPercent ?? this.appCpuPercent,
+      builderCores: builderCores ?? this.builderCores,
+      cpuCores: cpuCores ?? this.cpuCores,
+      isBuilding: isBuilding ?? this.isBuilding,
       processes: processes ?? this.processes,
     );
   }
@@ -143,15 +176,53 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   List<SystemProcessItem> _cachedProcesses = const [];
 
+  // --- Мгновенная нагрузка процессов (дельта тиков /proc/<pid>/stat) ---
+  // `ps %cpu` показывает среднее за всё время жизни процесса и в «ядрах» (170% = 1.7 ядра),
+  // а общая загрузка считается от всего CPU (0..100%). Из-за этого цифры не совпадали.
+  // Теперь ВСЁ считается в одной шкале: % от всего процессора устройства.
+  static const int _clkTck = 100;
+  Map<int, int> _prevTicks = {};
+  Map<int, int> _newTicks = {};
+  DateTime? _prevSampleAt;
+  double _sampleDtSec = 0;
+  bool _busy = false;
+  double _lastIdeCores = 0;
+  double _lastTotalCores = 0;
+
+  /// Загрузка процесса в ядрах (1.0 = одно ядро полностью). null — /proc недоступен.
+  double? _coresFor(int procPid) {
+    try {
+      final stat = File('/proc/$procPid/stat').readAsStringSync();
+      final rp = stat.lastIndexOf(')');
+      if (rp < 0) return null;
+      final f = stat.substring(rp + 2).split(' ');
+      if (f.length < 13) return null;
+      final ticks = (int.tryParse(f[11]) ?? 0) + (int.tryParse(f[12]) ?? 0);
+      _newTicks[procPid] = ticks;
+      final prev = _prevTicks[procPid];
+      if (prev == null || _sampleDtSec <= 0.2) return 0.0;
+      final d = ticks - prev;
+      if (d < 0) return 0.0;
+      return (d / _clkTck) / _sampleDtSec;
+    } catch (_) {
+      return null;
+    }
+  }
+
   SystemStatsNotifier() : super(SystemStats()) {
     _startUpdates();
   }
 
   void _startUpdates() {
     _updateStats(fetchProcesses: false);
-    // 10-секундный интервал для защиты от перегрузки очереди событий и ANR на Android
-    _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      _updateStats(fetchProcesses: false);
+    // Адаптивный интервал: во время сборки обновляем каждые 2 с (точная нагрузка),
+    // в простое — раз в 10 с, чтобы не грузить Android и не вызывать ANR.
+    var tick = 0;
+    _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      tick++;
+      if (LiveTelemetryService.instance.isBuilding || tick % 5 == 0) {
+        _updateStats(fetchProcesses: false);
+      }
     });
   }
 
@@ -205,6 +276,16 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   }
 
   Future<void> _updateStats({bool fetchProcesses = false}) async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await _updateStatsImpl(fetchProcesses: fetchProcesses);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _updateStatsImpl({bool fetchProcesses = false}) async {
     double cpu = 0.0;
 
     final cpuStats = await _parseCpuStats();
@@ -315,10 +396,20 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
     // Если чтение /proc/stat заблокировано SELinux на Android:
     // учитываем реальную нагрузку дочерних процессов сборщика в общем индикаторе CPU!
-    if (_procStatBlocked && builderCpuPercent > 0) {
-      final totalSysLoad = (builderCpuPercent / (_cpuCores * 100.0)) + cpu;
-      cpu = totalSysLoad.clamp(0.04, 0.99);
+    // Единая шкала: общая нагрузка ВСЕГДА не меньше суммы IDE + сборщик.
+    // (раньше сборка могла показывать 170% при общей нагрузке 17%).
+    final appCpuPercent =
+        processes.where((p) => p.pid == pid).fold<double>(0, (a, p) => a + p.cpuPercent);
+    final visiblePercent = (_lastTotalCores / _cpuCores * 100.0);
+    final floorPercent = [appCpuPercent + builderCpuPercent, visiblePercent]
+        .reduce((a, b) => a > b ? a : b);
+    if (_procStatBlocked || cpuStats == null) {
+      cpu = (floorPercent / 100.0).clamp(0.0, 1.0);
+    } else if (cpu * 100 < floorPercent) {
+      cpu = (floorPercent / 100.0).clamp(0.0, 1.0);
     }
+    builderCpuPercent = builderCpuPercent.clamp(0.0, 100.0);
+    final builderCores = builderCpuPercent / 100.0 * _cpuCores;
 
     if (mounted) {
       state = SystemStats(
@@ -335,6 +426,10 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         deviceRamUsage: deviceUsage,
         builderRamMB: builderRamMB,
         builderCpuPercent: builderCpuPercent,
+        appCpuPercent: appCpuPercent.clamp(0.0, 100.0),
+        builderCores: builderCores,
+        cpuCores: _cpuCores,
+        isBuilding: isBuilding,
         processes: processes,
       );
     }
@@ -354,7 +449,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   Future<List<SystemProcessItem>> _fetchProcessList(int appRssBytes, double totalCpu) async {
     final list = <SystemProcessItem>[];
-    double ideCpu = 1.2;
+    double ideCpu = 0.0;
+    final sampleNow = DateTime.now();
+    _sampleDtSec = _prevSampleAt == null
+        ? 0
+        : sampleNow.difference(_prevSampleAt!).inMilliseconds / 1000.0;
+    _newTicks = {};
+    double totalCores = 0;
 
     try {
       if (!Platform.isWindows) {
@@ -371,13 +472,20 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
             final parts = trimmed.split(RegExp(r'\s+'));
             if (parts.length >= 4) {
               final procPid = int.tryParse(parts[0]);
-              final cpuVal = double.tryParse(parts[1]) ?? 0.0;
+              final psCpu = double.tryParse(parts[1]) ?? 0.0;
+              // Единая шкала: % от ВСЕХ ядер устройства
+              final cores = _coresFor(int.tryParse(parts[0]) ?? -1);
+              final cpuVal = cores != null
+                  ? cores / _cpuCores * 100.0
+                  : psCpu / _cpuCores;
+              if (cores != null) totalCores += cores;
               final rssKb = int.tryParse(parts[2]) ?? 0;
               final fullArgs = parts.sublist(3).join(' ');
 
               if (procPid == null) continue;
               if (procPid == pid) {
-                ideCpu = cpuVal > 0 ? cpuVal : 1.2;
+                ideCpu = cpuVal;
+                _lastIdeCores = cores ?? (cpuVal / 100.0 * _cpuCores);
                 continue; // пропускаем добавление дубликата, добавим ниже
               }
               if (fullArgs.contains('ps -eo') || fullArgs.contains('ps -o')) continue; // пропускаем сам ps
@@ -391,6 +499,41 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         }
       }
     } catch (_) {}
+
+    // Fallback: `ps` недоступен/не вернул процессы — читаем /proc напрямую.
+    if (list.isEmpty && !Platform.isWindows) {
+      try {
+        for (final e in Directory('/proc').listSync(followLinks: false)) {
+          final name = e.path.split('/').last;
+          final procPid = int.tryParse(name);
+          if (procPid == null || procPid == pid) continue;
+          final cores = _coresFor(procPid);
+          if (cores == null) continue;
+          String args = '';
+          int rss = 0;
+          try {
+            args = File('${e.path}/cmdline').readAsStringSync().replaceAll('\u0000', ' ').trim();
+            final st = File('${e.path}/statm').readAsStringSync().split(' ');
+            rss = (int.tryParse(st[1]) ?? 0) * 4096;
+          } catch (_) {}
+          if (args.isEmpty) continue;
+          totalCores += cores;
+          final parsed = _classifyProcess(procPid, cores / _cpuCores * 100.0, rss, args);
+          if (parsed != null) list.add(parsed);
+        }
+      } catch (_) {}
+    }
+    if (ideCpu == 0.0) {
+      final c = _coresFor(pid);
+      if (c != null) {
+        ideCpu = c / _cpuCores * 100.0;
+        if (!_newTicks.containsKey(-pid)) totalCores += c;
+      }
+    }
+
+    _prevTicks = _newTicks;
+    _prevSampleAt = sampleNow;
+    _lastTotalCores = totalCores;
 
     // 1. Всегда добавляем само приложение Quantum IDE с его РЕАЛЬНЫМ процентом CPU
     list.add(SystemProcessItem(

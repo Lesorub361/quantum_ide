@@ -13,6 +13,7 @@ import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/build_progress_card.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/github_actions_pipeline_viewer.dart';
 import 'package:quantum_ide/core/services/android_app_installer_service.dart';
 import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart';
@@ -436,6 +437,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
             ],
           ),
         ),
+        const BuildProgressCard(),
         Expanded(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -1042,6 +1044,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
             ],
           ),
         ),
+        const BuildProgressCard(),
         Expanded(
           child: _buildSubTab == 0
               ? Column(

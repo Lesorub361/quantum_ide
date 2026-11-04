@@ -907,7 +907,7 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
 
               _row(
                 'Процессор (${stats.socName})',
-                '${(stats.cpuUsage * 100).toStringAsFixed(0)}%${stats.builderCpuPercent > 0 ? " (Сборщик: ${(stats.builderCpuPercent).toStringAsFixed(0)}%)" : ""}',
+                stats.cpuSummary,
                 stats.cpuUsage,
                 LucideIcons.cpu,
               ),

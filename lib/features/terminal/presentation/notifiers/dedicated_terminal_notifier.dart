@@ -13,6 +13,8 @@ import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';
 import '../../../../core/services/live_telemetry_service.dart';
 import 'terminal_tabs_notifier.dart';
+import '../../engine/terminal_output_pipe.dart';
+import '../../../../core/services/build_progress_tracker.dart';
 
 enum DedicatedTerminalType { run, build, appLogs }
 
@@ -170,6 +172,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       final xtermVc = xt.TerminalController();
       int lastCols = -1;
       int lastRows = -1;
+      final inputGuard = TerminalInputGuard();
       final xtermTerm = xt.Terminal(
         maxLines: 2500,
         platform: Platform.isAndroid
@@ -182,6 +185,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
                         ? xt.TerminalTargetPlatform.windows
                         : xt.TerminalTargetPlatform.linux))),
         onOutput: (data) {
+          if (!inputGuard.accept(data)) return;
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
@@ -209,7 +213,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       // ignore: cancel_subscriptions
       final ptyOutSub = pty.output
           .cast<List<int>>()
-          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(terminalOutputTransformer())
           .listen(
         (text) {
           try {
@@ -219,6 +223,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
               xtermTerm.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
             } catch (_) {}
           }
+          BuildProgressTracker.instance.feed(text);
           if (type == DedicatedTerminalType.build) {
             LiveTelemetryService.instance.appendBuildOutput(text);
             if (text.contains('✓ Built build/app/outputs/') ||

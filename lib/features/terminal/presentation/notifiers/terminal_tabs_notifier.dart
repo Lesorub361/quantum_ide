@@ -13,6 +13,7 @@ import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';
 import '../../../../core/utils/path_mapper.dart';
 import '../../../git/presentation/notifiers/git_notifier.dart';
+import '../../engine/terminal_output_pipe.dart';
 
 class TerminalSession {
   final String id;
@@ -181,6 +182,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       Timer? resizeDebounceTimer;
       bool hadUserCommandRecently = false;
 
+      final inputGuard = TerminalInputGuard();
       final xtermTerm = xt.Terminal(
         maxLines: 2500,
         platform: Platform.isAndroid
@@ -196,6 +198,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           if (data.contains('\r') || data.contains('\n')) {
             hadUserCommandRecently = true;
           }
+          if (!inputGuard.accept(data)) return;
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
@@ -236,7 +239,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       Timer? gitRefreshDebounceTimer;
       final sub = pty.output
           .cast<List<int>>()
-          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(terminalOutputTransformer())
           .listen(
         (text) {
           try {
@@ -406,7 +409,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       // ignore: cancel_subscriptions
       final ptyOutSub = newPty.output
           .cast<List<int>>()
-          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(terminalOutputTransformer())
           .listen(
         (text) {
           try {
