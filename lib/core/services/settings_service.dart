@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,7 +58,6 @@ class SettingsState {
     this.openrouterApiKey = '',
     this.openaiApiKey = '',
     this.anthropicApiKey = '',
-    this.providerApiKeys = const {},
     this.dshPort = 3080,
     this.isInitialized = false,
   });
@@ -68,19 +66,7 @@ class SettingsState {
   final String openrouterApiKey;
   final String openaiApiKey;
   final String anthropicApiKey;
-  final Map<String, String> providerApiKeys;
   final int dshPort;
-
-  String getProviderApiKey(String providerId) {
-    if (providerApiKeys.containsKey(providerId)) {
-      return providerApiKeys[providerId] ?? '';
-    }
-    if (providerId == 'deepseek') return deepseekApiKey;
-    if (providerId == 'openrouter') return openrouterApiKey;
-    if (providerId == 'openai') return openaiApiKey;
-    if (providerId == 'anthropic') return anthropicApiKey;
-    return '';
-  }
 
   SettingsState copyWith({
     ThemeMode? themeMode,
@@ -112,7 +98,6 @@ class SettingsState {
     String? openrouterApiKey,
     String? openaiApiKey,
     String? anthropicApiKey,
-    Map<String, String>? providerApiKeys,
     int? dshPort,
     bool? isInitialized,
   }) {
@@ -145,7 +130,6 @@ class SettingsState {
       openrouterApiKey: openrouterApiKey ?? this.openrouterApiKey,
       openaiApiKey: openaiApiKey ?? this.openaiApiKey,
       anthropicApiKey: anthropicApiKey ?? this.anthropicApiKey,
-      providerApiKeys: providerApiKeys ?? this.providerApiKeys,
       dshPort: dshPort ?? this.dshPort,
       isInitialized: isInitialized ?? this.isInitialized,
     );
@@ -185,7 +169,6 @@ class SettingsService extends StateNotifier<SettingsState> {
   static const _keyOpenrouterApiKey = 'settings_openrouter_api_key';
   static const _keyOpenaiApiKey = 'settings_openai_api_key';
   static const _keyAnthropicApiKey = 'settings_anthropic_api_key';
-  static const _keyProviderApiKeys = 'settings_provider_api_keys';
   static const _keyDshPort = 'settings_dsh_port';
 
   Future<void> _loadSettings() async {
@@ -221,15 +204,6 @@ class SettingsService extends StateNotifier<SettingsState> {
       openrouterApiKey: prefs.getString(_keyOpenrouterApiKey) ?? '',
       openaiApiKey: prefs.getString(_keyOpenaiApiKey) ?? '',
       anthropicApiKey: prefs.getString(_keyAnthropicApiKey) ?? '',
-      providerApiKeys: () {
-        final raw = prefs.getString(_keyProviderApiKeys);
-        if (raw == null || raw.isEmpty) return <String, String>{};
-        try {
-          return Map<String, String>.from(jsonDecode(raw) as Map);
-        } catch (_) {
-          return <String, String>{};
-        }
-      }(),
       dshPort: prefs.getInt(_keyDshPort) ?? 3080,
       isInitialized: true,
     );
@@ -410,39 +384,6 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(anthropicApiKey: key);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAnthropicApiKey, key);
-  }
-
-  Future<void> setProviderApiKey(String providerId, String key) async {
-    final updated = Map<String, String>.from(state.providerApiKeys);
-    if (key.trim().isEmpty) {
-      updated.remove(providerId);
-    } else {
-      updated[providerId] = key.trim();
-    }
-    // Also sync legacy specific keys
-    if (providerId == 'deepseek') state = state.copyWith(deepseekApiKey: key.trim());
-    if (providerId == 'openrouter') state = state.copyWith(openrouterApiKey: key.trim());
-    if (providerId == 'openai') state = state.copyWith(openaiApiKey: key.trim());
-    if (providerId == 'anthropic') state = state.copyWith(anthropicApiKey: key.trim());
-    
-    state = state.copyWith(providerApiKeys: updated);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyProviderApiKeys, jsonEncode(updated));
-    if (providerId == 'deepseek') await prefs.setString(_keyDeepseekApiKey, key.trim());
-    if (providerId == 'openrouter') await prefs.setString(_keyOpenrouterApiKey, key.trim());
-    if (providerId == 'openai') await prefs.setString(_keyOpenaiApiKey, key.trim());
-    if (providerId == 'anthropic') await prefs.setString(_keyAnthropicApiKey, key.trim());
-  }
-
-  String getProviderApiKey(String providerId) {
-    if (state.providerApiKeys.containsKey(providerId)) {
-      return state.providerApiKeys[providerId] ?? '';
-    }
-    if (providerId == 'deepseek') return state.deepseekApiKey;
-    if (providerId == 'openrouter') return state.openrouterApiKey;
-    if (providerId == 'openai') return state.openaiApiKey;
-    if (providerId == 'anthropic') return state.anthropicApiKey;
-    return '';
   }
 
   Future<void> setDshPort(int port) async {

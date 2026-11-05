@@ -24,7 +24,6 @@ class QuantumModelItem {
   final int badgeColorValue;
   final bool isReasoning;
   final bool isOpenRouter;
-  final String? directProviderId;
 
   const QuantumModelItem({
     required this.id,
@@ -35,7 +34,6 @@ class QuantumModelItem {
     required this.badgeColorValue,
     this.isReasoning = false,
     this.isOpenRouter = true,
-    this.directProviderId,
   });
 
   static const List<QuantumModelItem> predefinedModels = [
@@ -254,77 +252,6 @@ class QuantumModelItem {
       badgeColorValue: 0xFFD97706,
       isOpenRouter: false,
     ),
-    // ── Direct Providers & Fast Inference ──
-    QuantumModelItem(
-      id: 'llama-3.3-70b-versatile',
-      name: 'Groq Llama 3.3 70B (Fast)',
-      providerName: 'Groq Direct',
-      category: 'Прямой API',
-      badge: 'Groq 500t/s',
-      badgeColorValue: 0xFFF59E0B,
-      isOpenRouter: false,
-      directProviderId: 'groq',
-    ),
-    QuantumModelItem(
-      id: 'codestral-latest',
-      name: 'Mistral Codestral',
-      providerName: 'Mistral Direct',
-      category: 'Кодинг',
-      badge: 'Codestral',
-      badgeColorValue: 0xFFFF7000,
-      isOpenRouter: false,
-      directProviderId: 'mistral',
-    ),
-    QuantumModelItem(
-      id: 'mistral-large-latest',
-      name: 'Mistral Large 2',
-      providerName: 'Mistral Direct',
-      category: 'Флагманы',
-      badge: 'Mistral Large',
-      badgeColorValue: 0xFFFF7000,
-      isOpenRouter: false,
-      directProviderId: 'mistral',
-    ),
-    QuantumModelItem(
-      id: 'kimi-k2.6',
-      name: 'Moonshot Kimi K2.6',
-      providerName: 'Kimi Direct',
-      category: 'Прямой API',
-      badge: 'Kimi 256k',
-      badgeColorValue: 0xFF3B82F6,
-      isOpenRouter: false,
-      directProviderId: 'kimi',
-    ),
-    QuantumModelItem(
-      id: 'llama-3.1-sonar-large-128k-online',
-      name: 'Perplexity Sonar Online',
-      providerName: 'Perplexity Direct',
-      category: 'Прямой API',
-      badge: 'Online Search',
-      badgeColorValue: 0xFF06B6D4,
-      isOpenRouter: false,
-      directProviderId: 'perplexity',
-    ),
-    QuantumModelItem(
-      id: 'meta-llama/Llama-3-70b-chat-hf',
-      name: 'Together Llama 3 70B',
-      providerName: 'Together AI',
-      category: 'Прямой API',
-      badge: 'Together',
-      badgeColorValue: 0xFF8B5CF6,
-      isOpenRouter: false,
-      directProviderId: 'together',
-    ),
-    QuantumModelItem(
-      id: 'qwen2.5-coder:latest',
-      name: 'Ollama Qwen 2.5 Coder',
-      providerName: 'Ollama Local',
-      category: 'Локальный',
-      badge: 'Ollama :11434',
-      badgeColorValue: 0xFF10B981,
-      isOpenRouter: false,
-      directProviderId: 'ollama',
-    ),
     QuantumModelItem(
       id: 'default',
       name: 'Локальный / Custom API',
@@ -388,18 +315,6 @@ class AgentAction {
   bool backupTaken = false;
   bool isUndone = false;
 
-  // ── Состояние выполнения команды (для VS Code-подобной карточки вывода) ──
-  /// Накопленный вывод (stdout+stderr) команды.
-  String output = '';
-  bool isRunning = false;
-  int? exitCode;
-  DateTime? startedAt;
-  DateTime? finishedAt;
-  StreamingCommand? handle;
-
-  Duration? get duration =>
-      startedAt == null ? null : (finishedAt ?? DateTime.now()).difference(startedAt!);
-
   AgentAction({
     required this.type,
     required this.path,
@@ -422,10 +337,6 @@ class ChatMessage {
   /// Non-null for tool-result messages (shown as a compact chip, sent to the model as context).
   final String? toolLabel;
 
-  /// Сообщение уходит в контекст модели, но не рисуется в чате
-  /// (например, результат команды, уже показанный в карточке терминала).
-  final bool hiddenInUi;
-
   ChatMessage({
     required this.id,
     required this.role,
@@ -436,7 +347,6 @@ class ChatMessage {
     required this.timestamp,
     List<AgentAction>? actions,
     this.toolLabel,
-    this.hiddenInUi = false,
   }) : actions = actions ?? [];
 }
 
@@ -1089,7 +999,6 @@ class QuantumAiAgentService extends ChangeNotifier {
     };
     return '''Ты — ведущий ИИ-разработчик и ассистент Quantum IDE.
 Ты работаешь непосредственно с проектом пользователя.
-Проект может быть на ЛЮБОМ стеке (Node/TS, Python, Go, Rust, Java/Kotlin, C/C++, PHP, web, Flutter и т.д.), а не только Flutter. Определи стек по манифестам (package.json, pyproject.toml/requirements.txt, Cargo.toml, go.mod, pom.xml/build.gradle, CMakeLists.txt, pubspec.yaml…) и используй соответствующие инструменты, менеджеры пакетов, тесты и команды запуска.
 Текущая рабочая директория: ${wsPath ?? 'корень проекта'}.
 $modeBlock
 ${rules.isEmpty ? '' : '\nПРАВИЛА ПРОЕКТА (AGENTS.md, обязательны):\n$rules\n'}${ctx.isEmpty ? '' : '\nКОНТЕКСТ ПРЯМО СЕЙЧАС:\n$ctx\n'}
@@ -1130,36 +1039,7 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     String apiKey;
     String model = _selectedModel.id;
 
-    final directProv = _selectedModel.directProviderId;
-    if (directProv != null) {
-      apiKey = settings.getProviderApiKey(directProv);
-      switch (directProv) {
-        case 'groq':
-          endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-          break;
-        case 'mistral':
-          endpoint = 'https://api.mistral.ai/v1/chat/completions';
-          break;
-        case 'kimi':
-          endpoint = 'https://api.moonshot.cn/v1/chat/completions';
-          break;
-        case 'perplexity':
-          endpoint = 'https://api.perplexity.ai/chat/completions';
-          break;
-        case 'together':
-          endpoint = 'https://api.together.xyz/v1/chat/completions';
-          break;
-        case 'fireworks':
-          endpoint = 'https://api.fireworks.ai/inference/v1/chat/completions';
-          break;
-        case 'ollama':
-          endpoint = 'http://127.0.0.1:11434/v1/chat/completions';
-          apiKey = apiKey.isEmpty ? 'ollama' : apiKey;
-          break;
-        default:
-          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
-      }
-    } else if (_selectedModel.isOpenRouter) {
+    if (_selectedModel.isOpenRouter) {
       endpoint = 'https://openrouter.ai/api/v1/chat/completions';
       apiKey = settings.openrouterApiKey;
       // Smart fallback: if user has no OpenRouter key but has DeepSeek direct key
@@ -1176,6 +1056,7 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
           apiKey = settings.deepseekApiKey;
           model = _selectedModel.id;
         } else if (settings.openrouterApiKey.isNotEmpty) {
+          // SMART FALLBACK: user entered OpenRouter key, route DeepSeek through OpenRouter!
           endpoint = 'https://openrouter.ai/api/v1/chat/completions';
           apiKey = settings.openrouterApiKey;
           model = _selectedModel.id == 'deepseek-reasoner'
@@ -1212,8 +1093,7 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
         }
       } else {
         endpoint = 'http://127.0.0.1:11434/v1/chat/completions';
-        apiKey = settings.getProviderApiKey('ollama');
-        if (apiKey.isEmpty) apiKey = settings.deepseekApiKey.isNotEmpty ? settings.deepseekApiKey : 'ollama';
+        apiKey = settings.deepseekApiKey.isNotEmpty ? settings.deepseekApiKey : 'ollama';
       }
     }
 
@@ -1472,81 +1352,26 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     await sendMessage('Выполни согласованный выше план по шагам. Начни с первого шага.');
   }
 
-  /// Останавливает выполняющуюся команду агента.
-  Future<void> cancelCommandAction(AgentAction action) async {
-    await action.handle?.cancel();
-  }
-
-  /// Запускает команду терминала со стримингом вывода в карточку чата.
+  /// Запускает команду терминала
   Future<void> executeCommandAction(AgentAction action) async {
     final ws = _getWorkspacePath();
-    final cmd = action.command;
-    if (cmd == null || action.isRunning) return;
-
-    action
-      ..output = ''
-      ..exitCode = null
-      ..isRunning = true
-      ..isExecuted = false
-      ..startedAt = DateTime.now()
-      ..finishedAt = null;
-    notifyListeners();
-
-    Timer? throttle;
-    void scheduleNotify() {
-      throttle ??= Timer(const Duration(milliseconds: 80), () {
-        throttle = null;
-        notifyListeners();
-      });
-    }
-
+    if (action.command == null) return;
     try {
-      final handle = _runtime.runCommandStream(
-        cmd,
-        workingDirectory: ws,
-        onLine: (line, {bool isError = false, bool replace = false}) {
-          if (replace) {
-            final i = action.output.lastIndexOf('\n', action.output.length - 2);
-            action.output = i < 0 ? '' : action.output.substring(0, i + 1);
-          }
-          action.output += '$line\n';
-          // Не даём карточке раздуваться бесконечно.
-          if (action.output.length > 200000) {
-            action.output = '…[начало обрезано]\n${action.output.substring(action.output.length - 150000)}';
-          }
-          scheduleNotify();
-        },
-      );
-      action.handle = handle;
-      action.exitCode = await handle.exitCode;
+      final out = await _runtime.runCommand(action.command!, workingDirectory: ws);
+      action.isExecuted = true;
+      final clipped = out.length > 6000 ? '…${out.substring(out.length - 6000)}' : out;
+      _messages.add(ChatMessage(
+        id: 'tool_${DateTime.now().microsecondsSinceEpoch}',
+        role: MessageRole.system,
+        text: clipped.trim().isEmpty ? '(пустой вывод)' : clipped,
+        toolLabel: 'run_command ${action.command}',
+        timestamp: DateTime.now(),
+      ));
+      notifyListeners();
+      // Возвращаем результат агенту, чтобы он мог исправить ошибку сам.
+      unawaited(sendMessage('Команда выполнена, результат выше. Проанализируй и продолжай.'));
     } catch (e) {
       debugPrint('[QuantumAiAgent] Command error: $e');
-      action.output += '$e\n';
-      action.exitCode = 1;
-    } finally {
-      throttle?.cancel();
-      action
-        ..isRunning = false
-        ..isExecuted = true
-        ..handle = null
-        ..finishedAt = DateTime.now();
-      notifyListeners();
-    }
-
-    final out = action.output;
-    final clipped = out.length > 6000 ? '…${out.substring(out.length - 6000)}' : out;
-    _messages.add(ChatMessage(
-      id: 'tool_${DateTime.now().microsecondsSinceEpoch}',
-      role: MessageRole.system,
-      text: '${clipped.trim().isEmpty ? '(пустой вывод)' : clipped}\n[exit code: ${action.exitCode}]',
-      toolLabel: 'run_command $cmd',
-      timestamp: DateTime.now(),
-      hiddenInUi: true,
-    ));
-    notifyListeners();
-    // Возвращаем результат агенту, чтобы он мог исправить ошибку сам.
-    if (action.exitCode != 130) {
-      unawaited(sendMessage('Команда выполнена, результат выше. Проанализируй и продолжай.'));
     }
   }
 }

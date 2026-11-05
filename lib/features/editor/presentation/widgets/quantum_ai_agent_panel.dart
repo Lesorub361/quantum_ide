@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:quantum_ide/core/theme/vscode_colors.dart';
-
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -13,15 +10,9 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'dart:io';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/ai_diff_dialog.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/agent_terminal_card.dart';
-import 'package:quantum_ide/features/editor/presentation/widgets/mcp_manager_dialog.dart';
-import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
 class QuantumAiAgentPanel extends ConsumerStatefulWidget {
-  const QuantumAiAgentPanel({super.key, this.onClose});
-
-  /// Если задан — в шапке показывается кнопка закрытия (режим правой док-панели).
-  final VoidCallback? onClose;
+  const QuantumAiAgentPanel({super.key});
 
   @override
   ConsumerState<QuantumAiAgentPanel> createState() => _QuantumAiAgentPanelState();
@@ -33,14 +24,6 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
   final FocusNode _focusNode = FocusNode();
 
   @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(() {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
   void dispose() {
     _textController.dispose();
     _scrollController.dispose();
@@ -48,12 +31,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     super.dispose();
   }
 
-  void _scrollToBottom({bool force = true}) {
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        final pos = _scrollController.position;
-        // При стриминге не перебиваем пользователя, если он листает историю вверх.
-        if (!force && pos.maxScrollExtent - pos.pixels > 160) return;
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 250),
@@ -66,15 +46,12 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
   @override
   Widget build(BuildContext context) {
     final agent = ref.watch(quantumAiAgentServiceProvider);
-    if (agent.isGenerating || agent.messages.any((m) => m.actions.any((a) => a.isRunning))) {
-      _scrollToBottom(force: false);
-    }
     final settings = ref.watch(settingsProvider);
     final workspace = ref.watch(workspaceProvider);
     final projectName = workspace.currentPath?.split('/').where((s) => s.isNotEmpty).lastOrNull ?? 'Проект';
 
     return Container(
-      color: Vs.sideBar,
+      color: const Color(0xFF0C0E15),
       child: Column(
         children: [
           // ── Header Bar ──────────────────────────────────────────────────────
@@ -115,50 +92,27 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     final fill = agent.contextFill;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      color: Vs.sideBar,
+      color: const Color(0xFF0F121B),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: Vs.input,
-                  borderRadius: BorderRadius.circular(9),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+              for (final m in AgentMode.values) ...[
+                Tooltip(
+                  message: m.hint,
+                  child: ChoiceChip(
+                    label: Text(m.label, style: const TextStyle(fontSize: 11)),
+                    selected: agent.mode == m,
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    selectedColor: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+                    onSelected: agent.isGenerating ? null : (_) => agent.setMode(m),
+                  ),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final m in AgentMode.values)
-                      Tooltip(
-                        message: m.hint,
-                        child: GestureDetector(
-                          onTap: agent.isGenerating ? null : () => agent.setMode(m),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 160),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(7),
-                              gradient: agent.mode == m
-                                  ? const LinearGradient(colors: [Color(0xFF7C3AED), Color(0xFF4F46E5)])
-                                  : null,
-                            ),
-                            child: Text(
-                              m.label,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: agent.mode == m ? Colors.white : Colors.white54,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+                const SizedBox(width: 4),
+              ],
               const Spacer(),
               PopupMenuButton<AgentEngine>(
                 tooltip: 'Кто выполняет задачу',
@@ -252,8 +206,8 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Vs.sideBar,
-        border: Border(bottom: BorderSide(color: Vs.border)),
+        color: const Color(0xFF131722),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
       ),
       child: Row(
         children: [
@@ -277,7 +231,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
               height: 28,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: Vs.input,
+                color: const Color(0xFF0A0D14),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(color: Colors.white12),
               ),
@@ -333,7 +287,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 const Icon(LucideIcons.folder, size: 10, color: Colors.cyanAccent),
                 const SizedBox(width: 4),
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 90),
+                  constraints: const BoxConstraints(maxWidth: 65),
                   child: Text(
                     projectName,
                     maxLines: 1,
@@ -356,32 +310,14 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             onPressed: () => agent.clearChat(),
           ),
 
-          // MCP Manager
-          IconButton(
-            icon: const Icon(LucideIcons.blocks, size: 14, color: Vs.accentLight),
-            tooltip: 'Инструменты MCP (Model Context Protocol)',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-            onPressed: () => McpManagerDialog.show(context),
-          ),
-          const SizedBox(width: 2),
-
           // Settings (API Keys)
           IconButton(
             icon: const Icon(LucideIcons.settings_2, size: 13, color: Colors.white60),
-            tooltip: 'Настроить API Ключи и Провайдеры',
+            tooltip: 'Настроить API Ключи',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 26, height: 26),
             onPressed: () => _showApiKeysDialog(context, settings),
           ),
-          if (widget.onClose != null)
-            IconButton(
-              icon: const Icon(LucideIcons.x, size: 14, color: Colors.white60),
-              tooltip: 'Закрыть панель',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-              onPressed: widget.onClose,
-            ),
         ],
       ),
     );
@@ -419,7 +355,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
           }).toList();
 
           return AlertDialog(
-            backgroundColor: Vs.sideBar,
+            backgroundColor: const Color(0xFF131722),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -490,7 +426,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   Container(
                     height: 36,
                     decoration: BoxDecoration(
-                      color: Vs.input,
+                      color: const Color(0xFF0A0D14),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.white12),
                     ),
@@ -683,7 +619,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Vs.input,
+                      color: const Color(0xFF0A0D14),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.white10),
                     ),
@@ -752,7 +688,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         itemBuilder: (context, i) {
           final prompt = suggestions[i];
           return ActionChip(
-            backgroundColor: Vs.sideBar,
+            backgroundColor: const Color(0xFF131722),
             side: BorderSide(color: Colors.white.withValues(alpha: 0.09)),
             label: Text(
               prompt,
@@ -775,13 +711,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
   ) {
     final isUser = msg.role == MessageRole.user;
 
-    // Результат команды уже показан в карточке терминала — не дублируем.
-    if (msg.hiddenInUi) return const SizedBox.shrink();
-
     // Результат инструмента: компактная плашка вместо большого пузыря.
     if (msg.toolLabel != null) {
       return Padding(
-        padding: const EdgeInsets.only(bottom: 8, left: 27),
+        padding: const EdgeInsets.only(bottom: 6, left: 34),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
@@ -814,100 +747,94 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       return const SizedBox.shrink();
     }
 
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 🧠 Collapsible Thinking Block (DeepSeek R1 / o3-mini)
-        if (msg.thinking != null && msg.thinking!.isNotEmpty) _buildThinkingBlock(msg),
-
-        // Main Text Content
-        if (msg.text.isNotEmpty && _cleanText(msg.text).isNotEmpty)
-          GptMarkdown(
-            _cleanText(msg.text),
-            style: GoogleFonts.inter(color: const Color(0xFFE5E7EB), fontSize: 12.5, height: 1.5),
-            onLinkTap: (url, title) => launchUrlString(url),
-          )
-        else if (msg.isStreaming)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(color: Color(0xFF8B5CF6), strokeWidth: 1.8),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                msg.isThinking ? 'Думает…' : 'Печатает…',
-                style: GoogleFonts.inter(color: Colors.white60, fontSize: 11.5),
-              ),
-            ],
-          ),
-
-        // Action Cards (write_file, run_command)
-        if (msg.actions.isNotEmpty) ...msg.actions.map((act) => _buildActionCard(context, agent, act)),
-      ],
-    );
-
-    if (isUser) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 14, left: 28),
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF2B3354), Color(0xFF232A47)],
-              ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(14),
-                topRight: Radius.circular(14),
-                bottomLeft: Radius.circular(14),
-                bottomRight: Radius.circular(4),
-              ),
-              border: Border.all(color: const Color(0xFF4F5B7F).withValues(alpha: 0.7)),
-            ),
-            child: SelectableText(
-              msg.text,
-              style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5, height: 1.45),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Ответ ассистента: без пузыря, на всю ширину панели (как в чатах IDE).
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 20,
-                height: 20,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)]),
+          if (!isUser) ...[
+            Container(
+              width: 26,
+              height: 26,
+              margin: const EdgeInsets.only(right: 8, top: 2),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
                 ),
-                child: const Icon(LucideIcons.sparkles, size: 10, color: Colors.white),
               ),
-              const SizedBox(width: 7),
-              Text('Quantum',
-                  style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: Colors.white70)),
-              const SizedBox(width: 6),
-              Text(
-                '${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
-                style: const TextStyle(fontSize: 10, color: Colors.white30),
+              child: const Icon(LucideIcons.sparkles, size: 12, color: Colors.white),
+            ),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: isUser ? const Color(0xFF2E3856) : const Color(0xFF131722),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isUser
+                      ? const Color(0xFF4F5B7F)
+                      : Colors.white.withValues(alpha: 0.08),
+                ),
               ),
-            ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 🧠 Collapsible Thinking Block (DeepSeek R1 / o3-mini)
+                  if (msg.thinking != null && msg.thinking!.isNotEmpty)
+                    _buildThinkingBlock(msg),
+
+                  // Main Text Content
+                  if (msg.text.isNotEmpty)
+                    GptMarkdown(
+                      _cleanText(msg.text),
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        height: 1.45,
+                      ),
+                      onLinkTap: (url, title) => launchUrlString(url),
+                    )
+                  else if (msg.isStreaming)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(color: Color(0xFF8B5CF6), strokeWidth: 1.8),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          msg.isThinking ? 'Мысли модели (R1)...' : 'Печатает...',
+                          style: GoogleFonts.inter(color: Colors.white60, fontSize: 11.5),
+                        ),
+                      ],
+                    ),
+
+                  // Action Cards (write_file, run_command)
+                  if (msg.actions.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    ...msg.actions.map((act) => _buildActionCard(context, agent, act)),
+                  ],
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 6),
-          Padding(padding: const EdgeInsets.only(left: 27), child: body),
+          if (isUser) ...[
+            Container(
+              width: 26,
+              height: 26,
+              margin: const EdgeInsets.only(left: 8, top: 2),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF3B82F6),
+              ),
+              child: const Icon(LucideIcons.user, size: 12, color: Colors.white),
+            ),
+          ],
         ],
       ),
     );
@@ -1055,15 +982,44 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         ),
       );
     } else if (action.type == 'run_command') {
-      return AgentTerminalCard(
-        command: action.command ?? '',
-        output: action.output,
-        isRunning: action.isRunning,
-        exitCode: action.exitCode,
-        duration: action.duration,
-        canRun: !action.isRunning && !agent.isGenerating,
-        onRun: () => agent.executeCommandAction(action),
-        onStop: () => agent.cancelCommandAction(action),
+      return Container(
+        margin: const EdgeInsets.only(top: 6),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0A131A),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(LucideIcons.terminal, size: 14, color: Colors.cyanAccent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                action.command ?? '',
+                style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: action.isExecuted ? Colors.white12 : Colors.cyanAccent,
+                foregroundColor: action.isExecuted ? Colors.white60 : Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              ),
+              icon: Icon(action.isExecuted ? LucideIcons.check : LucideIcons.play, size: 12),
+              label: Text(action.isExecuted ? 'Выполнено' : 'Запустить', style: const TextStyle(fontSize: 10.5)),
+              onPressed: action.isExecuted
+                  ? null
+                  : () async {
+                      await agent.executeCommandAction(action);
+                    },
+            ),
+          ],
+        ),
       );
     }
     return const SizedBox.shrink();
@@ -1071,96 +1027,60 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
 
   Widget _buildInputBar(BuildContext context, QuantumAiAgentService agent) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Vs.sideBar,
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+        color: const Color(0xFF131722),
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
       ),
       child: SafeArea(
         top: false,
-        child: Container(
-          decoration: BoxDecoration(
-            color: Vs.sideBar,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _focusNode.hasFocus
-                ? const Color(0xFF8B5CF6).withValues(alpha: 0.6)
-                : Colors.white.withValues(alpha: 0.10)),
-          ),
-          padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Focus(
-                  // Enter — отправить, Shift+Enter — новая строка.
-                  onKeyEvent: (node, event) {
-                    if (event is KeyDownEvent &&
-                        event.logicalKey == LogicalKeyboardKey.enter &&
-                        !HardwareKeyboard.instance.isShiftPressed) {
-                      _sendMessage(agent);
-                      return KeyEventResult.handled;
-                    }
-                    return KeyEventResult.ignored;
-                  },
-                  child: TextField(
-                    controller: _textController,
-                    focusNode: _focusNode,
-                    maxLines: 6,
-                    minLines: 1,
-                    style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5),
-                    decoration: const InputDecoration(
-                      hintText: 'Спросите агента или поставьте задачу…',
-                      hintStyle: TextStyle(color: Colors.white30, fontSize: 12.5),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 9),
-                    ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0A0D14),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: TextField(
+                  controller: _textController,
+                  focusNode: _focusNode,
+                  maxLines: 4,
+                  minLines: 1,
+                  style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5),
+                  decoration: const InputDecoration(
+                    hintText: 'Спросите AI Агента о коде или задаче...',
+                    hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8),
                   ),
+                  onSubmitted: (_) => _sendMessage(agent),
                 ),
               ),
-              const SizedBox(width: 6),
-              if (agent.isGenerating)
-                _sendBtn(
-                  icon: LucideIcons.square,
-                  tooltip: 'Остановить',
-                  color: Colors.redAccent,
-                  onTap: agent.stopGeneration,
-                )
-              else
-                _sendBtn(
-                  icon: LucideIcons.arrow_up,
-                  tooltip: 'Отправить',
-                  gradient: const [Color(0xFF8B5CF6), Color(0xFF6366F1)],
-                  onTap: () => _sendMessage(agent),
+            ),
+            const SizedBox(width: 8),
+            if (agent.isGenerating)
+              IconButton(
+                icon: const Icon(LucideIcons.square, size: 15, color: Colors.redAccent),
+                tooltip: 'Остановить',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
                 ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _sendBtn({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-    Color? color,
-    List<Color>? gradient,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            color: color?.withValues(alpha: 0.18),
-            gradient: gradient == null ? null : LinearGradient(colors: gradient),
-          ),
-          child: Icon(icon, size: 16, color: color ?? Colors.white),
+                onPressed: () => agent.stopGeneration(),
+              )
+            else
+              IconButton(
+                icon: const Icon(LucideIcons.send, size: 15, color: Colors.white),
+                tooltip: 'Отправить',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF8B5CF6),
+                ),
+                onPressed: () => _sendMessage(agent),
+              ),
+          ],
         ),
       ),
     );
@@ -1188,20 +1108,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     final orCtrl = TextEditingController(text: settings.openrouterApiKey);
     final oaCtrl = TextEditingController(text: settings.openaiApiKey);
     final anCtrl = TextEditingController(text: settings.anthropicApiKey);
-    final groqCtrl = TextEditingController(text: settings.getProviderApiKey('groq'));
-    final mistralCtrl = TextEditingController(text: settings.getProviderApiKey('mistral'));
-    final kimiCtrl = TextEditingController(text: settings.getProviderApiKey('kimi'));
-    final pplxCtrl = TextEditingController(text: settings.getProviderApiKey('perplexity'));
-    final togetherCtrl = TextEditingController(text: settings.getProviderApiKey('together'));
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Vs.sideBar,
+        backgroundColor: const Color(0xFF131722),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(LucideIcons.key, color: Vs.accentLight, size: 18),
+            const Icon(LucideIcons.key, color: Color(0xFFA78BFA), size: 18),
             const SizedBox(width: 8),
             Text(
               'API Ключи ИИ-Провайдеров',
@@ -1209,63 +1124,45 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             ),
           ],
         ),
-        content: SizedBox(
-          width: 500,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Vs.accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Vs.accent.withValues(alpha: 0.25)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(LucideIcons.sparkles, color: Vs.accentLight, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '💡 OpenRouter дает доступ сразу к 200+ моделям. Если есть прямой ключ (Groq, Mistral, DeepSeek), укажите его ниже для максимальной скорости и минимальных задержек!',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 11),
-                        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.sparkles, color: Color(0xFFA78BFA), size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '💡 Ключ OpenRouter открывает доступ сразу ко всем моделям: DeepSeek V3/R1, Claude 3.7, GPT-4o, Gemini 2.0, Qwen и бесплатным моделям!',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 11),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Универсальные хабы и флагманы:',
-                  style: TextStyle(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                _buildField('OpenRouter Key (универсальный ключ ко всем моделям)', orCtrl),
-                const SizedBox(height: 8),
-                _buildField('DeepSeek API Key (DEEPSEEK_API_KEY)', dsCtrl),
-                const SizedBox(height: 8),
-                _buildField('OpenAI Key (OPENAI_API_KEY)', oaCtrl),
-                const SizedBox(height: 8),
-                _buildField('Anthropic Claude Key (ANTHROPIC_API_KEY)', anCtrl),
-                const SizedBox(height: 14),
-                const Text(
-                  'Быстрые выводы и специализированные провайдеры:',
-                  style: TextStyle(color: Colors.white70, fontSize: 11.5, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                _buildField('Groq API Key (LPU сверхбыстрый вывод 500 т/с)', groqCtrl),
-                const SizedBox(height: 8),
-                _buildField('Mistral AI Key (Codestral & Mistral Large)', mistralCtrl),
-                const SizedBox(height: 8),
-                _buildField('Moonshot Kimi Key (256k контекст)', kimiCtrl),
-                const SizedBox(height: 8),
-                _buildField('Perplexity Key (Sonar поиск в интернете)', pplxCtrl),
-                const SizedBox(height: 8),
-                _buildField('Together AI Key (Открытые модели)', togetherCtrl),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Ключи сохраняются локально и шифруются на устройстве:',
+                style: TextStyle(color: Colors.white60, fontSize: 11.5),
+              ),
+              const SizedBox(height: 12),
+              _buildField('OpenRouter Key (универсальный ключ ко всем моделям)', orCtrl),
+              const SizedBox(height: 8),
+              _buildField('DeepSeek API Key (DEEPSEEK_API_KEY)', dsCtrl),
+              const SizedBox(height: 8),
+              _buildField('OpenAI Key (OPENAI_API_KEY)', oaCtrl),
+              const SizedBox(height: 8),
+              _buildField('Anthropic Key (ANTHROPIC_API_KEY)', anCtrl),
+            ],
           ),
         ),
         actions: [
@@ -1274,18 +1171,13 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Vs.accent, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
             onPressed: () {
               final sn = ref.read(settingsProvider.notifier);
               sn.setDeepseekApiKey(dsCtrl.text.trim());
               sn.setOpenrouterApiKey(orCtrl.text.trim());
               sn.setOpenaiApiKey(oaCtrl.text.trim());
               sn.setAnthropicApiKey(anCtrl.text.trim());
-              sn.setProviderApiKey('groq', groqCtrl.text.trim());
-              sn.setProviderApiKey('mistral', mistralCtrl.text.trim());
-              sn.setProviderApiKey('kimi', kimiCtrl.text.trim());
-              sn.setProviderApiKey('perplexity', pplxCtrl.text.trim());
-              sn.setProviderApiKey('together', togetherCtrl.text.trim());
               Navigator.pop(ctx);
             },
             child: const Text('Сохранить'),
@@ -1294,6 +1186,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       ),
     );
   }
+
   Widget _buildField(String label, TextEditingController controller) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1303,7 +1196,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         Container(
           height: 36,
           decoration: BoxDecoration(
-            color: Vs.input,
+            color: const Color(0xFF0A0D14),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.white12),
           ),

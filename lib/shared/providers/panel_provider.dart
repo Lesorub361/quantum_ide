@@ -92,7 +92,3 @@ final panelProvider = StateNotifierProvider<PanelNotifier, PanelState>((ref) {
 final serverRunningProvider = StateProvider<bool>((ref) => false);
 final leftPanelWidthProvider = StateProvider<double>((ref) => 320.0);
 final leftPanelOpenProvider = StateProvider<bool>((ref) => true);
-
-/// Правая док-панель AI-агента (как чат-сайдбар в VS Code).
-final aiDockOpenProvider = StateProvider<bool>((ref) => false);
-final aiDockWidthProvider = StateProvider<double>((ref) => 420.0);
