@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:quantum_ide/core/theme/vscode_colors.dart';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1375,55 +1377,34 @@ class ActionIconButton extends StatelessWidget {
     this.color,
     this.backgroundColor,
     this.borderColor,
-    this.size = 32,
-    this.iconSize = 15,
+    this.size = 30,
+    this.iconSize = 16,
   });
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = color ?? Colors.white.withValues(alpha: 0.85);
-    final isCustomColor = color != null && color != Colors.white70 && color != Colors.white;
-
-    final effectiveBg = backgroundColor ??
-        (isCustomColor
-            ? color!.withValues(alpha: 0.12)
-            : const Color(0xFF161922).withValues(alpha: 0.85));
-
-    final effectiveBorder = borderColor ??
-        (isCustomColor
-            ? color!.withValues(alpha: 0.28)
-            : Colors.white.withValues(alpha: 0.08));
+    // VS Code title-bar action: плоская иконка без рамки, подсветка при наведении.
+    final keep = color == Colors.greenAccent || color == Colors.white || color == Colors.amberAccent;
+    final effectiveColor = keep ? color! : Vs.text;
+    final isActiveBg = backgroundColor != null && backgroundColor != Colors.transparent && color == Colors.white;
 
     Widget button = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        splashColor: (color ?? Colors.cyanAccent).withValues(alpha: 0.2),
-        highlightColor: (color ?? Colors.cyanAccent).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(5),
+        hoverColor: Colors.white.withValues(alpha: 0.10),
+        splashColor: Colors.white.withValues(alpha: 0.12),
+        highlightColor: Colors.white.withValues(alpha: 0.06),
         child: Container(
           width: size,
           height: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: effectiveBg,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: effectiveBorder, width: 0.8),
-            boxShadow: isCustomColor
-                ? [
-                    BoxShadow(
-                      color: color!.withValues(alpha: 0.08),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
+            color: isActiveBg ? Colors.white.withValues(alpha: 0.08) : null,
+            borderRadius: BorderRadius.circular(5),
           ),
-          child: Icon(
-            icon,
-            size: iconSize,
-            color: effectiveColor,
-          ),
+          child: Icon(icon, size: iconSize, color: effectiveColor),
         ),
       ),
     );

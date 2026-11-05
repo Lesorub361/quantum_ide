@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:quantum_ide/core/theme/vscode_colors.dart';
+
 import 'package:quantum_ide/shared/widgets/unified_load_meter.dart';
 import 'package:quantum_ide/features/editor/presentation/pages/editor_page.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -214,86 +216,62 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     Color badgeColor = const Color(0xFFFF3C3C),
     bool isMobile = false,
   }) {
-    const activeColor = Color(0xFF4CD7F6);
+    const activeColor = Colors.white;
     final iconWidget = Icon(
       icon,
-      size: isMobile ? 15 : 16,
-      color: isActive ? activeColor : Colors.white.withValues(alpha: 0.45),
+      size: isMobile ? 20 : 24,
+      color: isActive ? activeColor : Vs.textDim,
     );
 
-    final itemSize = isMobile ? 38.0 : 42.0;
+    final itemSize = isMobile ? 44.0 : 48.0;
 
     return Tooltip(
       message: tooltip,
       waitDuration: const Duration(milliseconds: 350),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            ref.read(drawerTabProvider.notifier).state = index;
-          },
-          child: SizedBox(
-            width: itemSize,
-            height: itemSize,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (isActive)
-                  Positioned(
-                    left: 0,
-                    top: 8,
-                    bottom: 8,
-                    child: Container(
-                      width: 2.5,
-                      decoration: BoxDecoration(
-                        color: activeColor,
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(2),
-                          bottomRight: Radius.circular(2),
+      child: InkWell(
+        onTap: () {
+          ref.read(drawerTabProvider.notifier).state = index;
+        },
+        hoverColor: Colors.white.withValues(alpha: 0.04),
+        child: SizedBox(
+          width: itemSize,
+          height: itemSize,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Активный индикатор — тонкая линия слева, как в VS Code.
+              if (isActive)
+                const Positioned(
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: SizedBox(width: 2, child: ColoredBox(color: Vs.accent)),
+                ),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  iconWidget,
+                  if (badgeCount > 0)
+                    Positioned(
+                      right: -7,
+                      bottom: -5,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: badgeColor == const Color(0xFFFF3C3C) ? Vs.error : (badgeColor == const Color(0xFFF59E0B) ? Vs.warning : Vs.badge),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: activeColor.withValues(alpha: 0.5),
-                            blurRadius: 4,
-                          ),
-                        ],
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        child: Text(
+                          badgeCount > 99 ? '99+' : '$badgeCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.w600),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
-                  ),
-                badgeCount > 0
-                    ? Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          iconWidget,
-                          Positioned(
-                            right: -6,
-                            top: -4,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: badgeColor,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 14,
-                                minHeight: 14,
-                              ),
-                              child: Text(
-                                badgeCount > 99 ? '99+' : '$badgeCount',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : iconWidget,
-              ],
-            ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -345,12 +323,12 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
           ];
 
     // Activity bar on the left
-    final activityBarWidth = isMobile ? 38.0 : 44.0;
+    final activityBarWidth = isMobile ? 44.0 : 48.0;
     final activityBar = Container(
       width: activityBarWidth,
-      decoration: BoxDecoration(
-        color: const Color(0xFF090B0F),
-        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)),
+      decoration: const BoxDecoration(
+        color: Vs.sideBar,
+        border: Border(right: BorderSide(color: Vs.border, width: 1)),
       ),
       child: Column(
         children: [
@@ -358,7 +336,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  const SizedBox(height: 8),
                   for (final sec in sidebarOrder) ...[
                     if (!disabledTabs.contains(sec)) ...[
                       if (sec == 'explorer')
@@ -402,8 +379,17 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               ),
             ),
           ),
-          const Divider(height: 1, color: Colors.white10),
-          const SizedBox(height: 4),
+          Tooltip(
+            message: 'Аккаунт',
+            child: InkWell(
+              onTap: () => context.push('/settings'),
+              child: SizedBox(
+                width: activityBarWidth,
+                height: activityBarWidth,
+                child: const Icon(LucideIcons.circle_user_round, size: 24, color: Vs.textDim),
+              ),
+            ),
+          ),
           Tooltip(
             message: AppLocalizations.of(context)!.settings,
             child: InkWell(
@@ -413,7 +399,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
               child: SizedBox(
                 width: activityBarWidth,
                 height: activityBarWidth,
-                child: const Icon(LucideIcons.settings, size: 16, color: Colors.white38),
+                child: const Icon(LucideIcons.settings, size: 24, color: Vs.textDim),
               ),
             ),
           ),
@@ -689,9 +675,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
 
     if (widget.isInline) {
       return Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF0D0F14).withValues(alpha: 0.5),
-          border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
+        decoration: const BoxDecoration(
+          color: Vs.sideBar,
+          border: Border(right: BorderSide(color: Vs.border, width: 1)),
         ),
         child: content,
       );
@@ -704,8 +690,8 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     
     return GlassContainer(
       blur: 30,
-      opacity: 0.92,
-      color: const Color(0xFF0F1117),
+      opacity: 1.0,
+      color: Vs.sideBar,
       borderRadius: BorderRadius.zero,
       border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
       child: Drawer(

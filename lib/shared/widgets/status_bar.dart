@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:quantum_ide/core/theme/vscode_colors.dart';
+
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -74,16 +76,11 @@ class _StatusBarState extends ConsumerState<StatusBar> {
 
     return RepaintBoundary(
       child: Container(
-        height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: const Color(0xFF090B10),
-          border: Border(
-            top: BorderSide(
-              color: Colors.white.withValues(alpha: 0.06),
-              width: 0.5,
-            ),
-          ),
+        height: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: const BoxDecoration(
+          color: Vs.sideBar,
+          border: Border(top: BorderSide(color: Vs.border, width: 1)),
         ),
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -1049,28 +1046,22 @@ class _StatusBarPill extends StatelessWidget {
       label,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: GoogleFonts.inter(
-        fontSize: 10,
-        color: color ?? Colors.white60,
-        fontWeight: FontWeight.w500,
-      ),
+      style: GoogleFonts.inter(fontSize: 11.5, color: Vs.text),
     );
 
     return InkWell(
-      borderRadius: BorderRadius.circular(4),
       onTap: onTap,
+      hoverColor: Colors.white.withValues(alpha: 0.10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
-        decoration: BoxDecoration(
-          color: (color ?? Colors.white54).withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(3.5),
-        ),
+        height: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 7),
+        alignment: Alignment.center,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 9.5, color: color ?? Colors.white54),
-              const SizedBox(width: 3),
+              Icon(icon, size: 13, color: Vs.text),
+              const SizedBox(width: 4),
             ],
             if (maxWidth != null)
               ConstrainedBox(

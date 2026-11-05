@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:quantum_ide/core/theme/vscode_colors.dart';
+
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -194,19 +196,10 @@ class EditorTabBar extends ConsumerWidget {
     }
 
     return Container(
-      height: 42,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF090C14),
-            Color(0xFF0E121D),
-          ],
-        ),
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.07), width: 0.8),
-        ),
+      height: 35,
+      decoration: const BoxDecoration(
+        color: Vs.tabInactive,
+        border: Border(bottom: BorderSide(color: Vs.border, width: 1)),
       ),
       child: Row(
         children: [
@@ -214,7 +207,6 @@ class EditorTabBar extends ConsumerWidget {
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               itemCount: openFiles.length,
               itemBuilder: (context, index) {
                 final file = openFiles[index];
@@ -223,132 +215,57 @@ class EditorTabBar extends ConsumerWidget {
 
                 return Listener(
                   onPointerDown: (event) {
-                    if (event.buttons == 4) { // Middle click
-                      notifier.closeTab(index);
-                    }
+                    if (event.buttons == 4) notifier.closeTab(index); // middle click
                   },
                   child: GestureDetector(
                     onTap: () => notifier.setActiveTab(index),
                     onSecondaryTapDown: (details) => _showTabContextMenu(context, ref, index, details.globalPosition),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 160),
-                      curve: Curves.easeOutCubic,
-                      margin: const EdgeInsets.only(right: 5),
-                      padding: const EdgeInsets.fromLTRB(10, 4, 8, 4),
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 110, maxWidth: 220),
+                      padding: const EdgeInsets.only(left: 12, right: 6),
                       decoration: BoxDecoration(
-                        gradient: isActive
-                            ? const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFF1A2234),
-                                  Color(0xFF141928),
-                                ],
-                              )
-                            : LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.02),
-                                  Colors.white.withValues(alpha: 0.01),
-                                ],
-                              ),
-                        borderRadius: BorderRadius.circular(9),
-                        border: Border.all(
-                          color: isActive
-                              ? Colors.cyanAccent.withValues(alpha: 0.45)
-                              : Colors.white.withValues(alpha: 0.05),
-                          width: isActive ? 1.0 : 0.6,
+                        color: isActive ? Vs.editor : Vs.tabInactive,
+                        border: Border(
+                          top: BorderSide(color: isActive ? Vs.accent : Colors.transparent, width: 1.5),
+                          right: const BorderSide(color: Vs.border, width: 1),
                         ),
-                        boxShadow: isActive
-                            ? [
-                                BoxShadow(
-                                  color: Colors.cyanAccent.withValues(alpha: 0.08),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
-                            : null,
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                iconInfo.icon,
-                                size: 13.5,
-                                color: isActive ? iconInfo.color : iconInfo.color.withValues(alpha: 0.55),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                file.name,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11.5,
-                                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                                  color: isActive ? Colors.white : Colors.white60,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              if (file.isModified)
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  margin: const EdgeInsets.only(right: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFFB800),
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFFFFB800).withValues(alpha: 0.6),
-                                        blurRadius: 4,
-                                        spreadRadius: 1,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: () => notifier.closeTab(index),
-                                child: Container(
-                                  padding: const EdgeInsets.all(3.5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    LucideIcons.x,
-                                    size: 11.5,
-                                    color: isActive ? Colors.white70 : Colors.white24,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          if (isActive) ...[
-                            const SizedBox(height: 3),
-                            Container(
-                              height: 1.8,
-                              width: 32,
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  colors: [
-                                    Color(0xFF00E5FF),
-                                    Color(0xFF7C4DFF),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(1),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
-                                    blurRadius: 4,
-                                  ),
-                                ],
+                          Icon(iconInfo.icon, size: 15, color: isActive ? iconInfo.color : iconInfo.color.withValues(alpha: 0.6)),
+                          const SizedBox(width: 7),
+                          Flexible(
+                            child: Text(
+                              file.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                color: isActive ? Colors.white : Vs.textDim,
                               ),
                             ),
-                          ],
+                          ),
+                          const SizedBox(width: 4),
+                          // Точка «изменён» превращается в крестик, как в VS Code.
+                          InkWell(
+                            borderRadius: BorderRadius.circular(5),
+                            hoverColor: Colors.white.withValues(alpha: 0.12),
+                            onTap: () => notifier.closeTab(index),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Center(
+                                child: file.isModified
+                                    ? Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: const BoxDecoration(color: Vs.text, shape: BoxShape.circle),
+                                      )
+                                    : Icon(LucideIcons.x, size: 14, color: isActive ? Vs.textDim : Vs.textFaint),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -360,16 +277,11 @@ class EditorTabBar extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(right: 6),
             child: InkWell(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(5),
               onTap: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
               child: Container(
                 padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 0.6),
-                ),
-                child: const Icon(LucideIcons.plus, size: 13, color: Colors.cyanAccent),
+                child: const Icon(LucideIcons.plus, size: 16, color: Vs.textDim),
               ),
             ),
           ),

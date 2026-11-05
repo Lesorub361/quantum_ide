@@ -1,6 +1,9 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:quantum_ide/core/theme/vscode_colors.dart';
+
+import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
 
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -429,16 +432,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       children: [
                         if (!_isZenMode)
                           Container(
-                            height: 30,
+                            height: 24,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0A0C14).withValues(alpha: 0.95),
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.05),
-                                  width: 0.8,
-                                ),
-                              ),
+                              color: Vs.editor,
                             ),
                             child: Row(
                               children: [
@@ -715,14 +712,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       },
       child: Scaffold(
       key: _scaffoldKey,
+      backgroundColor: Vs.editor,
       resizeToAvoidBottomInset: false,
       drawer: isDesktop ? null : const FileDrawer(),
       appBar: _isZenMode ? null : PreferredSize(
-        preferredSize: const Size.fromHeight(72),
-        child: GlassContainer(
-          blur: 30,
-          opacity: 0.1,
-          border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)),
+        preferredSize: Size.fromHeight(isDesktop ? 38.0 + 35.0 : 40.0 + 35.0),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Vs.sideBar,
+            border: Border(bottom: BorderSide(color: Vs.border, width: 1)),
+          ),
           child: SafeArea(
             child: Column(
               children: [
@@ -733,7 +732,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       const SizedBox(width: 8),
                       ActionIconButton(
                         icon: LucideIcons.panel_left,
-                        color: Colors.cyanAccent,
+                        color: Vs.text,
                         tooltip: AppLocalizations.of(context)!.openExplorer,
                         onTap: () {
                           if (isDesktop) {
@@ -753,8 +752,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         },
                       ),
                       const SizedBox(width: 6),
-                      const Expanded(
-                        child: EditorAppBarTitle(),
+                      Expanded(
+                        child: isDesktop
+                            ? Center(child: _buildCommandCenter(context, workspacePath))
+                            : const EditorAppBarTitle(),
                       ),
                       const SizedBox(width: 8),
                       Row(
@@ -843,21 +844,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             },
                           ),
                           ActionIconButton(
-                            icon: LucideIcons.sparkles,
-                            color: panelState.selectedTab == PanelTab.aiAgent && panelState.isOpened
-                                ? const Color(0xFF8B5CF6)
-                                : const Color(0xFF8B5CF6).withValues(alpha: 0.85),
-                            backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
-                            borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
-                            tooltip: 'Quantum AI Агент',
-                            onTap: () {
-                              if (panelState.isOpened && panelState.selectedTab == PanelTab.aiAgent) {
-                                panelNotifier.closePanel();
-                              } else {
-                                panelNotifier.selectTab(PanelTab.aiAgent);
-                                panelNotifier.openPanel();
-                              }
-                            },
+                            icon: isDesktop ? LucideIcons.panel_right : LucideIcons.sparkles,
+                            color: ref.watch(aiDockOpenProvider) ? Colors.white : Vs.text,
+                            backgroundColor: ref.watch(aiDockOpenProvider) ? Colors.white : null,
+                            tooltip: 'Чат AI-агента (Secondary Side Bar)',
+                            onTap: () => _toggleAiDock(isDesktop),
                           ),
                           PopupMenuButton<String>(
                             tooltip: 'Ещё действия',
@@ -907,12 +898,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   break;
                                 case 'ai_agent':
                                 case 'dsh':
-                                  if (panelState.isOpened && panelState.selectedTab == PanelTab.aiAgent) {
-                                    panelNotifier.closePanel();
-                                  } else {
-                                    panelNotifier.selectTab(PanelTab.aiAgent);
-                                    panelNotifier.openPanel();
-                                  }
+                                  _toggleAiDock(isDesktop);
                                   break;
                                 case 'sync':
                                   final currentWs = ref.read(workspaceProvider).currentPath;
@@ -1013,10 +999,20 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           ),
         ),
       ),
-      endDrawer: null,
+      endDrawer: isDesktop
+          ? null
+          : Drawer(
+              width: MediaQuery.of(context).size.width.clamp(0.0, 520.0) * 0.94,
+              backgroundColor: Vs.sideBar,
+              shape: const RoundedRectangleBorder(),
+              child: SafeArea(
+                child: QuantumAiAgentPanel(onClose: () => _scaffoldKey.currentState?.closeEndDrawer()),
+              ),
+            ),
       body: _buildWorkspaceLayout(
         mainBody,
         leftOpen: isDesktop && ref.watch(leftPanelOpenProvider),
+        rightOpen: isDesktop && ref.watch(aiDockOpenProvider),
       ),
       bottomNavigationBar: _isZenMode ? null : const StatusBar(),
     ),
@@ -1054,18 +1050,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         height: targetHeight,
         clipBehavior: Clip.hardEdge,
         decoration: const BoxDecoration(
-          color: Color(0xFF0D0F14),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black54,
-              blurRadius: 10,
-              spreadRadius: 2,
-            ),
-          ],
+          color: Vs.sideBar,
+          border: Border(top: BorderSide(color: Vs.border, width: 1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1086,6 +1072,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   Widget _buildWorkspaceLayout(
     Widget mainContent, {
     required bool leftOpen,
+    bool rightOpen = false,
   }) {
     return Row(
       children: [
@@ -1141,8 +1128,76 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         Expanded(
           child: mainContent,
         ),
+        if (rightOpen) ...[
+          MouseRegion(
+            cursor: SystemMouseCursors.resizeColumn,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragUpdate: (d) {
+                final w = ref.read(aiDockWidthProvider);
+                ref.read(aiDockWidthProvider.notifier).state = (w - d.delta.dx).clamp(320.0, 760.0);
+              },
+              child: Container(
+                width: 1.5,
+                decoration: const BoxDecoration(
+                  color: Vs.border,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: ref.watch(aiDockWidthProvider).clamp(320.0, 760.0),
+            child: QuantumAiAgentPanel(
+              key: const ValueKey('aiDock'),
+              onClose: () => ref.read(aiDockOpenProvider.notifier).state = false,
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  /// «Command Center» — поле поиска по центру заголовка, как в VS Code.
+  Widget _buildCommandCenter(BuildContext context, String? workspacePath) {
+    final name = (workspacePath ?? '').split('/').where((e) => e.isNotEmpty).lastOrNull ?? 'QuantumIDE';
+    return InkWell(
+      borderRadius: BorderRadius.circular(7),
+      onTap: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 520),
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Vs.editor,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: Vs.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(LucideIcons.search, size: 13, color: Vs.textDim),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(fontSize: 12, color: Vs.textDim)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _toggleAiDock(bool isDesktop) {
+    if (isDesktop) {
+      final n = ref.read(aiDockOpenProvider.notifier);
+      n.state = !n.state;
+    } else {
+      final st = _scaffoldKey.currentState;
+      if (st == null) return;
+      st.isEndDrawerOpen ? st.closeEndDrawer() : st.openEndDrawer();
+    }
   }
 
   Widget _buildPanelHeader(
@@ -1176,27 +1231,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       },
       child: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF141722),
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-          ),
-          border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
+          color: Vs.sideBar,
+          border: Border(bottom: BorderSide(color: Vs.border, width: 1)),
         ),
-        padding: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.only(top: 2),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Drag pill
-            Container(
-              width: 36,
-              height: 3,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(1.5),
-              ),
-            ),
-            const SizedBox(height: 4),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               child: Row(
@@ -1259,14 +1300,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? tabColor.withValues(alpha: 0.12)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(5),
                                         border: Border(
                                           bottom: BorderSide(
-                                            color: isSelected ? tabColor : Colors.transparent,
-                                            width: 2.0,
+                                            color: isSelected ? Vs.accent : Colors.transparent,
+                                            width: 1.5,
                                           ),
                                         ),
                                       ),
@@ -1275,19 +1312,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         children: [
                                           Icon(
                                             _getTabIcon(tab),
-                                            size: 13,
-                                            color: isSelected ? tabColor : Colors.white54,
+                                            size: 14,
+                                            color: isSelected ? Colors.white : Vs.textDim,
                                           ),
                                           if (!isMobile || isSelected) ...[
                                             const SizedBox(width: 5),
                                             Text(
-                                              _getTabTitle(context, tab),
+                                              _getTabTitle(context, tab).toUpperCase(),
                                               style: GoogleFonts.inter(
-                                                color: isSelected ? Colors.white : Colors.white60,
+                                                color: isSelected ? Colors.white : Vs.textDim,
                                                 fontSize: 10.5,
-                                                fontWeight: isSelected
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w500,
+                                                letterSpacing: 0.3,
+                                                fontWeight: FontWeight.w500,
                                               ),
                                             ),
                                           ],
@@ -1296,7 +1332,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                               decoration: BoxDecoration(
-                                                color: tab == PanelTab.problems ? Colors.redAccent : Colors.purpleAccent,
+                                                color: Vs.badge,
                                                 borderRadius: BorderRadius.circular(6),
                                               ),
                                               constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
