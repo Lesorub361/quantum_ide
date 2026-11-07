@@ -53,12 +53,10 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // On local tablet builds, restrict to arm64-v8a to prevent corrupted 32-bit APK on Android/Xiaomi
-        if (System.getenv("GITHUB_ACTIONS") != "true") {
-            ndk {
-                abiFilters.clear()
-                abiFilters.add("arm64-v8a")
-            }
+        // Support standard target architectures (arm64-v8a, armeabi-v7a, x86_64) for universal and split-per-abi builds
+        ndk {
+            abiFilters.clear()
+            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
         }
     }
 

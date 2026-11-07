@@ -32,22 +32,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DEFAULT_NOTES: |
-        ## 🚀 QuantumIDE v1.2.165 - Предпросмотр Markdown (глазик), встроенный сервер Shelf и новые инструменты
+        ## 🚀 QuantumIDE v1.2.198 - Мультиархитектурные APK (v7/v8/x86_64) и исправление NDK CMake
 
         ### ✨ Что нового и улучшено:
-        - **Полноэкранный предпросмотр Markdown (глазик 👁️)**:
-          - Для всех файлов `.md` и `.markdown` в верхней панели редактора добавлена кнопка «глазик».
-          - Мгновенное переключение между режимом редактирования и предпросмотром (как в GitHub и VS Code).
-          - Красивый рендеринг заголовков, цитат, списков задач с чекбоксами, таблиц, формул LaTeX и блоков кода с кнопками копирования.
-          - Добавлена кнопка быстрого копирования всего Markdown и статистика (строки / слова).
-        - **Встроенный локальный веб-сервер**:
-          - Добавлены `shelf` и `shelf_static` для запуска локального легковесного веб-сервера (<2 МБ RAM) для предпросмотра веб-проектов без Node.js.
-        - **Инструменты виртуализации и интерфейса (`pubspec.yaml`)**:
-          - **`flutter_fancy_tree_view`**: виртуализированное дерево файлов для плавного скролла 10 000+ файлов.
-          - **`substring_highlight`**: подсветка совпадений в поиске файлов (Quick Open).
-          - **`ansicolor`**: форматирование и раскраска терминального вывода ANSI.
-          - **`xml`**: официальный XML/SVG парсер и билдер.
-          - **`json_path`**: извлечение данных из JSON-конфигураций проекта.
+        - **Мультиархитектурная сборка APK (Split-per-ABI)**:
+          - Сборка и публикация отдельных оптимизированных APK под каждую архитектуру: `arm64-v8a` (v8), `armeabi-v7a` (v7) и `x86_64`.
+          - Раздельные легковесные пакеты для максимальной производительности без конфликтов библиотек.
+        - **Исправление сборки NDK & CMake**:
+          - Устранена ошибка парсинга ревизии Android NDK (`Failed to parse Android NDK revision: source.properties`) при сборке нативных модулей CMake.
+          - Добавлены терминальные команды `build-apk-split` и `fb-apk-split` для быстрой сборки нескольких версий прямо в IDE.
+          - В скрипт `build.sh` добавлена цель `android-split`.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -115,6 +109,17 @@ jobs:
               }
             done
           fi
+          # Ensure NDK source.properties has Pkg.Desc first so CMake legacy toolchain regex never fails
+          for sp in "$ANDROID_HOME"/ndk/*/source.properties; do
+            [ -f "$sp" ] || continue
+            rev=$(grep 'Pkg.Revision' "$sp" | cut -d'=' -f2 | tr -d ' ')
+            printf "Pkg.Desc = Android NDK\nPkg.Revision = %s\nPkg.BaseRevision = %s\n" "$rev" "$rev" > "$sp"
+          done
+          # Also patch android-legacy.toolchain.cmake if present in NDK
+          for tc in "$ANDROID_HOME"/ndk/*/build/cmake/android-legacy.toolchain.cmake; do
+            [ -f "$tc" ] || continue
+            sed -i 's/\^Pkg\\\.Desc = Android NDK/Pkg\\\.Desc = Android NDK/g' "$tc" || true
+          done
 
       - name: Get dependencies
         run: flutter pub get

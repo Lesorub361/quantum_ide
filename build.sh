@@ -170,6 +170,19 @@ build_android_apk() {
     fi
 }
 
+# Function to build Android APKs split per ABI (v7a, v8a, x86_64)
+build_android_apk_split() {
+    log "INFO" "Building Android APKs (Release Split-per-ABI: arm64-v8a, armeabi-v7a, x86_64)..."
+    cd "$PROJECT_ROOT"
+    
+    flutter build apk --release --split-per-abi --no-tree-shake-icons 2>&1 | tee -a "$BUILD_LOG" || {
+        error "Android APK split build failed"
+    }
+    
+    success "Android APKs split-per-abi complete!"
+    ls -lh "$PROJECT_ROOT/build/app/outputs/flutter-apk/"*.apk | tee -a "$BUILD_LOG"
+}
+
 # Function to build Android App Bundle
 build_android_aab() {
     log "INFO" "Building Android App Bundle (release)..."
@@ -227,6 +240,9 @@ main() {
         android)
             build_android_apk
             ;;
+        android-split)
+            build_android_apk_split
+            ;;
         android-aab)
             build_android_aab
             ;;
@@ -254,10 +270,11 @@ Build Modes:
   profile     - Build with profiling enabled
 
 Platforms:
-  linux       - Build for Linux desktop
-  android     - Build Android APK
-  android-aab - Build Android App Bundle
-  all         - Build for all platforms (default)
+  linux         - Build for Linux desktop
+  android       - Build Android APK (universal)
+  android-split - Build Android APKs split per ABI (arm64-v8a, armeabi-v7a, x86_64)
+  android-aab   - Build Android App Bundle
+  all           - Build for all platforms (default)
 
 Examples:
   ./build.sh debug linux          # Debug build for Linux
