@@ -33,8 +33,8 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_wi
 import 'package:quantum_ide/features/terminal/presentation/widgets/quantum_terminal_scroll_controller.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_text_selection_modal.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_selection_overlay.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/quantum_terminal_tools_modal.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart';
-import 'package:quantum_ide/features/terminal/engine/quantum_terminal_engine.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -766,6 +766,22 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     }
     if (value == 'copy_all_output') {
       _copyTerminalOutputDirect(session);
+      return;
+    }
+    if (value == 'terminal_hub') {
+      QuantumTerminalToolsModal.show(context, session);
+      return;
+    }
+    if (value == 'insert_path') {
+      QuantumTerminalToolsModal.show(context, session, initialTab: TerminalToolTab.filePicker);
+      return;
+    }
+    if (value == 'terminal_history') {
+      QuantumTerminalToolsModal.show(context, session, initialTab: TerminalToolTab.commandHistory);
+      return;
+    }
+    if (value == 'terminal_processes') {
+      QuantumTerminalToolsModal.show(context, session, initialTab: TerminalToolTab.processManager);
       return;
     }
     if (value.startsWith('cmd:')) {
@@ -1801,6 +1817,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     l10n.newSession,
                     () => notifier.createNewSession(),
                     color: Colors.cyanAccent,
+                  ),
+                  const SizedBox(width: 3),
+                  _buildTerminalActionButton(
+                    LucideIcons.sparkles,
+                    'Quantum Terminal Hub (ИИ, Пути, Процессы)',
+                    () => QuantumTerminalToolsModal.show(context, currentSession),
+                    color: const Color(0xFFC084FC),
                   ),
                   const SizedBox(width: 4),
                   Material(

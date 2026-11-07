@@ -785,6 +785,9 @@ alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
+alias lg="lazygit"
+export EDITOR=micro
+export VISUAL=micro
 alias fb-apk="flutter build apk --debug"
 alias fb-apk-release="flutter build apk --release"
 alias fb-bundle="flutter build appbundle --release"
@@ -1184,6 +1187,9 @@ alias ll='ls -la --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
 alias grep='grep --color=auto'
+alias lg="lazygit"
+export EDITOR=micro
+export VISUAL=micro
 alias fb-apk="flutter build apk --debug"
 alias fb-apk-release="flutter build apk --release"
 alias fb-bundle="flutter build appbundle --release"
@@ -2775,7 +2781,7 @@ if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! com
         ncurses-base ncurses-term ncurses-bin \
         readline-common libreadline8 \
         bash-completion \
-        less nano vim tmux htop tree jq ncdu \
+        less nano vim micro tmux htop tree jq ncdu \
         procps psmisc \
         file ca-certificates \
         locales ripgrep fzf iproute2 iputils-ping net-tools lsof \
@@ -2785,6 +2791,9 @@ if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! com
     ln -sf /usr/bin/fdfind /usr/bin/fd 2>/dev/null || true
     ln -sf /usr/bin/batcat /usr/bin/bat 2>/dev/null || true
     corepack enable 2>/dev/null || true
+    if ! command -v lazygit >/dev/null 2>&1; then
+        (curl -sSL "https://github.com/jesseduffield/lazygit/releases/download/v0.66.2/lazygit_0.66.2_linux_arm64.tar.gz" | tar -xz -C /tmp && mv /tmp/lazygit /usr/local/bin/lazygit && chmod +x /usr/local/bin/lazygit) 2>/dev/null || true
+    fi
 fi
 
 # Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail

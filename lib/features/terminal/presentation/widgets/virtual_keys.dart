@@ -44,11 +44,13 @@ class VirtualKeysView extends ConsumerStatefulWidget {
 
 class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
   List<VirtualKey> _getCompactKeys(bool isRu) => [
-    VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
+    const VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
     VirtualKey(label: 'TAB', value: '\t', tooltip: isRu ? 'Tab / Автодополнение' : 'Tab / Autocomplete'),
     VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: isRu ? 'Зажать Ctrl' : 'Toggle Ctrl'),
     VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: isRu ? 'Зажать Alt' : 'Toggle Alt'),
     VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: isRu ? 'Прервать процесс (Ctrl+C)' : 'Interrupt process (Ctrl+C)'),
+    VirtualKey(label: 'HUB', value: 'terminal_hub', icon: LucideIcons.sparkles, tooltip: isRu ? 'Инструменты и ИИ' : 'Tools & AI Hub'),
+    VirtualKey(label: 'PATH', value: 'insert_path', icon: LucideIcons.folder, tooltip: isRu ? 'Вставить путь к файлу' : 'Insert File Path'),
     VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: isRu ? 'Вставить из буфера' : 'Paste from clipboard'),
     VirtualKey(label: '←', value: '\x1b[D', icon: LucideIcons.arrow_left, tooltip: isRu ? 'Влево' : 'Left'),
     VirtualKey(label: '↑', value: '\x1b[A', icon: LucideIcons.arrow_up, tooltip: isRu ? 'Вверх' : 'Up'),
@@ -57,11 +59,13 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
   ];
 
   List<VirtualKey> _getRow1Keys(bool isRu) => [
-    VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
+    const VirtualKey(label: 'ESC', value: '\x1b', tooltip: 'Escape'),
     VirtualKey(label: 'TAB', value: '\t', tooltip: isRu ? 'Tab / Автодополнение' : 'Tab / Autocomplete'),
     VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: isRu ? 'Зажать Ctrl' : 'Toggle Ctrl'),
     VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: isRu ? 'Зажать Alt' : 'Toggle Alt'),
     VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true, tooltip: isRu ? 'Зажать Shift' : 'Toggle Shift'),
+    VirtualKey(label: 'HUB', value: 'terminal_hub', icon: LucideIcons.sparkles, tooltip: isRu ? 'Инструменты и ИИ' : 'Tools & AI Hub'),
+    VirtualKey(label: 'PATH', value: 'insert_path', icon: LucideIcons.folder, tooltip: isRu ? 'Вставить путь к файлу' : 'Insert File Path'),
     VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: isRu ? 'Вставить из буфера' : 'Paste from clipboard'),
     VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: isRu ? 'Прервать процесс (Ctrl+C)' : 'Interrupt process (Ctrl+C)'),
   ];
@@ -537,6 +541,9 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
     {'label': 'git pull', 'cmd': 'git pull\n', 'badge': 'Git'},
     {'label': 'git push', 'cmd': 'git push\n', 'badge': 'Git'},
     {'label': 'ls -la', 'cmd': 'ls -la\n', 'badge': 'Shell'},
+    {'label': 'lazygit', 'cmd': 'lazygit\n', 'badge': 'Git TUI'},
+    {'label': 'micro', 'cmd': 'micro\n', 'badge': 'Touch Edit'},
+    {'label': 'htop', 'cmd': 'htop\n', 'badge': 'Monitor'},
     {'label': 'df -h & free -m', 'cmd': 'df -h && free -m\n', 'badge': 'Sys'},
     {'label': './gradlew assembleDebug', 'cmd': 'bash ./gradlew assembleDebug\n', 'badge': 'Gradle'},
   ];
