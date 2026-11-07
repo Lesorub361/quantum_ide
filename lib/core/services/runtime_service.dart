@@ -2404,7 +2404,7 @@ WRAP_EOF
                     fi
                     ln -sfn "$item" "$TARGET_NDK/$name" 2>/dev/null || true
                 done
-                printf "Pkg.BaseRevision = %s\nPkg.Desc = Android NDK\nPkg.Revision = %s\n" "$ver" "$ver" > "$TARGET_NDK/source.properties"
+                printf "Pkg.Desc = Android NDK\nPkg.Revision = %s\nPkg.BaseRevision = %s\n" "$ver" "$ver" > "$TARGET_NDK/source.properties"
                 if [ -f "$BASE_NDK/package.xml" ]; then
                     major=$(echo "$ver" | cut -d. -f1)
                     minor=$(echo "$ver" | cut -d. -f2)
@@ -2481,7 +2481,7 @@ for fl_dir in "${FLUTTER_ROOT:-}" "/root/flutter" "$HOME/flutter" "/data/data/co
     FLUTTER_ENGINE="$fl_dir/bin/cache/artifacts/engine"
     ENGINE_HASH=$(cat "$fl_dir/bin/internal/engine.version" 2>/dev/null || true)
     for mode in release profile; do
-        for arch in arm64 arm; do
+        for arch in arm64 arm x64; do
             TARGET_PARENT="$FLUTTER_ENGINE/android-$arch-$mode"
             [ -d "$TARGET_PARENT" ] || mkdir -p "$TARGET_PARENT" 2>/dev/null || true
             ENGINE_DIR="$TARGET_PARENT/linux-arm64"
@@ -2768,7 +2768,7 @@ echo "$$" > "$LOCKFILE"
 trap 'rm -f "$LOCKFILE"' EXIT INT TERM
 
 # Ensure all essential terminal utilities, ADB/Fastboot, and firmware flashing tools are installed
-if ! command -v adb >/dev/null 2>&1 || ! command -v fastboot >/dev/null 2>&1 || ! command -v less >/dev/null 2>&1 || ! command -v nano >/dev/null 2>&1 || ! command -v infocmp >/dev/null 2>&1 || [ ! -f /etc/bash_completion ]; then
+if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! command -v vim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1 || ! command -v pip3 >/dev/null 2>&1 || ! command -v rg >/dev/null 2>&1 || ! command -v fdfind >/dev/null 2>&1 || ! command -v batcat >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
     apt-get install -y --no-install-recommends \
@@ -2780,7 +2780,11 @@ if ! command -v adb >/dev/null 2>&1 || ! command -v fastboot >/dev/null 2>&1 || 
         file ca-certificates \
         locales ripgrep fzf iproute2 iputils-ping net-tools lsof \
         android-tools-adb android-tools-fastboot \
-        usbutils aria2 p7zip-full zstd brotli libusb-1.0-0 >/dev/null 2>&1 || true
+        usbutils aria2 p7zip-full zstd brotli libusb-1.0-0 \
+        python3-pip fd-find bat rsync >/dev/null 2>&1 || true
+    ln -sf /usr/bin/fdfind /usr/bin/fd 2>/dev/null || true
+    ln -sf /usr/bin/batcat /usr/bin/bat 2>/dev/null || true
+    corepack enable 2>/dev/null || true
 fi
 
 # Ensure Python 3 standard library (ntpath, pathlib) is installed so generators/builds never fail

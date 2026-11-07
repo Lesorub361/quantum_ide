@@ -52,12 +52,6 @@ android {
         multiDexEnabled = true
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // Support standard target architectures (arm64-v8a, armeabi-v7a, x86_64) for universal and split-per-abi builds
-        ndk {
-            abiFilters.clear()
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a", "x86_64"))
-        }
     }
 
     packaging {

@@ -528,6 +528,7 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
     {'label': 'flutter pub get', 'cmd': 'flutter pub get\n', 'badge': 'Flutter'},
     {'label': 'flutter run', 'cmd': 'flutter run\n', 'badge': 'Flutter'},
     {'label': 'flutter build apk', 'cmd': 'flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation\n', 'badge': 'Build'},
+    {'label': 'flutter build apk (split)', 'cmd': 'flutter build apk --release --split-per-abi\n', 'badge': 'Build'},
     {'label': 'flutter build appbundle', 'cmd': 'flutter build appbundle --release --target-platform android-arm64 --android-skip-build-dependency-validation\n', 'badge': 'Build'},
     {'label': 'flutter analyze', 'cmd': 'flutter analyze\n', 'badge': 'Check'},
     {'label': 'flutter clean', 'cmd': 'flutter clean\n', 'badge': 'Clean'},
