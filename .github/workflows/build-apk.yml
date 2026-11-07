@@ -120,11 +120,23 @@ jobs:
         run: flutter pub get
 
       - name: Build release APK (Universal & Split ABIs)
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8'"
         run: |
-          sed -i 's/-Xmx896m/-Xmx4096m/g' android/gradle.properties
+          sed -i '/org.gradle.jvmargs/d' android/gradle.properties
+          sed -i '/kotlin.compiler.execution.strategy/d' android/gradle.properties
+          sed -i '/android.aapt2FromMavenOverride/d' android/gradle.properties
           sed -i 's/org.gradle.daemon=false/org.gradle.daemon=true/g' android/gradle.properties
           sed -i 's/org.gradle.parallel=false/org.gradle.parallel=true/g' android/gradle.properties
-          sed -i 's/org.gradle.workers.max=1/org.gradle.workers.max=4/g' android/gradle.properties
+          sed -i 's/org.gradle.workers.max=.*/org.gradle.workers.max=4/g' android/gradle.properties
+          sed -i 's/android.aapt2FromMaven=false/android.aapt2FromMaven=true/g' android/gradle.properties
+          cat << 'EOF' >> android/gradle.properties
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+          kotlin.compiler.execution.strategy=daemon
+          kotlin.daemon.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+          EOF
+          echo "=== Effective android/gradle.properties for CI ==="
+          cat android/gradle.properties
           flutter build apk --release --no-tree-shake-icons
           cp build/app/outputs/flutter-apk/app-release.apk /tmp/app-universal-release.apk
           flutter build apk --release --split-per-abi --no-tree-shake-icons

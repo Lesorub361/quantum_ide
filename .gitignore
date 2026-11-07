@@ -69,3 +69,4 @@ android/gradle-wrapper.zip
 # Local plugins vendored C++ engine and gradle caches
 local_plugins/**/.gradle/
 .local/
+test/scratch_test.dart
