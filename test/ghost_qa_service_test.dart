@@ -8,6 +8,9 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('GhostQAService Tests', () {
+    setUp(() {
+      GhostQAService.instance.authorizeDirectly();
+    });
     test('Owner authorization test', () {
       final service = GhostQAService.instance;
       // In this dev container, owner_qa.key was created, so isAuthorized is true

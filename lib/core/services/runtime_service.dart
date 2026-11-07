@@ -1697,11 +1697,32 @@ ROOTFS="\$FILES_DIR/rootfs/ubuntu"
 TMPDIR="\$FILES_DIR/tmp"
 CONFIG="\$FILES_DIR/config"
 
-# Create proc/sys fakes if missing to avoid proot warnings
+# Create proc/sys fakes if missing or empty to avoid proot warnings and support ps/top/uptime
 mkdir -p "\$CONFIG/proc_fakes" "\$CONFIG/sys_fakes"
-touch "\$CONFIG/proc_fakes/loadavg" "\$CONFIG/proc_fakes/stat" "\$CONFIG/proc_fakes/uptime" 
-touch "\$CONFIG/proc_fakes/version" "\$CONFIG/proc_fakes/vmstat" "\$CONFIG/proc_fakes/cap_last_cap"
-touch "\$CONFIG/proc_fakes/max_user_watches" "\$CONFIG/proc_fakes/fips_enabled"
+if [ ! -s "\$CONFIG/proc_fakes/loadavg" ]; then
+    echo "0.10 0.10 0.10 1/100 1000" > "\$CONFIG/proc_fakes/loadavg"
+fi
+if [ ! -s "\$CONFIG/proc_fakes/stat" ]; then
+    printf "cpu  2255 34 2290 22625 150 0 0 0 0 0\\ncpu0 1132 17 1145 11312 75 0 0 0 0 0\\ncpu1 1123 17 1145 11313 75 0 0 0 0 0\\nbtime 1700000000\\nprocesses 1000\\nprocs_running 1\\nprocs_blocked 0\\n" > "\$CONFIG/proc_fakes/stat"
+fi
+if [ ! -s "\$CONFIG/proc_fakes/uptime" ]; then
+    echo "3600.00 7200.00" > "\$CONFIG/proc_fakes/uptime"
+fi
+if [ ! -s "\$CONFIG/proc_fakes/version" ]; then
+    echo "Linux version 6.1.0-quantum (root@localhost) (gcc version 11.4.0) #1 SMP PREEMPT 2026" > "\$CONFIG/proc_fakes/version"
+fi
+if [ ! -s "\$CONFIG/proc_fakes/vmstat" ]; then
+    printf "nr_free_pages 100000\\nnr_active_anon 50000\\nnr_inactive_anon 50000\\n" > "\$CONFIG/proc_fakes/vmstat"
+fi
+if [ ! -s "\$CONFIG/proc_fakes/cap_last_cap" ]; then
+    echo "40" > "\$CONFIG/proc_fakes/cap_last_cap"
+fi
+if [ ! -s "\$CONFIG/proc_fakes/max_user_watches" ]; then
+    echo "1048576" > "\$CONFIG/proc_fakes/max_user_watches"
+fi
+if [ ! -s "\$CONFIG/proc_fakes/fips_enabled" ]; then
+    echo "0" > "\$CONFIG/proc_fakes/fips_enabled"
+fi
 touch "\$CONFIG/sys_fakes/empty"
 CONFIG="\$FILES_DIR/config"
 

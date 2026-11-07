@@ -324,24 +324,28 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       final file = File(path);
       if (Platform.isAndroid) {
         try {
-          final runtime = ref.read(runtimeServiceProvider);
-          final extPath = PathMapper.mapToExternal(path, runtime.appDirectory);
-          if (extPath != path) {
-            final extFile = File(extPath);
-            if (await extFile.exists()) {
-              final extStat = await extFile.stat();
-              if (extStat.size > 0) {
-                if (!await file.exists()) {
-                  await file.parent.create(recursive: true);
-                  await extFile.copy(path);
-                } else {
-                  final intStat = await file.stat();
-                  if (intStat.size == 0 ||
-                      extStat.modified.isAfter(intStat.modified.add(const Duration(seconds: 1)))) {
+          final prefs = await SharedPreferences.getInstance();
+          final syncEnabled = prefs.getBool('settings_sd_card_sync') ?? false;
+          if (syncEnabled) {
+            final runtime = ref.read(runtimeServiceProvider);
+            final extPath = PathMapper.mapToExternal(path, runtime.appDirectory);
+            if (extPath != path) {
+              final extFile = File(extPath);
+              if (await extFile.exists()) {
+                final extStat = await extFile.stat();
+                if (extStat.size > 0) {
+                  if (!await file.exists()) {
+                    await file.parent.create(recursive: true);
                     await extFile.copy(path);
-                    try {
-                      await file.setLastModified(extStat.modified);
-                    } catch (_) {}
+                  } else {
+                    final intStat = await file.stat();
+                    if (intStat.size == 0 ||
+                        extStat.modified.isAfter(intStat.modified.add(const Duration(seconds: 1)))) {
+                      await extFile.copy(path);
+                      try {
+                        await file.setLastModified(extStat.modified);
+                      } catch (_) {}
+                    }
                   }
                 }
               }

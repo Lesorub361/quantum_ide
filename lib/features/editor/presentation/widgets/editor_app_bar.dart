@@ -234,7 +234,7 @@ class EditorTabBar extends ConsumerWidget {
                       duration: const Duration(milliseconds: 160),
                       curve: Curves.easeOutCubic,
                       margin: const EdgeInsets.only(right: 5),
-                      padding: const EdgeInsets.fromLTRB(10, 4, 8, 4),
+                      padding: const EdgeInsets.fromLTRB(10, 2, 8, 2),
                       decoration: BoxDecoration(
                         gradient: isActive
                             ? const LinearGradient(

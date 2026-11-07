@@ -1,16 +1,16 @@
 {
-  "versionCode": 210,
-  "versionName": "1.2.193",
-  "notes": "QuantumIDE v1.2.193:\n• 🎨 Живая интерактивная кастомизация UI и кнопок (UI Customizer): полная настройка высоты клавиш (слайдер 22–46px), размера шрифта (9–16pt), компактного режима, порядка и видимости кнопок в реальном времени с мгновенным предпросмотром!\n• 🧩 Настройка всех панелей: перетаскивание (drag-and-drop) и тумблеры включения/отключения вкладок терминала (Run, Build, ADB, Problems, Git, AI) и разделов боковой панели.\n• 🤖 Интеграция с терминальными ИИ-агентами (agy / Antigravity / Claude): автоэкспорт раскладки в .quantum/plugins/ui_layout.json, генерация готового промпта и мгновенное обновление UI «на лету» без перезапуска IDE благодаря встроенному файловому наблюдателю!",
+  "versionCode": 214,
+  "versionName": "1.2.197",
+  "notes": "QuantumIDE v1.2.197:\n• 🛡️ Исправлен FastSyntaxEngine: корректная обработка тройных кавычек ('''/\"\"\") и регулярных выражений без ложных синтаксических ошибок.\n• ⚡ Исправлен мониторинг CPU: валидные структуры /proc/stat, /proc/uptime и /proc/loadavg в PRoot для бесперебойной работы ps и статус-бара.\n• 🚀 Оптимизация Dart LSP: увеличение лимита кучи с 128 МБ до 512 МБ для стабильного анализа больших проектов без GC фризов.\n• 🔒 Защита файлов проекта: предотвращение повреждения и слепой перезаписи файлов с SD-карты при отключенной внешней синхронизации.\n• 🎨 Исправлен оверфлоу верстки (0.1px RenderFlex) во вкладках редактора.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.193/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.197/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.193",
-  "buildNumber": 210,
-  "tag_name": "v1.2.193",
-  "releaseNotes": "Live UI & Virtual Keypad Customizer with drag-and-drop ordering, height/font sliders, tab toggles, in-terminal AI agent plugin integration (.quantum/plugins/ui_layout.json), and automatic real-time layout reload."
+  "version": "1.2.197",
+  "buildNumber": 214,
+  "tag_name": "v1.2.197",
+  "releaseNotes": "Fix FastSyntaxEngine triple-quote false positives, repair PRoot proc fakes for CPU stats & ps, boost Dart LSP heap to 512MB, guard internal files against external SD overwrite, and fix editor tab RenderFlex overflow."
 }

@@ -55,97 +55,185 @@ class FastSyntaxEngine {
     int multiLineCommentStartLine = 0;
     int multiLineCommentStartCol = 0;
 
+    bool inTripleSingle = false;
+    bool inTripleDouble = false;
+    int tripleStartLine = 0;
+    int tripleStartCol = 0;
+
     for (int lineIdx = 0; lineIdx < lines.length; lineIdx++) {
       final line = lines[lineIdx];
-      bool inSingleQuote = false;
-      bool inDoubleQuote = false;
+      bool inSingle = false;
+      bool inDouble = false;
+      bool isRaw = false;
       bool isEscaped = false;
+      int col = 0;
+      final lineLen = line.length;
 
-      for (int colIdx = 0; colIdx < line.length; colIdx++) {
-        final char = line[colIdx];
-        final nextChar = (colIdx + 1 < line.length) ? line[colIdx + 1] : '';
+      while (col < lineLen) {
+        final c = line[col];
+        final c2 = (col + 2 <= lineLen) ? line.substring(col, col + 2) : '';
+        final c3 = (col + 3 <= lineLen) ? line.substring(col, col + 3) : '';
 
-        // Handle multi-line comment end
+        // 1. Multi-line block comment
         if (inMultiLineComment) {
-          if (char == '*' && nextChar == '/') {
+          if (c2 == '*/') {
             inMultiLineComment = false;
-            colIdx++; // skip slash
+            col += 2;
+          } else {
+            col += 1;
           }
           continue;
         }
 
-        // Handle escape characters inside strings
-        if (isEscaped) {
-          isEscaped = false;
-          continue;
-        }
-        if (char == '\\' && (inSingleQuote || inDoubleQuote)) {
-          isEscaped = true;
-          continue;
-        }
-
-        // Handle string literals
-        if (char == "'" && !inDoubleQuote) {
-          inSingleQuote = !inSingleQuote;
-          continue;
-        }
-        if (char == '"' && !inSingleQuote) {
-          inDoubleQuote = !inDoubleQuote;
+        // 2. Multi-line triple quotes (Dart/Python/Kotlin)
+        if (inTripleSingle) {
+          if (c3 == "'''") {
+            inTripleSingle = false;
+            col += 3;
+          } else {
+            col += 1;
+          }
           continue;
         }
 
-        // Skip anything inside quotes
-        if (inSingleQuote || inDoubleQuote) continue;
-
-        // Comments
-        if (char == '/' && nextChar == '/') {
-          // Rest of line is single-line comment
-          break;
+        if (inTripleDouble) {
+          if (c3 == '"""') {
+            inTripleDouble = false;
+            col += 3;
+          } else {
+            col += 1;
+          }
+          continue;
         }
-        if (char == '/' && nextChar == '*') {
+
+        // 3. Inside single-line quotes
+        if (inSingle) {
+          if (!isRaw && isEscaped) {
+            isEscaped = false;
+            col += 1;
+            continue;
+          }
+          if (!isRaw && c == r'\') {
+            isEscaped = true;
+            col += 1;
+            continue;
+          }
+          if (c == "'") {
+            inSingle = false;
+            isRaw = false;
+            col += 1;
+            continue;
+          }
+          col += 1;
+          continue;
+        }
+
+        if (inDouble) {
+          if (!isRaw && isEscaped) {
+            isEscaped = false;
+            col += 1;
+            continue;
+          }
+          if (!isRaw && c == r'\') {
+            isEscaped = true;
+            col += 1;
+            continue;
+          }
+          if (c == '"') {
+            inDouble = false;
+            isRaw = false;
+            col += 1;
+            continue;
+          }
+          col += 1;
+          continue;
+        }
+
+        // 4. Check for raw string prefix 'r' or 'R' before quote
+        if ((c == 'r' || c == 'R') && col + 1 < lineLen && (line[col + 1] == "'" || line[col + 1] == '"')) {
+          isRaw = true;
+          col += 1;
+          continue;
+        }
+
+        // 5. Comments
+        if (c2 == '//') {
+          break; // rest of line is comment
+        }
+        if (c2 == '/*') {
           inMultiLineComment = true;
           multiLineCommentStartLine = lineIdx;
-          multiLineCommentStartCol = colIdx;
-          colIdx++;
+          multiLineCommentStartCol = col;
+          col += 2;
           continue;
         }
 
-        // Bracket matching
-        if (char == '{' || char == '(' || char == '[') {
-          bracketStack.add(_BracketToken(char, lineIdx, colIdx));
-        } else if (char == '}' || char == ')' || char == ']') {
+        // 6. Triple quotes
+        if (c3 == "'''") {
+          inTripleSingle = true;
+          tripleStartLine = lineIdx;
+          tripleStartCol = col;
+          col += 3;
+          continue;
+        }
+        if (c3 == '"""') {
+          inTripleDouble = true;
+          tripleStartLine = lineIdx;
+          tripleStartCol = col;
+          col += 3;
+          continue;
+        }
+
+        // 7. Single-line quotes
+        if (c == "'") {
+          inSingle = true;
+          col += 1;
+          continue;
+        }
+        if (c == '"') {
+          inDouble = true;
+          col += 1;
+          continue;
+        }
+
+        if (isRaw) {
+          isRaw = false;
+        }
+
+        // 8. Bracket matching
+        if (c == '{' || c == '(' || c == '[') {
+          bracketStack.add(_BracketToken(c, lineIdx, col));
+        } else if (c == '}' || c == ')' || c == ']') {
           if (bracketStack.isEmpty) {
             diagnostics.add(CodeDiagnostic(
-              range: CodeLineRange(index: lineIdx, start: colIdx, end: colIdx + 1),
-              message: 'Лишняя закрывающая скобка «$char», нет соответствующей открывающей',
+              range: CodeLineRange(index: lineIdx, start: col, end: col + 1),
+              message: 'Лишняя закрывающая скобка «$c», нет соответствующей открывающей',
               severity: CodeDiagnosticSeverity.error,
             ));
           } else {
             final last = bracketStack.removeLast();
-            final expected = _matchingOpeningBracket(char);
+            final expected = _matchingOpeningBracket(c);
             if (last.char != expected) {
               diagnostics.add(CodeDiagnostic(
-                range: CodeLineRange(index: lineIdx, start: colIdx, end: colIdx + 1),
-                message: 'Несоответствие скобок: ожидалась закрывающая для «${last.char}» (со стр. ${last.line + 1}), но найдена «$char»',
+                range: CodeLineRange(index: lineIdx, start: col, end: col + 1),
+                message: 'Несоответствие скобок: ожидалась закрывающая для «${last.char}» (со стр. ${last.line + 1}), но найдена «$c»',
                 severity: CodeDiagnosticSeverity.error,
               ));
             }
           }
         }
+
+        col += 1;
       }
 
-      // Check unclosed single-line strings
-      if (inSingleQuote || inDoubleQuote) {
-        // Multi-line strings in Dart are triple quotes (''' or """)
-        final isTripleQuote = line.contains("'''") || line.contains('"""');
-        if (!isTripleQuote) {
-          final q = inSingleQuote ? "'" : '"';
-          diagnostics.add(CodeDiagnostic(
-            range: CodeLineRange(index: lineIdx, start: line.length - 1, end: line.length),
-            message: 'Синтаксическая ошибка: незакрытая кавычка $q в конце строки',
-            severity: CodeDiagnosticSeverity.error,
-          ));
-        }
+      // Check unclosed single-line strings at end of line
+      if (inSingle || inDouble) {
+        final q = inSingle ? "'" : '"';
+        diagnostics.add(CodeDiagnostic(
+          range: CodeLineRange(index: lineIdx, start: lineLen > 0 ? lineLen - 1 : 0, end: lineLen),
+          message: 'Синтаксическая ошибка: незакрытая кавычка $q в конце строки',
+          severity: CodeDiagnosticSeverity.error,
+        ));
       }
     }
 
@@ -159,6 +247,20 @@ class FastSyntaxEngine {
         ),
         message: 'Незакрытый многострочный комментарий /* ... */',
         severity: CodeDiagnosticSeverity.warning,
+      ));
+    }
+
+    // Unterminated triple quotes
+    if (inTripleSingle || inTripleDouble) {
+      final tq = inTripleSingle ? "'''" : '"""';
+      diagnostics.add(CodeDiagnostic(
+        range: CodeLineRange(
+          index: tripleStartLine,
+          start: tripleStartCol,
+          end: tripleStartCol + 3,
+        ),
+        message: 'Незакрытая многострочная строка $tq',
+        severity: CodeDiagnosticSeverity.error,
       ));
     }
 
