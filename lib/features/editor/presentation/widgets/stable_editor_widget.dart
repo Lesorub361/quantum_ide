@@ -1381,43 +1381,25 @@ class ActionIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = color ?? Colors.white.withValues(alpha: 0.85);
-    final isCustomColor = color != null && color != Colors.white70 && color != Colors.white;
-
-    final effectiveBg = backgroundColor ??
-        (isCustomColor
-            ? color!.withValues(alpha: 0.12)
-            : const Color(0xFF161922).withValues(alpha: 0.85));
-
-    final effectiveBorder = borderColor ??
-        (isCustomColor
-            ? color!.withValues(alpha: 0.28)
-            : Colors.white.withValues(alpha: 0.08));
+    final effectiveColor = color ?? const Color(0xFF94A3B8);
+    final effectiveBg = backgroundColor ?? const Color(0xFF141720);
+    final effectiveBorder = borderColor ?? Colors.white.withValues(alpha: 0.08);
 
     Widget button = Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        splashColor: (color ?? Colors.cyanAccent).withValues(alpha: 0.2),
-        highlightColor: (color ?? Colors.cyanAccent).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(7),
+        splashColor: Colors.white.withValues(alpha: 0.08),
+        highlightColor: Colors.white.withValues(alpha: 0.04),
         child: Container(
           width: size,
           height: size,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: effectiveBg,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(7),
             border: Border.all(color: effectiveBorder, width: 0.8),
-            boxShadow: isCustomColor
-                ? [
-                    BoxShadow(
-                      color: color!.withValues(alpha: 0.08),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
           ),
           child: Icon(
             icon,

@@ -1,16 +1,16 @@
 {
-  "versionCode": 216,
-  "versionName": "1.2.199",
-  "notes": "QuantumIDE v1.2.199:\n• 🚀 Terminal Hub & AI Assistant: интеграция панели инструментов терминала с ИИ-анализом ошибок и автогенерацией команд.\n• 📂 Touch Path Picker: интерактивный выбор и вставка путей к файлам прямо в терминал или открытие в Micro.\n• 📜 Поиск по истории команд терминала с быстрой вставкой/запуском.\n• ⚙️ Диспетчер процессов и ОЗУ: очистка Gradle daemon, остановка висящих Node.js процессов, освобождение памяти.\n• 🛠️ Предустановлены современные консольные утилиты: Micro editor, Lazygit (lg), Htop, Jq, Fd, Bat, Ripgrep.",
+  "versionCode": 217,
+  "versionName": "1.2.200",
+  "notes": "QuantumIDE v1.2.200:\n• 🛡️ Исправлена порча кода при автосохранении и сворачивании IDE: блокировка параллельных сохранений (_savingPaths), сохранение только изменённых вкладок (isModified), отключение автоформатирования LSP при автосохранении и защита applyLSPEdits.\n• 📊 Точный Диспетчер задач и статус-бар: исправлены 0% CPU на Android 14+, масштабирование загрузки GPU Adreno по частоте (gpuclk/max_gpuclk) и убрана двойная скобка в названии процессора.\n• 💻 Стабильный терминал и TUI (Claude Code / Gemini CLI): устранено дублирование слов при выводе, увеличено окно буферизации OSC 8 / CSI последовательностей до 2048 байт и синхронизирован размер строк/колонок PTY.\n• 🤖 Боковая изменяемая панель Quantum AI (справа на ПК/планшетах), 9 AI-провайдеров (OpenRouter, DeepSeek, Claude, Gemini, OpenAI, Groq, Mistral, xAI Grok, Ollama), прикрепление файлов (📎) и фото (🖼️), а также строгий монохромный дизайн кнопок.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.199/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.200/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.199",
-  "buildNumber": 216,
-  "tag_name": "v1.2.199",
-  "releaseNotes": "Terminal Supercharged: AI Error Inspector & Command Generator, Touch Path Picker, History Search, Process & Memory Manager, Micro editor, Lazygit, bat, fd, ripgrep."
+  "version": "1.2.200",
+  "buildNumber": 217,
+  "tag_name": "v1.2.200",
+  "releaseNotes": "Critical fixes: prevent LSP/auto-save file corruption on app switch, accurate CPU/GPU metrics in Task Manager, fix terminal duplicate words & TUI column alignment, right-side resizable AI Agent dock with file/image attachments and 9 AI providers."
 }

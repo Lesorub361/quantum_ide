@@ -131,6 +131,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   late final LspService _lspService;
   Timer? _diffTimer;
   final Map<String, Timer> _autoSaveTimers = {};
+  final Set<String> _savingPaths = {};
   final Map<String, CodeLines> _lastCodeLines = {};
   final DiffService _diffService = DiffService();
   static const int _maxOpenFiles = 10;
@@ -470,7 +471,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     if (triggerAutoSave) {
       _autoSaveTimers[path]?.cancel();
       _autoSaveTimers[path] = Timer(const Duration(seconds: 5), () {
-        saveFileByPath(path);
+        saveFileByPath(path, isAutoSave: true);
         _autoSaveTimers.remove(path);
       });
     }
@@ -573,45 +574,54 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
     _persistWorkspaceFiles();
   }
 
-  Future<void> saveFile(int index) async {
+  Future<void> saveFile(int index, {bool isAutoSave = false}) async {
     if (index < 0 || index >= state.openFiles.length) return;
     final path = state.openFiles[index].path;
-    await saveFileByPath(path);
+    await saveFileByPath(path, isAutoSave: isAutoSave);
   }
 
-  Future<void> saveFileByPath(String path) async {
+  Future<void> saveFileByPath(String path, {bool isAutoSave = false}) async {
+    if (_savingPaths.contains(path)) return;
     final index = state.openFiles.indexWhere((f) => f.path == path);
     if (index == -1) return;
 
-    final settings = ref.read(settingsProvider);
-    if (settings.formatOnSave) {
-      try {
-        final edits = await _lspService.format(path);
-        if (edits.isNotEmpty) {
-          final jsonEdits = edits.map((e) => {
-            'range': {
-              'start': {
-                'line': e.range.start.line,
-                'character': e.range.start.character,
-              },
-              'end': {
-                'line': e.range.end.line,
-                'character': e.range.end.character,
-              }
-            },
-            'newText': e.newText,
-          }).toList();
-          applyLSPEdits(path, jsonEdits);
-        }
-      } catch (e) {
-        debugPrint('Error formatting before save: $e');
-      }
-    }
+    final initialFile = state.openFiles[index];
+    // Never touch or overwrite unmodified files during background/lifecycle auto-saves
+    if (isAutoSave && !initialFile.isModified) return;
 
-    final file = state.openFiles[index];
-    final content = file.controller.text;
-
+    _savingPaths.add(path);
     try {
+      final settings = ref.read(settingsProvider);
+      if (!isAutoSave && settings.formatOnSave && initialFile.isModified) {
+        try {
+          await _lspService.onFileChanged(path, initialFile.controller.text);
+          final edits = await _lspService.format(path);
+          if (edits.isNotEmpty) {
+            final jsonEdits = edits.map((e) => {
+              'range': {
+                'start': {
+                  'line': e.range.start.line,
+                  'character': e.range.start.character,
+                },
+                'end': {
+                  'line': e.range.end.line,
+                  'character': e.range.end.character,
+                }
+              },
+              'newText': e.newText,
+            }).toList();
+            applyLSPEdits(path, jsonEdits);
+          }
+        } catch (e) {
+          debugPrint('Error formatting before save: $e');
+        }
+      }
+
+      final currentIdx = state.openFiles.indexWhere((f) => f.path == path);
+      if (currentIdx == -1) return;
+      final file = state.openFiles[currentIdx];
+      final content = file.controller.text;
+
       final diskFile = File(path);
       if (content.trim().isEmpty && await diskFile.exists() && await diskFile.length() > 0) {
         // Never overwrite a non-empty file on disk with an empty controller buffer; reload instead!
@@ -619,17 +629,17 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         return;
       }
       await diskFile.writeAsString(content, flush: true);
-      
+
       // Mirror to external storage
       await ref.read(projectServiceProvider.notifier).mirrorEntity(path);
 
       // Re-verify index after await
-      final currentIndex = state.openFiles.indexWhere((f) => f.path == path);
-      if (currentIndex == -1) return;
+      final afterIndex = state.openFiles.indexWhere((f) => f.path == path);
+      if (afterIndex == -1) return;
 
-      final currentFile = state.openFiles[currentIndex];
+      final currentFile = state.openFiles[afterIndex];
       final newOpenFiles = List<EditorFile>.from(state.openFiles);
-      newOpenFiles[currentIndex] = currentFile.copyWith(
+      newOpenFiles[afterIndex] = currentFile.copyWith(
         originalContent: content,
         diffMarkers: const [],
         isModified: false,
@@ -642,6 +652,8 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       ref.read(symbolIndexerProvider.notifier).indexFile(path);
     } catch (e) {
       debugPrint('Error saving file $path: $e');
+    } finally {
+      _savingPaths.remove(path);
     }
   }
 
@@ -1109,7 +1121,9 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       for (int i = 0; i < this.state.openFiles.length; i++) {
-        saveFile(i);
+        if (this.state.openFiles[i].isModified) {
+          saveFile(i, isAutoSave: true);
+        }
       }
     } else if (state == AppLifecycleState.resumed) {
       // Pick up any external edits immediately when returning to the IDE from external editors
@@ -1168,6 +1182,9 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   Future<void> formatActiveFile() async {
     final path = state.activeFilePath;
     if (path == null) return;
+    final activeIdx = state.openFiles.indexWhere((f) => f.path == path);
+    if (activeIdx == -1) return;
+    await _lspService.onFileChanged(path, state.openFiles[activeIdx].controller.text);
     final edits = await _lspService.format(path);
     if (edits.isEmpty) return;
 
@@ -1194,7 +1211,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
 
     final file = state.openFiles[index];
     final controller = file.controller;
-    
+
     // Sort edits by range (reverse order to not mess up positions)
     final sortedEdits = List.from(edits);
     sortedEdits.sort((a, b) {
@@ -1206,28 +1223,28 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       return (bStart['character'] as int).compareTo(aStart['character'] as int);
     });
 
-    // Get the current text
-    String currentText = controller.text;
+    // Normalize CRLF so line/character offsets match LSP lines
+    String currentText = controller.text.replaceAll('\r\n', '\n');
 
     for (final edit in sortedEdits) {
       try {
         final range = edit['range'] as Map<String, dynamic>;
         final start = range['start'] as Map<String, dynamic>;
         final end = range['end'] as Map<String, dynamic>;
-        final newText = edit['newText'] as String;
+        final newText = (edit['newText'] as String).replaceAll('\r\n', '\n');
 
         final startLine = start['line'] as int;
         final startChar = start['character'] as int;
         final endLine = end['line'] as int;
         final endChar = end['character'] as int;
 
-        // Calculate absolute positions in the text
         final lines = currentText.split('\n');
-        if (startLine >= lines.length || endLine >= lines.length) continue;
+        if (startLine < 0 || endLine < 0 || startLine >= lines.length || endLine >= lines.length) continue;
+        if (startChar > lines[startLine].length || endChar > lines[endLine].length) continue;
 
         int startOffset = 0;
         for (int i = 0; i < startLine; i++) {
-          startOffset += lines[i].length + 1; // +1 for newline
+          startOffset += lines[i].length + 1;
         }
         startOffset += startChar;
 
@@ -1237,7 +1254,6 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
         }
         endOffset += endChar;
 
-        // Apply the replacement
         if (startOffset >= 0 && endOffset >= startOffset && endOffset <= currentText.length) {
           currentText = currentText.replaceRange(startOffset, endOffset, newText);
         }
@@ -1246,11 +1262,19 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       }
     }
 
-    // Update the controller with new text
-    controller.text = currentText;
+    if (currentText == controller.text) return;
 
-    // Update the file's original content if we're applying LSP edits
-    _handleContentChange(filePath);
+    // Update controller without triggering recursive auto-save/LSP loops
+    _isReloadingFromDisk = true;
+    try {
+      controller.text = currentText;
+      _lastCodeLines[filePath] = controller.codeLines;
+    } finally {
+      _isReloadingFromDisk = false;
+    }
+
+    _lspService.onFileChanged(filePath, currentText).catchError((_) {});
+    _handleContentChange(filePath, triggerAutoSave: false);
   }
 
 

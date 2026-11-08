@@ -23,9 +23,26 @@ import urllib.error
 from datetime import datetime
 from pathlib import Path
 
+import re
+
 REPORTS_DIR = Path(".quantum/qa_reports")
-PACKAGE_NAME = "com.example.quantum_ide"
-MAIN_ACTIVITY = "com.example.quantum_ide.MainActivity"
+
+
+def _detect_package_name() -> str:
+    for candidate in (Path("android/app/build.gradle.kts"), Path("android/app/build.gradle")):
+        if candidate.exists():
+            try:
+                content = candidate.read_text(encoding="utf-8")
+                m = re.search(r'applicationId\s*=\s*["\']([a-zA-Z0-9_.]+)["\']', content)
+                if m:
+                    return m.group(1)
+            except Exception:
+                pass
+    return "com.example.quantum_ide"
+
+
+PACKAGE_NAME = _detect_package_name()
+MAIN_ACTIVITY = f"{PACKAGE_NAME}.MainActivity"
 
 
 class AutonomousQADaemon:

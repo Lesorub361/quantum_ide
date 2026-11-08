@@ -204,14 +204,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
           final safeRows = rows.clamp(6, 250);
           final safeCols = cols.clamp(20, 400);
-          // On mobile devices, software keyboard appearing or disappearing drops/restores visible rows
-          // while columns remain constant. Never resize PTY on keyboard height fluctuations to prevent
-          // sending SIGWINCH to bash, which causes readline to reprint duplicate prompts ("лестница строк").
-          if ((Platform.isAndroid || Platform.isIOS) &&
-              lastCols == safeCols &&
-              lastRows > 0) {
-            return;
-          }
           if (safeRows != lastRows || safeCols != lastCols) {
             resizeDebounceTimer?.cancel();
             resizeDebounceTimer = Timer(const Duration(milliseconds: 150), () {
@@ -242,12 +234,12 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .transform(terminalOutputTransformer())
           .listen(
         (text) {
+          if (text.isEmpty) return;
           try {
             xtermTerm.write(text);
-          } catch (e) {
-            try {
-              xtermTerm.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
-            } catch (_) {}
+          } catch (_) {
+            // Never write the same chunk a second time on parser exception:
+            // re-writing causes duplicated words (e.g. "timbtimber_game_page.dart").
           }
 
           if (hadUserCommandRecently) {
@@ -381,11 +373,6 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       term.onResize = (cols, rows, int pixelWidth, int pixelHeight) {
         final safeRows = rows.clamp(6, 250);
         final safeCols = cols.clamp(20, 400);
-        if ((Platform.isAndroid || Platform.isIOS) &&
-            lastRestartCols == safeCols &&
-            lastRestartRows > 0) {
-          return;
-        }
         restartResizeDebounce?.cancel();
         restartResizeDebounce = Timer(const Duration(milliseconds: 150), () {
           if (safeRows != lastRestartRows || safeCols != lastRestartCols) {
@@ -412,12 +399,11 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
           .transform(terminalOutputTransformer())
           .listen(
         (text) {
+          if (text.isEmpty) return;
           try {
             term.write(text);
-          } catch (e) {
-            try {
-              term.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
-            } catch (_) {}
+          } catch (_) {
+            // Never re-write chunk on error to avoid duplicate words.
           }
         },
         onDone: () {

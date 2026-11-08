@@ -214,13 +214,13 @@ class QuantumModelItem {
       badgeColorValue: 0xFFF97316,
     ),
 
-    // Direct API Models
+    // Direct API Models — DeepSeek
     QuantumModelItem(
       id: 'deepseek-chat',
       name: 'DeepSeek V3 (Direct)',
       providerName: 'DeepSeek Direct',
       category: 'Прямой API',
-      badge: 'Direct API',
+      badge: 'DeepSeek',
       badgeColorValue: 0xFF3B82F6,
       isOpenRouter: false,
     ),
@@ -234,13 +234,86 @@ class QuantumModelItem {
       isReasoning: true,
       isOpenRouter: false,
     ),
+
+    // Direct API Models — Google Gemini Direct
+    QuantumModelItem(
+      id: 'gemini-2.5-pro',
+      name: 'Gemini 2.5 Pro (Direct)',
+      providerName: 'Gemini Direct',
+      category: 'Прямой API',
+      badge: 'Gemini API',
+      badgeColorValue: 0xFF2563EB,
+      isReasoning: true,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'gemini-2.5-flash',
+      name: 'Gemini 2.5 Flash (Direct)',
+      providerName: 'Gemini Direct',
+      category: 'Прямой API',
+      badge: 'Gemini Fast',
+      badgeColorValue: 0xFF3B82F6,
+      isOpenRouter: false,
+    ),
+
+    // Direct API Models — Groq Cloud (Ultra Fast LPU)
+    QuantumModelItem(
+      id: 'llama-3.3-70b-versatile',
+      name: 'Llama 3.3 70B (Groq LPU)',
+      providerName: 'Groq Cloud',
+      category: 'Прямой API',
+      badge: 'Groq LPU',
+      badgeColorValue: 0xFFF97316,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'deepseek-r1-distill-llama-70b',
+      name: 'DeepSeek R1 70B (Groq LPU)',
+      providerName: 'Groq Cloud',
+      category: 'Прямой API',
+      badge: 'Groq R1',
+      badgeColorValue: 0xFFF97316,
+      isReasoning: true,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'qwen-2.5-coder-32b',
+      name: 'Qwen 2.5 Coder 32B (Groq)',
+      providerName: 'Groq Cloud',
+      category: 'Прямой API',
+      badge: 'Groq Code',
+      badgeColorValue: 0xFFF97316,
+      isOpenRouter: false,
+    ),
+
+    // Direct API Models — OpenAI & Anthropic
     QuantumModelItem(
       id: 'gpt-4o',
       name: 'OpenAI GPT-4o (Direct)',
       providerName: 'OpenAI Direct',
       category: 'Прямой API',
-      badge: 'Direct API',
+      badge: 'OpenAI',
       badgeColorValue: 0xFF059669,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'o3-mini',
+      name: 'OpenAI o3-mini (Direct)',
+      providerName: 'OpenAI Direct',
+      category: 'Прямой API',
+      badge: 'o3 Direct',
+      badgeColorValue: 0xFF10B981,
+      isReasoning: true,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'claude-3-7-sonnet-20250219',
+      name: 'Claude 3.7 Sonnet (Direct)',
+      providerName: 'Anthropic Direct',
+      category: 'Прямой API',
+      badge: 'Anthropic',
+      badgeColorValue: 0xFFD97706,
+      isReasoning: true,
       isOpenRouter: false,
     ),
     QuantumModelItem(
@@ -248,16 +321,48 @@ class QuantumModelItem {
       name: 'Claude 3.5 Sonnet (Direct)',
       providerName: 'Anthropic Direct',
       category: 'Прямой API',
-      badge: 'Direct API',
+      badge: 'Anthropic',
       badgeColorValue: 0xFFD97706,
       isOpenRouter: false,
     ),
+
+    // Direct API Models — xAI Grok & Mistral Codestral
+    QuantumModelItem(
+      id: 'grok-3',
+      name: 'xAI Grok 3 (Direct)',
+      providerName: 'xAI Direct',
+      category: 'Прямой API',
+      badge: 'xAI Grok',
+      badgeColorValue: 0xFF64748B,
+      isReasoning: true,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'grok-2-vision-1212',
+      name: 'xAI Grok 2 Vision (Direct)',
+      providerName: 'xAI Direct',
+      category: 'Прямой API',
+      badge: 'xAI Vision',
+      badgeColorValue: 0xFF64748B,
+      isOpenRouter: false,
+    ),
+    QuantumModelItem(
+      id: 'codestral-latest',
+      name: 'Mistral Codestral (Direct)',
+      providerName: 'Mistral Direct',
+      category: 'Прямой API',
+      badge: 'Mistral',
+      badgeColorValue: 0xFFEF4444,
+      isOpenRouter: false,
+    ),
+
+    // Local / Custom OpenAI-compatible Server (Ollama / LM Studio / vLLM)
     QuantumModelItem(
       id: 'default',
-      name: 'Локальный / Custom API',
+      name: 'Локальный / Custom API (Ollama)',
       providerName: 'Local',
       category: 'Локальный',
-      badge: 'Local',
+      badge: 'Local API',
       badgeColorValue: 0xFF6B7280,
       isOpenRouter: false,
     ),
@@ -267,12 +372,16 @@ class QuantumModelItem {
 enum AiProvider {
   deepseek('DeepSeek', 'deepseek-chat'),
   deepseekR1('DeepSeek R1', 'deepseek-reasoner'),
-  openrouterClaude('Claude 3.5 Sonnet', 'anthropic/claude-3.5-sonnet'),
+  openrouterClaude('Claude 3.7 Sonnet', 'anthropic/claude-3.7-sonnet'),
   openrouterGpt4o('GPT-4o (OpenRouter)', 'openai/gpt-4o'),
   openrouterQwen('Qwen 2.5 Coder 32B', 'qwen/qwen-2.5-coder-32b-instruct'),
-  openrouterGemini('Gemini 2.0 Flash', 'google/gemini-2.0-flash-001'),
+  openrouterGemini('Gemini 2.5 Pro', 'google/gemini-2.5-pro'),
+  geminiDirect('Gemini 2.5 Flash (Direct)', 'gemini-2.5-flash'),
+  groqCloud('Groq Llama 3.3 70B', 'llama-3.3-70b-versatile'),
+  xaiGrok('xAI Grok 3', 'grok-3'),
+  mistralCodestral('Mistral Codestral', 'codestral-latest'),
   openai('OpenAI GPT-4o', 'gpt-4o'),
-  anthropic('Anthropic Claude', 'claude-3-5-sonnet-20241022'),
+  anthropic('Anthropic Claude', 'claude-3-7-sonnet-20250219'),
   custom('Локальный / Custom API', 'default');
 
   final String label;
@@ -301,6 +410,26 @@ enum AgentMode {
   final String label;
   final String hint;
   const AgentMode(this.label, this.hint);
+}
+
+class ChatAttachment {
+  final String name;
+  final String path;
+  final String mimeType;
+  final bool isImage;
+  final String? base64Data;
+  final String? textContent;
+  final int sizeBytes;
+
+  const ChatAttachment({
+    required this.name,
+    required this.path,
+    required this.mimeType,
+    required this.isImage,
+    this.base64Data,
+    this.textContent,
+    this.sizeBytes = 0,
+  });
 }
 
 class AgentAction {
@@ -333,6 +462,7 @@ class ChatMessage {
   bool isStreaming;
   final DateTime timestamp;
   final List<AgentAction> actions;
+  final List<ChatAttachment> attachments;
 
   /// Non-null for tool-result messages (shown as a compact chip, sent to the model as context).
   final String? toolLabel;
@@ -346,8 +476,10 @@ class ChatMessage {
     this.isStreaming = false,
     required this.timestamp,
     List<AgentAction>? actions,
+    List<ChatAttachment>? attachments,
     this.toolLabel,
-  }) : actions = actions ?? [];
+  })  : actions = actions ?? [],
+        attachments = attachments ?? [];
 }
 
 class QuantumAiAgentService extends ChangeNotifier {
@@ -602,35 +734,10 @@ class QuantumAiAgentService extends ChangeNotifier {
 
   void selectProvider(AiProvider provider) {
     _selectedProvider = provider;
-    switch (provider) {
-      case AiProvider.deepseek:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'deepseek/deepseek-chat', orElse: () => QuantumModelItem.predefinedModels[0]);
-        break;
-      case AiProvider.deepseekR1:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'deepseek/deepseek-r1', orElse: () => QuantumModelItem.predefinedModels[1]);
-        break;
-      case AiProvider.openrouterClaude:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'anthropic/claude-3.5-sonnet', orElse: () => QuantumModelItem.predefinedModels[4]);
-        break;
-      case AiProvider.openrouterGpt4o:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'openai/gpt-4o', orElse: () => QuantumModelItem.predefinedModels[6]);
-        break;
-      case AiProvider.openrouterQwen:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'qwen/qwen-2.5-coder-32b-instruct', orElse: () => QuantumModelItem.predefinedModels[13]);
-        break;
-      case AiProvider.openrouterGemini:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'google/gemini-2.0-flash-001', orElse: () => QuantumModelItem.predefinedModels[10]);
-        break;
-      case AiProvider.openai:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'gpt-4o', orElse: () => QuantumModelItem.predefinedModels[19]);
-        break;
-      case AiProvider.anthropic:
-        _selectedModel = QuantumModelItem.predefinedModels.firstWhere((m) => m.id == 'claude-3-5-sonnet-20241022', orElse: () => QuantumModelItem.predefinedModels[20]);
-        break;
-      case AiProvider.custom:
-        _selectedModel = QuantumModelItem.predefinedModels.last;
-        break;
-    }
+    _selectedModel = QuantumModelItem.predefinedModels.firstWhere(
+      (m) => m.id == provider.defaultModel,
+      orElse: () => QuantumModelItem.predefinedModels.first,
+    );
     notifyListeners();
   }
 
@@ -648,7 +755,7 @@ class QuantumAiAgentService extends ChangeNotifier {
       ChatMessage(
         id: 'msg_welcome',
         role: MessageRole.assistant,
-        text: 'Привет! Я встроенный Quantum AI Агент. Я подключен напрямую к твоему проекту, могу анализировать файлы, писать код, находить ошибки и предлагать готовые изменения с кнопкой применения прямо в редактор.\n\nЧем могу помочь?',
+        text: 'Привет! Я встроенный Quantum AI Агент. Я подключен напрямую к твоему проекту, могу анализировать файлы и скриншоты, писать код, находить ошибки и предлагать готовые изменения с кнопкой применения прямо в редактор.\n\nЧем могу помочь?',
         timestamp: DateTime.now(),
       ),
     );
@@ -667,9 +774,18 @@ class QuantumAiAgentService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendMessage(String text) async {
+  Future<void> sendMessage(
+    String text, {
+    List<ChatAttachment> attachments = const [],
+  }) async {
     var query = text.trim();
-    if (query.isEmpty || _isGenerating) return;
+    if ((query.isEmpty && attachments.isEmpty) || _isGenerating) return;
+    if (query.isEmpty && attachments.isNotEmpty) {
+      final hasImages = attachments.any((a) => a.isImage);
+      query = hasImages
+          ? 'Проанализируй прикреплённое изображение / скриншот и помоги решить задачу.'
+          : 'Проанализируй прикреплённые файлы и помоги решить задачу.';
+    }
 
     // /init — сгенерировать .quantum/AGENTS.md (правила проекта для агента)
     if (query == '/init') {
@@ -684,31 +800,34 @@ class QuantumAiAgentService extends ChangeNotifier {
       return;
     }
 
-    // Проверка наличия сети через connectivity_plus
-    try {
-      final connectivityResults = await Connectivity().checkConnectivity();
-      if (connectivityResults.isNotEmpty &&
-          connectivityResults.every((r) => r == ConnectivityResult.none)) {
-        _statusMessage = 'Ошибка: нет подключения к сети';
-        _messages.add(
-          ChatMessage(
-            id: 'msg_offline_${DateTime.now().millisecondsSinceEpoch}',
-            role: MessageRole.assistant,
-            text: '⚠️ Нет активного подключения к интернету. Проверьте соединение с Wi-Fi или мобильной сетью для отправки запросов к ИИ.',
-            timestamp: DateTime.now(),
-          ),
-        );
-        notifyListeners();
-        return;
+    // Проверка наличия сети через connectivity_plus (кроме локального сервера)
+    if (_selectedModel.providerName != 'Local') {
+      try {
+        final connectivityResults = await Connectivity().checkConnectivity();
+        if (connectivityResults.isNotEmpty &&
+            connectivityResults.every((r) => r == ConnectivityResult.none)) {
+          _statusMessage = 'Ошибка: нет подключения к сети';
+          _messages.add(
+            ChatMessage(
+              id: 'msg_offline_${DateTime.now().millisecondsSinceEpoch}',
+              role: MessageRole.assistant,
+              text: '⚠️ Нет активного подключения к интернету. Проверьте соединение с Wi-Fi или мобильной сетью для отправки запросов к ИИ.',
+              timestamp: DateTime.now(),
+            ),
+          );
+          notifyListeners();
+          return;
+        }
+      } catch (e) {
+        debugPrint('[QuantumAI] Connectivity check error: $e');
       }
-    } catch (e) {
-      debugPrint('[QuantumAI] Connectivity check error: $e');
     }
 
     final userMsg = ChatMessage(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
       role: MessageRole.user,
       text: query,
+      attachments: List<ChatAttachment>.from(attachments),
       timestamp: DateTime.now(),
     );
     _messages.add(userMsg);
@@ -936,23 +1055,32 @@ class QuantumAiAgentService extends ChangeNotifier {
     }
   }
 
-  /// История для API со сжатием: старые результаты инструментов обрезаются,
-  /// при слишком длинном диалоге старые реплики схлопываются в краткую сводку.
-  List<Map<String, String>> _buildHistory(String systemPrompt) {
+  /// История для API со сжатием и поддержкой мультимодальных вложений (фото/файлы).
+  List<Map<String, dynamic>> _buildHistory(String systemPrompt) {
     final history = _messages.take(_messages.length - 1).toList();
     const keepRecent = 14;
     const budgetChars = 60000;
 
-    String render(ChatMessage m, {required bool old}) {
+    String renderText(ChatMessage m, {required bool old}) {
       if (m.toolLabel != null) {
         final t = old && m.text.length > 400 ? '${m.text.substring(0, 400)}…[сжато]' : m.text;
         return '[Результат инструмента ${m.toolLabel}]\n$t';
       }
-      if (old && m.text.length > 1500) return '${m.text.substring(0, 1500)}…[сжато]';
-      return m.text;
+      final buf = StringBuffer(old && m.text.length > 1500 ? '${m.text.substring(0, 1500)}…[сжато]' : m.text);
+      for (final att in m.attachments) {
+        if (!att.isImage && att.textContent != null && att.textContent!.isNotEmpty) {
+          final fileBody = old && att.textContent!.length > 800
+              ? '${att.textContent!.substring(0, 800)}…[файл сжат]'
+              : (att.textContent!.length > 15000 ? '${att.textContent!.substring(0, 15000)}\n…[обрезано]' : att.textContent!);
+          buf.writeln('\n\n<attached_file name="${att.name}" path="${att.path}">');
+          buf.writeln(fileBody);
+          buf.writeln('</attached_file>');
+        }
+      }
+      return buf.toString();
     }
 
-    final out = <Map<String, String>>[
+    final out = <Map<String, dynamic>>[
       {'role': 'system', 'content': systemPrompt},
     ];
     var total = systemPrompt.length;
@@ -962,14 +1090,35 @@ class QuantumAiAgentService extends ChangeNotifier {
       final old = i < olderCount;
       if (m.role == MessageRole.assistant && m.text.isEmpty) continue;
       final role = (m.toolLabel != null || m.role == MessageRole.user) ? 'user' : 'assistant';
-      final content = render(m, old: old);
-      total += content.length;
-      out.add({'role': role, 'content': content});
+      final textContent = renderText(m, old: old);
+      total += textContent.length;
+
+      final imageAttachments = !old
+          ? m.attachments.where((a) => a.isImage && a.base64Data != null && a.base64Data!.isNotEmpty).toList()
+          : const <ChatAttachment>[];
+
+      if (role == 'user' && imageAttachments.isNotEmpty) {
+        out.add({
+          'role': role,
+          'content': [
+            {'type': 'text', 'text': textContent},
+            for (final img in imageAttachments)
+              {
+                'type': 'image_url',
+                'image_url': {
+                  'url': 'data:${img.mimeType};base64,${img.base64Data}',
+                },
+              },
+          ],
+        });
+      } else {
+        out.add({'role': role, 'content': textContent});
+      }
     }
-    // Всё ещё слишком много — выбрасываем самые старые реплики (кроме первой пользовательской).
     var idx = 2;
     while (total > budgetChars && out.length > 6 && idx < out.length - keepRecent) {
-      total -= out[idx]['content']!.length;
+      final c = out[idx]['content'];
+      total -= c is String ? c.length : 1000;
       out.removeAt(idx);
     }
     return out;
@@ -1031,7 +1180,7 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
   }
 
   Future<void> _streamCompletion({
-    required List<Map<String, String>> messages,
+    required List<Map<String, dynamic>> messages,
     required SettingsState settings,
     required ChatMessage targetMsg,
   }) async {
@@ -1042,32 +1191,91 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     if (_selectedModel.isOpenRouter) {
       endpoint = 'https://openrouter.ai/api/v1/chat/completions';
       apiKey = settings.openrouterApiKey;
-      // Smart fallback: if user has no OpenRouter key but has DeepSeek direct key
-      if (apiKey.isEmpty && settings.deepseekApiKey.isNotEmpty && model.startsWith('deepseek/')) {
-        endpoint = 'https://api.deepseek.com/chat/completions';
-        apiKey = settings.deepseekApiKey;
-        model = model.contains('r1') ? 'deepseek-reasoner' : 'deepseek-chat';
+      // Smart fallback to direct provider keys if OpenRouter key is empty
+      if (apiKey.isEmpty) {
+        if (settings.deepseekApiKey.isNotEmpty && model.startsWith('deepseek/')) {
+          endpoint = 'https://api.deepseek.com/chat/completions';
+          apiKey = settings.deepseekApiKey;
+          model = model.contains('r1') ? 'deepseek-reasoner' : 'deepseek-chat';
+        } else if (settings.geminiApiKey.isNotEmpty && model.startsWith('google/gemini')) {
+          endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+          apiKey = settings.geminiApiKey;
+          model = model.contains('pro') ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
+        } else if (settings.groqApiKey.isNotEmpty && (model.contains('llama-3.3') || model.contains('qwen-2.5-coder'))) {
+          endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+          apiKey = settings.groqApiKey;
+          model = model.contains('qwen') ? 'qwen-2.5-coder-32b' : 'llama-3.3-70b-versatile';
+        } else if (settings.openaiApiKey.isNotEmpty && model.startsWith('openai/')) {
+          endpoint = 'https://api.openai.com/v1/chat/completions';
+          apiKey = settings.openaiApiKey;
+          model = model.split('/').last;
+        }
       }
     } else {
-      // Direct API model
-      if (_selectedModel.id.startsWith('deepseek')) {
+      final prov = _selectedModel.providerName;
+      if (prov == 'DeepSeek Direct' || _selectedModel.id.startsWith('deepseek')) {
         if (settings.deepseekApiKey.isNotEmpty) {
           endpoint = 'https://api.deepseek.com/chat/completions';
           apiKey = settings.deepseekApiKey;
-          model = _selectedModel.id;
         } else if (settings.openrouterApiKey.isNotEmpty) {
-          // SMART FALLBACK: user entered OpenRouter key, route DeepSeek through OpenRouter!
           endpoint = 'https://openrouter.ai/api/v1/chat/completions';
           apiKey = settings.openrouterApiKey;
-          model = _selectedModel.id == 'deepseek-reasoner'
-              ? 'deepseek/deepseek-r1'
-              : 'deepseek/deepseek-chat';
+          model = _selectedModel.id == 'deepseek-reasoner' ? 'deepseek/deepseek-r1' : 'deepseek/deepseek-chat';
         } else {
           endpoint = 'https://api.deepseek.com/chat/completions';
           apiKey = '';
-          model = _selectedModel.id;
         }
-      } else if (_selectedModel.id.startsWith('gpt')) {
+      } else if (prov == 'Gemini Direct' || _selectedModel.id.startsWith('gemini')) {
+        if (settings.geminiApiKey.isNotEmpty) {
+          endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+          apiKey = settings.geminiApiKey;
+        } else if (settings.openrouterApiKey.isNotEmpty) {
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+          apiKey = settings.openrouterApiKey;
+          model = 'google/${_selectedModel.id}';
+        } else {
+          endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+          apiKey = '';
+        }
+      } else if (prov == 'Groq Cloud') {
+        if (settings.groqApiKey.isNotEmpty) {
+          endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+          apiKey = settings.groqApiKey;
+        } else if (settings.openrouterApiKey.isNotEmpty) {
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+          apiKey = settings.openrouterApiKey;
+          model = _selectedModel.id.contains('qwen')
+              ? 'qwen/qwen-2.5-coder-32b-instruct'
+              : 'meta-llama/llama-3.3-70b-instruct';
+        } else {
+          endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+          apiKey = '';
+        }
+      } else if (prov == 'xAI Direct' || _selectedModel.id.startsWith('grok')) {
+        if (settings.xaiApiKey.isNotEmpty) {
+          endpoint = 'https://api.x.ai/v1/chat/completions';
+          apiKey = settings.xaiApiKey;
+        } else if (settings.openrouterApiKey.isNotEmpty) {
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+          apiKey = settings.openrouterApiKey;
+          model = 'x-ai/${_selectedModel.id}';
+        } else {
+          endpoint = 'https://api.x.ai/v1/chat/completions';
+          apiKey = '';
+        }
+      } else if (prov == 'Mistral Direct' || _selectedModel.id.startsWith('codestral')) {
+        if (settings.mistralApiKey.isNotEmpty) {
+          endpoint = 'https://api.mistral.ai/v1/chat/completions';
+          apiKey = settings.mistralApiKey;
+        } else if (settings.openrouterApiKey.isNotEmpty) {
+          endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+          apiKey = settings.openrouterApiKey;
+          model = 'mistralai/codestral-2501';
+        } else {
+          endpoint = 'https://api.mistral.ai/v1/chat/completions';
+          apiKey = '';
+        }
+      } else if (prov == 'OpenAI Direct' || _selectedModel.id.startsWith('gpt') || _selectedModel.id.startsWith('o3')) {
         if (settings.openaiApiKey.isNotEmpty) {
           endpoint = 'https://api.openai.com/v1/chat/completions';
           apiKey = settings.openaiApiKey;
@@ -1079,33 +1287,39 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
           endpoint = 'https://api.openai.com/v1/chat/completions';
           apiKey = '';
         }
-      } else if (_selectedModel.id.startsWith('claude')) {
+      } else if (prov == 'Anthropic Direct' || _selectedModel.id.startsWith('claude')) {
         if (settings.anthropicApiKey.isNotEmpty) {
-          endpoint = 'https://api.anthropic.com/v1/messages';
+          endpoint = 'https://api.anthropic.com/v1/chat/completions';
           apiKey = settings.anthropicApiKey;
         } else if (settings.openrouterApiKey.isNotEmpty) {
           endpoint = 'https://openrouter.ai/api/v1/chat/completions';
           apiKey = settings.openrouterApiKey;
-          model = 'anthropic/${_selectedModel.id}';
+          model = _selectedModel.id.contains('3-7')
+              ? 'anthropic/claude-3.7-sonnet'
+              : 'anthropic/claude-3.5-sonnet';
         } else {
-          endpoint = 'https://api.anthropic.com/v1/messages';
+          endpoint = 'https://api.anthropic.com/v1/chat/completions';
           apiKey = '';
         }
       } else {
-        endpoint = 'http://127.0.0.1:11434/v1/chat/completions';
-        apiKey = settings.deepseekApiKey.isNotEmpty ? settings.deepseekApiKey : 'ollama';
+        // Local / Custom OpenAI-compatible Server (Ollama / LM Studio / vLLM)
+        var base = settings.customApiBaseUrl.trim();
+        if (base.isEmpty) base = 'http://127.0.0.1:11434/v1';
+        if (base.endsWith('/')) base = base.substring(0, base.length - 1);
+        endpoint = base.endsWith('/chat/completions') ? base : '$base/chat/completions';
+        apiKey = settings.customApiKey.isNotEmpty ? settings.customApiKey : 'ollama';
+        model = settings.customApiModel.trim().isNotEmpty ? settings.customApiModel.trim() : 'qwen2.5-coder:7b';
       }
     }
 
-    if (apiKey.isEmpty && _selectedModel.id != 'default') {
+    if (apiKey.isEmpty && _selectedModel.providerName != 'Local') {
       if (_selectedModel.isOpenRouter) {
         throw Exception(
-          'Не указан OpenRouter API ключ. Введите его в настройках ⚙️ (вверху справа). '
-          'С ключом OpenRouter вам доступны все модели: DeepSeek V3/R1, Claude 3.7, GPT-4o, Gemini 2.0, Qwen!',
+          'Не указан OpenRouter API ключ. Откройте настройки провайдеров (🔑 вверху панели) и укажите ключ OpenRouter или выберите прямой провайдер (Gemini, Groq, DeepSeek, Ollama).',
         );
       } else {
         throw Exception(
-          'Не указан API ключ для ${_selectedModel.name}. Введите ключ в настройках ⚙️ (или используйте ключ OpenRouter, поддерживающий любые модели).',
+          'Не указан API ключ для ${_selectedModel.providerName} (${_selectedModel.name}). Введите ключ в настройках 🔑 (или укажите ключ OpenRouter для универсального доступа).',
         );
       }
     }
@@ -1125,11 +1339,15 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
       'model': model,
       'messages': messages,
       'stream': true,
-      'stream_options': {'include_usage': true},
       'temperature': 0.3,
     };
     var gotUsage = false;
-    final promptEst = messages.fold<int>(0, (a, m) => a + _estimateTokens(m['content'] ?? ''));
+    final promptEst = messages.fold<int>(0, (a, m) {
+      final c = m['content'];
+      if (c is String) return a + _estimateTokens(c);
+      if (c is List) return a + 600;
+      return a;
+    });
 
     final response = await _dio.post<ResponseBody>(
       endpoint,

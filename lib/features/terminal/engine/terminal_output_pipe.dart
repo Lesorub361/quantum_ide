@@ -60,16 +60,23 @@ class TerminalOutputPipe {
 
   String _pending = '';
 
-  /// Never split an escape sequence or a surrogate pair between two writes.
+  /// Never split an escape sequence or a surrogate pair between two writes,
+  /// and strip OSC 8 hyperlink wrappers / DEC 2026 sync markers that cause
+  /// xterm.dart parser glitches and duplicated words in TUI apps (Claude Code).
+  static final RegExp _completeEscRegex = RegExp(
+    r'^\x1b(\[[0-9;?<=>!]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[P^_][^\x07\x1b]*(\x07|\x1b\\)|[^\[\]P^_])',
+  );
+  static final RegExp _osc8Regex = RegExp(r'\x1b\]8;[^\x07\x1b]*(?:\x07|\x1b\\)');
+  static final RegExp _decSyncRegex = RegExp(r'\x1b\[\?2026[hl]');
+
   String _safeBoundary(String text) {
     var full = _pending + text;
     _pending = '';
     final esc = full.lastIndexOf('\x1b');
-    if (esc != -1 && full.length - esc < 32) {
+    if (esc != -1 && full.length - esc < 2048) {
       final tail = full.substring(esc);
-      // Incomplete CSI/OSC: ESC alone, or ESC [ ... without final byte.
-      final complete = RegExp(r'^\x1b(\[[0-9;?<=>!]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[^\[\]])')
-          .hasMatch(tail);
+      // Incomplete CSI/OSC/DCS: ESC alone, or ESC [ / ESC ] without terminator.
+      final complete = _completeEscRegex.hasMatch(tail);
       if (!complete) {
         _pending = tail;
         full = full.substring(0, esc);
@@ -81,6 +88,9 @@ class TerminalOutputPipe {
         _pending = full.substring(full.length - 1) + _pending;
         full = full.substring(0, full.length - 1);
       }
+    }
+    if (full.contains('\x1b')) {
+      full = full.replaceAll(_osc8Regex, '').replaceAll(_decSyncRegex, '');
     }
     return full;
   }

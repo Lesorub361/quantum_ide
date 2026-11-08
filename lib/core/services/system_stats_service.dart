@@ -172,6 +172,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   int? _lastAppCpuTicks;
   DateTime? _lastAppCpuTime;
+  double? _lastAppCpuFraction;
   final int _cpuCores = Platform.numberOfProcessors > 0 ? Platform.numberOfProcessors : 8;
 
   List<SystemProcessItem> _cachedProcesses = const [];
@@ -183,11 +184,13 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   static const int _clkTck = 100;
   Map<int, int> _prevTicks = {};
   Map<int, int> _newTicks = {};
+  final Map<int, double> _lastProcCores = {};
   DateTime? _prevSampleAt;
   double _sampleDtSec = 0;
   bool _busy = false;
   double _lastIdeCores = 0;
   double _lastTotalCores = 0;
+  double _lastAppCpuFraction = 0.03;
 
   /// Загрузка процесса в ядрах (1.0 = одно ядро полностью). null — /proc недоступен.
   double? _coresFor(int procPid) {
@@ -200,12 +203,15 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       final ticks = (int.tryParse(f[11]) ?? 0) + (int.tryParse(f[12]) ?? 0);
       _newTicks[procPid] = ticks;
       final prev = _prevTicks[procPid];
-      if (prev == null || _sampleDtSec <= 0.2) return 0.0;
+      if (prev == null) return _lastProcCores[procPid];
+      if (_sampleDtSec < 0.25) return _lastProcCores[procPid] ?? 0.02;
       final d = ticks - prev;
-      if (d < 0) return 0.0;
-      return (d / _clkTck) / _sampleDtSec;
+      if (d < 0) return _lastProcCores[procPid] ?? 0.0;
+      final cores = (d / _clkTck) / _sampleDtSec;
+      _lastProcCores[procPid] = cores;
+      return cores;
     } catch (_) {
-      return null;
+      return _lastProcCores[procPid];
     }
   }
 
@@ -216,11 +222,11 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   void _startUpdates() {
     _updateStats(fetchProcesses: false);
     // Адаптивный интервал: во время сборки обновляем каждые 2 с (точная нагрузка),
-    // в простое — раз в 10 с, чтобы не грузить Android и не вызывать ANR.
+    // в простое — раз в 6 с, чтобы показатели всегда были свежими без лишней нагрузки.
     var tick = 0;
     _timer = Timer.periodic(const Duration(seconds: 2), (timer) {
       tick++;
-      if (LiveTelemetryService.instance.isBuilding || tick % 5 == 0) {
+      if (LiveTelemetryService.instance.isBuilding || tick % 3 == 0) {
         _updateStats(fetchProcesses: false);
       }
     });
@@ -287,6 +293,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   Future<void> _updateStatsImpl({bool fetchProcesses = false}) async {
     double cpu = 0.0;
+    final appCpu = await _parseAppCpuUsage();
 
     final cpuStats = await _parseCpuStats();
     if (cpuStats != null) {
@@ -306,28 +313,17 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         final diffTotal = total - _lastCpuTotal;
         final diffIdle = idleTime - _lastCpuIdle;
         if (diffTotal > 0) {
-          cpu = 1.0 - (diffIdle / diffTotal);
-          if (cpu < 0.0) cpu = 0.0;
-          if (cpu > 1.0) cpu = 1.0;
+          cpu = (1.0 - (diffIdle / diffTotal)).clamp(0.01, 1.0);
         }
       }
       _lastCpuTotal = total;
       _lastCpuIdle = idleTime;
     } else {
-      // 1-й fallback: точное измерение CPU процесса IDE через /proc/self/stat (доступно на Android без SELinux-ошибок)
-      final appCpu = await _parseAppCpuUsage();
-      if (appCpu != null) {
-        cpu = appCpu;
-      } else {
-        // 2-й fallback: частоты CPU (если доступны)
-        final sysfsCpu = await _parseCpuUsageFromSysfs();
-        if (sysfsCpu != null) {
-          final normalized = ((sysfsCpu - 0.40) / 0.60).clamp(0.03, 0.85);
-          cpu = normalized;
-        } else {
-          cpu = 0.04;
-        }
-      }
+      // На Android 10+ /proc/stat закрыт SELinux: комбинируем точное время /proc/self/stat и частоты CPU sysfs
+      final sysfsCpu = await _parseCpuUsageFromSysfs();
+      final sysfsNormalized = sysfsCpu != null ? ((sysfsCpu - 0.35) / 0.65).clamp(0.02, 0.85) : 0.0;
+      final baseApp = appCpu ?? _lastAppCpuFraction;
+      cpu = (baseApp > sysfsNormalized * 0.5 ? baseApp : (baseApp + sysfsNormalized * 0.35)).clamp(0.02, 1.0);
     }
 
     // 1. Измеряем реальную память самого приложения Quantum IDE (RSS процесса в байтах)
@@ -366,7 +362,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
           name: 'Quantum IDE',
           description: 'Основное приложение IDE (Flutter UI & Engine)',
           category: 'IDE',
-          cpuPercent: (cpu * 100).clamp(0.5, 99.0),
+          cpuPercent: ((appCpu ?? cpu) * 100).clamp(1.0, 99.0),
           rssBytes: appRssBytes > 0 ? appRssBytes : 180 * 1024 * 1024,
           command: 'quantum_ide (PID: $pid)',
         )
@@ -394,20 +390,17 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       }
     }
 
-    // Если чтение /proc/stat заблокировано SELinux на Android:
-    // учитываем реальную нагрузку дочерних процессов сборщика в общем индикаторе CPU!
-    // Единая шкала: общая нагрузка ВСЕГДА не меньше суммы IDE + сборщик.
-    // (раньше сборка могла показывать 170% при общей нагрузке 17%).
+    // Единая шкала: общая нагрузка ВСЕГДА не меньше базового замера CPU и суммы IDE + сборщик.
     final appCpuPercent =
         processes.where((p) => p.pid == pid).fold<double>(0, (a, p) => a + p.cpuPercent);
     final visiblePercent = (_lastTotalCores / _cpuCores * 100.0);
-    final floorPercent = [appCpuPercent + builderCpuPercent, visiblePercent]
-        .reduce((a, b) => a > b ? a : b);
-    if (_procStatBlocked || cpuStats == null) {
-      cpu = (floorPercent / 100.0).clamp(0.0, 1.0);
-    } else if (cpu * 100 < floorPercent) {
-      cpu = (floorPercent / 100.0).clamp(0.0, 1.0);
-    }
+    final baseCpuPercent = cpu * 100.0;
+    final floorPercent = [
+      baseCpuPercent,
+      appCpuPercent + builderCpuPercent,
+      visiblePercent,
+    ].reduce((a, b) => a > b ? a : b);
+    cpu = (floorPercent / 100.0).clamp(0.01, 1.0);
     builderCpuPercent = builderCpuPercent.clamp(0.0, 100.0);
     final builderCores = builderCpuPercent / 100.0 * _cpuCores;
 
@@ -426,7 +419,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         deviceRamUsage: deviceUsage,
         builderRamMB: builderRamMB,
         builderCpuPercent: builderCpuPercent,
-        appCpuPercent: appCpuPercent.clamp(0.0, 100.0),
+        appCpuPercent: appCpuPercent.clamp(0.5, 100.0),
         builderCores: builderCores,
         cpuCores: _cpuCores,
         isBuilding: isBuilding,
@@ -474,11 +467,15 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
               final procPid = int.tryParse(parts[0]);
               final psCpu = double.tryParse(parts[1]) ?? 0.0;
               // Единая шкала: % от ВСЕХ ядер устройства
-              final cores = _coresFor(int.tryParse(parts[0]) ?? -1);
-              final cpuVal = cores != null
-                  ? cores / _cpuCores * 100.0
-                  : psCpu / _cpuCores;
-              if (cores != null) totalCores += cores;
+              final cores = _coresFor(procPid ?? -1);
+              final cpuVal = (cores != null && cores > 0)
+                  ? (cores / _cpuCores * 100.0)
+                  : (psCpu / _cpuCores);
+              if (cores != null && cores > 0) {
+                totalCores += cores;
+              } else if (psCpu > 0) {
+                totalCores += (psCpu / 100.0);
+              }
               final rssKb = int.tryParse(parts[2]) ?? 0;
               final fullArgs = parts.sublist(3).join(' ');
 
@@ -523,17 +520,24 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         }
       } catch (_) {}
     }
-    if (ideCpu == 0.0) {
+    if (ideCpu <= 0.1) {
       final c = _coresFor(pid);
-      if (c != null) {
+      if (c != null && c > 0) {
         ideCpu = c / _cpuCores * 100.0;
         if (!_newTicks.containsKey(-pid)) totalCores += c;
+      } else {
+        ideCpu = (_lastAppCpuFraction * 100.0).clamp(1.0, 100.0);
+        totalCores += _lastAppCpuFraction * _cpuCores;
       }
     }
 
-    _prevTicks = _newTicks;
-    _prevSampleAt = sampleNow;
-    _lastTotalCores = totalCores;
+    if (_sampleDtSec >= 0.25 || _prevSampleAt == null) {
+      _prevTicks = _newTicks;
+      _prevSampleAt = sampleNow;
+      _lastTotalCores = totalCores;
+    } else if (totalCores > _lastTotalCores) {
+      _lastTotalCores = totalCores;
+    }
 
     // 1. Всегда добавляем само приложение Quantum IDE с его РЕАЛЬНЫМ процентом CPU
     list.add(SystemProcessItem(
@@ -541,7 +545,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       name: 'Quantum IDE',
       description: 'Основное приложение IDE (Flutter UI & Engine)',
       category: 'IDE',
-      cpuPercent: ideCpu,
+      cpuPercent: double.parse(ideCpu.clamp(0.5, 100.0).toStringAsFixed(1)),
       rssBytes: appRssBytes > 0 ? appRssBytes : 180 * 1024 * 1024,
       command: 'quantum_ide (PID: $pid)',
     ));
@@ -917,53 +921,53 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     final p = platform.toLowerCase().trim();
 
     // Qualcomm Snapdragon models
-    if (s.contains('SM7635') || p.contains('volcano')) return 'Snapdragon 7s Gen 3 ($cores Cores)';
-    if (s.contains('SM8750') || p.contains('sun')) return 'Snapdragon 8 Elite ($cores Cores)';
-    if (s.contains('SM8650') || p.contains('pineapple')) return 'Snapdragon 8 Gen 3 ($cores Cores)';
-    if (s.contains('SM8550') || p.contains('kalama')) return 'Snapdragon 8 Gen 2 ($cores Cores)';
-    if (s.contains('SM8475') || p.contains('cape')) return 'Snapdragon 8+ Gen 1 ($cores Cores)';
-    if (s.contains('SM8450') || p.contains('taro')) return 'Snapdragon 8 Gen 1 ($cores Cores)';
-    if (s.contains('SM7550') || p.contains('crow')) return 'Snapdragon 7 Gen 3 ($cores Cores)';
-    if (s.contains('SM7475')) return 'Snapdragon 7+ Gen 2 ($cores Cores)';
-    if (s.contains('SM7325') || p.contains('lahaina')) return 'Snapdragon 778G ($cores Cores)';
-    if (s.contains('SM6450')) return 'Snapdragon 6 Gen 1 ($cores Cores)';
-    if (s.contains('SM6375')) return 'Snapdragon 695 ($cores Cores)';
-    if (s.contains('SM4450')) return 'Snapdragon 4 Gen 2 ($cores Cores)';
-    if (s.contains('SM8350')) return 'Snapdragon 888 ($cores Cores)';
-    if (s.contains('SM8250') || p.contains('kona')) return 'Snapdragon 865 ($cores Cores)';
-    if (s.contains('SM8150')) return 'Snapdragon 855 ($cores Cores)';
-    if (s.contains('SDM845')) return 'Snapdragon 845 ($cores Cores)';
+    if (s.contains('SM7635') || p.contains('volcano')) return 'Snapdragon 7s Gen 3 · $cores ядер';
+    if (s.contains('SM8750') || p.contains('sun')) return 'Snapdragon 8 Elite · $cores ядер';
+    if (s.contains('SM8650') || p.contains('pineapple')) return 'Snapdragon 8 Gen 3 · $cores ядер';
+    if (s.contains('SM8550') || p.contains('kalama')) return 'Snapdragon 8 Gen 2 · $cores ядер';
+    if (s.contains('SM8475') || p.contains('cape')) return 'Snapdragon 8+ Gen 1 · $cores ядер';
+    if (s.contains('SM8450') || p.contains('taro')) return 'Snapdragon 8 Gen 1 · $cores ядер';
+    if (s.contains('SM7550') || p.contains('crow')) return 'Snapdragon 7 Gen 3 · $cores ядер';
+    if (s.contains('SM7475')) return 'Snapdragon 7+ Gen 2 · $cores ядер';
+    if (s.contains('SM7325') || p.contains('lahaina')) return 'Snapdragon 778G · $cores ядер';
+    if (s.contains('SM6450')) return 'Snapdragon 6 Gen 1 · $cores ядер';
+    if (s.contains('SM6375')) return 'Snapdragon 695 · $cores ядер';
+    if (s.contains('SM4450')) return 'Snapdragon 4 Gen 2 · $cores ядер';
+    if (s.contains('SM8350')) return 'Snapdragon 888 · $cores ядер';
+    if (s.contains('SM8250') || p.contains('kona')) return 'Snapdragon 865 · $cores ядер';
+    if (s.contains('SM8150')) return 'Snapdragon 855 · $cores ядер';
+    if (s.contains('SDM845')) return 'Snapdragon 845 · $cores ядер';
 
     // MediaTek Dimensity / Helio
-    if (s.contains('MT6991')) return 'Dimensity 9400 ($cores Cores)';
-    if (s.contains('MT6989')) return 'Dimensity 9300 ($cores Cores)';
-    if (s.contains('MT6985')) return 'Dimensity 9200 ($cores Cores)';
-    if (s.contains('MT6983')) return 'Dimensity 9000 ($cores Cores)';
-    if (s.contains('MT6895')) return 'Dimensity 8100 ($cores Cores)';
-    if (s.contains('MT6877')) return 'Dimensity 1080 ($cores Cores)';
-    if (s.contains('MT6789')) return 'Helio G99 ($cores Cores)';
-    if (s.contains('MT6769') || s.contains('MT6768')) return 'Helio G85 ($cores Cores)';
+    if (s.contains('MT6991')) return 'Dimensity 9400 · $cores ядер';
+    if (s.contains('MT6989')) return 'Dimensity 9300 · $cores ядер';
+    if (s.contains('MT6985')) return 'Dimensity 9200 · $cores ядер';
+    if (s.contains('MT6983')) return 'Dimensity 9000 · $cores ядер';
+    if (s.contains('MT6895')) return 'Dimensity 8100 · $cores ядер';
+    if (s.contains('MT6877')) return 'Dimensity 1080 · $cores ядер';
+    if (s.contains('MT6789')) return 'Helio G99 · $cores ядер';
+    if (s.contains('MT6769') || s.contains('MT6768')) return 'Helio G85 · $cores ядер';
 
     // Google Tensor
-    if (p.contains('zumapro') || s.contains('G4')) return 'Google Tensor G4 ($cores Cores)';
-    if (p.contains('zuma') || s.contains('G3')) return 'Google Tensor G3 ($cores Cores)';
-    if (p.contains('bluejay') || p.contains('gs201')) return 'Google Tensor G2 ($cores Cores)';
-    if (p.contains('gs101')) return 'Google Tensor G1 ($cores Cores)';
+    if (p.contains('zumapro') || s.contains('G4')) return 'Google Tensor G4 · $cores ядер';
+    if (p.contains('zuma') || s.contains('G3')) return 'Google Tensor G3 · $cores ядер';
+    if (p.contains('bluejay') || p.contains('gs201')) return 'Google Tensor G2 · $cores ядер';
+    if (p.contains('gs101')) return 'Google Tensor G1 · $cores ядер';
 
     // Samsung Exynos
-    if (s.contains('S5E9945')) return 'Exynos 2400 ($cores Cores)';
-    if (s.contains('S5E9925')) return 'Exynos 2200 ($cores Cores)';
-    if (s.contains('S5E9840')) return 'Exynos 2100 ($cores Cores)';
-    if (s.contains('S5E8845')) return 'Exynos 1480 ($cores Cores)';
-    if (s.contains('S5E8835')) return 'Exynos 1380 ($cores Cores)';
+    if (s.contains('S5E9945')) return 'Exynos 2400 · $cores ядер';
+    if (s.contains('S5E9925')) return 'Exynos 2200 · $cores ядер';
+    if (s.contains('S5E9840')) return 'Exynos 2100 · $cores ядер';
+    if (s.contains('S5E8845')) return 'Exynos 1480 · $cores ядер';
+    if (s.contains('S5E8835')) return 'Exynos 1380 · $cores ядер';
 
     if (rawSoc.isNotEmpty) {
-      return '$rawSoc ($cores Cores)';
+      return '$rawSoc · $cores ядер';
     }
     if (platform.isNotEmpty && platform != 'unknown') {
-      return '${platform.toUpperCase()} ($cores Cores)';
+      return '${platform.toUpperCase()} · $cores ядер';
     }
-    return 'ARM64 ($cores Cores)';
+    return 'ARM64 · $cores ядер';
   }
 
   String? _cachedGpuName;
@@ -1010,7 +1014,29 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   Future<double> _parseGpuUsage(double cpuLoad) async {
     if (!_gpuSysfsBlocked) {
       try {
-        // 1. Qualcomm Adreno /sys/class/kgsl/kgsl-3d0/gpubusy (busy total)
+        // 1. Qualcomm percentage file (normalized by driver)
+        final kgslPct = File('/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage');
+        if (await kgslPct.exists()) {
+          final content = (await kgslPct.readAsString()).trim().replaceAll('%', '').trim();
+          final pct = double.tryParse(content);
+          if (pct != null) {
+            double ratio = (pct / 100.0).clamp(0.0, 1.0);
+            try {
+              final curClkFile = File('/sys/class/kgsl/kgsl-3d0/gpuclk');
+              final maxClkFile = File('/sys/class/kgsl/kgsl-3d0/max_gpuclk');
+              if (await curClkFile.exists() && await maxClkFile.exists()) {
+                final curClk = double.tryParse((await curClkFile.readAsString()).trim());
+                final maxClk = double.tryParse((await maxClkFile.readAsString()).trim());
+                if (curClk != null && maxClk != null && maxClk > 0) {
+                  ratio = (ratio * (curClk / maxClk)).clamp(0.0, 1.0);
+                }
+              }
+            } catch (_) {}
+            return ratio;
+          }
+        }
+
+        // 2. Qualcomm Adreno /sys/class/kgsl/kgsl-3d0/gpubusy (busy total at current clock)
         final kgslBusy = File('/sys/class/kgsl/kgsl-3d0/gpubusy');
         if (await kgslBusy.exists()) {
           final content = (await kgslBusy.readAsString()).trim();
@@ -1019,18 +1045,20 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
             final busy = double.tryParse(parts[0]) ?? 0.0;
             final total = double.tryParse(parts[1]) ?? 0.0;
             if (total > 0) {
-              return (busy / total).clamp(0.0, 1.0);
+              double ratio = (busy / total).clamp(0.0, 1.0);
+              try {
+                final curClkFile = File('/sys/class/kgsl/kgsl-3d0/gpuclk');
+                final maxClkFile = File('/sys/class/kgsl/kgsl-3d0/max_gpuclk');
+                if (await curClkFile.exists() && await maxClkFile.exists()) {
+                  final curClk = double.tryParse((await curClkFile.readAsString()).trim());
+                  final maxClk = double.tryParse((await maxClkFile.readAsString()).trim());
+                  if (curClk != null && maxClk != null && maxClk > 0) {
+                    ratio = (ratio * (curClk / maxClk)).clamp(0.0, 1.0);
+                  }
+                }
+              } catch (_) {}
+              return ratio;
             }
-          }
-        }
-
-        // 2. Qualcomm percentage file
-        final kgslPct = File('/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage');
-        if (await kgslPct.exists()) {
-          final content = (await kgslPct.readAsString()).trim();
-          final pct = double.tryParse(content);
-          if (pct != null) {
-            return (pct / 100.0).clamp(0.0, 1.0);
           }
         }
 
@@ -1068,9 +1096,9 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
     // 5. Fallback estimate dynamically correlated with system activity
     if (cpuLoad > 0.0) {
-      return (cpuLoad * 0.45 + 0.04).clamp(0.02, 0.95);
+      return (cpuLoad * 0.35 + 0.02).clamp(0.01, 0.95);
     }
-    return 0.05;
+    return 0.02;
   }
 
   Future<List<int>?> _parseCpuStats() async {
@@ -1099,7 +1127,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     try {
       final content = await File('/proc/self/stat').readAsString();
       final lastParen = content.lastIndexOf(')');
-      if (lastParen == -1) return null;
+      if (lastParen == -1) return _lastAppCpuFraction;
       final rest = content.substring(lastParen + 2).split(' ');
       if (rest.length > 14) {
         final utime = int.tryParse(rest[11]) ?? 0;
@@ -1111,19 +1139,23 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
         if (_lastAppCpuTicks != null && _lastAppCpuTime != null) {
           final elapsedSeconds = now.difference(_lastAppCpuTime!).inMilliseconds / 1000.0;
+          if (elapsedSeconds < 0.25) {
+            return _lastAppCpuFraction;
+          }
           final ticksDiff = totalTicks - _lastAppCpuTicks!;
-          if (elapsedSeconds > 0 && ticksDiff >= 0) {
-            final fraction = (ticksDiff / 100.0) / (elapsedSeconds * _cpuCores);
+          if (elapsedSeconds >= 0.25 && ticksDiff >= 0) {
+            final fraction = ((ticksDiff / 100.0) / (elapsedSeconds * _cpuCores)).clamp(0.01, 1.0);
             _lastAppCpuTicks = totalTicks;
             _lastAppCpuTime = now;
-            return fraction.clamp(0.01, 1.0);
+            _lastAppCpuFraction = fraction;
+            return fraction;
           }
         }
         _lastAppCpuTicks = totalTicks;
         _lastAppCpuTime = now;
       }
     } catch (_) {}
-    return null;
+    return _lastAppCpuFraction;
   }
 
   Future<double?> _parseCpuUsageFromSysfs() async {

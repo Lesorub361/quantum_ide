@@ -115,7 +115,9 @@ case "$CMD" in
         ;;
 
     screenshot)
-        DEST="${1:-/root/projects/quantum_ide/scratch/screenshot_$(date +%s).png}"
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        DEFAULT_SCRATCH="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/.quantum/scratch"
+        DEST="${1:-${DEFAULT_SCRATCH}/screenshot_$(date +%s).png}"
         DEV=$(get_target_device)
         if [ -z "$DEV" ]; then
             echo "❌ Ошибка: нет подключенного телефона (adb devices пуст)"
@@ -129,7 +131,9 @@ case "$CMD" in
         ;;
 
     ui-dump|inspect)
-        DEST="${1:-/root/projects/quantum_ide/scratch/window_dump_$(date +%s).xml}"
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        DEFAULT_SCRATCH="$(cd "$SCRIPT_DIR/.." 2>/dev/null && pwd)/.quantum/scratch"
+        DEST="${1:-${DEFAULT_SCRATCH}/window_dump_$(date +%s).xml}"
         DEV=$(get_target_device)
         if [ -z "$DEV" ]; then
             echo "❌ Ошибка: нет подключенного телефона (adb devices пуст)"
@@ -161,8 +165,13 @@ case "$CMD" in
             echo "Использование: quantum-device type <текст>"
             exit 1
         fi
-        ESCAPED=$(echo "$TEXT" | sed 's/ /%s/g' | sed "s/'/\\\'/g")
-        adb -s "$DEV" shell input text "$ESCAPED"
+        if echo "$TEXT" | grep -q '[^[:print:][:space:]]'; then
+            B64=$(printf "%s" "$TEXT" | base64 | tr -d '\n')
+            adb -s "$DEV" shell am broadcast -a ADB_INPUT_B64 --es msg "$B64" >/dev/null 2>&1 || true
+        else
+            ESCAPED=$(echo "$TEXT" | sed 's/ /%s/g' | sed "s/'/\\\'/g")
+            adb -s "$DEV" shell input text "$ESCAPED"
+        fi
         echo "✅ Текст введен на устройстве $DEV"
         ;;
 

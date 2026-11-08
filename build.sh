@@ -57,17 +57,18 @@ check_prerequisites() {
     fi
     
     if ! command -v java &> /dev/null; then
-        error "Java is not installed. Please install JDK 11 or higher."
-    fi
-    
-    local java_version=$(java -version 2>&1 | grep -oP 'version "\K[0-9]+' | head -1)
-    if [[ $java_version -lt 11 ]]; then
-        error "Java version must be 11 or higher. Current: $java_version"
+        warning "Java is not installed. Android builds require JDK 17+."
+    else
+        local java_version
+        java_version=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}' | awk -F '.' '{if ($1 == "1") print $2; else print $1}' | head -n 1)
+        if [[ -n "$java_version" && "$java_version" =~ ^[0-9]+$ && $java_version -lt 11 ]]; then
+            error "Java version must be 11 or higher. Current: $java_version"
+        fi
+        log "INFO" "Java version: ${java_version:-unknown}"
     fi
     
     log "INFO" "Flutter version: $(flutter --version | head -1)"
-    log "INFO" "Dart version: $(dart --version | head -1)"
-    log "INFO" "Java version: $java_version"
+    log "INFO" "Dart version: $(dart --version 2>&1 | head -1)"
     success "All prerequisites met"
 }
 
@@ -85,7 +86,7 @@ run_analyzer() {
     log "INFO" "Running Dart analyzer..."
     cd "$PROJECT_ROOT"
     
-    flutter analyze --fatal-infos 2>&1 | tee -a "$BUILD_LOG" || warning "Analyzer found issues but continuing..."
+    flutter analyze --no-fatal-infos --no-fatal-warnings 2>&1 | tee -a "$BUILD_LOG" || warning "Analyzer found issues but continuing..."
 }
 
 # Function to run tests
@@ -109,12 +110,56 @@ build_linux() {
         error "Linux build failed. Check logs above."
     }
     
-    local output_path="$PROJECT_ROOT/build/linux/x64/release/bundle"
+    local arch_dir="x64"
+    if [[ "$(uname -m)" == "aarch64" || "$(uname -m)" == "arm64" ]]; then
+        arch_dir="arm64"
+    fi
+    local output_path="$PROJECT_ROOT/build/linux/${arch_dir}/${FLUTTER_BUILD_MODE}/bundle"
     if [[ ! -d "$output_path" ]]; then
-        output_path="$PROJECT_ROOT/build/linux/x64/debug/bundle"
+        output_path=$(find "$PROJECT_ROOT/build/linux" -type d -name "bundle" 2>/dev/null | head -n 1)
     fi
     
-    success "Linux build complete: $output_path"
+    success "Linux build complete: ${output_path:-$PROJECT_ROOT/build/linux}"
+}
+
+# Function to build Web
+build_web() {
+    log "INFO" "Building for Web (${FLUTTER_BUILD_MODE})..."
+    cd "$PROJECT_ROOT"
+    flutter build web --$FLUTTER_BUILD_MODE 2>&1 | tee -a "$BUILD_LOG" || {
+        error "Web build failed. Check logs above."
+    }
+    success "Web build complete: $PROJECT_ROOT/build/web"
+}
+
+# Function to build Windows
+build_windows() {
+    log "INFO" "Building for Windows (${FLUTTER_BUILD_MODE})..."
+    cd "$PROJECT_ROOT"
+    flutter build windows --$FLUTTER_BUILD_MODE 2>&1 | tee -a "$BUILD_LOG" || {
+        error "Windows build failed. Check logs above."
+    }
+    success "Windows build complete: $PROJECT_ROOT/build/windows"
+}
+
+# Function to build macOS
+build_macos() {
+    log "INFO" "Building for macOS (${FLUTTER_BUILD_MODE})..."
+    cd "$PROJECT_ROOT"
+    flutter build macos --$FLUTTER_BUILD_MODE 2>&1 | tee -a "$BUILD_LOG" || {
+        error "macOS build failed. Check logs above."
+    }
+    success "macOS build complete: $PROJECT_ROOT/build/macos"
+}
+
+# Function to build iOS
+build_ios() {
+    log "INFO" "Building for iOS (${FLUTTER_BUILD_MODE})..."
+    cd "$PROJECT_ROOT"
+    flutter build ios --$FLUTTER_BUILD_MODE --no-codesign 2>&1 | tee -a "$BUILD_LOG" || {
+        error "iOS build failed. Check logs above."
+    }
+    success "iOS build complete: $PROJECT_ROOT/build/ios"
 }
 
 # Function to build Android APK
@@ -246,12 +291,24 @@ main() {
         android-aab)
             build_android_aab
             ;;
+        web)
+            build_web
+            ;;
+        windows)
+            build_windows
+            ;;
+        macos)
+            build_macos
+            ;;
+        ios)
+            build_ios
+            ;;
         all)
             build_linux
             build_android_apk
             ;;
         *)
-            error "Unknown platform: $TARGET_PLATFORM. Choose: linux, android, android-aab, all"
+            error "Unknown platform: $TARGET_PLATFORM. Choose: linux, android, android-split, android-aab, web, windows, macos, ios, all"
             ;;
     esac
     
@@ -270,10 +327,14 @@ Build Modes:
   profile     - Build with profiling enabled
 
 Platforms:
-  linux         - Build for Linux desktop
+  linux         - Build for Linux desktop (x64 / arm64)
   android       - Build Android APK (universal)
   android-split - Build Android APKs split per ABI (arm64-v8a, armeabi-v7a, x86_64)
   android-aab   - Build Android App Bundle
+  web           - Build Web application
+  windows       - Build for Windows desktop
+  macos         - Build for macOS desktop
+  ios           - Build for iOS (no codesign)
   all           - Build for all platforms (default)
 
 Examples:

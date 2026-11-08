@@ -228,6 +228,13 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = bottomInset > 0;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+
+    // На планшетах в альбомной ориентации и ПК (>= 900px), когда экранная клавиатура закрыта,
+    // не загромождаем экран мобильной полоской символов.
+    if (!isKeyboardOpen && screenWidth >= 900) {
+      return const SizedBox.shrink();
+    }
 
     final symbols = <String>[
       'TAB', '{', '}', '(', ')', '[', ']', ';', ':', '"', "'", '`', '=', '<', '>', '+', '-', '*', '/', '\\', '=>', '!=', '==', '&&', '||', '_', '\$', '?', '!', '@', '#', '%', '^', '&', '|', '~', '.',
@@ -250,7 +257,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               width: 28,
               height: 28,
               alignment: Alignment.center,
-              child: Icon(icon, size: 14, color: color ?? Colors.white70),
+              child: Icon(icon, size: 14, color: color ?? const Color(0xFF94A3B8)),
             ),
           ),
         ),
@@ -258,31 +265,19 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     }
 
     Color getSymbolColor(String sym) {
-      if (sym == 'TAB') return const Color(0xFF22D3EE);
-      if (sym == '{' || sym == '}' || sym == '(' || sym == ')' || sym == '[' || sym == ']') {
-        return const Color(0xFF38BDF8);
-      }
-      if (sym == '"' || sym == "'" || sym == '`') {
-        return const Color(0xFFFCD34D);
-      }
-      if (sym == '=' || sym == '+' || sym == '-' || sym == '*' || sym == '/' || sym == '=>') {
-        return const Color(0xFFC084FC);
-      }
-      if (sym == ';' || sym == ':' || sym == ',' || sym == '.') {
-        return Colors.white70;
-      }
-      return Colors.white.withValues(alpha: 0.85);
+      if (sym == 'TAB') return const Color(0xFFA78BFA);
+      return const Color(0xFFE2E8F0);
     }
 
     if (!isKeyboardOpen) {
       return Container(
-        height: 32,
+        height: 30,
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF0A0C14).withValues(alpha: 0.98),
+          color: const Color(0xFF0D0F14),
           border: Border(
-            top: BorderSide(color: Colors.white.withValues(alpha: 0.07), width: 0.8),
+            top: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.8),
           ),
         ),
         child: Row(
@@ -310,13 +305,11 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                 buildBtn(
                   icon: LucideIcons.chevron_left,
                   tooltip: 'Курсор влево',
-                  color: Colors.cyanAccent,
                   onPressed: () => _moveCursor(-1, ref),
                 ),
                 buildBtn(
                   icon: LucideIcons.chevron_right,
                   tooltip: 'Курсор вправо',
-                  color: Colors.cyanAccent,
                   onPressed: () => _moveCursor(1, ref),
                 ),
                 buildBtn(
@@ -336,13 +329,12 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               children: [
                 Text(
                   '${settings.fontSize.toInt()} px',
-                  style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.jetBrainsMono(fontSize: 10, color: const Color(0xFF94A3B8), fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 6),
                 buildBtn(
                   icon: LucideIcons.keyboard,
                   tooltip: l10n.edit,
-                  color: Colors.cyanAccent,
                   onPressed: () {
                     _triggerHaptic(ref);
                     FocusManager.instance.primaryFocus?.requestFocus();
@@ -360,7 +352,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF0C0E18),
+        color: const Color(0xFF0D0F14),
         border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.6)),
       ),
       child: Row(
@@ -384,13 +376,11 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           buildBtn(
             icon: LucideIcons.chevron_left,
             tooltip: 'Курсор влево',
-            color: Colors.cyanAccent,
             onPressed: () => _moveCursor(-1, ref),
           ),
           buildBtn(
             icon: LucideIcons.chevron_right,
             tooltip: 'Курсор вправо',
-            color: Colors.cyanAccent,
             onPressed: () => _moveCursor(1, ref),
           ),
           buildBtn(
@@ -406,7 +396,6 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           buildBtn(
             icon: LucideIcons.palette,
             tooltip: 'Выбрать цвет (Color Picker)',
-            color: Colors.pinkAccent,
             onPressed: () {
               _triggerHaptic(ref);
               ColorPickerDialog.show(
@@ -420,7 +409,6 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           buildBtn(
             icon: LucideIcons.code_xml,
             tooltip: 'Быстрые сниппеты кода',
-            color: const Color(0xFF00E5FF),
             onPressed: () {
               _triggerHaptic(ref);
               _showSnippetPicker(context);
@@ -429,7 +417,6 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           buildBtn(
             icon: LucideIcons.volume_2,
             tooltip: 'Звук клавиатуры (ASMR)',
-            color: Colors.amberAccent,
             onPressed: () {
               KeyboardSoundService.showSwitchSelectorDialog(context);
             },
@@ -459,25 +446,23 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                     style: TextButton.styleFrom(
                       minimumSize: Size(isTab ? 38 : 26, 26),
                       padding: EdgeInsets.zero,
-                      backgroundColor: isTab
-                          ? Colors.cyanAccent.withValues(alpha: 0.08)
-                          : const Color(0xFF151926),
+                      backgroundColor: const Color(0xFF141720),
                       foregroundColor: symColor,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(5),
                         side: BorderSide(
                           color: isTab
-                              ? Colors.cyanAccent.withValues(alpha: 0.25)
-                              : Colors.white.withValues(alpha: 0.05),
-                          width: 0.5,
+                              ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.06),
+                          width: 0.6,
                         ),
                       ),
                     ),
                     child: Text(
                       symbol,
                       style: GoogleFonts.jetBrainsMono(
-                        fontSize: isTab ? 9.5 : 12.5,
-                        fontWeight: FontWeight.bold,
+                        fontSize: isTab ? 9.5 : 12.0,
+                        fontWeight: FontWeight.w600,
                         color: symColor,
                       ),
                     ),

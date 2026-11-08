@@ -53,11 +53,18 @@ class SettingsState {
     this.glassmorphismBlur = 0.0,
     this.hotkeysJson = '{}',
     this.sdCardSync = true,
-    this.formatOnSave = true,
+    this.formatOnSave = false,
     this.deepseekApiKey = '',
     this.openrouterApiKey = '',
     this.openaiApiKey = '',
     this.anthropicApiKey = '',
+    this.geminiApiKey = '',
+    this.groqApiKey = '',
+    this.xaiApiKey = '',
+    this.mistralApiKey = '',
+    this.customApiBaseUrl = 'http://127.0.0.1:11434/v1',
+    this.customApiModel = 'qwen2.5-coder:7b',
+    this.customApiKey = '',
     this.dshPort = 3080,
     this.isInitialized = false,
   });
@@ -66,6 +73,13 @@ class SettingsState {
   final String openrouterApiKey;
   final String openaiApiKey;
   final String anthropicApiKey;
+  final String geminiApiKey;
+  final String groqApiKey;
+  final String xaiApiKey;
+  final String mistralApiKey;
+  final String customApiBaseUrl;
+  final String customApiModel;
+  final String customApiKey;
   final int dshPort;
 
   SettingsState copyWith({
@@ -98,6 +112,13 @@ class SettingsState {
     String? openrouterApiKey,
     String? openaiApiKey,
     String? anthropicApiKey,
+    String? geminiApiKey,
+    String? groqApiKey,
+    String? xaiApiKey,
+    String? mistralApiKey,
+    String? customApiBaseUrl,
+    String? customApiModel,
+    String? customApiKey,
     int? dshPort,
     bool? isInitialized,
   }) {
@@ -130,6 +151,13 @@ class SettingsState {
       openrouterApiKey: openrouterApiKey ?? this.openrouterApiKey,
       openaiApiKey: openaiApiKey ?? this.openaiApiKey,
       anthropicApiKey: anthropicApiKey ?? this.anthropicApiKey,
+      geminiApiKey: geminiApiKey ?? this.geminiApiKey,
+      groqApiKey: groqApiKey ?? this.groqApiKey,
+      xaiApiKey: xaiApiKey ?? this.xaiApiKey,
+      mistralApiKey: mistralApiKey ?? this.mistralApiKey,
+      customApiBaseUrl: customApiBaseUrl ?? this.customApiBaseUrl,
+      customApiModel: customApiModel ?? this.customApiModel,
+      customApiKey: customApiKey ?? this.customApiKey,
       dshPort: dshPort ?? this.dshPort,
       isInitialized: isInitialized ?? this.isInitialized,
     );
@@ -164,11 +192,18 @@ class SettingsService extends StateNotifier<SettingsState> {
   static const _keyGlassmorphismBlur = 'settings_glassmorphism_blur';
   static const _keyHotkeys = 'settings_hotkeys';
   static const _keySdCardSync = 'settings_sd_card_sync';
-  static const _keyFormatOnSave = 'settings_format_on_save';
+  static const _keyFormatOnSave = 'settings_format_on_save_v2';
   static const _keyDeepseekApiKey = 'settings_deepseek_api_key';
   static const _keyOpenrouterApiKey = 'settings_openrouter_api_key';
   static const _keyOpenaiApiKey = 'settings_openai_api_key';
   static const _keyAnthropicApiKey = 'settings_anthropic_api_key';
+  static const _keyGeminiApiKey = 'settings_gemini_api_key';
+  static const _keyGroqApiKey = 'settings_groq_api_key';
+  static const _keyXaiApiKey = 'settings_xai_api_key';
+  static const _keyMistralApiKey = 'settings_mistral_api_key';
+  static const _keyCustomApiBaseUrl = 'settings_custom_api_base_url';
+  static const _keyCustomApiModel = 'settings_custom_api_model';
+  static const _keyCustomApiKey = 'settings_custom_api_key';
   static const _keyDshPort = 'settings_dsh_port';
 
   Future<void> _loadSettings() async {
@@ -199,11 +234,18 @@ class SettingsService extends StateNotifier<SettingsState> {
       glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? 0.0,
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
       sdCardSync: prefs.getBool(_keySdCardSync) ?? true,
-      formatOnSave: prefs.getBool(_keyFormatOnSave) ?? true,
+      formatOnSave: prefs.getBool(_keyFormatOnSave) ?? false,
       deepseekApiKey: prefs.getString(_keyDeepseekApiKey) ?? '',
       openrouterApiKey: prefs.getString(_keyOpenrouterApiKey) ?? '',
       openaiApiKey: prefs.getString(_keyOpenaiApiKey) ?? '',
       anthropicApiKey: prefs.getString(_keyAnthropicApiKey) ?? '',
+      geminiApiKey: prefs.getString(_keyGeminiApiKey) ?? '',
+      groqApiKey: prefs.getString(_keyGroqApiKey) ?? '',
+      xaiApiKey: prefs.getString(_keyXaiApiKey) ?? '',
+      mistralApiKey: prefs.getString(_keyMistralApiKey) ?? '',
+      customApiBaseUrl: prefs.getString(_keyCustomApiBaseUrl) ?? 'http://127.0.0.1:11434/v1',
+      customApiModel: prefs.getString(_keyCustomApiModel) ?? 'qwen2.5-coder:7b',
+      customApiKey: prefs.getString(_keyCustomApiKey) ?? '',
       dshPort: prefs.getInt(_keyDshPort) ?? 3080,
       isInitialized: true,
     );
@@ -384,6 +426,48 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(anthropicApiKey: key);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyAnthropicApiKey, key);
+  }
+
+  Future<void> setGeminiApiKey(String key) async {
+    state = state.copyWith(geminiApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyGeminiApiKey, key);
+  }
+
+  Future<void> setGroqApiKey(String key) async {
+    state = state.copyWith(groqApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyGroqApiKey, key);
+  }
+
+  Future<void> setXaiApiKey(String key) async {
+    state = state.copyWith(xaiApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyXaiApiKey, key);
+  }
+
+  Future<void> setMistralApiKey(String key) async {
+    state = state.copyWith(mistralApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyMistralApiKey, key);
+  }
+
+  Future<void> setCustomApiBaseUrl(String url) async {
+    state = state.copyWith(customApiBaseUrl: url);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyCustomApiBaseUrl, url);
+  }
+
+  Future<void> setCustomApiModel(String model) async {
+    state = state.copyWith(customApiModel: model);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyCustomApiModel, model);
+  }
+
+  Future<void> setCustomApiKey(String key) async {
+    state = state.copyWith(customApiKey: key);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyCustomApiKey, key);
   }
 
   Future<void> setDshPort(int port) async {

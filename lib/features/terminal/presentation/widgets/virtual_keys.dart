@@ -773,34 +773,18 @@ class _VirtualKeyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color buttonColor = Colors.white.withValues(alpha: 0.06);
-    Color borderColor = Colors.white.withValues(alpha: 0.09);
-    Color themeColor = Colors.white.withValues(alpha: 0.82);
+    Color buttonColor = const Color(0xFF141720);
+    Color borderColor = Colors.white.withValues(alpha: 0.08);
+    Color themeColor = const Color(0xFFCBD5E1);
 
     if (isActive) {
-      buttonColor = Colors.cyanAccent.withValues(alpha: 0.25);
-      borderColor = Colors.cyanAccent.withValues(alpha: 0.6);
-      themeColor = Colors.cyanAccent;
-    } else if (keyData.value == 'toggle_keyboard') {
-      buttonColor = const Color(0xFF10B981).withValues(alpha: 0.18);
-      borderColor = const Color(0xFF34D399).withValues(alpha: 0.45);
-      themeColor = const Color(0xFF6EE7B7);
+      buttonColor = const Color(0xFF8B5CF6).withValues(alpha: 0.22);
+      borderColor = const Color(0xFF8B5CF6).withValues(alpha: 0.55);
+      themeColor = const Color(0xFFA78BFA);
     } else if (isHighlightedAction) {
-      buttonColor = const Color(0xFF0EA5E9).withValues(alpha: 0.2);
-      borderColor = const Color(0xFF38BDF8).withValues(alpha: 0.45);
-      themeColor = const Color(0xFF7DD3FC);
-    } else if (keyData.value == 'ctrl+c' || keyData.value == 'ctrl+z') {
-      buttonColor = Colors.redAccent.withValues(alpha: 0.12);
-      borderColor = Colors.redAccent.withValues(alpha: 0.28);
-      themeColor = const Color(0xFFFF6B6B);
-    } else if (keyData.value == 'copy' ||
-        keyData.value == 'paste' ||
-        keyData.value == 'select_all' ||
-        keyData.value == 'copy_all_output' ||
-        keyData.value == 'inline_selection_mode') {
-      buttonColor = const Color(0xFF8B5CF6).withValues(alpha: 0.16);
-      borderColor = const Color(0xFF8B5CF6).withValues(alpha: 0.34);
-      themeColor = const Color(0xFFC084FC);
+      buttonColor = const Color(0xFF1E2433);
+      borderColor = Colors.white.withValues(alpha: 0.14);
+      themeColor = Colors.white;
     }
 
     final isArrow = keyData.label == '↑' ||

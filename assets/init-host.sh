@@ -1,37 +1,38 @@
 #!/bin/sh
-# init-host.sh - Wrapper to launch proot with correct paths
+# init-host.sh - Wrapper to launch proot with correct paths and Android 14+ compatibility
 
 FILES_DIR="$1"
 if [ -z "$FILES_DIR" ]; then
-    # Fallback to current directory if not provided
     FILES_DIR=$(pwd)
 fi
 
 PROOT="$FILES_DIR/bin/proot"
-ROOTFS="$FILES_DIR/ubuntu"
+ROOTFS="$FILES_DIR/rootfs/ubuntu"
+if [ ! -d "$ROOTFS" ] && [ -d "$FILES_DIR/ubuntu" ]; then
+    ROOTFS="$FILES_DIR/ubuntu"
+fi
 TMPDIR="$FILES_DIR/runtime/tmp"
 
-# Ensure tmp dir exists
 mkdir -p "$TMPDIR"
 
-# Set up environment for proot
 export PROOT_TMP_DIR="$TMPDIR"
-export LD_LIBRARY_PATH="$FILES_DIR"
+export PROOT_NO_SECCOMP=1
+export LD_LIBRARY_PATH="$FILES_DIR:$FILES_DIR/bin:${LD_LIBRARY_PATH:-}"
 
-# Launch proot
-# -S: bind-mount rootfs and use it as /
-# -0: fake root id
-# -b: bind mounts
-# -w: working directory
-# -q: qemu (if needed, but here we assume native)
+SDCARD_BIND=""
+if [ -d "/storage/emulated/0" ]; then
+    SDCARD_BIND="-b /storage/emulated/0:/sdcard"
+fi
 
 "$PROOT" \
-    -S "$ROOTFS" \
+    --link2symlink \
     -0 \
+    -r "$ROOTFS" \
     -b /dev \
     -b /proc \
     -b /sys \
     -b /dev/pts \
+    $SDCARD_BIND \
     -b "$FILES_DIR/bin:/usr/local/bin" \
     -w /root \
     /bin/bash --login

@@ -2204,7 +2204,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                 focusNode: _getFocusNode(keyId),
                                 autofocus: !isMobile,
                                 deleteDetection: true,
-                                autoResize: !isMobile ? true : (MediaQuery.of(context).viewInsets.bottom == 0 && !_isMobileKeyboardActive),
+                                autoResize: true,
                                 hardwareKeyboardOnly: isMobile && !_isMobileKeyboardActive,
                                 onKeyEvent: (focusNode, event) {
                                   if (event is! KeyUpEvent && event.logicalKey == LogicalKeyboardKey.backspace) {

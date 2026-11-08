@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/system_monitor_service.dart';
+import 'package:quantum_ide/core/services/system_stats_service.dart';
 
 class SystemStatusBar extends ConsumerWidget {
   const SystemStatusBar({super.key});
@@ -10,7 +11,9 @@ class SystemStatusBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final monitor = ref.watch(systemMonitorProvider);
+    final stats = ref.watch(systemStatsProvider);
     final m = monitor.metrics;
+    final cpuPct = (stats.cpuUsage * 100).clamp(1, 100).toStringAsFixed(0);
 
     return InkWell(
       onTap: () => showDialog(
@@ -32,7 +35,7 @@ class SystemStatusBar extends ConsumerWidget {
             const Icon(LucideIcons.cpu, size: 11, color: Color(0xFF60A5FA)),
             const SizedBox(width: 4),
             Text(
-              '${(m.cpuLoad1m * 10).clamp(0, 100).toStringAsFixed(0)}%',
+              '$cpuPct%',
               style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white70, fontWeight: FontWeight.w600),
             ),
             const SizedBox(width: 8),
@@ -72,6 +75,7 @@ class SystemDiagnosticsDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final monitor = ref.watch(systemMonitorProvider);
+    final stats = ref.watch(systemStatsProvider);
     final m = monitor.metrics;
 
     return AlertDialog(
@@ -109,9 +113,9 @@ class SystemDiagnosticsDialog extends ConsumerWidget {
             ),
             const SizedBox(height: 10),
             _buildMetricCard(
-              title: 'Процессор (CPU)',
-              value: 'Ядер: ${m.cpuCores} | Нагрузка (1m): ${m.cpuLoad1m.toStringAsFixed(2)}',
-              progress: (m.cpuLoad1m / (m.cpuCores > 0 ? m.cpuCores : 1)).clamp(0.0, 1.0),
+              title: 'Процессор (${stats.socName})',
+              value: 'Нагрузка: ${(stats.cpuUsage * 100).toStringAsFixed(1)}% | IDE: ${stats.appCpuPercent.toStringAsFixed(1)}%',
+              progress: stats.cpuUsage.clamp(0.0, 1.0),
               progressColor: const Color(0xFF3B82F6),
               icon: LucideIcons.cpu,
             ),

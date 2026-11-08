@@ -189,16 +189,8 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
-          final safeRows = rows < 10 ? 10 : rows;
+          final safeRows = rows < 6 ? 6 : rows;
           final safeCols = cols < 20 ? 20 : cols;
-          // On mobile devices, software keyboard appearing or disappearing drops/restores visible rows
-          // while columns remain constant. Never resize PTY on keyboard height fluctuations to prevent
-          // sending SIGWINCH to bash, which causes readline to reprint duplicate prompts ("лестница строк").
-          if ((Platform.isAndroid || Platform.isIOS) &&
-              lastCols == safeCols &&
-              lastRows > 0) {
-            return;
-          }
           if (safeRows != lastRows || safeCols != lastCols) {
             lastRows = safeRows;
             lastCols = safeCols;
@@ -216,12 +208,11 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           .transform(terminalOutputTransformer())
           .listen(
         (text) {
+          if (text.isEmpty) return;
           try {
             xtermTerm.write(text);
-          } catch (e) {
-            try {
-              xtermTerm.write(text.replaceAll(RegExp(r'\x1b\[[0-9;]*[a-zA-Z]'), ''));
-            } catch (_) {}
+          } catch (_) {
+            // Never re-write chunk on error to avoid duplicate words.
           }
           BuildProgressTracker.instance.feed(text);
           if (type == DedicatedTerminalType.build) {
