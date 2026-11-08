@@ -172,7 +172,6 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   int? _lastAppCpuTicks;
   DateTime? _lastAppCpuTime;
-  double? _lastAppCpuFraction;
   final int _cpuCores = Platform.numberOfProcessors > 0 ? Platform.numberOfProcessors : 8;
 
   List<SystemProcessItem> _cachedProcesses = const [];
