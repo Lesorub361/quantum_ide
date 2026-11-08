@@ -835,7 +835,7 @@ class _FileTreeNodeState extends ConsumerState<FileTreeNode> {
       ],
     );
 
-    if (selected == null || !mounted) return;
+    if (selected == null || !mounted || !context.mounted) return;
     switch (selected) {
       case 'new_file':
         _startInlineCreation(isDir: false);

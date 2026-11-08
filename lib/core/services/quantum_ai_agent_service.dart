@@ -56,54 +56,62 @@ class QuantumModelItem {
       isReasoning: true,
     ),
 
-    // Active Free Models on OpenRouter
+    // Real Active Free Models on OpenRouter
     QuantumModelItem(
-      id: 'google/gemma-4-31b-it:free',
-      name: 'Google Gemma 4 31B (Free)',
+      id: 'meta-llama/llama-3.3-70b-instruct:free',
+      name: 'Llama 3.3 70B (Free)',
       providerName: 'OpenRouter',
       category: 'Бесплатные',
-      badge: 'FREE',
+      badge: 'TOP FREE',
       badgeColorValue: 0xFF10B981,
     ),
     QuantumModelItem(
-      id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',
-      name: 'NVIDIA Nemotron Reasoning (Free)',
+      id: 'deepseek/deepseek-r1:free',
+      name: 'DeepSeek R1 Reasoning (Free)',
       providerName: 'OpenRouter',
       category: 'Бесплатные',
       badge: 'FREE R1',
-      badgeColorValue: 0xFF10B981,
+      badgeColorValue: 0xFF8B5CF6,
       isReasoning: true,
     ),
     QuantumModelItem(
-      id: 'cohere/north-mini-code:free',
-      name: 'Cohere North Mini Code (Free)',
+      id: 'qwen/qwen-2.5-coder-32b-instruct:free',
+      name: 'Qwen 2.5 Coder 32B (Free)',
       providerName: 'OpenRouter',
       category: 'Бесплатные',
-      badge: 'FREE Code',
-      badgeColorValue: 0xFF10B981,
+      badge: 'FREE CODE',
+      badgeColorValue: 0xFF06B6D4,
     ),
     QuantumModelItem(
-      id: 'google/gemma-4-26b-a4b-it:free',
-      name: 'Google Gemma 4 26B (Free)',
+      id: 'deepseek/deepseek-chat:free',
+      name: 'DeepSeek V3 Chat (Free)',
       providerName: 'OpenRouter',
       category: 'Бесплатные',
       badge: 'FREE',
       badgeColorValue: 0xFF10B981,
     ),
     QuantumModelItem(
-      id: 'nvidia/nemotron-3.5-lightning:free',
-      name: 'NVIDIA 3.5 Lightning (Free)',
+      id: 'google/gemini-2.0-flash-exp:free',
+      name: 'Gemini 2.0 Flash (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FAST FREE',
+      badgeColorValue: 0xFF3B82F6,
+    ),
+    QuantumModelItem(
+      id: 'google/gemma-2-9b-it:free',
+      name: 'Google Gemma 2 9B (Free)',
       providerName: 'OpenRouter',
       category: 'Бесплатные',
       badge: 'FREE',
       badgeColorValue: 0xFF10B981,
     ),
     QuantumModelItem(
-      id: 'liquid/lfm-2.5-2.6b:free',
-      name: 'Liquid LFM 2.5 (Free)',
+      id: 'mistralai/mistral-7b-instruct:free',
+      name: 'Mistral 7B Instruct (Free)',
       providerName: 'OpenRouter',
       category: 'Бесплатные',
-      badge: 'FREE Fast',
+      badge: 'FREE',
       badgeColorValue: 0xFF10B981,
     ),
 
@@ -438,6 +446,9 @@ class AgentAction {
   final String? content;
   final String? command;
   bool isExecuted;
+  bool isExecuting;
+  String? executionError;
+  String? output;
 
   /// Состояние файла ДО применения (для отката). null → файла не было.
   String? backupContent;
@@ -450,6 +461,9 @@ class AgentAction {
     this.content,
     this.command,
     this.isExecuted = false,
+    this.isExecuting = false,
+    this.executionError,
+    this.output,
   });
 }
 
@@ -742,6 +756,7 @@ class QuantumAiAgentService extends ChangeNotifier {
   }
 
   void clearChat() {
+    stopGeneration();
     _messages.clear();
     _promptTokens = 0;
     _completionTokens = 0;
@@ -908,12 +923,42 @@ class QuantumAiAgentService extends ChangeNotifier {
     } catch (e) {
       if (e is DioException && CancelToken.isCancel(e)) {
         _statusMessage = 'Остановлено пользователем';
-      } else if (e is DioException && (e.response?.statusCode == 404 || e.message?.contains('404') == true)) {
-        final errText = '⚠️ Модель "${_selectedModel.name}" (${_selectedModel.id}) недоступна на сервере (код 404).\n\n'
-            'OpenRouter периодически отключает устаревшие бесплатные модели или обновляет их идентификаторы.\n\n'
-            '💡 **Что делать:** Откройте выбор модели (вверху панели) и нажмите кнопку 🔄 **«Обновить список»**, чтобы загрузить актуальные активные бесплатные модели прямо с сервера OpenRouter.';
-        assistantMsg.text = assistantMsg.text.isEmpty ? errText : '${assistantMsg.text}\n\n$errText';
-        _statusMessage = 'Ошибка 404: модель отключена на сервере';
+      } else if (e is DioException) {
+        String detailedError = '';
+        try {
+          if (e.response?.data is ResponseBody) {
+            final raw = await utf8.decodeStream((e.response!.data as ResponseBody).stream);
+            final json = jsonDecode(raw);
+            if (json is Map && json['error'] != null) {
+              final errMap = json['error'];
+              if (errMap is Map && errMap['message'] != null) {
+                detailedError = errMap['message'].toString();
+              } else {
+                detailedError = raw;
+              }
+            } else {
+              detailedError = raw;
+            }
+          }
+        } catch (_) {}
+
+        if (e.response?.statusCode == 404 || e.message?.contains('404') == true || detailedError.contains('404')) {
+          final errText = '⚠️ Модель "${_selectedModel.name}" (${_selectedModel.id}) недоступна на сервере (код 404).\n\n'
+              'OpenRouter периодически отключает устаревшие бесплатные модели или обновляет их идентификаторы.\n\n'
+              '💡 **Решение:** Выберите другую бесплатную модель (например, **Llama 3.3 70B (Free)**, **DeepSeek V3 (Free)** или **Gemini 2.0 Flash (Free)**) в списке вверху панели.';
+          assistantMsg.text = assistantMsg.text.isEmpty ? errText : '${assistantMsg.text}\n\n$errText';
+          _statusMessage = 'Ошибка 404: модель недоступна';
+        } else if (e.response?.statusCode == 429 || detailedError.toLowerCase().contains('rate limit')) {
+          const errText = '⚠️ Превышен лимит запросов бесплатной модели (код 429 Rate Limit).\n\n'
+              'Провайдер временно ограничил бесплатные запросы для этой модели.\n\n'
+              '💡 **Решение:** Переключитесь на другую бесплатную модель из списка (например, **Llama 3.3 70B**, **Qwen 2.5 Coder 32B** или **DeepSeek R1**) — у каждой модели свой независимый лимит!';
+          assistantMsg.text = assistantMsg.text.isEmpty ? errText : '${assistantMsg.text}\n\n$errText';
+          _statusMessage = 'Лимит запросов (429)';
+        } else {
+          final msg = detailedError.isNotEmpty ? detailedError : e.toString();
+          assistantMsg.text += '\n\n⚠️ **Ошибка генерации:** $msg';
+          _statusMessage = 'Ошибка: $msg';
+        }
       } else {
         assistantMsg.text += '\n\n⚠️ **Ошибка генерации:** $e';
         _statusMessage = 'Ошибка: $e';
@@ -1115,7 +1160,7 @@ class QuantumAiAgentService extends ChangeNotifier {
         out.add({'role': role, 'content': textContent});
       }
     }
-    var idx = 2;
+    const idx = 2;
     while (total > budgetChars && out.length > 6 && idx < out.length - keepRecent) {
       final c = out[idx]['content'];
       total -= c is String ? c.length : 1000;
@@ -1142,11 +1187,11 @@ class QuantumAiAgentService extends ChangeNotifier {
     final ctx = _tools.contextBlock();
     final rules = _projectRules(wsPath);
     final modeBlock = switch (_mode) {
-      AgentMode.ask => 'РЕЖИМ ASK: только отвечай и исследуй проект инструментами чтения. НЕ предлагай блоки <action> (запись файлов и команды запрещены). Код показывай обычными markdown-блоками.',
-      AgentMode.plan => 'РЕЖИМ PLAN: исследуй проект инструментами и составь нумерованный план изменений: какие файлы, что менять и зачем, риски, как проверить. НЕ пиши блоки <action> и не выводи готовый код целиком. Закончи фразой «План готов».',
-      AgentMode.build => 'РЕЖИМ BUILD: реализуй задачу. Если есть утверждённый план — следуй ему по шагам.',
+      AgentMode.ask => 'РЕЖИМ ASK: Отвечай максимально подробно, профессионально и красиво оформленно. Используй богатый Markdown (структурированные разделы с эмодзи, списки, выделения, цитаты, таблицы). Код оформляй блоками с указанием языка (```dart, ```json, ```bash). Исследуй проект инструментами чтения при необходимости. НЕ предлагай блоки <action>.',
+      AgentMode.plan => 'РЕЖИМ PLAN: Проведи полный аудит архитектуры через инструменты чтения и составь визуально безупречный, детальный нумерованный план: 🎯 Цель, 📋 Пошаговый план (файлы, изменения, логика), 🛠 Архитектурные решения, ⚠️ Возможные риски, ✅ Критерии проверки. НЕ пиши блоки <action>. В конце напиши: «Готов перейти к реализации? Переключись в режим Build и нажми «Выполнить план»!».',
+      AgentMode.build => 'РЕЖИМ BUILD: Реализуй задачу полностью от начала до конца. Если есть план — следуй ему шаг за шагом. Создавай или изменяй файлы через <action type="write_file">, запускай нужные команды и проверки через <action type="run_command">.',
     };
-    return '''Ты — ведущий ИИ-разработчик и ассистент Quantum IDE.
+    return '''Ты — ведущий ИИ-разработчик и ассистент Quantum IDE (уровень Staff / Principal Engineer).
 Ты работаешь непосредственно с проектом пользователя.
 Текущая рабочая директория: ${wsPath ?? 'корень проекта'}.
 $modeBlock
@@ -1170,12 +1215,12 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
 содержимое файла
 </action>
 
-5. Для команд терминала (требуют подтверждения пользователя):
+5. Для команд терминала (пользователь запустит по кнопке):
 <action type="run_command">
 команда_bash
 </action>
 
-6. Объясняй изменения кратко и по делу. Поддерживай формулы KaTeX и Markdown. Отвечай на языке пользователя.
+6. Оформляй ответы аккуратно и красиво: форматируй в GitHub Markdown, выделяй код и пути, отвечай на языке пользователя (по умолчанию на русском).
 ''';
   }
 
@@ -1493,6 +1538,9 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     final fullPath = _resolveActionPath(action);
     if (ws == null || fullPath == null || action.content == null) return false;
 
+    action.isExecuting = true;
+    action.executionError = null;
+    notifyListeners();
     try {
       final file = File(fullPath);
       if (!action.backupTaken) {
@@ -1516,8 +1564,12 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
       notifyListeners();
       return true;
     } catch (e) {
+      action.executionError = '$e';
       debugPrint('[QuantumAiAgent] Write error: $e');
       return false;
+    } finally {
+      action.isExecuting = false;
+      notifyListeners();
     }
   }
 
@@ -1574,9 +1626,16 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
   Future<void> executeCommandAction(AgentAction action) async {
     final ws = _getWorkspacePath();
     if (action.command == null) return;
+    action.isExecuting = true;
+    action.executionError = null;
+    notifyListeners();
     try {
-      final out = await _runtime.runCommand(action.command!, workingDirectory: ws);
+      final out = await _runtime.runCommand(action.command!, workingDirectory: ws).timeout(
+        const Duration(minutes: 5),
+        onTimeout: () => throw TimeoutException('Превышено время ожидания выполнения команды (5 мин).'),
+      );
       action.isExecuted = true;
+      action.output = out;
       final clipped = out.length > 6000 ? '…${out.substring(out.length - 6000)}' : out;
       _messages.add(ChatMessage(
         id: 'tool_${DateTime.now().microsecondsSinceEpoch}',
@@ -1586,18 +1645,30 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
         timestamp: DateTime.now(),
       ));
       notifyListeners();
-      // Возвращаем результат агенту, чтобы он мог исправить ошибку сам.
-      unawaited(sendMessage('Команда выполнена, результат выше. Проанализируй и продолжай.'));
+      // Возвращаем результат агенту для продолжения
+      unawaited(sendMessage('Команда выполнена успешно. Результат:\n```\n${clipped.trim()}\n```\nПроанализируй вывод и продолжай задачу.'));
     } catch (e) {
-      debugPrint('[QuantumAiAgent] Command error: $e');
+      action.executionError = '$e';
+      _messages.add(ChatMessage(
+        id: 'tool_err_${DateTime.now().microsecondsSinceEpoch}',
+        role: MessageRole.system,
+        text: '⚠️ Ошибка при выполнении команды `${action.command}`:\n$e',
+        toolLabel: 'error ${action.command}',
+        timestamp: DateTime.now(),
+      ));
+      notifyListeners();
+      unawaited(sendMessage('При выполнении команды `${action.command}` произошла ошибка:\n$e\nПредложи исправление.'));
+    } finally {
+      action.isExecuting = false;
+      notifyListeners();
     }
   }
 }
 
 final quantumAiAgentServiceProvider = ChangeNotifierProvider<QuantumAiAgentService>((ref) {
   final runtime = ref.watch(runtimeServiceProvider);
-  final settings = () => ref.read(settingsProvider);
-  final ws = () => ref.read(workspaceProvider).currentPath;
+  SettingsState settings() => ref.read(settingsProvider);
+  String? ws() => ref.read(workspaceProvider).currentPath;
   AgentContext agentCtx() {
     final ed = ref.read(editorProvider);
     final wsPath = ref.read(workspaceProvider).currentPath;

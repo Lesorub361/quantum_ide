@@ -15,6 +15,7 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/ai_diff_dialog.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/mcp_management_dialog.dart';
 
 class QuantumAiAgentPanel extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
@@ -290,6 +291,24 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
           ),
           const SizedBox(width: 6),
 
+          // MCP Tools & Servers
+          IconButton(
+            icon: const Icon(LucideIcons.plug, size: 13, color: Color(0xFF38BDF8)),
+            tooltip: 'MCP Серверы и Инструменты',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+            onPressed: () => McpManagementDialog.show(context),
+          ),
+
+          // New Chat
+          IconButton(
+            icon: const Icon(LucideIcons.message_square_plus, size: 13, color: Color(0xFFA78BFA)),
+            tooltip: 'Начать новый диалог',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+            onPressed: () => agent.clearChat(),
+          ),
+
           // API Keys Settings
           IconButton(
             icon: const Icon(LucideIcons.key, size: 13, color: Color(0xFF94A3B8)),
@@ -478,7 +497,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       physics: const BouncingScrollPhysics(),
-                      separatorBuilder: (_, __) => const SizedBox(width: 6),
+                      separatorBuilder: (_, _) => const SizedBox(width: 6),
                       itemCount: categories.length,
                       itemBuilder: (context, idx) {
                         final cat = categories[idx];
@@ -531,7 +550,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         : ListView.separated(
                             physics: const BouncingScrollPhysics(),
                             itemCount: filteredModels.length,
-                            separatorBuilder: (_, __) => Divider(
+                            separatorBuilder: (_, _) => Divider(
                               height: 1,
                               color: Colors.white.withValues(alpha: 0.05),
                             ),
@@ -696,7 +715,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        separatorBuilder: (_, __) => const SizedBox(width: 6),
+        separatorBuilder: (_, _) => const SizedBox(width: 6),
         itemCount: suggestions.length,
         itemBuilder: (context, i) {
           final prompt = suggestions[i];
@@ -771,9 +790,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
               width: 26,
               height: 26,
               margin: const EdgeInsets.only(right: 8, top: 2),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
                 ),
               ),
@@ -811,7 +830,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                                 width: 120,
                                 height: 90,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(
+                                errorBuilder: (_, _, _) => Container(
                                   width: 120,
                                   height: 60,
                                   color: Colors.black26,
@@ -860,9 +879,48 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     GptMarkdown(
                       _cleanText(msg.text),
                       style: GoogleFonts.inter(
-                        color: Colors.white,
+                        color: const Color(0xFFF1F5F9),
                         fontSize: 12.5,
                         height: 1.45,
+                      ),
+                      styleSheet: GptMarkdownStyleSheet(
+                        codeBlock: CodeBlockStyle(
+                          backgroundColor: const Color(0xFF131722),
+                          borderColor: const Color(0xFF283145),
+                          borderWidth: 1.0,
+                          textColor: const Color(0xFFE2E8F0),
+                          showCopyButton: true,
+                          fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
+                          fontSize: 11.5,
+                        ),
+                        inlineCode: InlineCodeStyle(
+                          color: const Color(0xFF38BDF8),
+                          backgroundColor: const Color(0xFF1E293B),
+                          borderColor: const Color(0xFF334155),
+                          borderWidth: 1.0,
+                          fontFamily: GoogleFonts.jetBrainsMono().fontFamily,
+                          fontSizeFactor: 0.9,
+                        ),
+                        table: const TableStyle(
+                          headerBackground: Color(0xFF1E293B),
+                          borderColor: Color(0xFF334155),
+                          rowStripeColor: Color(0xFF161B26),
+                        ),
+                        blockQuote: const BlockQuoteStyle(
+                          backgroundColor: Color(0xFF171B26),
+                          barColor: Color(0xFF8B5CF6),
+                          barWidth: 3.0,
+                        ),
+                        heading: HeadingStyle(
+                          textStyle: GoogleFonts.inter(
+                            color: const Color(0xFFF8FAFC),
+                            fontWeight: FontWeight.bold,
+                          ),
+                          dividerColor: const Color(0xFF283145),
+                        ),
+                        link: const LinkStyle(
+                          color: Color(0xFF38BDF8),
+                        ),
                       ),
                       onLinkTap: (url, title) => launchUrlString(url),
                     )
@@ -1002,96 +1060,163 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         decoration: BoxDecoration(
           color: const Color(0xFF091410),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
+          border: Border.all(
+            color: action.executionError != null
+                ? Colors.redAccent.withValues(alpha: 0.5)
+                : const Color(0xFF10B981).withValues(alpha: 0.3),
+          ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(LucideIcons.file_code, size: 14, color: Color(0xFF10B981)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Файл: ${action.path}  (${(action.content ?? '').split('\n').length} стр.)',
-                style: GoogleFonts.jetBrainsMono(color: const Color(0xFF10B981), fontSize: 11, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (!action.isExecuted) ...[
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFA78BFA),
-                  side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            Row(
+              children: [
+                const Icon(LucideIcons.file_code, size: 14, color: Color(0xFF10B981)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Файл: ${action.path}  (${(action.content ?? '').split('\n').length} стр.)',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: const Color(0xFF10B981),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                icon: const Icon(LucideIcons.git_compare, size: 11),
-                label: const Text('Diff', style: TextStyle(fontSize: 10.5)),
-                onPressed: () async {
-                  String oldContent = '';
-                  final ws = ref.read(workspaceProvider).currentPath;
-                  if (ws != null) {
-                    final fullPath = File(action.path).isAbsolute
-                        ? action.path
-                        : '$ws/${action.path}';
-                    final f = File(fullPath);
-                    if (await f.exists()) {
-                      oldContent = await f.readAsString();
-                    }
-                  }
-                  if (context.mounted) {
-                    showDialog(
-                      context: context,
-                      builder: (_) => AiDiffDialog(
-                        filePath: action.path,
-                        oldContent: oldContent,
-                        newContent: action.content ?? '',
-                        onApply: () async {
-                          final ok = await agent.executeWriteAction(action);
-                          if (ok && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Файл ${action.path} успешно записан!')),
-                            );
-                          }
-                        },
-                      ),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(width: 6),
-            ],
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: action.isExecuted ? Colors.white12 : const Color(0xFF10B981),
-                foregroundColor: action.isExecuted ? Colors.white60 : Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              ),
-              icon: Icon(action.isExecuted ? LucideIcons.check : LucideIcons.save, size: 12),
-              label: Text(action.isExecuted ? 'Записан' : (action.isUndone ? 'Применить снова' : 'Применить'), style: const TextStyle(fontSize: 10.5)),
-              onPressed: action.isExecuted
-                  ? null
-                  : () async {
-                      final ok = await agent.executeWriteAction(action);
-                      if (ok && context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Файл ${action.path} успешно записан!')),
+                if (!action.isExecuted && !action.isExecuting) ...[
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFA78BFA),
+                      side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    icon: const Icon(LucideIcons.git_compare, size: 11),
+                    label: const Text('Diff', style: TextStyle(fontSize: 10.5)),
+                    onPressed: () async {
+                      String oldContent = '';
+                      final ws = ref.read(workspaceProvider).currentPath;
+                      if (ws != null) {
+                        final fullPath = File(action.path).isAbsolute
+                            ? action.path
+                            : '$ws/${action.path}';
+                        final f = File(fullPath);
+                        if (await f.exists()) {
+                          oldContent = await f.readAsString();
+                        }
+                      }
+                      if (context.mounted) {
+                        showDialog(
+                          context: context,
+                          builder: (_) => AiDiffDialog(
+                            filePath: action.path,
+                            oldContent: oldContent,
+                            newContent: action.content ?? '',
+                            onApply: () async {
+                              final ok = await agent.executeWriteAction(action);
+                              if (ok && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Файл ${action.path} успешно записан!')),
+                                );
+                              }
+                            },
+                          ),
                         );
                       }
                     },
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                if (action.isExecuting) ...[
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Запись...',
+                    style: GoogleFonts.inter(color: const Color(0xFF10B981), fontSize: 10.5),
+                  ),
+                ] else ...[
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: action.isExecuted
+                          ? Colors.white12
+                          : (action.executionError != null ? Colors.redAccent : const Color(0xFF10B981)),
+                      foregroundColor: action.isExecuted ? Colors.white60 : Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    icon: Icon(
+                      action.isExecuted
+                          ? LucideIcons.check
+                          : (action.executionError != null ? LucideIcons.refresh_cw : LucideIcons.save),
+                      size: 12,
+                    ),
+                    label: Text(
+                      action.isExecuted
+                          ? 'Записан'
+                          : (action.executionError != null
+                              ? 'Повторить'
+                              : (action.isUndone ? 'Применить снова' : 'Применить')),
+                      style: const TextStyle(fontSize: 10.5),
+                    ),
+                    onPressed: action.isExecuted
+                        ? null
+                        : () async {
+                            final ok = await agent.executeWriteAction(action);
+                            if (ok && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Файл ${action.path} успешно записан!')),
+                              );
+                            }
+                          },
+                  ),
+                ],
+                if (action.isExecuted && action.backupTaken)
+                  IconButton(
+                    tooltip: 'Откатить этот файл',
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 15,
+                    color: Colors.orangeAccent,
+                    icon: const Icon(LucideIcons.undo_2),
+                    onPressed: () => agent.undoWriteAction(action),
+                  ),
+              ],
             ),
-            if (action.isExecuted && action.backupTaken)
-              IconButton(
-                tooltip: 'Откатить этот файл',
-                visualDensity: VisualDensity.compact,
-                iconSize: 15,
-                color: Colors.orangeAccent,
-                icon: const Icon(LucideIcons.undo_2),
-                onPressed: () => agent.undoWriteAction(action),
+            if (action.executionError != null) ...[
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.circle_alert, size: 12, color: Colors.redAccent),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        action.executionError!,
+                        style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 10.5),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            ],
           ],
         ),
       );
@@ -1102,36 +1227,118 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         decoration: BoxDecoration(
           color: const Color(0xFF0A131A),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+          border: Border.all(
+            color: action.executionError != null
+                ? Colors.redAccent.withValues(alpha: 0.5)
+                : const Color(0xFF38BDF8).withValues(alpha: 0.3),
+          ),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(LucideIcons.terminal, size: 14, color: Color(0xFF38BDF8)),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                action.command ?? '',
-                style: GoogleFonts.jetBrainsMono(color: const Color(0xFF38BDF8), fontSize: 11),
-                overflow: TextOverflow.ellipsis,
-              ),
+            Row(
+              children: [
+                const Icon(LucideIcons.terminal, size: 14, color: Color(0xFF38BDF8)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    action.command ?? '',
+                    style: GoogleFonts.jetBrainsMono(color: const Color(0xFF38BDF8), fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (action.isExecuting) ...[
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Выполняется...',
+                    style: GoogleFonts.inter(color: const Color(0xFF38BDF8), fontSize: 10.5),
+                  ),
+                ] else ...[
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: action.isExecuted
+                          ? Colors.white12
+                          : (action.executionError != null ? Colors.redAccent : const Color(0xFF0284C7)),
+                      foregroundColor: action.isExecuted ? Colors.white60 : Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    icon: Icon(
+                      action.isExecuted
+                          ? LucideIcons.check
+                          : (action.executionError != null ? LucideIcons.refresh_cw : LucideIcons.play),
+                      size: 12,
+                    ),
+                    label: Text(
+                      action.isExecuted
+                          ? 'Выполнено'
+                          : (action.executionError != null ? 'Повторить' : 'Запустить'),
+                      style: const TextStyle(fontSize: 10.5),
+                    ),
+                    onPressed: action.isExecuted
+                        ? null
+                        : () async {
+                            await agent.executeCommandAction(action);
+                          },
+                  ),
+                ],
+              ],
             ),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: action.isExecuted ? Colors.white12 : const Color(0xFF0284C7),
-                foregroundColor: action.isExecuted ? Colors.white60 : Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            if (action.output != null && action.output!.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF050B10),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Text(
+                  action.output!,
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.jetBrainsMono(
+                    color: const Color(0xFF94A3B8),
+                    fontSize: 10,
+                  ),
+                ),
               ),
-              icon: Icon(action.isExecuted ? LucideIcons.check : LucideIcons.play, size: 12),
-              label: Text(action.isExecuted ? 'Выполнено' : 'Запустить', style: const TextStyle(fontSize: 10.5)),
-              onPressed: action.isExecuted
-                  ? null
-                  : () async {
-                      await agent.executeCommandAction(action);
-                    },
-            ),
+            ],
+            if (action.executionError != null) ...[
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.circle_alert, size: 12, color: Colors.redAccent),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        action.executionError!,
+                        style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 10.5),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -1151,7 +1358,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         scrollDirection: Axis.horizontal,
         physics: const BouncingScrollPhysics(),
         itemCount: _pendingAttachments.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final att = _pendingAttachments[index];
           return Container(

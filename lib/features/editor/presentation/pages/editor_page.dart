@@ -369,7 +369,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 768;
-    final isCompactPhone = screenWidth < 620;
     final l10n = AppLocalizations.of(context)!;
 
     // Слушаем смену workspace ОДИН РАЗ — не на каждый build()
@@ -386,28 +385,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final allProjects = ref.watch(projectServiceProvider);
     final currentProjectIndex = allProjects.indexWhere((p) => p.path == workspacePath);
     final currentProject = currentProjectIndex != -1 ? allProjects[currentProjectIndex] : null;
-
-    final diagnosticsCount = ref.watch(editorProvider.select((s) {
-      int count = 0;
-      s.allDiagnostics.forEach((filePath, list) {
-        if (workspacePath != null && filePath.startsWith(workspacePath)) {
-          for (final d in list) {
-            if (d.severity == CodeDiagnosticSeverity.error ||
-                d.severity == CodeDiagnosticSeverity.warning) {
-              count++;
-            }
-          }
-        }
-      });
-      return count;
-    }));
-    final gitChangesCount = ref.watch(gitProvider.select((s) => 
-      (s.status?.stagedFiles.length ?? 0) + 
-      (s.status?.modifiedFiles.length ?? 0) + 
-      (s.status?.untrackedFiles.length ?? 0) +
-      (s.status?.conflictedFiles.length ?? 0)
-    ));
-    final isServerRunning = ref.watch(serverRunningProvider);
 
     final double keyboardInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = keyboardInset > 0;
@@ -635,9 +612,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       ref,
                       panelState,
                       panelNotifier,
-                      diagnosticsCount,
-                      gitChangesCount,
-                      isServerRunning,
                       availableHeight,
                     )
                   : const SizedBox.shrink(),
@@ -843,19 +817,29 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   ],
                                   if (screenWidth >= 420) ...[
                                     const SizedBox(width: 4),
-                                    ActionIconButton(
-                                      icon: LucideIcons.git_branch,
-                                      color: (panelState.isOpened && panelState.selectedTab == PanelTab.git)
-                                          ? const Color(0xFFE2E8F0)
-                                          : (gitChangesCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)),
-                                      tooltip: gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git',
-                                      onTap: () {
-                                        if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
-                                          panelNotifier.closePanel();
-                                        } else {
-                                          panelNotifier.selectTab(PanelTab.git);
-                                          panelNotifier.openPanel();
-                                        }
+                                    Consumer(
+                                      builder: (context, ref, _) {
+                                        final changesCount = ref.watch(gitProvider.select((s) => 
+                                          (s.status?.stagedFiles.length ?? 0) + 
+                                          (s.status?.modifiedFiles.length ?? 0) + 
+                                          (s.status?.untrackedFiles.length ?? 0) +
+                                          (s.status?.conflictedFiles.length ?? 0)
+                                        ));
+                                        return ActionIconButton(
+                                          icon: LucideIcons.git_branch,
+                                          color: (panelState.isOpened && panelState.selectedTab == PanelTab.git)
+                                              ? const Color(0xFFE2E8F0)
+                                              : (changesCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)),
+                                          tooltip: changesCount > 0 ? 'Git ($changesCount изм.)' : 'Git',
+                                          onTap: () {
+                                            if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
+                                              panelNotifier.closePanel();
+                                            } else {
+                                              panelNotifier.selectTab(PanelTab.git);
+                                              panelNotifier.openPanel();
+                                            }
+                                          },
+                                        );
                                       },
                                     ),
                                     const SizedBox(width: 4),
@@ -999,12 +983,22 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                       if (screenWidth < 520) ...[
                                         PopupMenuItem(
                                           value: 'git',
-                                          child: Row(
-                                            children: [
-                                              Icon(LucideIcons.git_branch, size: 16, color: gitChangesCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)),
-                                              const SizedBox(width: 10),
-                                              Text(gitChangesCount > 0 ? 'Git ($gitChangesCount изм.)' : 'Git', style: const TextStyle(fontSize: 13, color: Colors.white)),
-                                            ],
+                                          child: Consumer(
+                                            builder: (context, ref, _) {
+                                              final changesCount = ref.watch(gitProvider.select((s) => 
+                                                (s.status?.stagedFiles.length ?? 0) + 
+                                                (s.status?.modifiedFiles.length ?? 0) + 
+                                                (s.status?.untrackedFiles.length ?? 0) + 
+                                                (s.status?.conflictedFiles.length ?? 0)
+                                              ));
+                                              return Row(
+                                                children: [
+                                                  Icon(LucideIcons.git_branch, size: 16, color: changesCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)),
+                                                  const SizedBox(width: 10),
+                                                  Text(changesCount > 0 ? 'Git ($changesCount изм.)' : 'Git', style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                                ],
+                                              );
+                                            },
                                           ),
                                         ),
                                         const PopupMenuItem(
@@ -1143,9 +1137,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     WidgetRef ref,
     PanelState panelState,
     PanelNotifier panelNotifier,
-    int diagnosticsCount,
-    int gitChangesCount,
-    bool isServerRunning,
     double maxAllowedPanelHeight,
   ) {
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
@@ -1183,7 +1174,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildPanelHeader(context, panelState, panelNotifier, maxAllowedPanelHeight, diagnosticsCount, gitChangesCount),
+            _buildPanelHeader(context, panelState, panelNotifier, maxAllowedPanelHeight),
             Expanded(
               child: panelState.panelHeight > 60
                   ? const TerminalPanelContent(onlyTerminal: false)
@@ -1334,8 +1325,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     PanelState panelState,
     PanelNotifier panelNotifier,
     double maxAllowedPanelHeight,
-    int diagnosticsCount,
-    int gitChangesCount,
   ) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1422,13 +1411,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               final isSelected = panelState.selectedTab == tab;
                               final tabColor = _getTabColor(tab);
 
-                              int? badgeCount;
-                              if (tab == PanelTab.problems && diagnosticsCount > 0) {
-                                badgeCount = diagnosticsCount;
-                              } else if (tab == PanelTab.git && gitChangesCount > 0) {
-                                badgeCount = gitChangesCount;
-                              }
-
                               return Padding(
                                 padding: const EdgeInsets.only(right: 5.0),
                                 child: Material(
@@ -1478,26 +1460,57 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                               ),
                                             ),
                                           ],
-                                          if (badgeCount != null) ...[
-                                            const SizedBox(width: 4),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: tab == PanelTab.problems ? const Color(0xFFEF4444) : const Color(0xFF475569),
-                                                borderRadius: BorderRadius.circular(6),
-                                              ),
-                                              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
-                                              child: Text(
-                                                '$badgeCount',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 7.5,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                                textAlign: TextAlign.center,
-                                              ),
+                                          if (tab == PanelTab.problems || tab == PanelTab.git)
+                                            Consumer(
+                                              builder: (context, ref, _) {
+                                                int? count;
+                                                if (tab == PanelTab.problems) {
+                                                  final ws = ref.watch(workspaceProvider).currentPath;
+                                                  count = ref.watch(editorProvider.select((s) {
+                                                    int c = 0;
+                                                    s.allDiagnostics.forEach((filePath, list) {
+                                                      if (ws != null && filePath.startsWith(ws)) {
+                                                        for (final d in list) {
+                                                          if (d.severity == CodeDiagnosticSeverity.error ||
+                                                              d.severity == CodeDiagnosticSeverity.warning) {
+                                                            c++;
+                                                          }
+                                                        }
+                                                      }
+                                                    });
+                                                    return c;
+                                                  }));
+                                                } else if (tab == PanelTab.git) {
+                                                  count = ref.watch(gitProvider.select((s) => 
+                                                    (s.status?.stagedFiles.length ?? 0) + 
+                                                    (s.status?.modifiedFiles.length ?? 0) + 
+                                                    (s.status?.untrackedFiles.length ?? 0) +
+                                                    (s.status?.conflictedFiles.length ?? 0)
+                                                  ));
+                                                }
+                                                if (count == null || count <= 0) return const SizedBox.shrink();
+                                                return Padding(
+                                                  padding: const EdgeInsets.only(left: 4.0),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                    decoration: BoxDecoration(
+                                                      color: tab == PanelTab.problems ? const Color(0xFFEF4444) : const Color(0xFF475569),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                                                    child: Text(
+                                                      '$count',
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 7.5,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                      textAlign: TextAlign.center,
+                                                    ),
+                                                  ),
+                                                );
+                                              },
                                             ),
-                                          ],
                                         ],
                                       ),
                                     ),

@@ -125,7 +125,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
               }
             },
             child: Scaffold(
-              backgroundColor: const Color(0xFF0D0F14),
+              backgroundColor: Theme.of(context).scaffoldBackgroundColor,
               body: LayoutBuilder(
                 builder: (context, constraints) {
                   final isWide = constraints.maxWidth >= 768;
@@ -425,7 +425,7 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     return SliverAppBar(
       expandedHeight: 80,
       pinned: true,
-      backgroundColor: const Color(0xFF0D0F14),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       elevation: 0,
       leading: IconButton(
         icon: Icon(isRoot ? LucideIcons.arrow_left : LucideIcons.chevron_left, color: Colors.white),
@@ -1094,7 +1094,6 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
 
   Widget _buildItemActions(BuildContext context, WidgetRef ref, FileNode node) {
     final isZip = node.name.toLowerCase().endsWith('.zip');
-    final l10n = AppLocalizations.of(context)!;
 
     return SizedBox(
       width: 44,

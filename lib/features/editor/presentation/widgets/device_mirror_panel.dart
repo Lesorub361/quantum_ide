@@ -1,7 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -566,7 +563,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                 } else {
                   result = await adb.connectWifi(target);
                 }
-                if (mounted) {
+                if (mounted && context.mounted) {
                   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                     SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(result, style: GoogleFonts.firaCode())),
                   );
@@ -1040,7 +1037,7 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                               label: const Text('Переподключить USB', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                               onPressed: () async {
                                 final msg = await ref.read(adbDeviceServiceProvider.notifier).reconnectDevice(device.id);
-                                if (mounted) {
+                                if (mounted && context.mounted) {
                                   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                                     SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text(msg, style: GoogleFonts.firaCode())),
                                   );
@@ -1107,13 +1104,13 @@ class _DeviceMirrorPanelState extends ConsumerState<DeviceMirrorPanel> {
                             onPressed: () async {
                               try {
                                 final path = await ref.read(adbDeviceServiceProvider.notifier).takeScreenshot(deviceId: device.id);
-                                if (mounted) {
+                                if (mounted && context.mounted) {
                                   ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                                     SnackBar(backgroundColor: const Color(0xFF1E2230), content: Text('Скриншот сохранён:\n$path', style: GoogleFonts.firaCode())),
                                   );
                                 }
                               } catch (e) {
-                                if (mounted) {
+                                if (mounted && context.mounted) {
                                   ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text('Ошибка скриншота: $e')));
                                 }
                               }

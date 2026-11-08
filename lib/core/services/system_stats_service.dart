@@ -187,7 +187,6 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   DateTime? _prevSampleAt;
   double _sampleDtSec = 0;
   bool _busy = false;
-  double _lastIdeCores = 0;
   double _lastTotalCores = 0;
   double _lastAppCpuFraction = 0.03;
 
@@ -481,7 +480,6 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
               if (procPid == null) continue;
               if (procPid == pid) {
                 ideCpu = cpuVal;
-                _lastIdeCores = cores ?? (cpuVal / 100.0 * _cpuCores);
                 continue; // пропускаем добавление дубликата, добавим ниже
               }
               if (fullArgs.contains('ps -eo') || fullArgs.contains('ps -o')) continue; // пропускаем сам ps
@@ -496,10 +494,10 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       }
     } catch (_) {}
 
-    // Fallback: `ps` недоступен/не вернул процессы — читаем /proc напрямую.
+    // Fallback: `ps` недоступен/не вернул процессы — читаем /proc асинхронно без блокировки UI
     if (list.isEmpty && !Platform.isWindows) {
       try {
-        for (final e in Directory('/proc').listSync(followLinks: false)) {
+        await for (final e in Directory('/proc').list(followLinks: false)) {
           final name = e.path.split('/').last;
           final procPid = int.tryParse(name);
           if (procPid == null || procPid == pid) continue;
@@ -508,8 +506,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
           String args = '';
           int rss = 0;
           try {
-            args = File('${e.path}/cmdline').readAsStringSync().replaceAll('\u0000', ' ').trim();
-            final st = File('${e.path}/statm').readAsStringSync().split(' ');
+            args = (await File('${e.path}/cmdline').readAsString()).replaceAll('\u0000', ' ').trim();
+            final st = (await File('${e.path}/statm').readAsString()).split(' ');
             rss = (int.tryParse(st[1]) ?? 0) * 4096;
           } catch (_) {}
           if (args.isEmpty) continue;

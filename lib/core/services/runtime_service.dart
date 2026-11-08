@@ -669,7 +669,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '28';
+    const bashrcVersion = '30';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -703,7 +703,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=28
+# BASHRC_VERSION=30
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -723,8 +723,11 @@ else
     fi
 fi
 if [ -d "$JAVA_HOME" ] && ! grep -q "$JAVA_HOME" /root/.config/flutter/settings 2>/dev/null; then
-    if command -v flutter >/dev/null 2>&1; then
-        flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1 || true
+    mkdir -p /root/.config/flutter 2>/dev/null || true
+    if [ ! -f /root/.config/flutter/settings ]; then
+        printf '{"jdk-dir":"%s"}\n' "$JAVA_HOME" > /root/.config/flutter/settings 2>/dev/null || true
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c "import json; p='/root/.config/flutter/settings'; d=json.load(open(p)) if open(p).read().strip() else {}; d['jdk-dir']='$JAVA_HOME'; json.dump(d, open(p, 'w'))" 2>/dev/null || true
     fi
 fi
 export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
@@ -759,16 +762,17 @@ export PAGER=less
 
 # Zero-fork pure-bash git branch prompt using PROMPT_COMMAND for 100% precise readline cursor tracking
 __update_quantum_ps1() {
-    local git_str=""
+    local b=""
     if [ -f ".git/HEAD" ]; then
         local head_ref
         read -r head_ref < ".git/HEAD" 2>/dev/null
-        local branch="${head_ref#ref: refs/heads/}"
-        if [ -n "$branch" ]; then
-            git_str=" \[\033[35m\]git:(\[\033[1;31m\]$branch\[\033[0m\033[35m\])\[\033[0m\]"
-        fi
+        b="${head_ref#ref: refs/heads/}"
     fi
-    PS1="\[\033[1;36m\]\W\[\033[0m\]${git_str} \[\033[1;34m\]\$ \[\033[0m\]"
+    if [ -n "$b" ]; then
+        PS1="\[\033[1;36m\]\W\[\033[0m\] \[\033[35m\]git:(\[\033[1;31m\]$b\[\033[35m\])\[\033[0m\] \[\033[1;34m\]\$ \[\033[0m\]"
+    else
+        PS1="\[\033[1;36m\]\W\[\033[0m\] \[\033[1;34m\]\$ \[\033[0m\]"
+    fi
 }
 PROMPT_COMMAND="__update_quantum_ps1"
 
@@ -1356,7 +1360,7 @@ fi
         for (final inputrc in inputrcTargets) {
           try {
             if (await inputrc.parent.exists()) {
-              await inputrc.writeAsString('set input-meta on\nset output-meta on\nset convert-meta off\nset enable-bracketed-paste on\n"\\C-?": backward-delete-char\n"\\C-h": backward-delete-char\n"\\e[3~": delete-char\n');
+              await inputrc.writeAsString('set input-meta on\nset output-meta on\nset convert-meta off\nset enable-bracketed-paste off\n"\\C-?": backward-delete-char\n"\\C-h": backward-delete-char\n"\\e[3~": delete-char\n');
             }
           } catch (_) {}
         }
@@ -1769,20 +1773,44 @@ mkdir -p "\$SHADOW_DIR"
 # Clean old binds if they exist
 rm -f "\$TMPDIR/proot_binds"
 
-# ONLY find gradlew files in QuantumIDE folder on SD card (much faster)
-find "/storage/emulated/0/QuantumIDE" -maxdepth 4 -name "gradlew" 2>/dev/null | while read -r f; do
-    [ -f "\$f" ] || continue
-    # Skip paths containing spaces to prevent proot CLI option parsing crashes
-    case "\$f" in
-        *" "*) continue ;;
-    esac
-    SAFE_NAME=\$(echo "\$f" | tr '/' '_')
-    SHADOW_PATH="\$SHADOW_DIR/\$SAFE_NAME"
-    cp "\$f" "\$SHADOW_PATH" 2>/dev/null
-    chmod 755 "\$SHADOW_PATH" 2>/dev/null
-    GUEST_F=\$(echo "\$f" | sed "s|/storage/emulated/0/QuantumIDE|/root/projects/external|g" | sed "s|/storage/emulated/0|/sdcard|g")
-    echo "--bind=\$SHADOW_PATH:\$GUEST_F" >> "\$TMPDIR/proot_binds"
-done
+# Fast gradlew permissions fix: ONLY scan target project or shallow external dir
+SHADOW_TARGET=""
+case "\$GUEST_CWD" in
+    /sdcard/*|/root/projects/external/*)
+        HOST_PROJ=\$(echo "\$GUEST_CWD" | sed "s|/root/projects/external|/storage/emulated/0/QuantumIDE|g" | sed "s|/sdcard|/storage/emulated/0|g")
+        if [ -d "\$HOST_PROJ" ]; then
+            SHADOW_TARGET="\$HOST_PROJ"
+        fi
+        ;;
+esac
+
+if [ -n "\$SHADOW_TARGET" ]; then
+    find "\$SHADOW_TARGET" -maxdepth 2 -name "gradlew" 2>/dev/null | while read -r f; do
+        [ -f "\$f" ] || continue
+        case "\$f" in
+            *" "*) continue ;;
+        esac
+        SAFE_NAME=\$(echo "\$f" | tr '/' '_')
+        SHADOW_PATH="\$SHADOW_DIR/\$SAFE_NAME"
+        cp "\$f" "\$SHADOW_PATH" 2>/dev/null
+        chmod 755 "\$SHADOW_PATH" 2>/dev/null
+        GUEST_F=\$(echo "\$f" | sed "s|/storage/emulated/0/QuantumIDE|/root/projects/external|g" | sed "s|/storage/emulated/0|/sdcard|g")
+        echo "--bind=\$SHADOW_PATH:\$GUEST_F" >> "\$TMPDIR/proot_binds"
+    done
+elif [ -d "/storage/emulated/0/QuantumIDE" ]; then
+    find "/storage/emulated/0/QuantumIDE" -maxdepth 2 -name "gradlew" 2>/dev/null | while read -r f; do
+        [ -f "\$f" ] || continue
+        case "\$f" in
+            *" "*) continue ;;
+        esac
+        SAFE_NAME=\$(echo "\$f" | tr '/' '_')
+        SHADOW_PATH="\$SHADOW_DIR/\$SAFE_NAME"
+        cp "\$f" "\$SHADOW_PATH" 2>/dev/null
+        chmod 755 "\$SHADOW_PATH" 2>/dev/null
+        GUEST_F=\$(echo "\$f" | sed "s|/storage/emulated/0/QuantumIDE|/root/projects/external|g" | sed "s|/storage/emulated/0|/sdcard|g")
+        echo "--bind=\$SHADOW_PATH:\$GUEST_F" >> "\$TMPDIR/proot_binds"
+    done
+fi
 
 if [ -f "\$TMPDIR/proot_binds" ]; then
     BIND_OVERLAYS=\$(cat "\$TMPDIR/proot_binds" | tr '\n' ' ')
@@ -1954,14 +1982,16 @@ if [ \$# -gt 2 ]; then
             fi
         ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT" "\$@"
 else
-    # Auto-setup ARM64 environment in background
-    (
-      sleep 2 # Wait for session to start
-      "\$PROOT" \\
-          --link2symlink -L \\
-          --rootfs="\$ROOTFS" \\
-          -0 /bin/bash -c 'PATH="\$1"; exec /bin/bash /root/setup-arm64.sh > /tmp/setup_arm64.log 2>&1' dummy "\$PATH"
-    ) >/dev/null 2>&1 &
+    # Auto-setup ARM64 environment in background (only once until done.flag is created)
+    if [ ! -f "\$TMPDIR/setup_arm64_done.flag" ] && [ ! -f "\$ROOTFS/tmp/setup_arm64_done.flag" ]; then
+        (
+          sleep 2 # Wait for session to start
+          "\$PROOT" \\
+              --link2symlink -L \\
+              --rootfs="\$ROOTFS" \\
+              -0 /bin/bash -c 'PATH="\$1"; exec /bin/bash /root/setup-arm64.sh > /tmp/setup_arm64.log 2>&1' dummy "\$PATH"
+        ) >/dev/null 2>&1 &
+    fi
 
     exec "\$PROOT" \\
         --link2symlink -L --kill-on-exit \\
@@ -2721,7 +2751,23 @@ fi
 # setup-arm64.sh - Automatically configure ARM64 environment inside QuantumIDE
 # This script is called by init-host in the background.
 
-# Always run fast NDK & CMake wrapper heal on every invocation
+# Prevent multiple instances of setup-arm64.sh running at once or re-running unnecessarily
+DONE_FLAG="/tmp/setup_arm64_done.flag"
+if [ -f "$DONE_FLAG" ] && [ "$1" != "--force" ]; then
+    exit 0
+fi
+LOCKFILE="/tmp/setup_daemon.lock"
+if [ -f "$LOCKFILE" ]; then
+    read -r last_pid < "$LOCKFILE"
+    if [ -n "$last_pid" ] && kill -0 "$last_pid" 2>/dev/null; then
+        echo "setup-arm64.sh is already running (PID: $last_pid). Exiting."
+        exit 0
+    fi
+fi
+echo "$$" > "$LOCKFILE"
+trap 'rm -f "$LOCKFILE"' EXIT INT TERM
+
+# Always run fast NDK & CMake wrapper heal on initial setup
 if [ -x /usr/local/bin/quantum-patch-ndk ]; then
     /usr/local/bin/quantum-patch-ndk --fast 2>/dev/null || true
 fi
@@ -2757,22 +2803,6 @@ if [ -d /lib/terminfo ] && [ ! -e /usr/share/terminfo/x ]; then
     ln -sf /lib/terminfo/* /usr/share/terminfo/ 2>/dev/null || true
 fi
 
-# Prevent multiple instances of setup-arm64.sh running at once or re-running unnecessarily
-DONE_FLAG="/tmp/setup_arm64_done.flag"
-if [ -f "$DONE_FLAG" ] && [ "$1" != "--force" ]; then
-    exit 0
-fi
-LOCKFILE="/tmp/setup_daemon.lock"
-if [ -f "$LOCKFILE" ]; then
-    read -r last_pid < "$LOCKFILE"
-    if [ -n "$last_pid" ] && kill -0 "$last_pid" 2>/dev/null; then
-        echo "setup-arm64.sh is already running (PID: $last_pid). Exiting."
-        exit 0
-    fi
-fi
-echo "$$" > "$LOCKFILE"
-trap 'rm -f "$LOCKFILE"' EXIT INT TERM
-
 # Ensure all essential terminal utilities, ADB/Fastboot, and firmware flashing tools are installed
 if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! command -v vim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1 || ! command -v pip3 >/dev/null 2>&1 || ! command -v rg >/dev/null 2>&1 || ! command -v fdfind >/dev/null 2>&1 || ! command -v batcat >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
@@ -2788,6 +2818,8 @@ if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! com
         android-tools-adb android-tools-fastboot \
         usbutils aria2 p7zip-full zstd brotli libusb-1.0-0 \
         python3-pip fd-find bat rsync >/dev/null 2>&1 || true
+    locale-gen en_US.UTF-8 ru_RU.UTF-8 >/dev/null 2>&1 || true
+    update-locale LANG=ru_RU.UTF-8 LC_ALL=ru_RU.UTF-8 >/dev/null 2>&1 || true
     ln -sf /usr/bin/fdfind /usr/bin/fd 2>/dev/null || true
     ln -sf /usr/bin/batcat /usr/bin/bat 2>/dev/null || true
     corepack enable 2>/dev/null || true

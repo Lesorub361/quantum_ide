@@ -3393,7 +3393,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                             }
                             if (ctx.mounted) Navigator.pop(ctx);
                             await notifier.push();
-                            if (mounted) {
+                            if (mounted && context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text('✓ Репозиторий «$repoName» (${isPrivateRepo ? "Приватный" : "Публичный"}) успешно создан и отправлен на GitHub!'),

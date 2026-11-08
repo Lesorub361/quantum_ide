@@ -5,6 +5,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
@@ -14,6 +15,7 @@ import 'package:quantum_ide/core/services/project_sync_service.dart';
 
 import 'package:xterm/xterm.dart' as xt;
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../../engine/terminal_output_pipe.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/virtual_keys.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
@@ -36,7 +38,6 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_sele
 import 'package:quantum_ide/features/terminal/presentation/widgets/quantum_terminal_tools_modal.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
@@ -141,50 +142,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  void _showUrlDetected(String url) {
-    HapticFeedback.lightImpact();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(LucideIcons.external_link, size: 16, color: Colors.cyanAccent),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                url,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.inter(fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-        action: SnackBarAction(
-          label: 'Открыть',
-          textColor: Colors.cyanAccent,
-          onPressed: () async {
-            final uri = Uri.tryParse(url);
-            if (uri != null) {
-              await launchUrl(uri, mode: LaunchMode.externalApplication);
-            }
-          },
-        ),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
-      ),
-    );
-  }
-
-  String? _findUrlAt(String line, int col) {
-    final regExp = RegExp(r'https?://[^\s<>"]+|ftp://[^\s<>"]+');
-    for (final match in regExp.allMatches(line)) {
-      if (col >= match.start && col <= match.end) {
-        return match.group(0);
-      }
-    }
-    return null;
-  }
-
   final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
   final Map<String, QuantumTerminalScrollController> _terminalScrollControllers = {};
@@ -274,6 +231,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   final ValueNotifier<List<String>?> _suggestionsNotifier = ValueNotifier(null);
   int _selectedSuggestionIndex = 0;
   List<String> _pathBinaries = [];
+  final TerminalInputGuard _inputGuard = TerminalInputGuard();
+  Timer? _suggestionsDebounceTimer;
 
   TerminalSession? _lastAttachedSession;
   final Set<TerminalSession> _initializedSessions = {}; // Для контроля слушателей выделения
@@ -344,6 +303,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     }
     _terminalFocusNodes.clear();
     _terminalKeys.clear();
+    _suggestionsDebounceTimer?.cancel();
     _suggestionsNotifier.dispose();
     super.dispose();
   }
@@ -514,7 +474,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
 
-    _updateSuggestions(session);
+    _suggestionsDebounceTimer?.cancel();
+    _suggestionsDebounceTimer = Timer(const Duration(milliseconds: 70), () {
+      if (mounted) _updateSuggestions(session);
+    });
   }
 
   Future<void> _updateSuggestions(TerminalSession session) async {
@@ -668,6 +631,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       final hadCtrl = _activeModifiers.contains('CTRL');
       final hadAlt = _activeModifiers.contains('ALT');
       final hadShift = _activeModifiers.contains('SHIFT');
+      
+      // Filter out duplicate IME input events on mobile keyboards
+      if (!hadCtrl && !hadAlt && !hadShift) {
+        if (!_inputGuard.accept(data)) return;
+      }
       
       String sequence = '';
       if (hadCtrl) {
@@ -893,7 +861,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final panelState = ref.watch(panelProvider);
     final sessions = ref.watch(terminalTabsProvider);
     final notifier = ref.read(terminalTabsProvider.notifier);
-    final editorState = ref.watch(editorProvider);
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     if (bottomInset > 20) {
@@ -916,7 +883,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               Expanded(
                 child: widget.onlyTerminal
                     ? _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'))
-                    : _buildBody(panelState, sessions, notifier, editorState),
+                    : _buildBody(panelState, sessions, notifier),
               ),
               if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
                   sessions.isNotEmpty &&
@@ -933,17 +900,17 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  Widget _buildBody(PanelState state, List<TerminalSession> sessions, TerminalTabsNotifier notifier, EditorState editorState) {
+  Widget _buildBody(PanelState state, List<TerminalSession> sessions, TerminalTabsNotifier notifier) {
     const tabs = PanelTab.values;
     final index = tabs.indexOf(state.selectedTab);
 
     return IndexedStack(
       index: index,
-      children: tabs.map((tab) => _getTabWidget(tab, sessions, notifier, editorState, tab == state.selectedTab)).toList(),
+      children: tabs.map((tab) => _getTabWidget(tab, sessions, notifier, tab == state.selectedTab)).toList(),
     );
   }
 
-  Widget _getTabWidget(PanelTab tab, List<TerminalSession> sessions, TerminalTabsNotifier notifier, EditorState editorState, [bool isCurrent = false]) {
+  Widget _getTabWidget(PanelTab tab, List<TerminalSession> sessions, TerminalTabsNotifier notifier, [bool isCurrent = false]) {
     switch (tab) {
       case PanelTab.terminal:
         return _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'));
@@ -954,7 +921,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       case PanelTab.appLogs:
         return _buildAppLogsView(key: const ValueKey('appLogs'));
       case PanelTab.problems:
-        return _buildProblemsView(editorState);
+        return Consumer(
+          key: const ValueKey('problems'),
+          builder: (context, ref, _) => _buildProblemsView(ref.watch(editorProvider)),
+        );
       case PanelTab.git:
         return _buildGitView();
       case PanelTab.debug:
@@ -971,11 +941,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildRunView({Key? key}) {
-    final l10n = AppLocalizations.of(context)!;
-    final dedicatedState = ref.watch(dedicatedTerminalProvider);
-    final session = dedicatedState.sessions[DedicatedTerminalType.run];
-    final workspaceState = ref.watch(workspaceProvider);
-    final allProjects = ref.watch(projectServiceProvider);
+    return Consumer(
+      key: key,
+      builder: (context, ref, _) {
+        final l10n = AppLocalizations.of(context)!;
+        final dedicatedState = ref.watch(dedicatedTerminalProvider);
+        final session = dedicatedState.sessions[DedicatedTerminalType.run];
+        final workspaceState = ref.watch(workspaceProvider);
+        final allProjects = ref.watch(projectServiceProvider);
 
     final currentProject = allProjects.firstWhere(
       (p) => p.path == workspaceState.currentPath,
@@ -1126,6 +1099,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         ),
       ],
     );
+      },
+    );
   }
 
   Widget _buildSubTabButton(int index, String label, IconData icon) {
@@ -1163,11 +1138,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   Widget _buildBuildLogsView({Key? key}) {
-    final l10n = AppLocalizations.of(context)!;
-    final dedicatedState = ref.watch(dedicatedTerminalProvider);
-    final session = dedicatedState.sessions[DedicatedTerminalType.build];
-    final ws = ref.watch(workspaceProvider).currentPath ?? '';
-    final allProjects = ref.watch(projectServiceProvider);
+    return Consumer(
+      key: key,
+      builder: (context, ref, _) {
+        final l10n = AppLocalizations.of(context)!;
+        final dedicatedState = ref.watch(dedicatedTerminalProvider);
+        final session = dedicatedState.sessions[DedicatedTerminalType.build];
+        final ws = ref.watch(workspaceProvider).currentPath ?? '';
+        final allProjects = ref.watch(projectServiceProvider);
     final currentProject = allProjects.firstWhere(
       (p) => p.path == ws,
       orElse: () => Project(
@@ -1261,12 +1239,17 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         ),
       ],
     );
+      },
+    );
   }
 
   Widget _buildAppLogsView({Key? key}) {
-    final l10n = AppLocalizations.of(context)!;
-    final dedicatedState = ref.watch(dedicatedTerminalProvider);
-    final session = dedicatedState.sessions[DedicatedTerminalType.appLogs];
+    return Consumer(
+      key: key,
+      builder: (context, ref, _) {
+        final l10n = AppLocalizations.of(context)!;
+        final dedicatedState = ref.watch(dedicatedTerminalProvider);
+        final session = dedicatedState.sessions[DedicatedTerminalType.appLogs];
 
     return Column(
       children: [
@@ -1282,6 +1265,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             : Center(child: Text(l10n.appLogs, style: const TextStyle(color: Colors.white38))),
         ),
       ],
+    );
+      },
     );
   }
 
@@ -2366,73 +2351,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       searchHitForeground: Colors.black,
     );
   }
-
-  Future<String> _detectProjectCheckCommand(String? workspacePath) async {
-    if (workspacePath == null) return 'flutter analyze';
-    try {
-      final dir = Directory(workspacePath);
-      if (!await dir.exists()) return 'flutter analyze';
-      
-      final pubspec = File(p.join(workspacePath, 'pubspec.yaml'));
-      if (await pubspec.exists()) {
-        final content = await pubspec.readAsString();
-        if (content.contains('sdk: flutter') || content.contains('flutter:')) {
-          return 'flutter analyze';
-        }
-        return 'dart analyze';
-      }
-      
-      final packageJson = File(p.join(workspacePath, 'package.json'));
-      if (await packageJson.exists()) {
-        final tsconfig = File(p.join(workspacePath, 'tsconfig.json'));
-        if (await tsconfig.exists()) {
-          return 'npx tsc --noEmit';
-        }
-        return 'npm run build';
-      }
-      
-      final cargo = File(p.join(workspacePath, 'Cargo.toml'));
-      if (await cargo.exists()) {
-        return 'cargo check';
-      }
-      
-      final goMod = File(p.join(workspacePath, 'go.mod'));
-      if (await goMod.exists()) {
-        return 'go vet ./...';
-      }
-
-      final buildGradle = File(p.join(workspacePath, 'build.gradle'));
-      final buildGradleKts = File(p.join(workspacePath, 'build.gradle.kts'));
-      if (await buildGradle.exists() || await buildGradleKts.exists()) {
-        final gradlew = File(p.join(workspacePath, 'gradlew'));
-        if (await gradlew.exists()) {
-          return './gradlew compileJava';
-        }
-        return 'gradle compileJava';
-      }
-
-      final cmake = File(p.join(workspacePath, 'CMakeLists.txt'));
-      if (await cmake.exists()) {
-        return 'cmake --build build';
-      }
-
-      final entities = await dir.list().toList();
-      bool hasPython = false;
-      for (final entity in entities) {
-        if (entity is File && entity.path.endsWith('.py')) {
-          hasPython = true;
-          break;
-        }
-      }
-      if (hasPython) {
-        return 'python3 -m compileall .';
-      }
-    } catch (e) {
-      debugPrint('Error detecting project check command: $e');
-    }
-    return 'flutter analyze';
-  }
-
 
   Widget _buildProblemsView(EditorState state) {
     final workspacePath = ref.read(workspaceProvider).currentPath;
