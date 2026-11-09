@@ -48,6 +48,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     VirtualKey(label: 'TAB', value: '\t', tooltip: isRu ? 'Tab / Автодополнение' : 'Tab / Autocomplete'),
     VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: isRu ? 'Зажать Ctrl' : 'Toggle Ctrl'),
     VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: isRu ? 'Зажать Alt' : 'Toggle Alt'),
+    VirtualKey(label: 'ENTER', value: '\r', icon: LucideIcons.corner_down_left, tooltip: isRu ? 'Ввод / Подтвердить (Enter)' : 'Enter / Confirm'),
     VirtualKey(label: 'C-C', value: 'ctrl+c', tooltip: isRu ? 'Прервать процесс (Ctrl+C)' : 'Interrupt process (Ctrl+C)'),
     VirtualKey(label: 'HUB', value: 'terminal_hub', icon: LucideIcons.sparkles, tooltip: isRu ? 'Инструменты и ИИ' : 'Tools & AI Hub'),
     VirtualKey(label: 'PATH', value: 'insert_path', icon: LucideIcons.folder, tooltip: isRu ? 'Вставить путь к файлу' : 'Insert File Path'),
@@ -64,6 +65,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
     VirtualKey(label: 'CTRL', value: 'ctrl', isToggle: true, tooltip: isRu ? 'Зажать Ctrl' : 'Toggle Ctrl'),
     VirtualKey(label: 'ALT', value: 'ALT', isToggle: true, tooltip: isRu ? 'Зажать Alt' : 'Toggle Alt'),
     VirtualKey(label: 'SHIFT', value: 'SHIFT', isToggle: true, tooltip: isRu ? 'Зажать Shift' : 'Toggle Shift'),
+    VirtualKey(label: 'ENTER', value: '\r', icon: LucideIcons.corner_down_left, tooltip: isRu ? 'Ввод / Подтвердить (Enter)' : 'Enter / Confirm'),
     VirtualKey(label: 'HUB', value: 'terminal_hub', icon: LucideIcons.sparkles, tooltip: isRu ? 'Инструменты и ИИ' : 'Tools & AI Hub'),
     VirtualKey(label: 'PATH', value: 'insert_path', icon: LucideIcons.folder, tooltip: isRu ? 'Вставить путь к файлу' : 'Insert File Path'),
     VirtualKey(label: 'PASTE', value: 'paste', icon: LucideIcons.clipboard_paste, tooltip: isRu ? 'Вставить из буфера' : 'Paste from clipboard'),
@@ -92,6 +94,7 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
       case 'CTRL': return 'ctrl';
       case 'ALT': return 'alt';
       case 'SHIFT': return 'shift';
+      case 'ENTER': return 'enter';
       case 'PASTE': return 'paste';
       case 'C-C': return 'cc';
       case 'DEL': return 'del';
@@ -159,8 +162,9 @@ class _VirtualKeysViewState extends ConsumerState<VirtualKeysView> {
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final minTotalWidth = rowKeys.length * 44.0;
-                final shouldExpandEvenly = constraints.maxWidth >= minTotalWidth;
+                final minTotalWidth = rowKeys.length * 52.0;
+                final shouldExpandEvenly =
+                    constraints.maxWidth >= minTotalWidth && rowKeys.length <= 6;
 
                 if (shouldExpandEvenly) {
                   return Padding(
@@ -533,7 +537,7 @@ class _MoreTerminalCommandsSheet extends StatelessWidget {
     {'label': 'flutter run', 'cmd': 'flutter run\n', 'badge': 'Flutter'},
     {'label': 'flutter build apk', 'cmd': 'flutter build apk --release --target-platform android-arm64 --android-skip-build-dependency-validation\n', 'badge': 'Build'},
     {'label': 'flutter build apk (split)', 'cmd': 'flutter build apk --release --split-per-abi\n', 'badge': 'Build'},
-    {'label': 'flutter build appbundle', 'cmd': 'flutter build appbundle --release --target-platform android-arm64 --android-skip-build-dependency-validation\n', 'badge': 'Build'},
+    {'label': 'flutter build appbundle', 'cmd': 'flutter build appbundle --release --android-skip-build-dependency-validation\n', 'badge': 'Build'},
     {'label': 'flutter analyze', 'cmd': 'flutter analyze\n', 'badge': 'Check'},
     {'label': 'flutter clean', 'cmd': 'flutter clean\n', 'badge': 'Clean'},
     {'label': 'git status', 'cmd': 'git status\n', 'badge': 'Git'},
@@ -810,8 +814,12 @@ class _VirtualKeyButton extends StatelessWidget {
         child: Container(
           height: height,
           width: fixedWidth,
-          constraints: fixedWidth == null ? const BoxConstraints(minWidth: 28) : null,
-          padding: EdgeInsets.symmetric(horizontal: fixedWidth != null ? 2 : 6),
+          constraints: fixedWidth == null
+              ? const BoxConstraints(minWidth: 38)
+              : null,
+          padding: EdgeInsets.symmetric(
+            horizontal: fixedWidth != null ? 2 : 7,
+          ),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(5),
@@ -822,15 +830,26 @@ class _VirtualKeyButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (keyData.icon != null) ...[
-                Icon(keyData.icon, size: (fontSize + 2.0).clamp(11.0, 18.0), color: themeColor),
-                if (keyData.label.isNotEmpty && !isArrow && fixedWidth == null) const SizedBox(width: 3),
+                Icon(
+                  keyData.icon,
+                  size: (fontSize + 2.5).clamp(12.0, 18.0),
+                  color: themeColor,
+                ),
+                if (keyData.label.isNotEmpty &&
+                    !isArrow &&
+                    (fixedWidth == null || fixedWidth! >= 46))
+                  const SizedBox(width: 3.5),
               ],
-              if (keyData.icon == null || (keyData.label.isNotEmpty && !isArrow))
+              if (keyData.icon == null ||
+                  (keyData.label.isNotEmpty &&
+                      !isArrow &&
+                      (fixedWidth == null || fixedWidth! >= 46)))
                 Flexible(
                   child: Text(
                     keyData.label,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    overflow: TextOverflow.fade,
                     style: GoogleFonts.jetBrainsMono(
                       color: themeColor,
                       fontSize: isArrow ? (fontSize + 1.5) : fontSize,

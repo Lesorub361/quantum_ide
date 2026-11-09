@@ -118,9 +118,9 @@ class _StringSink implements Sink<String> {
 }
 
 /// Drops accidental duplicate input produced by IME composition on Android
-/// (the same committed text is delivered twice within a few milliseconds).
+/// (the same committed text or partial composition delivered twice within a few milliseconds).
 class TerminalInputGuard {
-  TerminalInputGuard({this.window = const Duration(milliseconds: 6)});
+  TerminalInputGuard({this.window = const Duration(milliseconds: 35)});
 
   final Duration window;
   String? _last;
@@ -131,9 +131,14 @@ class TerminalInputGuard {
     final now = DateTime.now();
     // Control sequences (arrows, enter, ctrl+x) may legitimately repeat fast
     // (key repeat), so only guard printable text.
-    final printable = data.isNotEmpty && data.codeUnitAt(0) >= 0x20 && data.codeUnitAt(0) != 0x7f;
-    if (printable && data == _last && now.difference(_lastAt) < window) {
-      return false;
+    final printable = data.isNotEmpty &&
+        data.codeUnitAt(0) >= 0x20 &&
+        data.codeUnitAt(0) != 0x7f;
+    if (printable) {
+      final diff = now.difference(_lastAt);
+      if (data == _last && diff < (data.length > 1 ? const Duration(milliseconds: 100) : window)) {
+        return false;
+      }
     }
     _last = data;
     _lastAt = now;

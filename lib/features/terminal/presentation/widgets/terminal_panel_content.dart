@@ -42,6 +42,7 @@ import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
+import 'package:quantum_ide/core/services/quantum_ai_agent_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 const String _ktRepairCmd =
@@ -79,7 +80,8 @@ class TerminalPanelContent extends ConsumerStatefulWidget {
   const TerminalPanelContent({super.key, this.onlyTerminal = false});
 
   @override
-  ConsumerState<TerminalPanelContent> createState() => _TerminalPanelContentState();
+  ConsumerState<TerminalPanelContent> createState() =>
+      _TerminalPanelContentState();
 }
 
 class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
@@ -90,7 +92,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   bool _keyboardWasVisibleOnScreen = false;
   bool _inlineSelectionMode = false;
   String _inlineSelectedText = '';
-  int _problemsSeverityFilter = 0; // 0: Все, 1: Ошибки, 2: Предупреждения, 3: Инфо
+  int _problemsSeverityFilter =
+      0; // 0: Все, 1: Ошибки, 2: Предупреждения, 3: Инфо
   int _buildSubTab = 0;
   bool _isWakelockEnabled = false;
   double _pinchBaseFontSize = 13.0;
@@ -111,7 +114,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       },
       onPointerMove: (event) {
         _pinchPointers[event.pointer] = event.position;
-        if (_pinchPointers.length >= 2 && _initialPinchDistance != null && _initialPinchDistance! > 0) {
+        if (_pinchPointers.length >= 2 &&
+            _initialPinchDistance != null &&
+            _initialPinchDistance! > 0) {
           final points = _pinchPointers.values.toList();
           final currentDistance = (points[0] - points[1]).distance;
           final scale = currentDistance / _initialPinchDistance!;
@@ -124,7 +129,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           _initialPinchDistance = null;
           if (_pendingPinchFontSize != null) {
             final rounded = _pendingPinchFontSize!.roundToDouble();
-            if ((rounded - ref.read(settingsProvider).terminalFontSize).abs() >= 1.0) {
+            if ((rounded - ref.read(settingsProvider).terminalFontSize).abs() >=
+                1.0) {
               ref.read(settingsProvider.notifier).setTerminalFontSize(rounded);
             }
             _pendingPinchFontSize = null;
@@ -144,13 +150,20 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
-  final Map<String, QuantumTerminalScrollController> _terminalScrollControllers = {};
+  final Map<String, QuantumTerminalScrollController>
+  _terminalScrollControllers = {};
 
   GlobalKey<xt.TerminalViewState> _getTerminalKey(String id) {
-    return _terminalKeys.putIfAbsent(id, () => GlobalKey<xt.TerminalViewState>());
+    return _terminalKeys.putIfAbsent(
+      id,
+      () => GlobalKey<xt.TerminalViewState>(),
+    );
   }
 
-  QuantumTerminalScrollController _getScrollController(String id, xt.Terminal terminal) {
+  QuantumTerminalScrollController _getScrollController(
+    String id,
+    xt.Terminal terminal,
+  ) {
     return _terminalScrollControllers.putIfAbsent(
       id,
       () => QuantumTerminalScrollController(terminal: terminal),
@@ -158,14 +171,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   TerminalFocusNode _getFocusNode(String id) {
-    final isMobile = Platform.isAndroid || Platform.isIOS || (mounted && MediaQuery.of(context).size.width < 650);
+    final isMobile =
+        Platform.isAndroid ||
+        Platform.isIOS ||
+        (mounted && MediaQuery.of(context).size.width < 650);
     return _terminalFocusNodes.putIfAbsent(
       id,
       () => TerminalFocusNode(allowAutoKeyboard: !isMobile),
     );
   }
 
-  void _openTerminalKeyboard(TerminalSession session, {bool isSecondary = false, bool clearSelection = false}) {
+  void _openTerminalKeyboard(
+    TerminalSession session, {
+    bool isSecondary = false,
+    bool clearSelection = false,
+  }) {
     if (_inlineSelectionMode) return;
     if (session.xtermViewController.selection != null) {
       if (clearSelection) {
@@ -200,7 +220,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     });
   }
 
-  void _closeTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+  void _closeTerminalKeyboard(
+    TerminalSession session, {
+    bool isSecondary = false,
+  }) {
     _keyboardWasVisibleOnScreen = false;
     _isMobileKeyboardActive = false;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
@@ -212,7 +235,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     if (mounted) setState(() {});
   }
 
-  void _toggleTerminalKeyboard(TerminalSession session, {bool isSecondary = false}) {
+  void _toggleTerminalKeyboard(
+    TerminalSession session, {
+    bool isSecondary = false,
+  }) {
     if (_inlineSelectionMode) {
       setState(() {
         _inlineSelectionMode = false;
@@ -223,7 +249,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     if (bottomInset > 20) {
       _closeTerminalKeyboard(session, isSecondary: isSecondary);
     } else {
-      _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
+      _openTerminalKeyboard(
+        session,
+        isSecondary: isSecondary,
+        clearSelection: true,
+      );
     }
   }
 
@@ -235,19 +265,24 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   Timer? _suggestionsDebounceTimer;
 
   TerminalSession? _lastAttachedSession;
-  final Set<TerminalSession> _initializedSessions = {}; // Для контроля слушателей выделения
+  final Set<TerminalSession> _initializedSessions =
+      {}; // Для контроля слушателей выделения
 
   @override
   void initState() {
     super.initState();
     _loadPathBinaries();
-    WakelockPlus.enabled.then((val) {
-      if (mounted) setState(() => _isWakelockEnabled = val);
-    }).catchError((_) {});
+    WakelockPlus.enabled
+        .then((val) {
+          if (mounted) setState(() => _isWakelockEnabled = val);
+        })
+        .catchError((_) {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         final pluginState = ref.read(quantumPluginServiceProvider);
-        ref.read(quantumTerminalBarProvider.notifier).syncPluginButtons(
+        ref
+            .read(quantumTerminalBarProvider.notifier)
+            .syncPluginButtons(
               pluginState.activeTerminalCommands,
               pluginState.activeCustomButtons,
             );
@@ -313,10 +348,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return registeredType;
     }
     if (path == null) return ProjectType.other;
-    
+
     final dir = Directory(path);
     if (!dir.existsSync()) return ProjectType.other;
-    
+
     try {
       final files = dir.listSync();
       bool hasPubspec = false;
@@ -325,24 +360,28 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       bool hasHtmlFile = false;
       bool hasGradle = false;
       bool hasCargo = false;
-      
+
       for (final file in files) {
         final name = file.path.split(Platform.pathSeparator).last.toLowerCase();
         if (name == 'pubspec.yaml') hasPubspec = true;
         if (name == 'package.json') hasPackageJson = true;
         if (name.endsWith('.py')) hasPyFile = true;
         if (name == 'index.html' || name.endsWith('.html')) hasHtmlFile = true;
-        if (name == 'build.gradle' || name == 'build.gradle.kts' ||
-            name == 'settings.gradle' || name == 'settings.gradle.kts' ||
+        if (name == 'build.gradle' ||
+            name == 'build.gradle.kts' ||
+            name == 'settings.gradle' ||
+            name == 'settings.gradle.kts' ||
             name == 'gradlew') {
           hasGradle = true;
         }
         if (name == 'cargo.toml') hasCargo = true;
       }
-      
+
       if (hasPubspec) {
         try {
-          final pubspecContent = File(p.join(path, 'pubspec.yaml')).readAsStringSync();
+          final pubspecContent = File(
+            p.join(path, 'pubspec.yaml'),
+          ).readAsStringSync();
           if (pubspecContent.contains('flutter:')) return ProjectType.flutter;
           return ProjectType.dart;
         } catch (_) {
@@ -354,8 +393,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         if (mainDir.existsSync()) {
           try {
             final entities = mainDir.listSync(recursive: true);
-            if (entities.any((e) => e.path.endsWith('.kt'))) return ProjectType.androidKotlin;
-            if (entities.any((e) => e.path.endsWith('.java'))) return ProjectType.androidJava;
+            if (entities.any((e) => e.path.endsWith('.kt')))
+              return ProjectType.androidKotlin;
+            if (entities.any((e) => e.path.endsWith('.java')))
+              return ProjectType.androidJava;
           } catch (_) {}
         }
         if (File(p.join(path, 'build.gradle.kts')).existsSync() ||
@@ -369,7 +410,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       if (hasPyFile) return ProjectType.python;
       if (hasHtmlFile) return ProjectType.web;
     } catch (_) {}
-    
+
     return ProjectType.other;
   }
 
@@ -385,8 +426,24 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       p.join(appDir, 'rootfs', 'ubuntu', 'sbin'),
       p.join(appDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin'),
       p.join(appDir, 'rootfs', 'ubuntu', 'root', 'flutter', 'bin'),
-      p.join(appDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'cmdline-tools', 'latest', 'bin'),
-      p.join(appDir, 'rootfs', 'ubuntu', 'root', 'android-sdk', 'platform-tools'),
+      p.join(
+        appDir,
+        'rootfs',
+        'ubuntu',
+        'root',
+        'android-sdk',
+        'cmdline-tools',
+        'latest',
+        'bin',
+      ),
+      p.join(
+        appDir,
+        'rootfs',
+        'ubuntu',
+        'root',
+        'android-sdk',
+        'platform-tools',
+      ),
       '/usr/bin',
       '/usr/local/bin',
       if (home.isNotEmpty) p.join(home, '.local', 'bin'),
@@ -394,12 +451,56 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     final binaries = <String>{};
     const defaultCliTools = [
-      'git', 'flutter', 'dart', 'npm', 'npx', 'node', 'yarn', 'pnpm',
-      'python3', 'python', 'pip', 'pip3', 'cargo', 'rustc', 'docker',
-      'curl', 'wget', 'cat', 'grep', 'find', 'ssh', 'scp', 'apt', 'apt-get',
-      'tar', 'zip', 'unzip', 'ps', 'kill', 'htop', 'ls', 'cd', 'mkdir',
-      'rm', 'cp', 'mv', 'chmod', 'chown', 'clear', 'bash', 'sh', 'nano', 'vim',
-      'df', 'free', 'uname', 'which', 'export', 'source', 'env',
+      'git',
+      'flutter',
+      'dart',
+      'npm',
+      'npx',
+      'node',
+      'yarn',
+      'pnpm',
+      'python3',
+      'python',
+      'pip',
+      'pip3',
+      'cargo',
+      'rustc',
+      'docker',
+      'curl',
+      'wget',
+      'cat',
+      'grep',
+      'find',
+      'ssh',
+      'scp',
+      'apt',
+      'apt-get',
+      'tar',
+      'zip',
+      'unzip',
+      'ps',
+      'kill',
+      'htop',
+      'ls',
+      'cd',
+      'mkdir',
+      'rm',
+      'cp',
+      'mv',
+      'chmod',
+      'chown',
+      'clear',
+      'bash',
+      'sh',
+      'nano',
+      'vim',
+      'df',
+      'free',
+      'uname',
+      'which',
+      'export',
+      'source',
+      'env',
     ];
     binaries.addAll(defaultCliTools);
 
@@ -419,7 +520,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     _pathBinaries = binaries.toList()..sort();
   }
 
-  String _mapGuestToHostForAutocomplete(String guestPath, RuntimeService runtime) {
+  String _mapGuestToHostForAutocomplete(
+    String guestPath,
+    RuntimeService runtime,
+  ) {
     return PathMapper.mapToHost(guestPath, runtime.appDirectory);
   }
 
@@ -519,7 +623,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             .toList();
 
         final containsMatches = _pathBinaries
-            .where((bin) => bin.toLowerCase().contains(queryLower) && !bin.toLowerCase().startsWith(queryLower))
+            .where(
+              (bin) =>
+                  bin.toLowerCase().contains(queryLower) &&
+                  !bin.toLowerCase().startsWith(queryLower),
+            )
             .take(8)
             .toList();
 
@@ -536,14 +644,23 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     }
   }
 
-  Future<List<String>> _getPathSuggestions(TerminalSession session, String input) async {
+  Future<List<String>> _getPathSuggestions(
+    TerminalSession session,
+    String input,
+  ) async {
     try {
       final runtime = ref.read(runtimeServiceProvider);
       final workspace = ref.read(workspaceProvider);
-      
-      final hostProjectDir = workspace.currentPath ?? p.join(runtime.appDirectory, 'projects');
-      final hostHomeDir = p.join(runtime.appDirectory, 'rootfs', 'ubuntu', 'root');
-      
+
+      final hostProjectDir =
+          workspace.currentPath ?? p.join(runtime.appDirectory, 'projects');
+      final hostHomeDir = p.join(
+        runtime.appDirectory,
+        'rootfs',
+        'ubuntu',
+        'root',
+      );
+
       String searchPath;
       String prefix = '';
 
@@ -562,8 +679,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
 
       final lastSlash = searchPath.lastIndexOf('/');
-      final dirPath = lastSlash >= 0 ? searchPath.substring(0, lastSlash + 1) : searchPath;
-      final partial = lastSlash >= 0 ? searchPath.substring(lastSlash + 1).toLowerCase() : '';
+      final dirPath = lastSlash >= 0
+          ? searchPath.substring(0, lastSlash + 1)
+          : searchPath;
+      final partial = lastSlash >= 0
+          ? searchPath.substring(lastSlash + 1).toLowerCase()
+          : '';
 
       final dir = Directory(dirPath);
       if (!await dir.exists()) return [];
@@ -579,8 +700,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           } else if (prefix == './') {
             displayPath += p.relative(entity.path, from: hostProjectDir);
           } else if (input.startsWith('/')) {
-            final relativeToRootfs = p.relative(entity.path, from: p.join(runtime.appDirectory, 'rootfs', 'ubuntu'));
-            displayPath = relativeToRootfs.startsWith('.') ? entity.path : '/$relativeToRootfs';
+            final relativeToRootfs = p.relative(
+              entity.path,
+              from: p.join(runtime.appDirectory, 'rootfs', 'ubuntu'),
+            );
+            displayPath = relativeToRootfs.startsWith('.')
+                ? entity.path
+                : '/$relativeToRootfs';
           } else {
             displayPath = name;
           }
@@ -601,7 +727,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       session.pty.write(Uint8List.fromList(utf8.encode(toSend)));
     } else {
       final delSequence = '\x7f' * _currentInput.length;
-      session.pty.write(Uint8List.fromList(utf8.encode('$delSequence$suggestion')));
+      session.pty.write(
+        Uint8List.fromList(utf8.encode('$delSequence$suggestion')),
+      );
     }
     _currentInput = suggestion;
     _suggestionsNotifier.value = null;
@@ -631,12 +759,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       final hadCtrl = _activeModifiers.contains('CTRL');
       final hadAlt = _activeModifiers.contains('ALT');
       final hadShift = _activeModifiers.contains('SHIFT');
-      
+
       // Filter out duplicate IME input events on mobile keyboards
       if (!hadCtrl && !hadAlt && !hadShift) {
         if (!_inputGuard.accept(data)) return;
       }
-      
+
       String sequence = '';
       if (hadCtrl) {
         if (data.length == 1) {
@@ -729,7 +857,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
     if (value == 'selection_mode') {
-      TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+      TerminalTextSelectionModal.show(
+        context,
+        session.xtermTerminal,
+        session.title,
+      );
       return;
     }
     if (value == 'copy_all_output') {
@@ -741,15 +873,27 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
     if (value == 'insert_path') {
-      QuantumTerminalToolsModal.show(context, session, initialTab: TerminalToolTab.filePicker);
+      QuantumTerminalToolsModal.show(
+        context,
+        session,
+        initialTab: TerminalToolTab.filePicker,
+      );
       return;
     }
     if (value == 'terminal_history') {
-      QuantumTerminalToolsModal.show(context, session, initialTab: TerminalToolTab.commandHistory);
+      QuantumTerminalToolsModal.show(
+        context,
+        session,
+        initialTab: TerminalToolTab.commandHistory,
+      );
       return;
     }
     if (value == 'terminal_processes') {
-      QuantumTerminalToolsModal.show(context, session, initialTab: TerminalToolTab.processManager);
+      QuantumTerminalToolsModal.show(
+        context,
+        session,
+        initialTab: TerminalToolTab.processManager,
+      );
       return;
     }
     if (value.startsWith('cmd:')) {
@@ -789,25 +933,30 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
     if (value == 'ctrl+c') {
-      session.pty.write(Uint8List.fromList([3])); 
+      session.pty.write(Uint8List.fromList([3]));
       return;
     }
     if (value == 'ctrl+z') {
-      session.pty.write(Uint8List.fromList([26])); 
+      session.pty.write(Uint8List.fromList([26]));
       return;
     }
     if (value == 'ctrl+d') {
-      session.pty.write(Uint8List.fromList([4])); 
+      session.pty.write(Uint8List.fromList([4]));
       return;
     }
     if (value == 'ctrl+l') {
-      session.pty.write(Uint8List.fromList([12])); 
+      session.pty.write(Uint8List.fromList([12]));
       return;
     }
-    
+
     if (value == '\x7f') {
       session.pty.write(Uint8List.fromList([127]));
       _handleInputForAutocomplete(session, '\x7f');
+      return;
+    }
+
+    if (value == '\r' || value == '\n' || value == 'enter' || value == 'ENTER') {
+      session.pty.write(Uint8List.fromList([13]));
       return;
     }
 
@@ -824,18 +973,51 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         _acceptSuggestion(session, suggestions[_selectedSuggestionIndex]);
         return;
       }
-      term.keyInput(xt.TerminalKey.tab, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
+      term.keyInput(
+        xt.TerminalKey.tab,
+        ctrl: hadCtrl,
+        alt: hadAlt,
+        shift: hadShift,
+      );
     } else if (value == '\x1b') {
-      term.keyInput(xt.TerminalKey.escape, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
+      term.keyInput(
+        xt.TerminalKey.escape,
+        ctrl: hadCtrl,
+        alt: hadAlt,
+        shift: hadShift,
+      );
     } else if (value == '\x1b[A') {
-      term.keyInput(xt.TerminalKey.arrowUp, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
+      term.keyInput(
+        xt.TerminalKey.arrowUp,
+        ctrl: hadCtrl,
+        alt: hadAlt,
+        shift: hadShift,
+      );
     } else if (value == '\x1b[B') {
-      term.keyInput(xt.TerminalKey.arrowDown, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
+      term.keyInput(
+        xt.TerminalKey.arrowDown,
+        ctrl: hadCtrl,
+        alt: hadAlt,
+        shift: hadShift,
+      );
     } else if (value == '\x1b[D') {
-      term.keyInput(xt.TerminalKey.arrowLeft, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
+      term.keyInput(
+        xt.TerminalKey.arrowLeft,
+        ctrl: hadCtrl,
+        alt: hadAlt,
+        shift: hadShift,
+      );
     } else if (value == '\x1b[C') {
-      term.keyInput(xt.TerminalKey.arrowRight, ctrl: hadCtrl, alt: hadAlt, shift: hadShift);
-    } else if (value == '\x1b[H' || value == '\x1b[F' || value == '\x1b[5~' || value == '\x1b[6~') {
+      term.keyInput(
+        xt.TerminalKey.arrowRight,
+        ctrl: hadCtrl,
+        alt: hadAlt,
+        shift: hadShift,
+      );
+    } else if (value == '\x1b[H' ||
+        value == '\x1b[F' ||
+        value == '\x1b[5~' ||
+        value == '\x1b[6~') {
       session.pty.write(Uint8List.fromList(utf8.encode(value)));
     } else if (value.length == 1 && hadCtrl) {
       final code = value.toUpperCase().codeUnitAt(0);
@@ -868,30 +1050,41 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     } else if (bottomInset <= 20 && _keyboardWasVisibleOnScreen) {
       _keyboardWasVisibleOnScreen = false;
       _isMobileKeyboardActive = false;
+      for (final fn in _terminalFocusNodes.values) {
+        fn.allowAutoKeyboard = false;
+      }
     }
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0D0F14), 
-      ),
+      decoration: const BoxDecoration(color: Color(0xFF0D0F14)),
       child: SafeArea(
         bottom: true,
         child: Padding(
-          padding: EdgeInsets.only(bottom: widget.onlyTerminal ? bottomInset : 0),
+          padding: EdgeInsets.only(
+            bottom: widget.onlyTerminal ? bottomInset : 0,
+          ),
           child: Column(
             children: [
               Expanded(
                 child: widget.onlyTerminal
-                    ? _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'))
+                    ? _buildTerminalView(
+                        sessions,
+                        notifier,
+                        key: const ValueKey('terminal'),
+                      )
                     : _buildBody(panelState, sessions, notifier),
               ),
-              if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
+              if ((widget.onlyTerminal ||
+                      panelState.selectedTab == PanelTab.terminal) &&
                   sessions.isNotEmpty &&
                   notifier.currentIndex < sessions.length &&
                   ((bottomInset <= 20) && !_isMobileKeyboardActive))
                 _buildPluginCommandsBar(sessions[notifier.currentIndex]),
-              if ((widget.onlyTerminal || panelState.selectedTab == PanelTab.terminal) &&
-                  (Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650))
+              if ((widget.onlyTerminal ||
+                      panelState.selectedTab == PanelTab.terminal) &&
+                  (Platform.isAndroid ||
+                      Platform.isIOS ||
+                      MediaQuery.of(context).size.width < 650))
                 _buildVirtualKeys(sessions, notifier),
             ],
           ),
@@ -900,20 +1093,42 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  Widget _buildBody(PanelState state, List<TerminalSession> sessions, TerminalTabsNotifier notifier) {
+  Widget _buildBody(
+    PanelState state,
+    List<TerminalSession> sessions,
+    TerminalTabsNotifier notifier,
+  ) {
     const tabs = PanelTab.values;
     final index = tabs.indexOf(state.selectedTab);
 
     return IndexedStack(
       index: index,
-      children: tabs.map((tab) => _getTabWidget(tab, sessions, notifier, tab == state.selectedTab)).toList(),
+      children: tabs
+          .map(
+            (tab) => _getTabWidget(
+              tab,
+              sessions,
+              notifier,
+              tab == state.selectedTab,
+            ),
+          )
+          .toList(),
     );
   }
 
-  Widget _getTabWidget(PanelTab tab, List<TerminalSession> sessions, TerminalTabsNotifier notifier, [bool isCurrent = false]) {
+  Widget _getTabWidget(
+    PanelTab tab,
+    List<TerminalSession> sessions,
+    TerminalTabsNotifier notifier, [
+    bool isCurrent = false,
+  ]) {
     switch (tab) {
       case PanelTab.terminal:
-        return _buildTerminalView(sessions, notifier, key: const ValueKey('terminal'));
+        return _buildTerminalView(
+          sessions,
+          notifier,
+          key: const ValueKey('terminal'),
+        );
       case PanelTab.run:
         return _buildRunView(key: const ValueKey('run'));
       case PanelTab.buildLogs:
@@ -923,14 +1138,18 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       case PanelTab.problems:
         return Consumer(
           key: const ValueKey('problems'),
-          builder: (context, ref, _) => _buildProblemsView(ref.watch(editorProvider)),
+          builder: (context, ref, _) =>
+              _buildProblemsView(ref.watch(editorProvider)),
         );
       case PanelTab.git:
         return _buildGitView();
       case PanelTab.debug:
         return const DebuggerPanel(key: ValueKey('debug'));
       case PanelTab.deviceMirror:
-        return DeviceMirrorPanel(key: const ValueKey('deviceMirror'), isActive: isCurrent);
+        return DeviceMirrorPanel(
+          key: const ValueKey('deviceMirror'),
+          isActive: isCurrent,
+        );
       case PanelTab.aiAgent:
         return const QuantumAiAgentPanel(key: ValueKey('aiAgent'));
     }
@@ -950,155 +1169,354 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         final workspaceState = ref.watch(workspaceProvider);
         final allProjects = ref.watch(projectServiceProvider);
 
-    final currentProject = allProjects.firstWhere(
-      (p) => p.path == workspaceState.currentPath,
-      orElse: () => Project(
-        id: '',
-        name: 'Default',
-        path: workspaceState.currentPath ?? '',
-        type: ProjectType.other,
-        lastOpened: DateTime.now(),
-      ),
-    );
+        final currentProject = allProjects.firstWhere(
+          (p) => p.path == workspaceState.currentPath,
+          orElse: () => Project(
+            id: '',
+            name: 'Default',
+            path: workspaceState.currentPath ?? '',
+            type: ProjectType.other,
+            lastOpened: DateTime.now(),
+          ),
+        );
 
-    final projectType = _detectProjectType(workspaceState.currentPath, currentProject.type);
-    final String title;
-    final List<Widget> actions = [];
+        final projectType = _detectProjectType(
+          workspaceState.currentPath,
+          currentProject.type,
+        );
+        final String title;
+        final List<Widget> actions = [];
 
-    switch (projectType) {
-      case ProjectType.flutter:
-        title = l10n.flutterProject;
-        if (Platform.isAndroid) {
-          actions.addAll([
-            _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-                () => _runDedicatedCommand(DedicatedTerminalType.run, 'flutter run -d web-server --web-port 8080')),
-            _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
-                () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'r')),
-            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-                () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'q')),
-          ]);
-        } else {
-          actions.addAll([
-            _buildActionButton(l10n.runPC, LucideIcons.laptop, Colors.cyanAccent, 
-                () => _runDedicatedCommand(DedicatedTerminalType.run, 'flutter run -d linux')),
-            _buildActionButton(l10n.runMob, LucideIcons.smartphone, Colors.greenAccent, 
-                () => _runDedicatedCommand(DedicatedTerminalType.run, 'flutter run -d android')),
-            _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
-                () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'r')),
-            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-                () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, 'q')),
-          ]);
-        }
-        break;
-      case ProjectType.python:
-        title = l10n.pythonProject;
-        actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 
-                  'python3 main.py || python3 app.py || (py_file=\$(find . -maxdepth 2 -name "*.py" | head -n 1); if [ -n "\$py_file" ]; then python3 "\$py_file"; else echo "No python file found. Please create main.py"; fi)')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
-        ]);
-        break;
-      case ProjectType.nodejs:
-        title = l10n.nodejsProject;
-        actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 
-                  'npm start || node index.js || node server.js || node app.js || (js_file=\$(find . -maxdepth 2 -name "*.js" ! -path "*/node_modules/*" | head -n 1); if [ -n "\$js_file" ]; then node "\$js_file"; else echo "No JS file found. Please create index.js or package.json"; fi)')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
-        ]);
-        break;
-      case ProjectType.dart:
-        title = l10n.dartProject;
-        actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 
-                  'dart run || dart bin/main.dart || dart main.dart || (dart_file=\$(find . -maxdepth 2 -name "*.dart" | head -n 1); if [ -n "\$dart_file" ]; then dart "\$dart_file"; else echo "No Dart file found. Please create bin/main.dart"; fi)')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
-        ]);
-        break;
-      case ProjectType.web:
-        title = l10n.webProject;
-        actions.addAll([
-          _buildActionButton(l10n.startServer, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 
-                  'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
-        ]);
-        break;
-      case ProjectType.androidKotlin:
-        title = 'Android (Kotlin)';
-        actions.addAll([
-          _buildActionButton('Build Debug (KT)', LucideIcons.bug, Colors.yellow, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, '${_ktRepairCmd}chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
-          _buildActionButton('Install (KT)', LucideIcons.smartphone, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug', displayCmd: './gradlew installDebug')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
-        ]);
-        break;
-      case ProjectType.androidJava:
-        title = 'Android (Java)';
-        actions.addAll([
-          _buildActionButton('Build Debug (Java)', LucideIcons.bug, Colors.yellow, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
-          _buildActionButton('Install (Java)', LucideIcons.smartphone, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug', displayCmd: './gradlew installDebug')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
-        ]);
-        break;
-      case ProjectType.shell:
-      case ProjectType.other:
-        title = l10n.genericProject;
-        actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 
-                  'bash main.sh || bash run.sh || ./run.sh || ./main.sh || (sh_file=\$(find . -maxdepth 2 -name "*.sh" | head -n 1); if [ -n "\$sh_file" ]; then bash "\$sh_file"; else echo "No run script (.sh) found."; fi)')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))), 
-        ]);
-        break;
-      case ProjectType.rust:
-        title = l10n.rustProject;
-        actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 'cargo run')),
-          _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, 
-              () => _runDedicatedCommand(DedicatedTerminalType.run, 'cargo build')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _sendRawKeyToDedicatedTerminal(DedicatedTerminalType.run, String.fromCharCode(3))),
-        ]);
-        break;
-    }
-
-    actions.add(
-      _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.run))
-    );
-
-    return Column(
-      children: [
-        _buildActionHeader(title, actions),
-        Expanded(
-          child: session != null 
-            ? _buildTerminalWidget(session)
-            : Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(LucideIcons.rocket, size: 48, color: Colors.white10),
-                    const SizedBox(height: 12),
-                    Text(AppLocalizations.of(context)!.typeRunToStart, style: const TextStyle(color: Colors.white24, fontSize: 12)),
-                  ],
+        switch (projectType) {
+          case ProjectType.flutter:
+            title = l10n.flutterProject;
+            if (Platform.isAndroid) {
+              actions.addAll([
+                _buildActionButton(
+                  l10n.run,
+                  LucideIcons.play,
+                  Colors.greenAccent,
+                  () => _runDedicatedCommand(
+                    DedicatedTerminalType.run,
+                    'flutter run -d web-server --web-port 8080',
+                  ),
+                ),
+                _buildActionButton(
+                  'Hot Reload',
+                  LucideIcons.zap,
+                  Colors.yellow,
+                  () => _sendRawKeyToDedicatedTerminal(
+                    DedicatedTerminalType.run,
+                    'r',
+                  ),
+                ),
+                _buildActionButton(
+                  l10n.stop,
+                  LucideIcons.square,
+                  Colors.redAccent,
+                  () => _sendRawKeyToDedicatedTerminal(
+                    DedicatedTerminalType.run,
+                    'q',
+                  ),
+                ),
+              ]);
+            } else {
+              actions.addAll([
+                _buildActionButton(
+                  l10n.runPC,
+                  LucideIcons.laptop,
+                  Colors.cyanAccent,
+                  () => _runDedicatedCommand(
+                    DedicatedTerminalType.run,
+                    'flutter run -d linux',
+                  ),
+                ),
+                _buildActionButton(
+                  l10n.runMob,
+                  LucideIcons.smartphone,
+                  Colors.greenAccent,
+                  () => _runDedicatedCommand(
+                    DedicatedTerminalType.run,
+                    'flutter run -d android',
+                  ),
+                ),
+                _buildActionButton(
+                  'Hot Reload',
+                  LucideIcons.zap,
+                  Colors.yellow,
+                  () => _sendRawKeyToDedicatedTerminal(
+                    DedicatedTerminalType.run,
+                    'r',
+                  ),
+                ),
+                _buildActionButton(
+                  l10n.stop,
+                  LucideIcons.square,
+                  Colors.redAccent,
+                  () => _sendRawKeyToDedicatedTerminal(
+                    DedicatedTerminalType.run,
+                    'q',
+                  ),
+                ),
+              ]);
+            }
+            break;
+          case ProjectType.python:
+            title = l10n.pythonProject;
+            actions.addAll([
+              _buildActionButton(
+                l10n.run,
+                LucideIcons.play,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'python3 main.py || python3 app.py || (py_file=\$(find . -maxdepth 2 -name "*.py" | head -n 1); if [ -n "\$py_file" ]; then python3 "\$py_file"; else echo "No python file found. Please create main.py"; fi)',
                 ),
               ),
-        ),
-      ],
-    );
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+          case ProjectType.nodejs:
+            title = l10n.nodejsProject;
+            actions.addAll([
+              _buildActionButton(
+                l10n.run,
+                LucideIcons.play,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'npm start || node index.js || node server.js || node app.js || (js_file=\$(find . -maxdepth 2 -name "*.js" ! -path "*/node_modules/*" | head -n 1); if [ -n "\$js_file" ]; then node "\$js_file"; else echo "No JS file found. Please create index.js or package.json"; fi)',
+                ),
+              ),
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+          case ProjectType.dart:
+            title = l10n.dartProject;
+            actions.addAll([
+              _buildActionButton(
+                l10n.run,
+                LucideIcons.play,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'dart run || dart bin/main.dart || dart main.dart || (dart_file=\$(find . -maxdepth 2 -name "*.dart" | head -n 1); if [ -n "\$dart_file" ]; then dart "\$dart_file"; else echo "No Dart file found. Please create bin/main.dart"; fi)',
+                ),
+              ),
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+          case ProjectType.web:
+            title = l10n.webProject;
+            actions.addAll([
+              _buildActionButton(
+                l10n.startServer,
+                LucideIcons.play,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080',
+                ),
+              ),
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+          case ProjectType.androidKotlin:
+            title = 'Android (Kotlin)';
+            actions.addAll([
+              _buildActionButton(
+                'Build Debug (KT)',
+                LucideIcons.bug,
+                Colors.yellow,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  '${_ktRepairCmd}chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"',
+                  displayCmd: './gradlew assembleDebug',
+                ),
+              ),
+              _buildActionButton(
+                'Install (KT)',
+                LucideIcons.smartphone,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug',
+                  displayCmd: './gradlew installDebug',
+                ),
+              ),
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+          case ProjectType.androidJava:
+            title = 'Android (Java)';
+            actions.addAll([
+              _buildActionButton(
+                'Build Debug (Java)',
+                LucideIcons.bug,
+                Colors.yellow,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"',
+                  displayCmd: './gradlew assembleDebug',
+                ),
+              ),
+              _buildActionButton(
+                'Install (Java)',
+                LucideIcons.smartphone,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 installDebug',
+                  displayCmd: './gradlew installDebug',
+                ),
+              ),
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+          case ProjectType.shell:
+          case ProjectType.other:
+            title = l10n.genericProject;
+            actions.addAll([
+              _buildActionButton(
+                l10n.run,
+                LucideIcons.play,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'bash main.sh || bash run.sh || ./run.sh || ./main.sh || (sh_file=\$(find . -maxdepth 2 -name "*.sh" | head -n 1); if [ -n "\$sh_file" ]; then bash "\$sh_file"; else echo "No run script (.sh) found."; fi)',
+                ),
+              ),
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+          case ProjectType.rust:
+            title = l10n.rustProject;
+            actions.addAll([
+              _buildActionButton(
+                l10n.run,
+                LucideIcons.play,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'cargo run',
+                ),
+              ),
+              _buildActionButton(
+                l10n.buildPC,
+                LucideIcons.laptop,
+                Colors.cyanAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.run,
+                  'cargo build',
+                ),
+              ),
+              _buildActionButton(
+                l10n.stop,
+                LucideIcons.square,
+                Colors.redAccent,
+                () => _sendRawKeyToDedicatedTerminal(
+                  DedicatedTerminalType.run,
+                  String.fromCharCode(3),
+                ),
+              ),
+            ]);
+            break;
+        }
+
+        actions.add(
+          _buildActionButton(
+            l10n.copy,
+            LucideIcons.copy,
+            Colors.white60,
+            () => _copyTerminalOutput(DedicatedTerminalType.run),
+          ),
+        );
+
+        return Column(
+          children: [
+            _buildActionHeader(title, actions),
+            Expanded(
+              child: session != null
+                  ? _buildTerminalWidget(session)
+                  : Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            LucideIcons.rocket,
+                            size: 48,
+                            color: Colors.white10,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            AppLocalizations.of(context)!.typeRunToStart,
+                            style: const TextStyle(
+                              color: Colors.white24,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -1111,17 +1529,25 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: isActive ? Colors.cyanAccent.withValues(alpha: 0.12) : Colors.transparent,
+          color: isActive
+              ? Colors.cyanAccent.withValues(alpha: 0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isActive ? Colors.cyanAccent.withValues(alpha: 0.25) : Colors.transparent,
+            color: isActive
+                ? Colors.cyanAccent.withValues(alpha: 0.25)
+                : Colors.transparent,
             width: 0.6,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 12, color: isActive ? Colors.cyanAccent : Colors.white38),
+            Icon(
+              icon,
+              size: 12,
+              color: isActive ? Colors.cyanAccent : Colors.white38,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -1146,99 +1572,394 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         final session = dedicatedState.sessions[DedicatedTerminalType.build];
         final ws = ref.watch(workspaceProvider).currentPath ?? '';
         final allProjects = ref.watch(projectServiceProvider);
-    final currentProject = allProjects.firstWhere(
-      (p) => p.path == ws,
-      orElse: () => Project(
-        id: '',
-        name: 'Default',
-        path: ws,
-        type: ProjectType.other,
-        lastOpened: DateTime.now(),
-      ),
-    );
-    final projectType = _detectProjectType(ws.isNotEmpty ? ws : null, currentProject.type);
-    final isFlutter = projectType == ProjectType.flutter || (ws.isNotEmpty && File(p.join(ws, 'pubspec.yaml')).existsSync());
-    final isKotlin = projectType == ProjectType.androidKotlin;
-    final isJava = projectType == ProjectType.androidJava;
-    final isRust = projectType == ProjectType.rust;
-    final isNode = projectType == ProjectType.nodejs;
-    final isPython = projectType == ProjectType.python;
-    final isWeb = projectType == ProjectType.web;
-    final isDart = projectType == ProjectType.dart;
+        final currentProject = allProjects.firstWhere(
+          (p) => p.path == ws,
+          orElse: () => Project(
+            id: '',
+            name: 'Default',
+            path: ws,
+            type: ProjectType.other,
+            lastOpened: DateTime.now(),
+          ),
+        );
+        final projectType = _detectProjectType(
+          ws.isNotEmpty ? ws : null,
+          currentProject.type,
+        );
+        final isFlutter =
+            projectType == ProjectType.flutter ||
+            (ws.isNotEmpty && File(p.join(ws, 'pubspec.yaml')).existsSync());
+        final isKotlin = projectType == ProjectType.androidKotlin;
+        final isJava = projectType == ProjectType.androidJava;
+        final isRust = projectType == ProjectType.rust;
+        final isNode = projectType == ProjectType.nodejs;
+        final isPython = projectType == ProjectType.python;
+        final isWeb = projectType == ProjectType.web;
+        final isDart = projectType == ProjectType.dart;
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.01),
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-          ),
-          child: Row(
-            children: [
-              _buildSubTabButton(0, l10n.console, LucideIcons.terminal),
-              const SizedBox(width: 8),
-              _buildSubTabButton(1, l10n.signApk, LucideIcons.pen_tool),
-            ],
-          ),
-        ),
-        Expanded(
-          child: _buildSubTab == 0
-              ? Column(
-                  children: [
-                    _buildActionHeader(l10n.build, [
-                      if (isFlutter) ...[
-                        _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --debug --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: 'flutter build apk --debug')),
-                        _buildActionButton('Release APK', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: 'flutter build apk --release')),
-                        _buildActionButton('Split APKs', LucideIcons.boxes, Colors.amberAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs (v7/v8/x64) ready in project root"', displayCmd: 'flutter build apk --release --split-per-abi')),
-                        _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get', displayCmd: 'flutter pub get')),
-                        _buildActionButton(l10n.buildPC, LucideIcons.laptop, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && flutter build linux --release', displayCmd: 'flutter build linux --release')),
-                        _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'flutter clean', displayCmd: 'flutter clean')),
-                      ] else if (isKotlin) ...[
-                        _buildActionButton('Debug APK (KT)', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
-                        _buildActionButton('Release APK (KT)', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: './gradlew assembleRelease')),
-                        _buildActionButton('Clean (KT)', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk', displayCmd: './gradlew clean')),
-                      ] else if (isJava) ...[
-                        _buildActionButton('Debug APK (Java)', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
-                        _buildActionButton('Release APK (Java)', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: './gradlew assembleRelease')),
-                        _buildActionButton('Clean (Java)', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk', displayCmd: './gradlew clean')),
-                      ] else if (isRust) ...[
-                        _buildActionButton('Cargo Build', LucideIcons.hammer, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'cargo build', displayCmd: 'cargo build')),
-                        _buildActionButton('Release', LucideIcons.package, Colors.greenAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'cargo build --release', displayCmd: 'cargo build --release')),
-                        _buildActionButton('Check', LucideIcons.circle_check, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'cargo check', displayCmd: 'cargo check')),
-                        _buildActionButton('Test', LucideIcons.flask_conical, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'cargo test', displayCmd: 'cargo test')),
-                        _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'cargo clean', displayCmd: 'cargo clean')),
-                      ] else if (isNode) ...[
-                        _buildActionButton('npm install', LucideIcons.download, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'npm install', displayCmd: 'npm install')),
-                        _buildActionButton('npm build', LucideIcons.hammer, Colors.amber, () => _runDedicatedCommand(DedicatedTerminalType.build, 'npm run build || npx tsc || echo "No build script"', displayCmd: 'npm run build')),
-                        _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'rm -rf node_modules', displayCmd: 'rm -rf node_modules')),
-                      ] else if (isPython) ...[
-                        _buildActionButton('Install deps', LucideIcons.download, Colors.purple, () => _runDedicatedCommand(DedicatedTerminalType.build, 'pip3 install -r requirements.txt || pip install -r requirements.txt || echo "No requirements.txt"', displayCmd: 'pip install -r requirements.txt')),
-                        _buildActionButton('Freeze', LucideIcons.file_text, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'pip3 freeze > requirements.txt', displayCmd: 'pip freeze > requirements.txt')),
-                      ] else if (isWeb) ...[
-                        _buildActionButton('Start Server', LucideIcons.play, Colors.greenAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'python3 -m http.server 8080 || npx http-server -p 8080', displayCmd: 'python3 -m http.server 8080')),
-                      ] else if (isDart) ...[
-                        _buildActionButton('Compile Exe', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'dart compile exe bin/main.dart', displayCmd: 'dart compile exe')),
-                        _buildActionButton('Pub Get', LucideIcons.download, Colors.blue, () => _runDedicatedCommand(DedicatedTerminalType.build, 'dart pub get', displayCmd: 'dart pub get')),
-                        _buildActionButton('Analyze', LucideIcons.circle_check, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.build, 'dart analyze', displayCmd: 'dart analyze')),
-                      ] else ...[
-                        _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"', displayCmd: './gradlew assembleDebug')),
-                        _buildActionButton('Release APK', LucideIcons.package, Colors.orange, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"', displayCmd: './gradlew assembleRelease')),
-                        _buildActionButton('Clean', LucideIcons.trash_2, Colors.red, () => _runDedicatedCommand(DedicatedTerminalType.build, 'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk', displayCmd: './gradlew clean')),
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.01),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.05),
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  _buildSubTabButton(0, l10n.console, LucideIcons.terminal),
+                  const SizedBox(width: 8),
+                  _buildSubTabButton(1, l10n.signApk, LucideIcons.pen_tool),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _buildSubTab == 0
+                  ? Column(
+                      children: [
+                        _buildActionHeader(l10n.build, [
+                          if (isFlutter) ...[
+                            _buildActionButton(
+                              'Debug APK',
+                              LucideIcons.bug,
+                              Colors.yellow,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --debug --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
+                                displayCmd: 'flutter build apk --debug',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Release APK',
+                              LucideIcons.package,
+                              Colors.orange,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                                displayCmd: 'flutter build apk --release',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'AAB (Google Play)',
+                              LucideIcons.rocket,
+                              Colors.purpleAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB): ./app-release.aab"',
+                                displayCmd: 'flutter build appbundle --release',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Split APKs',
+                              LucideIcons.boxes,
+                              Colors.amberAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs (v7/v8/x64) ready in project root"',
+                                displayCmd:
+                                    'flutter build apk --release --split-per-abi',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Pub Get',
+                              LucideIcons.download,
+                              Colors.blue,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get',
+                                displayCmd: 'flutter pub get',
+                              ),
+                            ),
+                            _buildActionButton(
+                              l10n.buildPC,
+                              LucideIcons.laptop,
+                              Colors.cyanAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get && flutter build linux --release',
+                                displayCmd: 'flutter build linux --release',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Clean',
+                              LucideIcons.trash_2,
+                              Colors.red,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'flutter clean',
+                                displayCmd: 'flutter clean',
+                              ),
+                            ),
+                          ] else if (isKotlin) ...[
+                            _buildActionButton(
+                              'Debug APK (KT)',
+                              LucideIcons.bug,
+                              Colors.yellow,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
+                                displayCmd: './gradlew assembleDebug',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Release APK (KT)',
+                              LucideIcons.package,
+                              Colors.orange,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                                displayCmd: './gradlew assembleRelease',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Clean (KT)',
+                              LucideIcons.trash_2,
+                              Colors.red,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
+                                displayCmd: './gradlew clean',
+                              ),
+                            ),
+                          ] else if (isJava) ...[
+                            _buildActionButton(
+                              'Debug APK (Java)',
+                              LucideIcons.bug,
+                              Colors.yellow,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
+                                displayCmd: './gradlew assembleDebug',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Release APK (Java)',
+                              LucideIcons.package,
+                              Colors.orange,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                                displayCmd: './gradlew assembleRelease',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Clean (Java)',
+                              LucideIcons.trash_2,
+                              Colors.red,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
+                                displayCmd: './gradlew clean',
+                              ),
+                            ),
+                          ] else if (isRust) ...[
+                            _buildActionButton(
+                              'Cargo Build',
+                              LucideIcons.hammer,
+                              Colors.orange,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'cargo build',
+                                displayCmd: 'cargo build',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Release',
+                              LucideIcons.package,
+                              Colors.greenAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'cargo build --release',
+                                displayCmd: 'cargo build --release',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Check',
+                              LucideIcons.circle_check,
+                              Colors.cyanAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'cargo check',
+                                displayCmd: 'cargo check',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Test',
+                              LucideIcons.flask_conical,
+                              Colors.blue,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'cargo test',
+                                displayCmd: 'cargo test',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Clean',
+                              LucideIcons.trash_2,
+                              Colors.red,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'cargo clean',
+                                displayCmd: 'cargo clean',
+                              ),
+                            ),
+                          ] else if (isNode) ...[
+                            _buildActionButton(
+                              'npm install',
+                              LucideIcons.download,
+                              Colors.cyanAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'npm install',
+                                displayCmd: 'npm install',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'npm build',
+                              LucideIcons.hammer,
+                              Colors.amber,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'npm run build || npx tsc || echo "No build script"',
+                                displayCmd: 'npm run build',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Clean',
+                              LucideIcons.trash_2,
+                              Colors.red,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'rm -rf node_modules',
+                                displayCmd: 'rm -rf node_modules',
+                              ),
+                            ),
+                          ] else if (isPython) ...[
+                            _buildActionButton(
+                              'Install deps',
+                              LucideIcons.download,
+                              Colors.purple,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'pip3 install -r requirements.txt || pip install -r requirements.txt || echo "No requirements.txt"',
+                                displayCmd: 'pip install -r requirements.txt',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Freeze',
+                              LucideIcons.file_text,
+                              Colors.blue,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'pip3 freeze > requirements.txt',
+                                displayCmd: 'pip freeze > requirements.txt',
+                              ),
+                            ),
+                          ] else if (isWeb) ...[
+                            _buildActionButton(
+                              'Start Server',
+                              LucideIcons.play,
+                              Colors.greenAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'python3 -m http.server 8080 || npx http-server -p 8080',
+                                displayCmd: 'python3 -m http.server 8080',
+                              ),
+                            ),
+                          ] else if (isDart) ...[
+                            _buildActionButton(
+                              'Compile Exe',
+                              LucideIcons.package,
+                              Colors.orange,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'dart compile exe bin/main.dart',
+                                displayCmd: 'dart compile exe',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Pub Get',
+                              LucideIcons.download,
+                              Colors.blue,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'dart pub get',
+                                displayCmd: 'dart pub get',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Analyze',
+                              LucideIcons.circle_check,
+                              Colors.cyanAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'dart analyze',
+                                displayCmd: 'dart analyze',
+                              ),
+                            ),
+                          ] else ...[
+                            _buildActionButton(
+                              'Debug APK',
+                              LucideIcons.bug,
+                              Colors.yellow,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null && echo "✓ Debug APK: ./app-debug.apk"',
+                                displayCmd: './gradlew assembleDebug',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Release APK',
+                              LucideIcons.package,
+                              Colors.orange,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'chmod +x ./gradlew 2>/dev/null; ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                                displayCmd: './gradlew assembleRelease',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Clean',
+                              LucideIcons.trash_2,
+                              Colors.red,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                'chmod +x ./gradlew 2>/dev/null; ./gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
+                                displayCmd: './gradlew clean',
+                              ),
+                            ),
+                          ],
+                          _buildActionButton(
+                            l10n.copy,
+                            LucideIcons.copy,
+                            Colors.white60,
+                            () => _copyTerminalOutput(
+                              DedicatedTerminalType.build,
+                            ),
+                          ),
+                        ]),
+                        Expanded(
+                          child: session != null
+                              ? _buildTerminalWidget(session)
+                              : Center(
+                                  child: Text(
+                                    l10n.buildLogs,
+                                    style: const TextStyle(
+                                      color: Colors.white38,
+                                    ),
+                                  ),
+                                ),
+                        ),
                       ],
-                      _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.build)),
-                    ]),
-                    Expanded(
-                      child: session != null 
-                        ? _buildTerminalWidget(session)
-                        : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),
-                    ),
-                  ],
-                )
-              : const ApkSignerWidget(),
-        ),
-      ],
-    );
+                    )
+                  : const ApkSignerWidget(),
+            ),
+          ],
+        );
       },
     );
   }
@@ -1251,21 +1972,55 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         final dedicatedState = ref.watch(dedicatedTerminalProvider);
         final session = dedicatedState.sessions[DedicatedTerminalType.appLogs];
 
-    return Column(
-      children: [
-        _buildActionHeader(l10n.appLogs, [
-          _buildActionButton('Logs', LucideIcons.list, Colors.cyanAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'flutter logs')),
-          _buildActionButton('ADB Logcat', LucideIcons.smartphone, Colors.greenAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'if [ -f /usr/bin/adb ]; then mkdir -p /root/android-sdk/platform-tools && cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb 2>/dev/null && chmod +x /root/android-sdk/platform-tools/adb 2>/dev/null; fi ; adb logcat -v time *:V')),
-          _buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(DedicatedTerminalType.appLogs)),
-          _buildActionButton(l10n.setupSdk, LucideIcons.settings, Colors.purpleAccent, () => _runDedicatedCommand(DedicatedTerminalType.appLogs, 'kill -9 \$(pgrep -x "apt|apt-get|dpkg|dpkg-deb" 2>/dev/null) 2>/dev/null ; rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend 2>/dev/null ; dpkg --configure -a 2>/dev/null ; apt update && apt install -y debianutils libz1 libexpat1 openjdk-21-jdk wget unzip libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 libc6 aapt adb zipalign apksigner clang lld cmake ninja-build pkg-config libgtk-3-dev && git config --global --add safe.directory \'*\' && mkdir -p /root/android-sdk/licenses /root/android-sdk/platform-tools && cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb 2>/dev/null && chmod +x /root/android-sdk/platform-tools/adb 2>/dev/null && printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\\nd56f5187479451eabf01fb78af6dfcb131a6481e\\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\\n" > /root/android-sdk/licenses/android-sdk-license && printf "84831b9409646a918e30573bab4c9c91346d8abd\\n" > /root/android-sdk/licenses/android-sdk-preview-license && printf "859f317696f67ef3d7f30a50a5560e7834b43903\\n" > /root/android-sdk/licenses/android-sdk-arm-dbt-license && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && (flutter config --jdk-dir /usr/lib/jvm/java-17-openjdk-arm64 2>/dev/null || flutter config --jdk-dir /usr/lib/jvm/java-21-openjdk-arm64 2>/dev/null || true) && (which which >/dev/null || (printf \'#!/bin/sh\\ncommand -v "\$1"\\n\' > /usr/bin/which && chmod +x /usr/bin/which))')),
-        ]),
-        Expanded(
-          child: session != null 
-            ? _buildTerminalWidget(session)
-            : Center(child: Text(l10n.appLogs, style: const TextStyle(color: Colors.white38))),
-        ),
-      ],
-    );
+        return Column(
+          children: [
+            _buildActionHeader(l10n.appLogs, [
+              _buildActionButton(
+                'Logs',
+                LucideIcons.list,
+                Colors.cyanAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.appLogs,
+                  'flutter logs',
+                ),
+              ),
+              _buildActionButton(
+                'ADB Logcat',
+                LucideIcons.smartphone,
+                Colors.greenAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.appLogs,
+                  'if [ -f /usr/bin/adb ]; then mkdir -p /root/android-sdk/platform-tools && cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb 2>/dev/null && chmod +x /root/android-sdk/platform-tools/adb 2>/dev/null; fi ; adb logcat -v time *:V',
+                ),
+              ),
+              _buildActionButton(
+                l10n.copy,
+                LucideIcons.copy,
+                Colors.white60,
+                () => _copyTerminalOutput(DedicatedTerminalType.appLogs),
+              ),
+              _buildActionButton(
+                l10n.setupSdk,
+                LucideIcons.settings,
+                Colors.purpleAccent,
+                () => _runDedicatedCommand(
+                  DedicatedTerminalType.appLogs,
+                  'kill -9 \$(pgrep -x "apt|apt-get|dpkg|dpkg-deb" 2>/dev/null) 2>/dev/null ; rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend 2>/dev/null ; dpkg --configure -a 2>/dev/null ; apt update && apt install -y debianutils libz1 libexpat1 openjdk-21-jdk wget unzip libstdc++6 zlib1g zlib1g-dev libncurses6 libtinfo6 libc++1 libc6 aapt adb zipalign apksigner clang lld cmake ninja-build pkg-config libgtk-3-dev && git config --global --add safe.directory \'*\' && mkdir -p /root/android-sdk/licenses /root/android-sdk/platform-tools && cp -f /usr/bin/adb /root/android-sdk/platform-tools/adb 2>/dev/null && chmod +x /root/android-sdk/platform-tools/adb 2>/dev/null && printf "24333f8a63b6825ea9c5514f83c2829b004d1fee\\nd56f5187479451eabf01fb78af6dfcb131a6481e\\n2fa2d150aa0a1204d10e5ed57ab8369e7b50077c\\n" > /root/android-sdk/licenses/android-sdk-license && printf "84831b9409646a918e30573bab4c9c91346d8abd\\n" > /root/android-sdk/licenses/android-sdk-preview-license && printf "859f317696f67ef3d7f30a50a5560e7834b43903\\n" > /root/android-sdk/licenses/android-sdk-arm-dbt-license && (flutter config --android-sdk /root/android-sdk 2>/dev/null || true) && (flutter config --jdk-dir /usr/lib/jvm/java-17-openjdk-arm64 2>/dev/null || flutter config --jdk-dir /usr/lib/jvm/java-21-openjdk-arm64 2>/dev/null || true) && (which which >/dev/null || (printf \'#!/bin/sh\\ncommand -v "\$1"\\n\' > /usr/bin/which && chmod +x /usr/bin/which))',
+                ),
+              ),
+            ]),
+            Expanded(
+              child: session != null
+                  ? _buildTerminalWidget(session)
+                  : Center(
+                      child: Text(
+                        l10n.appLogs,
+                        style: const TextStyle(color: Colors.white38),
+                      ),
+                    ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -1275,7 +2030,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.02),
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+        ),
       ),
       child: Row(
         children: [
@@ -1286,13 +2043,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               borderRadius: BorderRadius.circular(5),
             ),
             child: Text(
-              title.toUpperCase(), 
+              title.toUpperCase(),
               style: GoogleFonts.inter(
-                color: Colors.cyanAccent, 
-                fontSize: 8.5, 
+                color: Colors.cyanAccent,
+                fontSize: 8.5,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1.0
-              )
+                letterSpacing: 1.0,
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -1300,9 +2057,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: actions,
-              ),
+              child: Row(children: actions),
             ),
           ),
         ],
@@ -1310,7 +2065,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildActionButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(left: 4),
       child: Tooltip(
@@ -1335,22 +2095,38 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  void _runDedicatedCommand(DedicatedTerminalType type, String cmd, {String? displayCmd}) {
+  void _runDedicatedCommand(
+    DedicatedTerminalType type,
+    String cmd, {
+    String? displayCmd,
+  }) {
     ref.read(projectSyncProvider.notifier).cancelSync();
 
     final workspace = ref.read(workspaceProvider);
     final path = workspace.currentPath;
     final runtime = ref.read(runtimeServiceProvider);
-    final guestPath = path != null ? PathMapper.mapToGuest(path, runtime.appDirectory) : null;
-    
-    final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
+    final guestPath = path != null
+        ? PathMapper.mapToGuest(path, runtime.appDirectory)
+        : null;
+
+    final cdCmd = guestPath != null
+        ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"'
+        : '';
     final shown = displayCmd ?? cmd;
-    final safeLabel = shown.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll(r'$', r'\$');
+    final safeLabel = shown
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"')
+        .replaceAll(r'$', r'\$');
     const clearScreen = 'printf "\\033[2J\\033[H\\033[3J"';
-    final banner = 'printf "\\033[1;36m▶ %s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeLabel"';
+    final banner =
+        'printf "\\033[1;36m▶ %s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeLabel"';
     const restoreTty = '; (stty sane 2>/dev/null || true); printf "\\r\\n"';
-    final fullCmd = cdCmd.isNotEmpty ? '$clearScreen && $cdCmd && $banner && ($cmd)$restoreTty' : '$clearScreen && $banner && ($cmd)$restoreTty';
-    ref.read(dedicatedTerminalProvider.notifier).sendCommand(type, fullCmd, interrupt: true, clear: false);
+    final fullCmd = cdCmd.isNotEmpty
+        ? '$clearScreen && $cdCmd && $banner && ($cmd)$restoreTty'
+        : '$clearScreen && $banner && ($cmd)$restoreTty';
+    ref
+        .read(dedicatedTerminalProvider.notifier)
+        .sendCommand(type, fullCmd, interrupt: true, clear: false);
   }
 
   void _sendRawKeyToDedicatedTerminal(DedicatedTerminalType type, String key) {
@@ -1415,7 +2191,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       await Clipboard.setData(ClipboardData(text: text));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppLocalizations.of(context)!.copiedToClipboard), duration: const Duration(seconds: 1)),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.copiedToClipboard),
+            duration: const Duration(seconds: 1),
+          ),
         );
       }
     }
@@ -1430,7 +2209,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(LucideIcons.check, color: Colors.greenAccent, size: 15),
+                const Icon(
+                  LucideIcons.check,
+                  color: Colors.greenAccent,
+                  size: 15,
+                ),
                 const SizedBox(width: 8),
                 Text(AppLocalizations.of(context)!.copiedToClipboard),
               ],
@@ -1443,7 +2226,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     }
   }
 
-  Widget _buildTerminalActionButton(IconData icon, String tooltip, VoidCallback onTap, {Color? color}) {
+  Widget _buildTerminalActionButton(
+    IconData icon,
+    String tooltip,
+    VoidCallback onTap, {
+    Color? color,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 1.5),
       child: Tooltip(
@@ -1458,7 +2246,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               decoration: BoxDecoration(
                 color: (color ?? Colors.white).withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: (color ?? Colors.white).withValues(alpha: 0.08), width: 0.5),
+                border: Border.all(
+                  color: (color ?? Colors.white).withValues(alpha: 0.08),
+                  width: 0.5,
+                ),
               ),
               child: Icon(icon, size: 12, color: color ?? Colors.white70),
             ),
@@ -1468,7 +2259,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  Widget _buildSessionsSidebarList(List<TerminalSession> sessions, TerminalTabsNotifier notifier, {bool isOverlay = false}) {
+  Widget _buildSessionsSidebarList(
+    List<TerminalSession> sessions,
+    TerminalTabsNotifier notifier, {
+    bool isOverlay = false,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF131722).withValues(alpha: 0.95),
@@ -1483,7 +2278,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             padding: const EdgeInsets.fromLTRB(14, 12, 10, 8),
             child: Row(
               children: [
-                const Icon(LucideIcons.terminal, size: 14, color: Colors.cyanAccent),
+                const Icon(
+                  LucideIcons.terminal,
+                  size: 14,
+                  color: Colors.cyanAccent,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   AppLocalizations.of(context)!.sessionsTitle,
@@ -1496,7 +2295,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1.5,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.cyanAccent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -1521,9 +2323,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       decoration: BoxDecoration(
                         color: Colors.cyanAccent.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.2), width: 0.8),
+                        border: Border.all(
+                          color: Colors.cyanAccent.withValues(alpha: 0.2),
+                          width: 0.8,
+                        ),
                       ),
-                      child: const Icon(LucideIcons.plus, size: 13, color: Colors.cyanAccent),
+                      child: const Icon(
+                        LucideIcons.plus,
+                        size: 13,
+                        color: Colors.cyanAccent,
+                      ),
                     ),
                   ),
                 ),
@@ -1536,7 +2345,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
                         padding: const EdgeInsets.all(5),
-                        child: const Icon(LucideIcons.x, size: 14, color: Colors.white54),
+                        child: const Icon(
+                          LucideIcons.x,
+                          size: 14,
+                          color: Colors.white54,
+                        ),
                       ),
                     ),
                   ),
@@ -1553,19 +2366,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 final isActive = index == notifier.currentIndex;
                 final session = sessions[index];
                 final isExited = session.isExited;
-                final statusColor = isExited ? Colors.redAccent : Colors.greenAccent;
+                final statusColor = isExited
+                    ? Colors.redAccent
+                    : Colors.greenAccent;
 
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.only(bottom: 6),
                   decoration: BoxDecoration(
-                    color: isActive 
-                        ? Colors.cyanAccent.withValues(alpha: 0.1) 
+                    color: isActive
+                        ? Colors.cyanAccent.withValues(alpha: 0.1)
                         : Colors.white.withValues(alpha: 0.02),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: isActive 
-                          ? Colors.cyanAccent.withValues(alpha: 0.4) 
+                      color: isActive
+                          ? Colors.cyanAccent.withValues(alpha: 0.4)
                           : Colors.white.withValues(alpha: 0.04),
                       width: isActive ? 1.0 : 0.6,
                     ),
@@ -1581,7 +2396,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         }
                       },
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
                         child: Row(
                           children: [
                             Container(
@@ -1608,16 +2426,24 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                     session.title,
                                     style: GoogleFonts.inter(
                                       fontSize: 11,
-                                      color: isActive ? Colors.white : Colors.white70,
-                                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                                      color: isActive
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontWeight: isActive
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 1),
                                   Text(
                                     isExited
-                                        ? AppLocalizations.of(context)!.sessionExited
-                                        : AppLocalizations.of(context)!.sessionRunning,
+                                        ? AppLocalizations.of(
+                                            context,
+                                          )!.sessionExited
+                                        : AppLocalizations.of(
+                                            context,
+                                          )!.sessionRunning,
                                     style: GoogleFonts.inter(
                                       fontSize: 8.5,
                                       color: statusColor.withValues(alpha: 0.7),
@@ -1634,14 +2460,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   Material(
                                     color: Colors.transparent,
                                     child: InkWell(
-                                      onTap: () => notifier.restartSession(index),
+                                      onTap: () =>
+                                          notifier.restartSession(index),
                                       borderRadius: BorderRadius.circular(4),
                                       child: Padding(
                                         padding: const EdgeInsets.all(4),
                                         child: Icon(
-                                          isExited ? LucideIcons.play : LucideIcons.refresh_cw,
+                                          isExited
+                                              ? LucideIcons.play
+                                              : LucideIcons.refresh_cw,
                                           size: 11,
-                                          color: isExited ? Colors.greenAccent : Colors.white54,
+                                          color: isExited
+                                              ? Colors.greenAccent
+                                              : Colors.white54,
                                         ),
                                       ),
                                     ),
@@ -1654,7 +2485,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                       borderRadius: BorderRadius.circular(4),
                                       child: const Padding(
                                         padding: EdgeInsets.all(4),
-                                        child: Icon(LucideIcons.trash_2, size: 11, color: Colors.redAccent),
+                                        child: Icon(
+                                          LucideIcons.trash_2,
+                                          size: 11,
+                                          color: Colors.redAccent,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1674,8 +2509,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  Widget _buildTerminalView(List<TerminalSession> sessions, TerminalTabsNotifier notifier, {Key? key}) {
-    if (sessions.isEmpty) return const Center(child: CircularProgressIndicator());
+  Widget _buildTerminalView(
+    List<TerminalSession> sessions,
+    TerminalTabsNotifier notifier, {
+    Key? key,
+  }) {
+    if (sessions.isEmpty)
+      return const Center(child: CircularProgressIndicator());
     final currentSession = sessions[notifier.currentIndex];
 
     return LayoutBuilder(
@@ -1690,23 +2530,31 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: const Color(0xFF0F1219),
-                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withValues(alpha: 0.05),
+                  ),
+                ),
               ),
               child: Row(
                 children: [
                   InkWell(
-                    onTap: () => setState(() => _isSidebarOpen = !_isSidebarOpen),
+                    onTap: () =>
+                        setState(() => _isSidebarOpen = !_isSidebarOpen),
                     borderRadius: BorderRadius.circular(4),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: _isSidebarOpen 
-                            ? Colors.cyanAccent.withValues(alpha: 0.15) 
+                        color: _isSidebarOpen
+                            ? Colors.cyanAccent.withValues(alpha: 0.15)
                             : Colors.white.withValues(alpha: 0.04),
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(
-                          color: _isSidebarOpen 
-                              ? Colors.cyanAccent.withValues(alpha: 0.3) 
+                          color: _isSidebarOpen
+                              ? Colors.cyanAccent.withValues(alpha: 0.3)
                               : Colors.white.withValues(alpha: 0.08),
                           width: 0.5,
                         ),
@@ -1717,14 +2565,18 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           Icon(
                             LucideIcons.terminal,
                             size: 12,
-                            color: _isSidebarOpen ? Colors.cyanAccent : Colors.white70,
+                            color: _isSidebarOpen
+                                ? Colors.cyanAccent
+                                : Colors.white70,
                           ),
                           if (sessions.length > 1) ...[
                             const SizedBox(width: 4),
                             Text(
                               '${sessions.length}',
                               style: TextStyle(
-                                color: _isSidebarOpen ? Colors.cyanAccent : Colors.white60,
+                                color: _isSidebarOpen
+                                    ? Colors.cyanAccent
+                                    : Colors.white60,
                                 fontSize: 9,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -1740,10 +2592,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     height: 6,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: currentSession.isExited ? Colors.redAccent : Colors.greenAccent,
+                      color: currentSession.isExited
+                          ? Colors.redAccent
+                          : Colors.greenAccent,
                       boxShadow: [
                         BoxShadow(
-                          color: (currentSession.isExited ? Colors.redAccent : Colors.greenAccent).withValues(alpha: 0.5),
+                          color:
+                              (currentSession.isExited
+                                      ? Colors.redAccent
+                                      : Colors.greenAccent)
+                                  .withValues(alpha: 0.5),
                           blurRadius: 4,
                         ),
                       ],
@@ -1765,7 +2623,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        ref.watch(workspaceProvider).currentPath?.split('/').last ?? 'workspace',
+                        ref
+                                .watch(workspaceProvider)
+                                .currentPath
+                                ?.split('/')
+                                .last ??
+                            'workspace',
                         style: GoogleFonts.jetBrainsMono(
                           color: Colors.white30,
                           fontSize: 9,
@@ -1777,7 +2640,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   ],
                   if (!isCompact) ...[
                     _buildTerminalActionButton(
-                      _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
+                      _isTerminalSplit
+                          ? LucideIcons.square
+                          : LucideIcons.columns_2,
                       _isTerminalSplit ? l10n.mergeScreen : l10n.splitScreen,
                       () {
                         setState(() {
@@ -1791,9 +2656,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     const SizedBox(width: 3),
                     _buildTerminalActionButton(
                       LucideIcons.coffee,
-                      _isWakelockEnabled ? l10n.keepScreenOnActive : l10n.keepScreenOn,
+                      _isWakelockEnabled
+                          ? l10n.keepScreenOnActive
+                          : l10n.keepScreenOn,
                       _toggleWakelock,
-                      color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
+                      color: _isWakelockEnabled
+                          ? Colors.orangeAccent
+                          : Colors.white60,
                     ),
                     const SizedBox(width: 3),
                   ],
@@ -1807,7 +2676,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   _buildTerminalActionButton(
                     LucideIcons.sparkles,
                     'Quantum Terminal Hub (ИИ, Пути, Процессы)',
-                    () => QuantumTerminalToolsModal.show(context, currentSession),
+                    () =>
+                        QuantumTerminalToolsModal.show(context, currentSession),
                     color: const Color(0xFFC084FC),
                   ),
                   const SizedBox(width: 4),
@@ -1821,7 +2691,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       },
                       borderRadius: BorderRadius.circular(4),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
                         child: Text(
                           'CLR',
                           style: GoogleFonts.jetBrainsMono(
@@ -1837,7 +2710,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   _buildTerminalActionButton(
                     LucideIcons.ellipsis_vertical,
                     l10n.terminalMenu,
-                    () => _showTerminalContextMenu(context, Offset.zero, currentSession, fromToolbar: true),
+                    () => _showTerminalContextMenu(
+                      context,
+                      Offset.zero,
+                      currentSession,
+                      fromToolbar: true,
+                    ),
                   ),
                 ],
               ),
@@ -1850,41 +2728,76 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           child: Column(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
+                                  horizontal: 8,
+                                ),
                                 color: Colors.white.withValues(alpha: 0.02),
                                 width: double.infinity,
                                 child: Text(
                                   '${AppLocalizations.of(context)!.panel1}: ${sessions[notifier.currentIndex].title}',
-                                  style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 8.5,
+                                    color: Colors.cyanAccent,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
-                              Expanded(child: _buildTerminalWidget(sessions[notifier.currentIndex])),
+                              Expanded(
+                                child: _buildTerminalWidget(
+                                  sessions[notifier.currentIndex],
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        Container(width: 1, color: Colors.white.withValues(alpha: 0.08)),
+                        Container(
+                          width: 1,
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
                         Expanded(
                           child: Column(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 3,
+                                  horizontal: 8,
+                                ),
                                 color: Colors.white.withValues(alpha: 0.02),
                                 width: double.infinity,
                                 child: Row(
                                   children: [
                                     Text(
                                       '${AppLocalizations.of(context)!.panel2}: ${sessions[(notifier.currentIndex + 1) % sessions.length].title}',
-                                      style: GoogleFonts.inter(fontSize: 8.5, color: Colors.cyanAccent.withValues(alpha: 0.7), fontWeight: FontWeight.bold),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 8.5,
+                                        color: Colors.cyanAccent.withValues(
+                                          alpha: 0.7,
+                                        ),
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                     const Spacer(),
                                     InkWell(
-                                      onTap: () => setState(() => _isTerminalSplit = false),
-                                      child: const Icon(LucideIcons.x, size: 10, color: Colors.white38),
+                                      onTap: () => setState(
+                                        () => _isTerminalSplit = false,
+                                      ),
+                                      child: const Icon(
+                                        LucideIcons.x,
+                                        size: 10,
+                                        color: Colors.white38,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                              Expanded(child: _buildTerminalWidget(sessions[(notifier.currentIndex + 1) % sessions.length], isSecondary: true)),
+                              Expanded(
+                                child: _buildTerminalWidget(
+                                  sessions[(notifier.currentIndex + 1) %
+                                      sessions.length],
+                                  isSecondary: true,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -1901,7 +2814,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               if (_isSidebarOpen)
                 SizedBox(
                   width: 220,
-                  child: _buildSessionsSidebarList(sessions, notifier, isOverlay: false),
+                  child: _buildSessionsSidebarList(
+                    sessions,
+                    notifier,
+                    isOverlay: false,
+                  ),
                 ),
               Expanded(child: terminalContent),
             ],
@@ -1915,9 +2832,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               Positioned.fill(
                 child: GestureDetector(
                   onTap: () => setState(() => _isSidebarOpen = false),
-                  child: Container(
-                    color: Colors.black.withValues(alpha: 0.65),
-                  ),
+                  child: Container(color: Colors.black.withValues(alpha: 0.65)),
                 ),
               ),
               Positioned(
@@ -1925,7 +2840,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 top: 0,
                 bottom: 0,
                 width: 230,
-                child: _buildSessionsSidebarList(sessions, notifier, isOverlay: true),
+                child: _buildSessionsSidebarList(
+                  sessions,
+                  notifier,
+                  isOverlay: true,
+                ),
               ),
             ],
           ],
@@ -1947,7 +2866,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       decoration: BoxDecoration(
         color: theme.background,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.45), width: 1.0),
+        border: Border.all(
+          color: Colors.cyanAccent.withValues(alpha: 0.45),
+          width: 1.0,
+        ),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -1957,12 +2879,18 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             decoration: BoxDecoration(
               color: const Color(0xFF151924),
               border: Border(
-                bottom: BorderSide(color: Colors.cyanAccent.withValues(alpha: 0.25)),
+                bottom: BorderSide(
+                  color: Colors.cyanAccent.withValues(alpha: 0.25),
+                ),
               ),
             ),
             child: Row(
               children: [
-                const Icon(LucideIcons.mouse_pointer_click, size: 13, color: Colors.cyanAccent),
+                const Icon(
+                  LucideIcons.mouse_pointer_click,
+                  size: 13,
+                  color: Colors.cyanAccent,
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -1981,7 +2909,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 if (_inlineSelectedText.isNotEmpty) ...[
                   InkWell(
                     onTap: () async {
-                      await Clipboard.setData(ClipboardData(text: _inlineSelectedText));
+                      await Clipboard.setData(
+                        ClipboardData(text: _inlineSelectedText),
+                      );
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -1994,7 +2924,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     },
                     borderRadius: BorderRadius.circular(5),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.cyanAccent.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(5),
@@ -2002,7 +2935,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(LucideIcons.copy, size: 12, color: Colors.cyanAccent),
+                          const Icon(
+                            LucideIcons.copy,
+                            size: 12,
+                            color: Colors.cyanAccent,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             l10n.copy,
@@ -2022,14 +2959,20 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   onTap: () => _copyTerminalOutputDirect(session),
                   borderRadius: BorderRadius.circular(5),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(5),
                     ),
                     child: Text(
                       l10n.copyAll,
-                      style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white70),
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
                 ),
@@ -2041,7 +2984,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   }),
                   borderRadius: BorderRadius.circular(5),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.amberAccent.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(5),
@@ -2078,7 +3024,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       if (selection.start >= 0 &&
                           selection.end <= fullText.length &&
                           selection.start != selection.end) {
-                        final selected = fullText.substring(selection.start, selection.end);
+                        final selected = fullText.substring(
+                          selection.start,
+                          selection.end,
+                        );
                         if (selected != _inlineSelectedText) {
                           setState(() => _inlineSelectedText = selected);
                         }
@@ -2104,11 +3053,17 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  Widget _buildTerminalWidget(TerminalSession session, {bool isSecondary = false}) {
+  Widget _buildTerminalWidget(
+    TerminalSession session, {
+    bool isSecondary = false,
+  }) {
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
     final theme = _getTerminalTheme(terminalThemeName);
-    final isMobile = Platform.isAndroid || Platform.isIOS || MediaQuery.of(context).size.width < 650;
+    final isMobile =
+        Platform.isAndroid ||
+        Platform.isIOS ||
+        MediaQuery.of(context).size.width < 650;
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
 
     if (!isSecondary) {
@@ -2138,7 +3093,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 decoration: BoxDecoration(
                   color: theme.background,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.03),
+                  ),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Actions(
@@ -2154,99 +3111,155 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     ),
                   },
                   child: Shortcuts(
-                      shortcuts: <LogicalKeySet, Intent>{
-                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyC): const CopyTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyC): const CopyTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyV): const PasteTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyV): const PasteTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyA): const SelectAllTextIntent(),
-                        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyA): const SelectAllTextIntent(),
-                      },
-                      child: _buildTerminalPinchWrapper(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: () {
-                            if (!isMobile) {
-                              _openTerminalKeyboard(session, isSecondary: isSecondary, clearSelection: true);
-                            } else if (session.xtermViewController.selection != null) {
-                              session.xtermViewController.clearSelection();
-                            }
-                          },
-                          onSecondaryTapDown: (details) {
-                            if (session.xtermViewController.selection != null) {
-                              _copySelection(session);
-                            } else {
-                              _pasteToTerminal(session);
-                            }
-                          },
-                          child: LayoutBuilder(
-                            builder: (context, viewConstraints) {
-                              return xt.TerminalView(
-                                key: _getTerminalKey(keyId),
+                    shortcuts: <LogicalKeySet, Intent>{
+                      LogicalKeySet(
+                        LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyC,
+                      ): const CopyTextIntent(),
+                      LogicalKeySet(
+                        LogicalKeyboardKey.meta,
+                        LogicalKeyboardKey.keyC,
+                      ): const CopyTextIntent(),
+                      LogicalKeySet(
+                        LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyV,
+                      ): const PasteTextIntent(),
+                      LogicalKeySet(
+                        LogicalKeyboardKey.meta,
+                        LogicalKeyboardKey.keyV,
+                      ): const PasteTextIntent(),
+                      LogicalKeySet(
+                        LogicalKeyboardKey.control,
+                        LogicalKeyboardKey.keyA,
+                      ): const SelectAllTextIntent(),
+                      LogicalKeySet(
+                        LogicalKeyboardKey.meta,
+                        LogicalKeyboardKey.keyA,
+                      ): const SelectAllTextIntent(),
+                    },
+                    child: _buildTerminalPinchWrapper(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onTap: () {
+                          if (!isMobile) {
+                            _openTerminalKeyboard(
+                              session,
+                              isSecondary: isSecondary,
+                              clearSelection: true,
+                            );
+                          } else if (session.xtermViewController.selection !=
+                              null) {
+                            session.xtermViewController.clearSelection();
+                          }
+                        },
+                        onSecondaryTapDown: (details) {
+                          if (session.xtermViewController.selection != null) {
+                            _copySelection(session);
+                          } else {
+                            _pasteToTerminal(session);
+                          }
+                        },
+                        child: LayoutBuilder(
+                          builder: (context, viewConstraints) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) {
+                                final ctrl = _terminalScrollControllers[keyId];
+                                if (ctrl != null &&
+                                    ctrl.hasClients &&
+                                    ctrl.wasFollowingCursor) {
+                                  ctrl.jumpTo(ctrl.position.maxScrollExtent);
+                                }
+                              }
+                            });
+                            return xt.TerminalView(
+                              key: _getTerminalKey(keyId),
+                              session.xtermTerminal,
+                              controller: session.xtermViewController,
+                              scrollController: _getScrollController(
+                                keyId,
                                 session.xtermTerminal,
-                                controller: session.xtermViewController,
-                                scrollController: _getScrollController(keyId, session.xtermTerminal),
-                                focusNode: _getFocusNode(keyId),
-                                autofocus: !isMobile,
-                                deleteDetection: true,
-                                autoResize: true,
-                                hardwareKeyboardOnly: isMobile && !_isMobileKeyboardActive,
-                                onKeyEvent: (focusNode, event) {
-                                  if (event is! KeyUpEvent && event.logicalKey == LogicalKeyboardKey.backspace) {
-                                    session.pty.write(Uint8List.fromList([127]));
-                                    _handleInputForAutocomplete(session, '\x7f');
-                                    return KeyEventResult.handled;
-                                  }
-                                  return KeyEventResult.ignored;
-                                },
-                                onTapUp: (details, offset) {
-                                  if (session.xtermViewController.selection != null) {
-                                    session.xtermViewController.clearSelection();
+                              ),
+                              focusNode: _getFocusNode(keyId),
+                              autofocus: !isMobile,
+                              deleteDetection: true,
+                              autoResize: true,
+                              hardwareKeyboardOnly:
+                                  isMobile && !_isMobileKeyboardActive,
+                              onKeyEvent: (focusNode, event) {
+                                if (event is! KeyUpEvent &&
+                                    event.logicalKey ==
+                                        LogicalKeyboardKey.backspace) {
+                                  session.pty.write(Uint8List.fromList([127]));
+                                  _handleInputForAutocomplete(session, '\x7f');
+                                  return KeyEventResult.handled;
+                                }
+                                return KeyEventResult.ignored;
+                              },
+                              onTapUp: (details, offset) {
+                                if (session.xtermViewController.selection !=
+                                    null) {
+                                  session.xtermViewController.clearSelection();
+                                  return;
+                                }
+
+                                final lineIndex = offset.y;
+                                final colIndex = offset.x;
+                                final buffer = session.xtermTerminal.buffer;
+                                if (lineIndex >= 0 &&
+                                    lineIndex < buffer.lines.length) {
+                                  final lineText = buffer.lines[lineIndex]
+                                      .toString();
+                                  final link = QuantumLinkDetector.findLinkAt(
+                                    lineText,
+                                    colIndex,
+                                  );
+                                  if (link != null) {
+                                    QuantumLinkDetector.handleLinkTap(
+                                      context,
+                                      ref,
+                                      link,
+                                    );
                                     return;
                                   }
+                                }
 
-                                  final lineIndex = offset.y;
-                                  final colIndex = offset.x;
-                                  final buffer = session.xtermTerminal.buffer;
-                                  if (lineIndex >= 0 && lineIndex < buffer.lines.length) {
-                                    final lineText = buffer.lines[lineIndex].toString();
-                                    final link = QuantumLinkDetector.findLinkAt(lineText, colIndex);
-                                    if (link != null) {
-                                      QuantumLinkDetector.handleLinkTap(context, ref, link);
-                                      return;
-                                    }
-                                  }
-
-                                  if (!isMobile || _isMobileKeyboardActive) {
-                                    _openTerminalKeyboard(session, isSecondary: isSecondary);
-                                  }
-                                },
-                                padding: const EdgeInsets.all(10),
-                                theme: theme,
-                                backgroundOpacity: 0,
-                                textStyle: xt.TerminalStyle(
-                                  fontSize: terminalFontSize,
-                                  fontFamily: _getFontFamily(ref.watch(settingsProvider).terminalFontFamily),
-                                  fontFamilyFallback: const [
-                                    'SymbolsNerdFont',
-                                    'Symbols Nerd Font',
-                                    'jetBrainsMono',
-                                    'firaCode',
-                                    'cascadia',
-                                    'dejaVuSansMono',
-                                    'inconsolata',
-                                    'sourceCodePro',
-                                    'Noto Sans Mono',
-                                    'DejaVu Sans Mono',
-                                    'monospace',
-                                  ],
+                                if (!isMobile) {
+                                  _openTerminalKeyboard(
+                                    session,
+                                    isSecondary: isSecondary,
+                                  );
+                                }
+                              },
+                              padding: const EdgeInsets.all(10),
+                              theme: theme,
+                              backgroundOpacity: 0,
+                              textStyle: xt.TerminalStyle(
+                                fontSize: terminalFontSize,
+                                fontFamily: _getFontFamily(
+                                  ref
+                                      .watch(settingsProvider)
+                                      .terminalFontFamily,
                                 ),
-                              );
-                            },
-                          ),
+                                fontFamilyFallback: const [
+                                  'SymbolsNerdFont',
+                                  'Symbols Nerd Font',
+                                  'jetBrainsMono',
+                                  'firaCode',
+                                  'cascadia',
+                                  'dejaVuSansMono',
+                                  'inconsolata',
+                                  'sourceCodePro',
+                                  'Noto Sans Mono',
+                                  'DejaVu Sans Mono',
+                                  'monospace',
+                                ],
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
+                  ),
                 ),
               ),
             ),
@@ -2256,6 +3269,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         TerminalSelectionOverlay(
           session: session,
           getViewState: () => _getTerminalKey(keyId).currentState!,
+          scrollController: _getScrollController(keyId, session.xtermTerminal),
           onSelectAll: () => _selectAllInTerminal(session),
           onPaste: () => _pasteToTerminal(session),
         ),
@@ -2363,15 +3377,23 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
     final totalErrors = allDiagnostics.values.fold<int>(
       0,
-      (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.error).length,
+      (sum, diags) =>
+          sum +
+          diags.where((d) => d.severity == CodeDiagnosticSeverity.error).length,
     );
     final totalWarnings = allDiagnostics.values.fold<int>(
       0,
-      (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.warning).length,
+      (sum, diags) =>
+          sum +
+          diags
+              .where((d) => d.severity == CodeDiagnosticSeverity.warning)
+              .length,
     );
     final totalHints = allDiagnostics.values.fold<int>(
       0,
-      (sum, diags) => sum + diags.where((d) => d.severity == CodeDiagnosticSeverity.hint).length,
+      (sum, diags) =>
+          sum +
+          diags.where((d) => d.severity == CodeDiagnosticSeverity.hint).length,
     );
     final totalProblems = totalErrors + totalWarnings + totalHints;
 
@@ -2381,14 +3403,26 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final flatEntries = <MapEntry<String, CodeDiagnostic>>[];
     allDiagnostics.forEach((filePath, diags) {
       for (final d in diags) {
-        if (_problemsSeverityFilter == 1 && d.severity != CodeDiagnosticSeverity.error) continue;
-        if (_problemsSeverityFilter == 2 && d.severity != CodeDiagnosticSeverity.warning) continue;
-        if (_problemsSeverityFilter == 3 && d.severity != CodeDiagnosticSeverity.hint) continue;
+        if (_problemsSeverityFilter == 1 &&
+            d.severity != CodeDiagnosticSeverity.error)
+          continue;
+        if (_problemsSeverityFilter == 2 &&
+            d.severity != CodeDiagnosticSeverity.warning)
+          continue;
+        if (_problemsSeverityFilter == 3 &&
+            d.severity != CodeDiagnosticSeverity.hint)
+          continue;
         flatEntries.add(MapEntry(filePath, d));
       }
     });
 
-    Widget buildFilterPill(int index, String label, int count, Color color, IconData icon) {
+    Widget buildFilterPill(
+      int index,
+      String label,
+      int count,
+      Color color,
+      IconData icon,
+    ) {
       final isSelected = _problemsSeverityFilter == index;
       return InkWell(
         onTap: () => setState(() => _problemsSeverityFilter = index),
@@ -2396,10 +3430,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: isSelected ? color.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.04),
+            color: isSelected
+                ? color.withValues(alpha: 0.18)
+                : Colors.white.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
-              color: isSelected ? color.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.07),
+              color: isSelected
+                  ? color.withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: 0.07),
             ),
           ),
           child: Row(
@@ -2434,7 +3472,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: const Color(0xFF12151E),
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+        ),
       ),
       child: Row(
         children: [
@@ -2443,20 +3483,43 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  buildFilterPill(0, 'Все', totalProblems, Colors.cyanAccent, LucideIcons.list_filter),
+                  buildFilterPill(
+                    0,
+                    'Все',
+                    totalProblems,
+                    Colors.cyanAccent,
+                    LucideIcons.list_filter,
+                  ),
                   const SizedBox(width: 6),
-                  buildFilterPill(1, 'Ошибки', totalErrors, Colors.redAccent, LucideIcons.circle_x),
+                  buildFilterPill(
+                    1,
+                    'Ошибки',
+                    totalErrors,
+                    Colors.redAccent,
+                    LucideIcons.circle_x,
+                  ),
                   const SizedBox(width: 6),
-                  buildFilterPill(2, 'Предупр.', totalWarnings, Colors.amberAccent, LucideIcons.triangle_alert),
+                  buildFilterPill(
+                    2,
+                    'Предупр.',
+                    totalWarnings,
+                    Colors.amberAccent,
+                    LucideIcons.triangle_alert,
+                  ),
                   if (totalHints > 0) ...[
                     const SizedBox(width: 6),
-                    buildFilterPill(3, 'Инфо', totalHints, Colors.blueAccent, LucideIcons.info),
+                    buildFilterPill(
+                      3,
+                      'Инфо',
+                      totalHints,
+                      Colors.blueAccent,
+                      LucideIcons.info,
+                    ),
                   ],
                 ],
               ),
             ),
           ),
-
         ],
       ),
     );
@@ -2476,7 +3539,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       color: Colors.greenAccent.withValues(alpha: 0.08),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(LucideIcons.shield_check, color: Colors.greenAccent, size: 22),
+                    child: const Icon(
+                      LucideIcons.shield_check,
+                      color: Colors.greenAccent,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Column(
@@ -2485,11 +3552,18 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     children: [
                       Text(
                         l10n.noErrorsFound,
-                        style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       Text(
                         l10n.noErrorsDescription,
-                        style: GoogleFonts.inter(color: Colors.white38, fontSize: 11),
+                        style: GoogleFonts.inter(
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
                       ),
                     ],
                   ),
@@ -2553,9 +3627,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
-            border: Border(
-              left: BorderSide(color: color, width: 2.5),
-            ),
+            border: Border(left: BorderSide(color: color, width: 2.5)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -2593,7 +3665,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               const SizedBox(width: 4),
               InkWell(
                 onTap: () {
-                  Clipboard.setData(ClipboardData(text: '$fileName:$lineNum:$colNum - ${d.message}'));
+                  Clipboard.setData(
+                    ClipboardData(
+                      text: '$fileName:$lineNum:$colNum - ${d.message}',
+                    ),
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Ошибка скопирована'),
@@ -2605,7 +3681,60 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 borderRadius: BorderRadius.circular(4),
                 child: const Padding(
                   padding: EdgeInsets.all(4),
-                  child: Icon(LucideIcons.copy, color: Colors.white38, size: 12),
+                  child: Icon(
+                    LucideIcons.copy,
+                    color: Colors.white38,
+                    size: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              InkWell(
+                onTap: () async {
+                  await ref.read(editorProvider.notifier).openFile(path);
+                  ref.read(panelProvider.notifier).selectTab(PanelTab.aiAgent);
+                  final prompt =
+                      'Пожалуйста, исправь следующую ошибку в файле $fileName на строке $lineNum:\n'
+                      '```\n${d.message}\n```\n'
+                      'Файл: $path\n'
+                      'Изучи контекст и код вокруг строки $lineNum и примени исправление.';
+                  await ref
+                      .read(quantumAiAgentServiceProvider)
+                      .sendMessage(prompt);
+                },
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: const Color(0xFF818CF8).withValues(alpha: 0.45),
+                      width: 0.7,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        LucideIcons.sparkles,
+                        color: Color(0xFFA5B4FC),
+                        size: 10,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'AI Fix',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFFE0E7FF),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -2616,7 +3745,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   // ОБНОВЛЕННОЕ ХАКЕРСКОЕ КОНТЕКСТНОЕ МЕНЮ (Как в Termux)
-  void _showTerminalContextMenu(BuildContext context, Offset position, TerminalSession session, {bool fromToolbar = false}) async {
+  void _showTerminalContextMenu(
+    BuildContext context,
+    Offset position,
+    TerminalSession session, {
+    bool fromToolbar = false,
+  }) async {
     HapticFeedback.mediumImpact();
     final isMobile = MediaQuery.of(context).size.width < 700;
 
@@ -2625,7 +3759,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
 
-    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
     final hasSelection = session.xtermViewController.selection != null;
     final l10n = AppLocalizations.of(context)!;
 
@@ -2650,9 +3785,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           height: 38,
           child: Row(
             children: [
-              const Icon(LucideIcons.mouse_pointer_click, size: 15, color: Colors.cyanAccent),
+              const Icon(
+                LucideIcons.mouse_pointer_click,
+                size: 15,
+                color: Colors.cyanAccent,
+              ),
               const SizedBox(width: 10),
-              Text(l10n.selectTextInTerminal, style: const TextStyle(color: Colors.cyanAccent, fontSize: 13)),
+              Text(
+                l10n.selectTextInTerminal,
+                style: const TextStyle(color: Colors.cyanAccent, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -2664,7 +3806,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               children: [
                 const Icon(LucideIcons.copy, size: 15, color: Colors.white70),
                 const SizedBox(width: 10),
-                Text(l10n.copy, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                Text(
+                  l10n.copy,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
               ],
             ),
           ),
@@ -2675,7 +3820,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             children: [
               const Icon(LucideIcons.files, size: 15, color: Colors.white70),
               const SizedBox(width: 10),
-              Text(l10n.copyAll, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              Text(
+                l10n.copyAll,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -2684,9 +3832,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           height: 38,
           child: Row(
             children: [
-              const Icon(LucideIcons.clipboard_paste, size: 15, color: Colors.white70),
+              const Icon(
+                LucideIcons.clipboard_paste,
+                size: 15,
+                color: Colors.white70,
+              ),
               const SizedBox(width: 10),
-              Text(l10n.paste, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              Text(
+                l10n.paste,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -2695,9 +3850,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           height: 38,
           child: Row(
             children: [
-              Icon(_isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2, size: 15, color: Colors.cyanAccent),
+              Icon(
+                _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
+                size: 15,
+                color: Colors.cyanAccent,
+              ),
               const SizedBox(width: 10),
-              Text(_isTerminalSplit ? l10n.mergeScreen : l10n.splitScreen, style: const TextStyle(color: Colors.white, fontSize: 13)),
+              Text(
+                _isTerminalSplit ? l10n.mergeScreen : l10n.splitScreen,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -2706,9 +3868,25 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           height: 38,
           child: Row(
             children: [
-              Icon(LucideIcons.coffee, size: 15, color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white70),
+              Icon(
+                LucideIcons.coffee,
+                size: 15,
+                color: _isWakelockEnabled
+                    ? Colors.orangeAccent
+                    : Colors.white70,
+              ),
               const SizedBox(width: 10),
-              Text(_isWakelockEnabled ? l10n.keepScreenOnActive : l10n.keepScreenOn, style: TextStyle(color: _isWakelockEnabled ? Colors.orangeAccent : Colors.white, fontSize: 13)),
+              Text(
+                _isWakelockEnabled
+                    ? l10n.keepScreenOnActive
+                    : l10n.keepScreenOn,
+                style: TextStyle(
+                  color: _isWakelockEnabled
+                      ? Colors.orangeAccent
+                      : Colors.white,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ),
@@ -2720,7 +3898,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
             children: [
               const Icon(LucideIcons.square, size: 15, color: Colors.redAccent),
               const SizedBox(width: 10),
-              Text(l10n.interruptProcess, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+              Text(
+                l10n.interruptProcess,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -2729,9 +3910,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           height: 38,
           child: Row(
             children: [
-              const Icon(LucideIcons.trash_2, size: 15, color: Colors.orangeAccent),
+              const Icon(
+                LucideIcons.trash_2,
+                size: 15,
+                color: Colors.orangeAccent,
+              ),
               const SizedBox(width: 10),
-              Text(l10n.clearTerminal, style: const TextStyle(color: Colors.orangeAccent, fontSize: 13)),
+              Text(
+                l10n.clearTerminal,
+                style: const TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ),
@@ -2743,10 +3934,16 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     if (result == 'inline_selection') {
       _toggleInlineSelectionMode(session);
     } else if (result == 'selection_mode') {
-      TerminalTextSelectionModal.show(context, session.xtermTerminal, session.title);
+      TerminalTextSelectionModal.show(
+        context,
+        session.xtermTerminal,
+        session.title,
+      );
     } else if (result == 'copy') {
       final selectedText = session.xtermViewController.selection != null
-          ? session.xtermTerminal.buffer.getText(session.xtermViewController.selection!)
+          ? session.xtermTerminal.buffer.getText(
+              session.xtermViewController.selection!,
+            )
           : '';
       if (selectedText.isNotEmpty) {
         final messenger = ScaffoldMessenger.of(context);
@@ -2785,7 +3982,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     }
   }
 
-  void _showMobileTerminalBottomSheet(BuildContext context, TerminalSession session) {
+  void _showMobileTerminalBottomSheet(
+    BuildContext context,
+    TerminalSession session,
+  ) {
     final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
@@ -2816,7 +4016,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
                       Container(
@@ -2824,7 +4027,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         height: 8,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: session.isExited ? Colors.redAccent : Colors.greenAccent,
+                          color: session.isExited
+                              ? Colors.redAccent
+                              : Colors.greenAccent,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -2838,10 +4043,17 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       ),
                       const Spacer(),
                       IconButton(
-                        icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                        icon: const Icon(
+                          LucideIcons.x,
+                          size: 16,
+                          color: Colors.white54,
+                        ),
                         onPressed: () => Navigator.pop(ctx),
                         padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
+                        ),
                       ),
                     ],
                   ),
@@ -2850,7 +4062,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                 _buildMenuTile(
                   icon: LucideIcons.mouse_pointer_click,
                   iconColor: Colors.cyanAccent,
-                  title: _inlineSelectionMode ? l10n.closeSelection : l10n.selectTextInTerminal,
+                  title: _inlineSelectionMode
+                      ? l10n.closeSelection
+                      : l10n.selectTextInTerminal,
                   subtitle: l10n.selectTextInTerminal,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -2905,7 +4119,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   subtitle: session.title,
                   onTap: () {
                     Navigator.pop(ctx);
-                    final tabsNotifier = ref.read(terminalTabsProvider.notifier);
+                    final tabsNotifier = ref.read(
+                      terminalTabsProvider.notifier,
+                    );
                     final idx = ref.read(terminalTabsProvider).indexOf(session);
                     if (idx != -1) {
                       tabsNotifier.restartSession(idx);
@@ -2913,7 +4129,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   },
                 ),
                 _buildMenuTile(
-                  icon: _isTerminalSplit ? LucideIcons.square : LucideIcons.columns_2,
+                  icon: _isTerminalSplit
+                      ? LucideIcons.square
+                      : LucideIcons.columns_2,
                   iconColor: Colors.cyanAccent,
                   title: _isTerminalSplit ? l10n.mergeScreen : l10n.splitScreen,
                   subtitle: l10n.splitScreen,
@@ -2923,15 +4141,21 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                       _isTerminalSplit = !_isTerminalSplit;
                       final sessions = ref.read(terminalTabsProvider);
                       if (_isTerminalSplit && sessions.length < 2) {
-                        ref.read(terminalTabsProvider.notifier).createNewSession();
+                        ref
+                            .read(terminalTabsProvider.notifier)
+                            .createNewSession();
                       }
                     });
                   },
                 ),
                 _buildMenuTile(
                   icon: LucideIcons.coffee,
-                  iconColor: _isWakelockEnabled ? Colors.orangeAccent : Colors.white60,
-                  title: _isWakelockEnabled ? l10n.keepScreenOnActive : l10n.keepScreenOn,
+                  iconColor: _isWakelockEnabled
+                      ? Colors.orangeAccent
+                      : Colors.white60,
+                  title: _isWakelockEnabled
+                      ? l10n.keepScreenOnActive
+                      : l10n.keepScreenOn,
                   subtitle: l10n.keepScreenOn,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -2993,7 +4217,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevron_right, size: 14, color: Colors.white24),
+              const Icon(
+                LucideIcons.chevron_right,
+                size: 14,
+                color: Colors.white24,
+              ),
             ],
           ),
         ),
@@ -3024,7 +4252,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           final item = cmds[index];
           return InkWell(
             onTap: () {
-              session.pty.write(Uint8List.fromList(utf8.encode('${item.command}\n')));
+              session.pty.write(
+                Uint8List.fromList(utf8.encode('${item.command}\n')),
+              );
             },
             borderRadius: BorderRadius.circular(4),
             child: Container(
@@ -3032,12 +4262,19 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               decoration: BoxDecoration(
                 color: const Color(0xFF1A1F2C),
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
+                  width: 0.5,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(LucideIcons.terminal, size: 10, color: Color(0xFF4FC3F7)),
+                  const Icon(
+                    LucideIcons.terminal,
+                    size: 10,
+                    color: Color(0xFF4FC3F7),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     item.name,
@@ -3057,8 +4294,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  Widget _buildVirtualKeys(List<TerminalSession> sessions, TerminalTabsNotifier notifier) {
-    if (sessions.isEmpty || notifier.currentIndex >= sessions.length) return const SizedBox();
+  Widget _buildVirtualKeys(
+    List<TerminalSession> sessions,
+    TerminalTabsNotifier notifier,
+  ) {
+    if (sessions.isEmpty || notifier.currentIndex >= sessions.length)
+      return const SizedBox();
     final currentSession = sessions[notifier.currentIndex];
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = (bottomInset > 20) || _isMobileKeyboardActive;
@@ -3135,7 +4376,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(hasSel ? AppLocalizations.of(context)!.copiedToClipboard : AppLocalizations.of(context)!.copyAll),
+            content: Text(
+              hasSel
+                  ? AppLocalizations.of(context)!.copiedToClipboard
+                  : AppLocalizations.of(context)!.copyAll,
+            ),
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 1),
           ),
@@ -3148,7 +4393,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final data = await Clipboard.getData(Clipboard.kTextPlain);
     final text = data?.text;
     if (text != null && text.isNotEmpty) {
-      final sanitized = _sanitizeTerminalInput(text).replaceAll(RegExp(r'[\r\n]+$'), '');
+      final sanitized = _sanitizeTerminalInput(
+        text,
+      ).replaceAll(RegExp(r'[\r\n]+$'), '');
       if (sanitized.isEmpty) return;
       if (session.xtermTerminal.bracketedPasteMode) {
         session.xtermTerminal.paste(sanitized);
@@ -3206,7 +4453,10 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
     const itemHeight = 36.0;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = bottomInset > 20;
-    final maxHeight = (widget.suggestions.length * itemHeight).clamp(0.0, isKeyboardOpen ? 95.0 : 180.0);
+    final maxHeight = (widget.suggestions.length * itemHeight).clamp(
+      0.0,
+      isKeyboardOpen ? 95.0 : 180.0,
+    );
 
     return Positioned(
       left: 16,
@@ -3284,7 +4534,9 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
                           child: Text(
                             suggestion,
                             style: GoogleFonts.jetBrainsMono(
-                              color: isSelected ? Colors.cyanAccent : Colors.white70,
+                              color: isSelected
+                                  ? Colors.cyanAccent
+                                  : Colors.white70,
                               fontSize: 12,
                             ),
                             overflow: TextOverflow.ellipsis,
@@ -3292,7 +4544,10 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
                         ),
                         if (!isPath)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.greenAccent.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
@@ -3308,7 +4563,10 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
                           ),
                         if (isDirectory)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.amber.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
@@ -3324,7 +4582,10 @@ class _SuggestionBoxState extends State<_SuggestionBox> {
                           ),
                         if (isPath && !isDirectory)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.blueAccent.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(4),
@@ -3381,14 +4642,28 @@ class _CollapsibleConsoleState extends State<CollapsibleConsole> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.terminal, size: 12, color: Colors.white54),
+                  const Icon(
+                    LucideIcons.terminal,
+                    size: 12,
+                    color: Colors.white54,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'Console Log',
-                    style: GoogleFonts.jetBrainsMono(fontSize: 10, color: Colors.white54, fontWeight: FontWeight.bold),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: Colors.white54,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const Spacer(),
-                  Icon(_isExpanded ? LucideIcons.chevron_up : LucideIcons.chevron_down, size: 12, color: Colors.white54),
+                  Icon(
+                    _isExpanded
+                        ? LucideIcons.chevron_up
+                        : LucideIcons.chevron_down,
+                    size: 12,
+                    color: Colors.white54,
+                  ),
                 ],
               ),
             ),
@@ -3399,7 +4674,11 @@ class _CollapsibleConsoleState extends State<CollapsibleConsole> {
               color: Colors.black26,
               child: SelectableText(
                 widget.content.trim(),
-                style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10.5, height: 1.4),
+                style: GoogleFonts.jetBrainsMono(
+                  color: Colors.white70,
+                  fontSize: 10.5,
+                  height: 1.4,
+                ),
               ),
             ),
         ],
@@ -3407,4 +4686,3 @@ class _CollapsibleConsoleState extends State<CollapsibleConsole> {
     );
   }
 }
-

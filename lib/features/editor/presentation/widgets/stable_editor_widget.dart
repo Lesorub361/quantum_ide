@@ -8,7 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
-import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart' hide CodeKeywordPrompt;
+import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart'
+    hide CodeKeywordPrompt;
 import 'package:quantum_ide/features/editor/presentation/handlers/snippet_prompt.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/diff_gutter_indicator.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
@@ -42,12 +43,12 @@ import 'package:quantum_ide/features/editor/presentation/widgets/collaboration_p
 import 'package:quantum_ide/core/services/service_providers.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_minimap.dart';
 
-
 class DiffBackgroundPainter extends CustomPainter {
   final CodeIndicatorValueNotifier? notifier;
   final List<DiffMarker> markers;
 
-  DiffBackgroundPainter({required this.notifier, required this.markers}) : super(repaint: notifier);
+  DiffBackgroundPainter({required this.notifier, required this.markers})
+    : super(repaint: notifier);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -168,7 +169,9 @@ class QuantumSelectionToolbarController implements SelectionToolbarController {
                 return CompositedTransformFollower(
                   link: layerLink,
                   showWhenUnlinked: false,
-                  offset: renderRect != null ? -renderRect.topLeft : Offset.zero,
+                  offset: renderRect != null
+                      ? -renderRect.topLeft
+                      : Offset.zero,
                   child: CodeEditorTapRegion(
                     child: builder(
                       context: context,
@@ -352,7 +355,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     if (currentValue.codeLines.length > _autoCloseMaxLines) return;
 
     final lineIndex = currentSelection.extentIndex;
-    if (lineIndex >= currentValue.codeLines.length || lineIndex >= previousValue.codeLines.length) return;
+    if (lineIndex >= currentValue.codeLines.length ||
+        lineIndex >= previousValue.codeLines.length)
+      return;
 
     final currentOffset = currentSelection.extentOffset;
     final previousOffset = previousSelection.extentOffset;
@@ -360,9 +365,12 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     final prevLineText = previousValue.codeLines[lineIndex].text;
 
     // 1. Backspace matching pair on the same line (O(1))
-    if (currentLineText.length == prevLineText.length - 1 && currentOffset == previousOffset - 1) {
-      if (currentOffset >= 0 && currentOffset < currentLineText.length &&
-          previousOffset > 0 && previousOffset <= prevLineText.length) {
+    if (currentLineText.length == prevLineText.length - 1 &&
+        currentOffset == previousOffset - 1) {
+      if (currentOffset >= 0 &&
+          currentOffset < currentLineText.length &&
+          previousOffset > 0 &&
+          previousOffset <= prevLineText.length) {
         final deletedChar = prevLineText[currentOffset];
         if (currentOffset + 1 < prevLineText.length) {
           final nextCharInPrev = prevLineText[currentOffset + 1];
@@ -377,17 +385,22 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             isPair = true;
           }
 
-          if (isPair && currentOffset < currentLineText.length &&
+          if (isPair &&
+              currentOffset < currentLineText.length &&
               currentLineText[currentOffset] == nextCharInPrev) {
             _isAutoClosing = true;
 
-            final newLineText = currentLineText.substring(0, currentOffset) +
-                                currentLineText.substring(currentOffset + 1);
+            final newLineText =
+                currentLineText.substring(0, currentOffset) +
+                currentLineText.substring(currentOffset + 1);
 
-            final newLines = List<CodeLine>.generate(currentValue.codeLines.length, (i) {
-              if (i == lineIndex) return CodeLine(newLineText);
-              return currentValue.codeLines[i];
-            });
+            final newLines = List<CodeLine>.generate(
+              currentValue.codeLines.length,
+              (i) {
+                if (i == lineIndex) return CodeLine(newLineText);
+                return currentValue.codeLines[i];
+              },
+            );
 
             controller.value = CodeLineEditingValue(
               codeLines: CodeLines.of(newLines),
@@ -403,14 +416,19 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     }
 
     // 2. Typing characters on the same line (O(1))
-    if (currentLineText.length == prevLineText.length + 1 && currentOffset == previousOffset + 1) {
+    if (currentLineText.length == prevLineText.length + 1 &&
+        currentOffset == previousOffset + 1) {
       if (currentOffset <= 0 || currentOffset > currentLineText.length) return;
 
       final typedChar = currentLineText[currentOffset - 1];
 
       // Step over closing character (overtype prevention)
-      if (typedChar == ')' || typedChar == '}' || typedChar == ']' ||
-          typedChar == '"' || typedChar == "'" || typedChar == '`') {
+      if (typedChar == ')' ||
+          typedChar == '}' ||
+          typedChar == ']' ||
+          typedChar == '"' ||
+          typedChar == "'" ||
+          typedChar == '`') {
         if (previousOffset < prevLineText.length &&
             prevLineText[previousOffset] == typedChar) {
           _isAutoClosing = true;
@@ -454,21 +472,28 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             currentOffset < currentLineText.length) {
           final nextChar = currentLineText[currentOffset];
           final RegExp wordChar = RegExp(r'[a-zA-Z0-9_]');
-          if (wordChar.hasMatch(nextChar) || nextChar == "'" || nextChar == '"' || nextChar == '`') {
+          if (wordChar.hasMatch(nextChar) ||
+              nextChar == "'" ||
+              nextChar == '"' ||
+              nextChar == '`') {
             return;
           }
         }
 
         _isAutoClosing = true;
 
-        final newLineText = currentLineText.substring(0, currentOffset) +
-                            closingChar +
-                            currentLineText.substring(currentOffset);
+        final newLineText =
+            currentLineText.substring(0, currentOffset) +
+            closingChar +
+            currentLineText.substring(currentOffset);
 
-        final newLines = List<CodeLine>.generate(currentValue.codeLines.length, (i) {
-          if (i == lineIndex) return CodeLine(newLineText);
-          return currentValue.codeLines[i];
-        });
+        final newLines = List<CodeLine>.generate(
+          currentValue.codeLines.length,
+          (i) {
+            if (i == lineIndex) return CodeLine(newLineText);
+            return currentValue.codeLines[i];
+          },
+        );
 
         controller.value = CodeLineEditingValue(
           codeLines: CodeLines.of(newLines),
@@ -488,8 +513,15 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     _diagnostics = widget.file.diagnostics;
     _diffMarkers = widget.file.diffMarkers;
     _findController = CodeFindController(widget.file.controller);
-    _toolbarController = QuantumSelectionToolbarController(builder: _buildToolbarMenu);
+    _toolbarController = QuantumSelectionToolbarController(
+      builder: _buildToolbarMenu,
+    );
     _setupControllerListener();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(activeFindControllerProvider.notifier).state = _findController;
+      }
+    });
   }
 
   @override
@@ -521,6 +553,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   void dispose() {
     QuantumSelectionToolbarController.dismissAll();
     _removeControllerListener();
+    if (ref.read(activeFindControllerProvider) == _findController) {
+      ref.read(activeFindControllerProvider.notifier).state = null;
+    }
     _findController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -598,7 +633,12 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
     showMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
       color: const Color(0xFF1E2230),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       items: [
@@ -607,9 +647,16 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             value: 'cut',
             child: Row(
               children: [
-                const Icon(LucideIcons.scissors, size: 14, color: Colors.white70),
+                const Icon(
+                  LucideIcons.scissors,
+                  size: 14,
+                  color: Colors.white70,
+                ),
                 const SizedBox(width: 8),
-                Text(l10n.cut, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                Text(
+                  l10n.cut,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -619,7 +666,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               children: [
                 const Icon(LucideIcons.copy, size: 14, color: Colors.white70),
                 const SizedBox(width: 8),
-                Text(l10n.copy, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                Text(
+                  l10n.copy,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -628,30 +678,47 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           value: 'paste',
           child: Row(
             children: [
-              const Icon(LucideIcons.clipboard, size: 14, color: Colors.white70),
+              const Icon(
+                LucideIcons.clipboard,
+                size: 14,
+                color: Colors.white70,
+              ),
               const SizedBox(width: 8),
-              Text(l10n.paste, style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text(
+                l10n.paste,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
             ],
           ),
         ),
-          PopupMenuItem(
-            value: 'selectAll',
-            child: Row(
-              children: [
-                const Icon(LucideIcons.square, size: 14, color: Colors.white70),
-                const SizedBox(width: 8),
-                Text(l10n.selectAll, style: const TextStyle(color: Colors.white, fontSize: 12)),
-              ],
-            ),
+        PopupMenuItem(
+          value: 'selectAll',
+          child: Row(
+            children: [
+              const Icon(LucideIcons.square, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(
+                l10n.selectAll,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
+            ],
           ),
+        ),
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'goToDefinition',
           child: Row(
             children: [
-              const Icon(LucideIcons.arrow_right, size: 14, color: Colors.white70),
+              const Icon(
+                LucideIcons.arrow_right,
+                size: 14,
+                color: Colors.white70,
+              ),
               const SizedBox(width: 8),
-              Text(l10n.goToDefinition, style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text(
+                l10n.goToDefinition,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
             ],
           ),
         ),
@@ -661,7 +728,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             children: [
               const Icon(LucideIcons.search, size: 14, color: Colors.white70),
               const SizedBox(width: 8),
-              Text(l10n.usages, style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text(
+                l10n.usages,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
             ],
           ),
         ),
@@ -671,7 +741,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             children: [
               const Icon(LucideIcons.pencil, size: 14, color: Colors.white70),
               const SizedBox(width: 8),
-              Text(l10n.rename, style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text(
+                l10n.rename,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
             ],
           ),
         ),
@@ -681,14 +754,17 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             children: [
               const Icon(LucideIcons.code, size: 14, color: Colors.white70),
               const SizedBox(width: 8),
-              Text(l10n.format, style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text(
+                l10n.format,
+                style: const TextStyle(color: Colors.white, fontSize: 12),
+              ),
             ],
           ),
         ),
       ],
     ).then((value) {
       if (value == null || !context.mounted) return;
-      
+
       switch (value) {
         case 'cut':
           final cutText = _getSelectedText();
@@ -696,7 +772,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             Clipboard.setData(ClipboardData(text: cutText));
             controller.replaceSelection('');
           }
-          try { controller.cut(); } catch (_) {}
+          try {
+            controller.cut();
+          } catch (_) {}
           break;
         case 'copy':
           final copyText = _getSelectedText();
@@ -705,17 +783,23 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           } else {
             final lineIdx = controller.selection.extentIndex;
             if (lineIdx >= 0 && lineIdx < controller.codeLines.length) {
-              Clipboard.setData(ClipboardData(text: controller.codeLines[lineIdx].text));
+              Clipboard.setData(
+                ClipboardData(text: controller.codeLines[lineIdx].text),
+              );
             }
           }
-          try { controller.copy(); } catch (_) {}
+          try {
+            controller.copy();
+          } catch (_) {}
           break;
         case 'paste':
           Clipboard.getData(Clipboard.kTextPlain).then((data) {
             if (data?.text != null && data!.text!.isNotEmpty) {
               controller.replaceSelection(data.text!);
             } else {
-              try { controller.paste(); } catch (_) {}
+              try {
+                controller.paste();
+              } catch (_) {}
             }
           });
           break;
@@ -730,7 +814,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               extentOffset: lastLen,
             );
           }
-          try { controller.selectAll(); } catch (_) {}
+          try {
+            controller.selectAll();
+          } catch (_) {}
           break;
         case 'goToDefinition':
           ref.read(editorProvider.notifier).goToDefinition();
@@ -761,7 +847,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               padding: const EdgeInsets.all(16.0),
               child: Text(
                 AppLocalizations.of(context)!.usages,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             ConstrainedBox(
@@ -772,18 +861,26 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                   final loc = locations[index];
                   final fileName = p.basename(Uri.parse(loc.uri).toFilePath());
                   return ListTile(
-                    title: Text(fileName, style: const TextStyle(color: Colors.white, fontSize: 14)),
+                    title: Text(
+                      fileName,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
                     subtitle: Text(
                       'Line ${loc.range.start.line + 1}, Column ${loc.range.start.character + 1}',
-                      style: const TextStyle(color: Colors.white54, fontSize: 12),
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 12,
+                      ),
                     ),
                     onTap: () {
                       Navigator.pop(context);
-                      ref.read(editorProvider.notifier).openFile(
-                        Uri.parse(loc.uri).toFilePath(),
-                        line: loc.range.start.line,
-                        column: loc.range.start.character,
-                      );
+                      ref
+                          .read(editorProvider.notifier)
+                          .openFile(
+                            Uri.parse(loc.uri).toFilePath(),
+                            line: loc.range.start.line,
+                            column: loc.range.start.character,
+                          );
                     },
                   );
                 },
@@ -838,7 +935,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
     if (file.isImage) {
       const sizeKb = '—';
-      
+
       return Container(
         color: const Color(0xFF0F111A), // Sleek deep dark background
         child: Column(
@@ -868,11 +965,20 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      const Icon(LucideIcons.image_off, color: Colors.redAccent, size: 48),
+                                      const Icon(
+                                        LucideIcons.image_off,
+                                        color: Colors.redAccent,
+                                        size: 48,
+                                      ),
                                       const SizedBox(height: 16),
                                       Text(
-                                        AppLocalizations.of(context)!.imageLoadError,
-                                        style: const TextStyle(color: Colors.white70, fontSize: 16),
+                                        AppLocalizations.of(
+                                          context,
+                                        )!.imageLoadError,
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 16,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -923,7 +1029,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(20),
@@ -947,7 +1056,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     }
 
     final performanceService = ref.read(editorPerformanceServiceProvider);
-    final applyHighlighting = performanceService.shouldApplySyntaxHighlighting(file.controller);
+    final applyHighlighting = performanceService.shouldApplySyntaxHighlighting(
+      file.controller,
+    );
     if (performanceService.isLargeFile(file.controller)) {
       performanceService.optimizeForLargeFile(file.controller);
     }
@@ -958,20 +1069,15 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       wordWrap: settings.wordWrap,
       chunkAnalyzer: const DefaultCodeChunkAnalyzer(),
       findController: _findController,
-      findBuilder: (context, controller, readOnly) => CodeFindPanelView(
-        controller: controller,
-        readOnly: readOnly,
-      ),
+      findBuilder: (context, controller, readOnly) =>
+          CodeFindPanelView(controller: controller, readOnly: readOnly),
       toolbarController: _toolbarController,
       indicatorBuilder: (context, controller, chunkController, notifier) {
         return Container(
           decoration: const BoxDecoration(
             color: Color(0xFF07090E),
             border: Border(
-              right: BorderSide(
-                color: Color(0xFF151924),
-                width: 0.8,
-              ),
+              right: BorderSide(color: Color(0xFF151924), width: 0.8),
             ),
           ),
           child: Stack(
@@ -1021,11 +1127,17 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               ),
               Positioned.fill(
                 child: IgnorePointer(
-                  child: DiagnosticIndicator(diagnostics: _diagnostics, notifier: notifier),
+                  child: DiagnosticIndicator(
+                    diagnostics: _diagnostics,
+                    notifier: notifier,
+                  ),
                 ),
               ),
               Positioned(
-                left: 0, top: 0, bottom: 0, width: 4,
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 4,
                 child: IgnorePointer(
                   child: DiffGutterIndicator(
                     controller: controller,
@@ -1060,13 +1172,16 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         selectionColor: Colors.cyanAccent.withValues(alpha: 0.26),
         chunkIndicatorColor: Colors.cyanAccent.withValues(alpha: 0.5),
         backgroundColor: const Color(0xFF090B12),
-        codeTheme: applyHighlighting ? _getHighlightTheme(settings.editorTheme) : null,
+        codeTheme: applyHighlighting
+            ? _getHighlightTheme(settings.editorTheme)
+            : null,
       ),
     );
 
     editorWidget = NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        if (notification is ScrollStartNotification || notification is ScrollUpdateNotification) {
+        if (notification is ScrollStartNotification ||
+            notification is ScrollUpdateNotification) {
           QuantumSelectionToolbarController.dismissAll();
         }
         return false;
@@ -1112,7 +1227,8 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         _pinchPointers.remove(e.pointer);
       },
       onPointerSignal: (e) {
-        if (e is PointerScrollEvent && HardwareKeyboard.instance.isControlPressed) {
+        if (e is PointerScrollEvent &&
+            HardwareKeyboard.instance.isControlPressed) {
           final delta = e.scrollDelta.dy < 0 ? 1.0 : -1.0;
           final newSize = (widget.settings.fontSize + delta).clamp(11.0, 32.0);
           ref.read(settingsProvider.notifier).setFontSize(newSize);
@@ -1137,7 +1253,8 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     final List<ContextMenuButtonItem> buttonItems = [];
     final l10n = AppLocalizations.of(context)!;
 
-    if (!controller.selection.isCollapsed || controller.selectedText.isNotEmpty) {
+    if (!controller.selection.isCollapsed ||
+        controller.selectedText.isNotEmpty) {
       buttonItems.add(
         ContextMenuButtonItem(
           label: l10n.cut,
@@ -1149,7 +1266,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               await Clipboard.setData(ClipboardData(text: text));
               controller.replaceSelection('');
             }
-            try { controller.cut(); } catch (_) {}
+            try {
+              controller.cut();
+            } catch (_) {}
             onDismiss();
           },
         ),
@@ -1166,10 +1285,14 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             } else {
               final lineIdx = controller.selection.extentIndex;
               if (lineIdx >= 0 && lineIdx < controller.codeLines.length) {
-                await Clipboard.setData(ClipboardData(text: controller.codeLines[lineIdx].text));
+                await Clipboard.setData(
+                  ClipboardData(text: controller.codeLines[lineIdx].text),
+                );
               }
             }
-            try { controller.copy(); } catch (_) {}
+            try {
+              controller.copy();
+            } catch (_) {}
             onDismiss();
           },
         ),
@@ -1184,7 +1307,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           if (data?.text != null && data!.text!.isNotEmpty) {
             controller.replaceSelection(data.text!);
           } else {
-            try { controller.paste(); } catch (_) {}
+            try {
+              controller.paste();
+            } catch (_) {}
           }
           onDismiss();
         },
@@ -1205,7 +1330,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               extentOffset: lastLen,
             );
           }
-          try { controller.selectAll(); } catch (_) {}
+          try {
+            controller.selectAll();
+          } catch (_) {}
           onRefresh();
         },
       ),
@@ -1243,7 +1370,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
               context: context,
               builder: (context) => AlertDialog(
                 backgroundColor: const Color(0xFF1E2230),
-                title: Text(l10n.documentation, style: const TextStyle(color: Colors.white, fontSize: 16)),
+                title: Text(
+                  l10n.documentation,
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                ),
                 content: SingleChildScrollView(
                   child: Text(
                     hover.contents,
@@ -1268,7 +1398,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         label: l10n.usages,
         onPressed: () async {
           onDismiss();
-          final locations = await ref.read(editorProvider.notifier).getReferences();
+          final locations = await ref
+              .read(editorProvider.notifier)
+              .getReferences();
           if (locations.isNotEmpty && context.mounted) {
             showModalBottomSheet(
               context: context,
@@ -1278,20 +1410,46 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: Text(l10n.usages, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      l10n.usages,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                   Expanded(
                     child: ListView.builder(
                       itemCount: locations.length,
                       itemBuilder: (context, index) {
                         final loc = locations[index];
-                        final fileName = p.basename(Uri.parse(loc.uri).toFilePath());
+                        final fileName = p.basename(
+                          Uri.parse(loc.uri).toFilePath(),
+                        );
                         return ListTile(
-                          title: Text(fileName, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                          subtitle: Text('${l10n.line} ${loc.range.start.line + 1}, ${l10n.column} ${loc.range.start.character + 1}', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                          title: Text(
+                            fileName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${l10n.line} ${loc.range.start.line + 1}, ${l10n.column} ${loc.range.start.character + 1}',
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 12,
+                            ),
+                          ),
                           onTap: () {
                             Navigator.pop(context);
-                            ref.read(editorProvider.notifier).openFile(Uri.parse(loc.uri).toFilePath(), line: loc.range.start.line, column: loc.range.start.character);
+                            ref
+                                .read(editorProvider.notifier)
+                                .openFile(
+                                  Uri.parse(loc.uri).toFilePath(),
+                                  line: loc.range.start.line,
+                                  column: loc.range.start.character,
+                                );
                           },
                         );
                       },
@@ -1315,7 +1473,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
             context: context,
             builder: (context) => AlertDialog(
               backgroundColor: const Color(0xFF1E2230),
-              title: Text(l10n.rename, style: const TextStyle(color: Colors.white)),
+              title: Text(
+                l10n.rename,
+                style: const TextStyle(color: Colors.white),
+              ),
               content: TextField(
                 controller: renameCtrl,
                 autofocus: true,
@@ -1326,8 +1487,14 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.cancel)),
-                TextButton(onPressed: () => Navigator.pop(context, renameCtrl.text), child: Text(l10n.ok)),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(l10n.cancel),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, renameCtrl.text),
+                  child: Text(l10n.ok),
+                ),
               ],
             ),
           );
@@ -1401,11 +1568,7 @@ class ActionIconButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(7),
             border: Border.all(color: effectiveBorder, width: 0.8),
           ),
-          child: Icon(
-            icon,
-            size: iconSize,
-            color: effectiveColor,
-          ),
+          child: Icon(icon, size: iconSize, color: effectiveColor),
         ),
       ),
     );
@@ -1425,19 +1588,20 @@ class ActionIconButton extends StatelessWidget {
   }
 }
 
-
-
-class QuantumAutocompleteView extends StatefulWidget implements PreferredSizeWidget {
+class QuantumAutocompleteView extends StatefulWidget
+    implements PreferredSizeWidget {
   final ValueNotifier<CodeAutocompleteEditingValue> notifier;
   final ValueChanged<CodeAutocompleteResult> onSelected;
 
-  const QuantumAutocompleteView({super.key, 
+  const QuantumAutocompleteView({
+    super.key,
     required this.notifier,
     required this.onSelected,
   });
 
   @override
-  State<QuantumAutocompleteView> createState() => _QuantumAutocompleteViewState();
+  State<QuantumAutocompleteView> createState() =>
+      _QuantumAutocompleteViewState();
 
   @override
   Size get preferredSize => const Size(310, 190);
@@ -1515,40 +1679,61 @@ class _QuantumAutocompleteViewState extends State<QuantumAutocompleteView> {
             blur: 40,
             opacity: 0.38,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.35), width: 0.8),
+            border: Border.all(
+              color: Colors.cyanAccent.withValues(alpha: 0.35),
+              width: 0.8,
+            ),
             child: Container(
               width: popupWidth,
-              constraints: BoxConstraints(
-                maxHeight: maxPopupHeight,
-              ),
+              constraints: BoxConstraints(maxHeight: maxPopupHeight),
               decoration: BoxDecoration(
                 color: const Color(0xFF0F121C).withValues(alpha: 0.94),
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: const [
-                  BoxShadow(color: Colors.black87, blurRadius: 18, offset: Offset(0, 6)),
+                  BoxShadow(
+                    color: Colors.black87,
+                    blurRadius: 18,
+                    offset: Offset(0, 6),
+                  ),
                 ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.04),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(14),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(LucideIcons.sparkles, size: 10, color: Colors.cyanAccent),
+                        const Icon(
+                          LucideIcons.sparkles,
+                          size: 10,
+                          color: Colors.cyanAccent,
+                        ),
                         const SizedBox(width: 5),
                         Text(
                           'VS Code IntelliSense (${value.prompts.length})',
-                          style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white54, fontWeight: FontWeight.bold),
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            color: Colors.white54,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const Spacer(),
                         Text(
                           'Tab / Нажмите',
-                          style: GoogleFonts.inter(fontSize: 8.5, color: Colors.white30),
+                          style: GoogleFonts.inter(
+                            fontSize: 8.5,
+                            color: Colors.white30,
+                          ),
                         ),
                       ],
                     ),
@@ -1566,12 +1751,17 @@ class _QuantumAutocompleteViewState extends State<QuantumAutocompleteView> {
                         final badge = _getPromptBadge(prompt);
 
                         return InkWell(
-                          onTap: () => widget.onSelected(value.copyWith(index: index).autocomplete),
+                          onTap: () => widget.onSelected(
+                            value.copyWith(index: index).autocomplete,
+                          ),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 120),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
-                              color: isSelected 
+                              color: isSelected
                                   ? color.withValues(alpha: 0.18)
                                   : Colors.transparent,
                             ),
@@ -1592,15 +1782,22 @@ class _QuantumAutocompleteViewState extends State<QuantumAutocompleteView> {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.jetBrainsMono(
-                                      color: isSelected ? Colors.white : Colors.white70,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.white70,
                                       fontSize: 12.5,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(width: 6),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 1.5,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: color.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(3),
@@ -1631,14 +1828,13 @@ class _QuantumAutocompleteViewState extends State<QuantumAutocompleteView> {
   }
 }
 
-
-
 class FloatingCapsuleButton extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
 
-  const FloatingCapsuleButton({super.key, 
+  const FloatingCapsuleButton({
+    super.key,
     required this.icon,
     required this.label,
     required this.onPressed,
@@ -1670,7 +1866,3 @@ class FloatingCapsuleButton extends StatelessWidget {
     );
   }
 }
-
-
-
-

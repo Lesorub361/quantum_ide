@@ -9,6 +9,8 @@ class QuantumTerminalScrollController extends ScrollController {
   VoidCallback? _terminalListener;
   bool _wasFollowingCursor = true;
 
+  bool get wasFollowingCursor => _wasFollowingCursor;
+
   QuantumTerminalScrollController({
     required this.terminal,
     super.initialScrollOffset,
@@ -25,9 +27,8 @@ class QuantumTerminalScrollController extends ScrollController {
     if (pos is! _QuantumTerminalScrollPosition) return;
 
     if (_wasFollowingCursor) {
-      final bound = pos.getCursorTargetOffset();
-      if ((pos.pixels - bound).abs() > 1.0) {
-        pos.jumpTo(bound);
+      if (pos.maxScrollExtent > 0) {
+        pos.jumpTo(pos.maxScrollExtent);
       }
     }
   }
@@ -73,46 +74,14 @@ class _QuantumTerminalScrollPosition extends ScrollPositionWithSingleContext {
 
   double getCursorTargetOffset() {
     if (viewportDimension <= 0 || maxScrollExtent <= 0) return 0.0;
-
-    final totalLines = terminal.buffer.lines.length;
-    if (totalLines <= 0) return 0.0;
-
-    final cellHeight = (maxScrollExtent + viewportDimension) / totalLines;
-    if (cellHeight <= 0) return 0.0;
-
-    final cursorY = terminal.buffer.absoluteCursorY;
-    final cursorBottom = (cursorY + 1) * cellHeight;
-
-    return math.max(0.0, cursorBottom - viewportDimension);
+    return maxScrollExtent;
   }
 
   double _boundOffset(double targetPixels) {
-    if (viewportDimension <= 0 || maxScrollExtent <= 0) return targetPixels;
-
-    final totalLines = terminal.buffer.lines.length;
-    if (totalLines <= 0) return targetPixels;
-
-    final cellHeight = (maxScrollExtent + viewportDimension) / totalLines;
-    if (cellHeight <= 0) return targetPixels;
-
-    final cursorY = terminal.buffer.absoluteCursorY;
-    final cursorTop = cursorY * cellHeight;
-    final cursorBottom = (cursorY + 1) * cellHeight;
-
-    // 1. If cursor is already fully visible in current viewport, keep current scroll position
-    if (hasPixels && pixels <= cursorTop && (pixels + viewportDimension) >= cursorBottom) {
-      return pixels;
+    if (viewportDimension <= 0 || maxScrollExtent <= 0) {
+      return math.max(0.0, targetPixels);
     }
-
-    // 2. Cursor target offset to show cursor line at bottom of viewport
-    final maxOffsetForCursor = math.max(0.0, cursorBottom - viewportDimension);
-
-    // 3. If jumping past the cursor into empty trailing buffer lines, clamp to cursor
-    if (targetPixels > maxOffsetForCursor) {
-      return maxOffsetForCursor;
-    }
-
-    return targetPixels;
+    return targetPixels.clamp(0.0, maxScrollExtent);
   }
 
   @override
@@ -124,13 +93,6 @@ class _QuantumTerminalScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   void correctBy(double correction) {
-    if (hasPixels && correction > 0 && maxScrollExtent > 0) {
-      final target = pixels + correction;
-      final bounded = _boundOffset(target);
-      super.correctBy(bounded - pixels);
-      _checkIfFollowingCursor();
-      return;
-    }
     super.correctBy(correction);
     _checkIfFollowingCursor();
   }
@@ -144,9 +106,7 @@ class _QuantumTerminalScrollPosition extends ScrollPositionWithSingleContext {
 
   void _checkIfFollowingCursor() {
     if (!hasPixels) return;
-    final target = getCursorTargetOffset();
-    // Following cursor if within 30px of target
-    final isFollowing = (pixels - target).abs() < 30.0;
+    final isFollowing = (pixels - maxScrollExtent).abs() < 40.0;
     onUserScrollTrackingChanged(isFollowing);
   }
 }

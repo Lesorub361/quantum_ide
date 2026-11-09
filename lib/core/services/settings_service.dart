@@ -137,7 +137,9 @@ class SettingsState {
       showHiddenFiles: showHiddenFiles ?? this.showHiddenFiles,
       geminiModel: geminiModel ?? this.geminiModel,
       flexScheme: flexScheme ?? this.flexScheme,
-      customPrimaryColor: clearCustomColor ? null : (customPrimaryColor ?? this.customPrimaryColor),
+      customPrimaryColor: clearCustomColor
+          ? null
+          : (customPrimaryColor ?? this.customPrimaryColor),
       editorTheme: editorTheme ?? this.editorTheme,
       editorFontFamily: editorFontFamily ?? this.editorFontFamily,
       terminalFontFamily: terminalFontFamily ?? this.terminalFontFamily,
@@ -209,7 +211,8 @@ class SettingsService extends StateNotifier<SettingsState> {
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     state = SettingsState(
-      themeMode: ThemeMode.values[prefs.getInt(_keyTheme) ?? ThemeMode.dark.index],
+      themeMode:
+          ThemeMode.values[prefs.getInt(_keyTheme) ?? ThemeMode.dark.index],
       fontSize: prefs.getDouble(_keyFontSize) ?? 14.0,
       autoCompletion: prefs.getBool(_keyAutoCompletion) ?? true,
       aiAutoCompletion: prefs.getBool(_keyAiAutoCompletion) ?? true,
@@ -228,7 +231,8 @@ class SettingsService extends StateNotifier<SettingsState> {
       customPrimaryColor: prefs.getInt(_keyCustomColor),
       editorTheme: prefs.getString(_keyEditorTheme) ?? 'vs-dark',
       editorFontFamily: prefs.getString(_keyEditorFontFamily) ?? 'Fira Code',
-      terminalFontFamily: prefs.getString(_keyTerminalFontFamily) ?? 'JetBrains Mono',
+      terminalFontFamily:
+          prefs.getString(_keyTerminalFontFamily) ?? 'JetBrains Mono',
       editorFontLigatures: prefs.getBool(_keyEditorFontLigatures) ?? true,
       glassmorphismOpacity: prefs.getDouble(_keyGlassmorphismOpacity) ?? 0.15,
       glassmorphismBlur: prefs.getDouble(_keyGlassmorphismBlur) ?? 0.0,
@@ -243,7 +247,8 @@ class SettingsService extends StateNotifier<SettingsState> {
       groqApiKey: prefs.getString(_keyGroqApiKey) ?? '',
       xaiApiKey: prefs.getString(_keyXaiApiKey) ?? '',
       mistralApiKey: prefs.getString(_keyMistralApiKey) ?? '',
-      customApiBaseUrl: prefs.getString(_keyCustomApiBaseUrl) ?? 'http://127.0.0.1:11434/v1',
+      customApiBaseUrl:
+          prefs.getString(_keyCustomApiBaseUrl) ?? 'http://127.0.0.1:11434/v1',
       customApiModel: prefs.getString(_keyCustomApiModel) ?? 'qwen2.5-coder:7b',
       customApiKey: prefs.getString(_keyCustomApiKey) ?? '',
       dshPort: prefs.getInt(_keyDshPort) ?? 3080,
@@ -477,6 +482,8 @@ class SettingsService extends StateNotifier<SettingsState> {
   }
 }
 
-final settingsProvider = StateNotifierProvider<SettingsService, SettingsState>((ref) {
+final settingsProvider = StateNotifierProvider<SettingsService, SettingsState>((
+  ref,
+) {
   return SettingsService();
 });

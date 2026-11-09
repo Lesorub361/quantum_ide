@@ -14,6 +14,8 @@ import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
+import 'package:quantum_ide/core/services/build_progress_tracker.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/build_completion_dialog.dart';
 
 class StatusBar extends ConsumerStatefulWidget {
   const StatusBar({super.key});
@@ -60,7 +62,8 @@ class _StatusBarState extends ConsumerState<StatusBar> {
     final editorState = ref.watch(editorProvider);
     final gitState = ref.watch(gitProvider);
 
-    final activeFile = editorState.openFiles.isNotEmpty &&
+    final activeFile =
+        editorState.openFiles.isNotEmpty &&
             editorState.activeTabIndex >= 0 &&
             editorState.activeTabIndex < editorState.openFiles.length
         ? editorState.openFiles[editorState.activeTabIndex]
@@ -70,7 +73,10 @@ class _StatusBarState extends ConsumerState<StatusBar> {
 
     final workspacePath = ref.watch(workspaceProvider).currentPath ?? '';
     final pos = _cursorValue?.selection.extent;
-    final (errorsCount, warningsCount, hintsCount) = _getDiagnosticsCounts(editorState.allDiagnostics, workspacePath);
+    final (errorsCount, warningsCount, hintsCount) = _getDiagnosticsCounts(
+      editorState.allDiagnostics,
+      workspacePath,
+    );
 
     return RepaintBoundary(
       child: Container(
@@ -111,7 +117,9 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                             color: Colors.cyanAccent,
                             maxWidth: isNarrow ? 72 : 140,
                             onTap: () {
-                              ref.read(panelProvider.notifier).selectTab(PanelTab.git);
+                              ref
+                                  .read(panelProvider.notifier)
+                                  .selectTab(PanelTab.git);
                             },
                           ),
                           SizedBox(width: isNarrow ? 5 : 8),
@@ -120,15 +128,23 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                         InkWell(
                           borderRadius: BorderRadius.circular(4),
                           onTap: () {
-                            ref.read(panelProvider.notifier).selectTab(PanelTab.problems);
+                            ref
+                                .read(panelProvider.notifier)
+                                .selectTab(PanelTab.problems);
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1.5,
+                            ),
                             decoration: BoxDecoration(
-                              color: (errorsCount > 0
-                                      ? const Color(0xFFFF6B6B)
-                                      : (warningsCount > 0 ? Colors.amberAccent : Colors.white54))
-                                  .withValues(alpha: 0.06),
+                              color:
+                                  (errorsCount > 0
+                                          ? const Color(0xFFFF6B6B)
+                                          : (warningsCount > 0
+                                                ? Colors.amberAccent
+                                                : Colors.white54))
+                                      .withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(3.5),
                             ),
                             child: Row(
@@ -137,14 +153,18 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                                 Icon(
                                   LucideIcons.circle_x,
                                   size: 10,
-                                  color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white38,
+                                  color: errorsCount > 0
+                                      ? const Color(0xFFFF6B6B)
+                                      : Colors.white38,
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
                                   '$errorsCount',
                                   style: GoogleFonts.inter(
                                     fontSize: 10,
-                                    color: errorsCount > 0 ? const Color(0xFFFF6B6B) : Colors.white60,
+                                    color: errorsCount > 0
+                                        ? const Color(0xFFFF6B6B)
+                                        : Colors.white60,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -152,14 +172,18 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                                 Icon(
                                   LucideIcons.triangle_alert,
                                   size: 10,
-                                  color: warningsCount > 0 ? Colors.amberAccent : Colors.white38,
+                                  color: warningsCount > 0
+                                      ? Colors.amberAccent
+                                      : Colors.white38,
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
                                   '$warningsCount',
                                   style: GoogleFonts.inter(
                                     fontSize: 10,
-                                    color: warningsCount > 0 ? Colors.amberAccent : Colors.white60,
+                                    color: warningsCount > 0
+                                        ? Colors.amberAccent
+                                        : Colors.white60,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -186,7 +210,11 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                         ),
                         SizedBox(width: isNarrow ? 5 : 8),
                         // CPU & RAM: adaptive (mini bars on PC, compact on phone) → tap opens system sheet
-                        _SystemStatsChip(compact: isNarrow, ultraCompact: isUltraNarrow),
+                        _SystemStatsChip(
+                          compact: isNarrow,
+                          ultraCompact: isUltraNarrow,
+                        ),
+                        _StatusBarBuildIndicator(isNarrow: isNarrow),
                       ],
                     ),
                   ),
@@ -243,7 +271,10 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                       // Language pill with genuine file/language icon from FileIconHelper
                       Builder(
                         builder: (context) {
-                          final fileInfo = FileIconHelper.getIconInfo(p.basename(activeFile.path), false);
+                          final fileInfo = FileIconHelper.getIconInfo(
+                            p.basename(activeFile.path),
+                            false,
+                          );
                           return _StatusBarPill(
                             icon: fileInfo.icon,
                             label: _getLanguageName(activeFile.path),
@@ -262,7 +293,10 @@ class _StatusBarState extends ConsumerState<StatusBar> {
     );
   }
 
-  (int, int, int) _getDiagnosticsCounts(Map<String, List<CodeDiagnostic>> allDiagnostics, String workspacePath) {
+  (int, int, int) _getDiagnosticsCounts(
+    Map<String, List<CodeDiagnostic>> allDiagnostics,
+    String workspacePath,
+  ) {
     int errors = 0;
     int warnings = 0;
     int hints = 0;
@@ -337,7 +371,10 @@ class _SystemStatsChip extends ConsumerWidget {
       child: FractionallySizedBox(
         widthFactor: value.clamp(0.02, 1.0),
         child: Container(
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
       ),
     );
@@ -349,10 +386,14 @@ class _SystemStatsChip extends ConsumerWidget {
     final cpuColor = loadColor(stats.cpuUsage);
     final gpuColor = loadColor(stats.gpuUsage);
     final ramColor = loadColor(stats.ramUsage);
-    final worst = (stats.cpuUsage >= stats.ramUsage && stats.cpuUsage >= stats.gpuUsage)
+    final worst =
+        (stats.cpuUsage >= stats.ramUsage && stats.cpuUsage >= stats.gpuUsage)
         ? cpuColor
         : (stats.gpuUsage >= stats.ramUsage ? gpuColor : ramColor);
-    final textStyle = GoogleFonts.jetBrainsMono(fontSize: 9.5, fontWeight: FontWeight.w600);
+    final textStyle = GoogleFonts.jetBrainsMono(
+      fontSize: 9.5,
+      fontWeight: FontWeight.w600,
+    );
 
     return InkWell(
       borderRadius: BorderRadius.circular(4),
@@ -368,7 +409,10 @@ class _SystemStatsChip extends ConsumerWidget {
           children: [
             Icon(LucideIcons.cpu, size: 10, color: cpuColor),
             const SizedBox(width: 3),
-            Text('${(stats.cpuUsage * 100).toStringAsFixed(0)}%', style: textStyle.copyWith(color: cpuColor)),
+            Text(
+              '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
+              style: textStyle.copyWith(color: cpuColor),
+            ),
             if (!compact) ...[
               const SizedBox(width: 4),
               _miniBar(stats.cpuUsage, cpuColor),
@@ -377,7 +421,10 @@ class _SystemStatsChip extends ConsumerWidget {
               const SizedBox(width: 6),
               Icon(LucideIcons.zap, size: 10, color: gpuColor),
               const SizedBox(width: 3),
-              Text('${(stats.gpuUsage * 100).toStringAsFixed(0)}%', style: textStyle.copyWith(color: gpuColor)),
+              Text(
+                '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
+                style: textStyle.copyWith(color: gpuColor),
+              ),
               if (!compact) ...[
                 const SizedBox(width: 4),
                 _miniBar(stats.gpuUsage, gpuColor),
@@ -409,7 +456,9 @@ class _SystemStatsChip extends ConsumerWidget {
         maxWidth: 680,
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
       builder: (_) => const _SystemSheet(),
     );
   }
@@ -497,9 +546,23 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
             children: [
               Icon(icon, size: 15, color: color),
               const SizedBox(width: 8),
-              Text(label, style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, fontWeight: FontWeight.w600)),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const Spacer(),
-              Text(value, style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: color, fontWeight: FontWeight.bold)),
+              Text(
+                value,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12.5,
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -528,15 +591,6 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
       return p.category == _selectedCategory;
     }).toList();
 
-    final toolsRamBytes = stats.processes
-        .where((p) => p.pid != pid)
-        .fold<int>(0, (sum, p) => sum + p.rssBytes);
-    final toolsRamMB = toolsRamBytes ~/ (1024 * 1024);
-    final toolsRamFormatted = toolsRamMB >= 1024
-        ? '${(toolsRamMB / 1024.0).toStringAsFixed(1)} GB'
-        : '$toolsRamMB MB';
-    final toolsRamUsage = (toolsRamMB / (stats.ramTotalGB * 1024.0)).clamp(0.0, 1.0);
-
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
@@ -548,7 +602,10 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               child: Container(
                 width: 36,
                 height: 4,
-                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -562,7 +619,11 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                     color: Colors.cyanAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.activity, size: 18, color: Colors.cyanAccent),
+                  child: const Icon(
+                    LucideIcons.activity,
+                    size: 18,
+                    color: Colors.cyanAccent,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Column(
@@ -570,36 +631,60 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                   children: [
                     Text(
                       'Диспетчер задач Quantum IDE',
-                      style: GoogleFonts.inter(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       'Мониторинг процессов и пакетов в реальном времени',
-                      style: GoogleFonts.inter(fontSize: 10.5, color: Colors.white38),
+                      style: GoogleFonts.inter(
+                        fontSize: 10.5,
+                        color: Colors.white38,
+                      ),
                     ),
                   ],
                 ),
                 const Spacer(),
                 IconButton(
                   tooltip: 'Обновить данные',
-                  onPressed: () => ref.read(systemStatsProvider.notifier).refreshProcesses(),
-                  icon: const Icon(LucideIcons.refresh_cw, size: 15, color: Colors.white70),
+                  onPressed: () =>
+                      ref.read(systemStatsProvider.notifier).refreshProcesses(),
+                  icon: const Icon(
+                    LucideIcons.refresh_cw,
+                    size: 15,
+                    color: Colors.white70,
+                  ),
                 ),
                 TextButton.icon(
                   onPressed: () async {
-                    await ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
+                    await ref
+                        .read(systemStatsProvider.notifier)
+                        .freeBackgroundMemory(force: true);
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('Фоновые демоны сборки (Gradle/Kotlin/Dart) остановлены, ОЗУ очищено'),
+                          content: Text(
+                            'Фоновые демоны сборки (Gradle/Kotlin/Dart) остановлены, ОЗУ очищено',
+                          ),
                           duration: Duration(seconds: 2),
                         ),
                       );
                     }
                   },
-                  icon: const Icon(LucideIcons.sparkles, size: 13, color: Colors.cyanAccent),
+                  icon: const Icon(
+                    LucideIcons.sparkles,
+                    size: 13,
+                    color: Colors.cyanAccent,
+                  ),
                   label: Text(
                     'Очистить ОЗУ',
-                    style: GoogleFonts.inter(fontSize: 11, color: Colors.cyanAccent, fontWeight: FontWeight.w600),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.cyanAccent,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -622,7 +707,9 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _selectedTab == 0 ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
+                          color: _selectedTab == 0
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -631,15 +718,21 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                             Icon(
                               LucideIcons.list,
                               size: 14,
-                              color: _selectedTab == 0 ? Colors.cyanAccent : Colors.white60,
+                              color: _selectedTab == 0
+                                  ? Colors.cyanAccent
+                                  : Colors.white60,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               'Процессы и пакеты (${stats.processes.length})',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                fontWeight: _selectedTab == 0 ? FontWeight.bold : FontWeight.w500,
-                                color: _selectedTab == 0 ? Colors.white : Colors.white60,
+                                fontWeight: _selectedTab == 0
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                color: _selectedTab == 0
+                                    ? Colors.white
+                                    : Colors.white60,
                               ),
                             ),
                           ],
@@ -654,7 +747,9 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _selectedTab == 1 ? Colors.white.withValues(alpha: 0.1) : Colors.transparent,
+                          color: _selectedTab == 1
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -663,15 +758,21 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                             Icon(
                               LucideIcons.gauge,
                               size: 14,
-                              color: _selectedTab == 1 ? Colors.cyanAccent : Colors.white60,
+                              color: _selectedTab == 1
+                                  ? Colors.cyanAccent
+                                  : Colors.white60,
                             ),
                             const SizedBox(width: 6),
                             Text(
                               'Производительность',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                fontWeight: _selectedTab == 1 ? FontWeight.bold : FontWeight.w500,
-                                color: _selectedTab == 1 ? Colors.white : Colors.white60,
+                                fontWeight: _selectedTab == 1
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                color: _selectedTab == 1
+                                    ? Colors.white
+                                    : Colors.white60,
                               ),
                             ),
                           ],
@@ -690,49 +791,65 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: [
-                    'Все',
-                    'Сборка',
-                    'Компилятор',
-                    'Языковой сервер',
-                    'ИИ / Агент',
-                    'Песочница',
-                    'Терминал',
-                  ].map((cat) {
-                    final isSel = _selectedCategory == cat;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(6),
-                        onTap: () => setState(() => _selectedCategory = cat),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isSel ? Colors.cyanAccent.withValues(alpha: 0.18) : Colors.white.withValues(alpha: 0.05),
+                  children:
+                      [
+                        'Все',
+                        'Сборка',
+                        'Компилятор',
+                        'Языковой сервер',
+                        'ИИ / Агент',
+                        'Песочница',
+                        'Терминал',
+                      ].map((cat) {
+                        final isSel = _selectedCategory == cat;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: InkWell(
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: isSel ? Colors.cyanAccent.withValues(alpha: 0.5) : Colors.transparent,
+                            onTap: () =>
+                                setState(() => _selectedCategory = cat),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSel
+                                    ? Colors.cyanAccent.withValues(alpha: 0.18)
+                                    : Colors.white.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isSel
+                                      ? Colors.cyanAccent.withValues(alpha: 0.5)
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Text(
+                                cat,
+                                style: GoogleFonts.inter(
+                                  fontSize: 10.5,
+                                  color: isSel
+                                      ? Colors.cyanAccent
+                                      : Colors.white60,
+                                  fontWeight: isSel
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
                             ),
                           ),
-                          child: Text(
-                            cat,
-                            style: GoogleFonts.inter(
-                              fontSize: 10.5,
-                              color: isSel ? Colors.cyanAccent : Colors.white60,
-                              fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
+                        );
+                      }).toList(),
                 ),
               ),
               const SizedBox(height: 8),
 
               // Table header (Windows Task Manager style)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.03),
                   borderRadius: BorderRadius.circular(6),
@@ -741,15 +858,38 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                   children: [
                     Expanded(
                       flex: 5,
-                      child: Text('ИМЯ ПРОЦЕССА / ПАКЕТА', style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white38, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        'ИМЯ ПРОЦЕССА / ПАКЕТА',
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          color: Colors.white38,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     Expanded(
                       flex: 2,
-                      child: Text('ЦП (CPU)', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white38, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        'ЦП (CPU)',
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          color: Colors.white38,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     Expanded(
                       flex: 2,
-                      child: Text('ПАМЯТЬ', textAlign: TextAlign.right, style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white38, fontWeight: FontWeight.bold)),
+                      child: Text(
+                        'ПАМЯТЬ',
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          color: Colors.white38,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     const SizedBox(width: 24), // Space for action button
@@ -766,23 +906,34 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                           padding: const EdgeInsets.symmetric(vertical: 24),
                           child: Text(
                             'Нет активных процессов в данной категории',
-                            style: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
+                            style: GoogleFonts.inter(
+                              color: Colors.white38,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       )
                     : ListView.separated(
                         shrinkWrap: true,
                         itemCount: processes.length,
-                        separatorBuilder: (_, __) => Divider(height: 1, color: Colors.white.withValues(alpha: 0.04)),
+                        separatorBuilder: (_, _) => Divider(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.04),
+                        ),
                         itemBuilder: (context, idx) {
                           final proc = processes[idx];
                           final isSelf = proc.pid == pid;
                           final catColor = _getCategoryColor(proc.category);
                           final catIcon = _getCategoryIcon(proc.category);
-                          final cpuColor = _SystemStatsChip.loadColor(proc.cpuPercent / 100.0);
+                          final cpuColor = _SystemStatsChip.loadColor(
+                            proc.cpuPercent / 100.0,
+                          );
 
                           return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 4,
+                            ),
                             child: Row(
                               children: [
                                 // Process Icon
@@ -793,7 +944,11 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                                     color: catColor.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: Icon(catIcon, size: 14, color: catColor),
+                                  child: Icon(
+                                    catIcon,
+                                    size: 14,
+                                    color: catColor,
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
 
@@ -801,7 +956,8 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                                 Expanded(
                                   flex: 5,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Row(
                                         children: [
@@ -820,12 +976,24 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                                           if (isSelf) ...[
                                             const SizedBox(width: 4),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 4,
+                                                    vertical: 1,
+                                                  ),
                                               decoration: BoxDecoration(
-                                                color: Colors.cyanAccent.withValues(alpha: 0.15),
-                                                borderRadius: BorderRadius.circular(3),
+                                                color: Colors.cyanAccent
+                                                    .withValues(alpha: 0.15),
+                                                borderRadius:
+                                                    BorderRadius.circular(3),
                                               ),
-                                              child: Text('Это приложение', style: GoogleFonts.inter(fontSize: 8, color: Colors.cyanAccent)),
+                                              child: Text(
+                                                'Это приложение',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 8,
+                                                  color: Colors.cyanAccent,
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ],
@@ -835,7 +1003,10 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                                         proc.description,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: GoogleFonts.inter(fontSize: 9.5, color: Colors.white38),
+                                        style: GoogleFonts.inter(
+                                          fontSize: 9.5,
+                                          color: Colors.white38,
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -875,12 +1046,20 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                                   InkWell(
                                     borderRadius: BorderRadius.circular(6),
                                     onTap: () async {
-                                      await ref.read(systemStatsProvider.notifier).killProcess(proc.pid);
+                                      await ref
+                                          .read(systemStatsProvider.notifier)
+                                          .killProcess(proc.pid);
                                       if (context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
                                           SnackBar(
-                                            content: Text('Процесс ${proc.name} (PID: ${proc.pid}) завершен'),
-                                            duration: const Duration(seconds: 1),
+                                            content: Text(
+                                              'Процесс ${proc.name} (PID: ${proc.pid}) завершен',
+                                            ),
+                                            duration: const Duration(
+                                              seconds: 1,
+                                            ),
                                           ),
                                         );
                                       }
@@ -888,10 +1067,16 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                                     child: Container(
                                       padding: const EdgeInsets.all(5),
                                       decoration: BoxDecoration(
-                                        color: Colors.redAccent.withValues(alpha: 0.12),
+                                        color: Colors.redAccent.withValues(
+                                          alpha: 0.12,
+                                        ),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
-                                      child: const Icon(LucideIcons.x, size: 13, color: Colors.redAccent),
+                                      child: const Icon(
+                                        LucideIcons.x,
+                                        size: 13,
+                                        color: Colors.redAccent,
+                                      ),
                                     ),
                                   )
                                 else
@@ -927,7 +1112,10 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                 _row(
                   'Память сборщика (Gradle, AAPT2, PRoot)',
                   '${stats.builderRamFormatted} (${((stats.builderRamMB / (stats.ramTotalGB * 1024.0)) * 100).toStringAsFixed(1)}% ОЗУ)',
-                  (stats.builderRamMB / (stats.ramTotalGB * 1024.0)).clamp(0.0, 1.0),
+                  (stats.builderRamMB / (stats.ramTotalGB * 1024.0)).clamp(
+                    0.0,
+                    1.0,
+                  ),
                   LucideIcons.package,
                 ),
               _row(
@@ -940,22 +1128,35 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
 
               // Карточка аппаратных характеристик устройства
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.07),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(LucideIcons.microchip, size: 13, color: Colors.cyanAccent),
+                        const Icon(
+                          LucideIcons.microchip,
+                          size: 13,
+                          color: Colors.cyanAccent,
+                        ),
                         const SizedBox(width: 6),
                         Text(
                           'Аппаратная конфигурация устройства',
-                          style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.cyanAccent),
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.cyanAccent,
+                          ),
                         ),
                       ],
                     ),
@@ -963,24 +1164,63 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('SoC / Процессор:', style: GoogleFonts.inter(fontSize: 10, color: Colors.white54)),
-                        Text(stats.socName, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white)),
+                        Text(
+                          'SoC / Процессор:',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        Text(
+                          stats.socName,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 3),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Графика (GPU):', style: GoogleFonts.inter(fontSize: 10, color: Colors.white54)),
-                        Text(stats.gpuName, style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white)),
+                        Text(
+                          'Графика (GPU):',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        Text(
+                          stats.gpuName,
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 3),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Оперативная память (RAM):', style: GoogleFonts.inter(fontSize: 10, color: Colors.white54)),
-                        Text('${stats.ramTotalGB.toStringAsFixed(1)} GB (Доступно: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} GB)', style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w600, color: Colors.white)),
+                        Text(
+                          'Оперативная память (RAM):',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        Text(
+                          '${stats.ramTotalGB.toStringAsFixed(1)} GB (Доступно: ${stats.deviceRamAvailableGB.toStringAsFixed(1)} GB)',
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -991,8 +1231,13 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: (high ? const Color(0xFFFF6B6B) : (stats.builderRamMB > 250 ? Colors.amberAccent : Colors.greenAccent))
-                      .withValues(alpha: 0.07),
+                  color:
+                      (high
+                              ? const Color(0xFFFF6B6B)
+                              : (stats.builderRamMB > 250
+                                    ? Colors.amberAccent
+                                    : Colors.greenAccent))
+                          .withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
@@ -1000,11 +1245,15 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                     Icon(
                       high
                           ? LucideIcons.triangle_alert
-                          : (stats.builderRamMB > 250 ? LucideIcons.info : LucideIcons.circle_check),
+                          : (stats.builderRamMB > 250
+                                ? LucideIcons.info
+                                : LucideIcons.circle_check),
                       size: 14,
                       color: high
                           ? const Color(0xFFFF6B6B)
-                          : (stats.builderRamMB > 250 ? Colors.amberAccent : Colors.greenAccent),
+                          : (stats.builderRamMB > 250
+                                ? Colors.amberAccent
+                                : Colors.greenAccent),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1012,9 +1261,13 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
                         high
                             ? 'Высокая нагрузка на процессор или память. Перейдите во вкладку «Процессы и пакеты» выше, чтобы увидеть или завершить нагружающий процесс.'
                             : (stats.builderRamMB > 250
-                                ? 'Фоновые демоны сборки (Gradle/AAPT2) удерживают ${stats.builderRamFormatted} ОЗУ. Нажмите «Очистить ОЗУ» вверху справа, чтобы мгновенно освободить память.'
-                                : 'Система работает стабильно. Quantum IDE потребляет всего ${stats.appRamFormatted}. Остальная память распределена между ОС Android и приложениями.'),
-                        style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white70, height: 1.35),
+                                  ? 'Фоновые демоны сборки (Gradle/AAPT2) удерживают ${stats.builderRamFormatted} ОЗУ. Нажмите «Очистить ОЗУ» вверху справа, чтобы мгновенно освободить память.'
+                                  : 'Система работает стабильно. Quantum IDE потребляет всего ${stats.appRamFormatted}. Остальная память распределена между ОС Android и приложениями.'),
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: Colors.white70,
+                          height: 1.35,
+                        ),
                       ),
                     ),
                   ],
@@ -1082,6 +1335,115 @@ class _StatusBarPill extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _StatusBarBuildIndicator extends ConsumerWidget {
+  final bool isNarrow;
+
+  const _StatusBarBuildIndicator({required this.isNarrow});
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ValueListenableBuilder<BuildProgress>(
+      valueListenable: BuildProgressTracker.instance.progress,
+      builder: (context, p, _) {
+        if (p.stage == BuildStage.idle) return const SizedBox.shrink();
+
+        final active = p.active;
+        final done = p.stage == BuildStage.done;
+        final failed = p.stage == BuildStage.failed;
+
+        final Color color;
+        final IconData icon;
+        final String label;
+
+        if (active) {
+          color = Colors.amberAccent;
+          icon = LucideIcons.hammer;
+          final pct = p.fraction != null
+              ? '${(p.fraction! * 100).toInt()}% '
+              : '';
+          final time = _fmt(p.elapsed);
+          label = isNarrow ? '$pct$time' : 'Сборка $pct($time)';
+        } else if (done) {
+          color = const Color(0xFF34D399);
+          icon = LucideIcons.circle_check;
+          label = isNarrow ? 'Готово' : 'Сборка завершена';
+        } else if (failed) {
+          color = const Color(0xFFFF6B6B);
+          icon = LucideIcons.triangle_alert;
+          label = isNarrow ? 'Сбой' : 'Ошибка сборки';
+        } else {
+          return const SizedBox.shrink();
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(left: 6),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(4),
+            onTap: () {
+              if (done && p.apkPath != null) {
+                BuildCompletionDialog.show(
+                  context,
+                  artifactPath: p.apkPath!,
+                  elapsed: p.elapsed,
+                );
+              } else {
+                ref.read(panelProvider.notifier).selectTab(PanelTab.buildLogs);
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(3.5),
+                border: Border.all(
+                  color: color.withValues(alpha: 0.35),
+                  width: 0.6,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 9.5, color: color),
+                  const SizedBox(width: 3.5),
+                  Text(
+                    label,
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                  if (!active) ...[
+                    const SizedBox(width: 3),
+                    InkWell(
+                      onTap: () => BuildProgressTracker.instance.dismiss(),
+                      borderRadius: BorderRadius.circular(3),
+                      child: Padding(
+                        padding: const EdgeInsets.all(1.5),
+                        child: Icon(
+                          LucideIcons.x,
+                          size: 8.5,
+                          color: color.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

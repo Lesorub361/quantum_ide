@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:re_editor/re_editor.dart';
+
+final activeFindControllerProvider = StateProvider<CodeFindController?>(
+  (ref) => null,
+);
 
 const double _kFindPanelWidth = 380;
 const double _kFindPanelHeight = 44;
@@ -19,8 +24,12 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => Size(
     double.infinity,
-    controller.value == null ? 0 :
-      (controller.value!.replaceMode ? _kReplacePanelHeight : _kFindPanelHeight) + 12
+    controller.value == null
+        ? 0
+        : (controller.value!.replaceMode
+                  ? _kReplacePanelHeight
+                  : _kFindPanelHeight) +
+              12,
   );
 
   @override
@@ -31,26 +40,28 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
     }
 
     final theme = Theme.of(context);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final panelWidth = (screenWidth - 20).clamp(260.0, _kFindPanelWidth);
 
     return Container(
-      margin: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
+      margin: const EdgeInsets.only(right: 10, top: 6, bottom: 6),
       alignment: Alignment.topRight,
       height: preferredSize.height,
       child: Container(
-        width: _kFindPanelWidth,
+        width: panelWidth,
         decoration: BoxDecoration(
-          color: const Color(0xFF1E2230).withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white10),
+          color: const Color(0xFF141824).withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            )
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
           ],
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -65,7 +76,11 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  Widget _buildFindRow(BuildContext context, CodeFindValue value, ThemeData theme) {
+  Widget _buildFindRow(
+    BuildContext context,
+    CodeFindValue value,
+    ThemeData theme,
+  ) {
     final String matchText;
     if (value.result == null || value.result!.matches.isEmpty) {
       matchText = '0/0';
@@ -131,7 +146,11 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
           // Matches Count
           Text(
             matchText,
-            style: const TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'monospace'),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontFamily: 'monospace',
+            ),
           ),
           const SizedBox(width: 8),
           // Navigation & Action Buttons
@@ -154,11 +173,11 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
               ),
               _buildIconButton(
                 icon: LucideIcons.replace,
-                onPressed: readOnly
-                    ? null
-                    : () => controller.toggleMode(),
+                onPressed: readOnly ? null : () => controller.toggleMode(),
                 tooltip: 'Toggle Replace',
-                color: value.replaceMode ? theme.colorScheme.primary : Colors.white60,
+                color: value.replaceMode
+                    ? theme.colorScheme.primary
+                    : Colors.white60,
               ),
               _buildIconButton(
                 icon: LucideIcons.x,
@@ -172,7 +191,11 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-  Widget _buildReplaceRow(BuildContext context, CodeFindValue value, ThemeData theme) {
+  Widget _buildReplaceRow(
+    BuildContext context,
+    CodeFindValue value,
+    ThemeData theme,
+  ) {
     return SizedBox(
       height: 32,
       child: Row(
@@ -194,7 +217,10 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
                 style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: const InputDecoration(
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   border: InputBorder.none,
                   hintText: 'Replace...',
                   hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
@@ -209,14 +235,20 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
             children: [
               _buildIconButton(
                 icon: LucideIcons.check,
-                onPressed: value.result == null || value.result!.matches.isEmpty || readOnly
+                onPressed:
+                    value.result == null ||
+                        value.result!.matches.isEmpty ||
+                        readOnly
                     ? null
                     : () => controller.replaceMatch(),
                 tooltip: 'Replace Current',
               ),
               _buildIconButton(
                 icon: LucideIcons.check_check,
-                onPressed: value.result == null || value.result!.matches.isEmpty || readOnly
+                onPressed:
+                    value.result == null ||
+                        value.result!.matches.isEmpty ||
+                        readOnly
                     ? null
                     : () => controller.replaceAllMatches(),
                 tooltip: 'Replace All',
@@ -243,10 +275,14 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
           decoration: BoxDecoration(
-            color: checked ? theme.colorScheme.primary.withValues(alpha: 0.2) : Colors.transparent,
+            color: checked
+                ? theme.colorScheme.primary.withValues(alpha: 0.2)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(4),
             border: Border.all(
-              color: checked ? theme.colorScheme.primary.withValues(alpha: 0.5) : Colors.transparent,
+              color: checked
+                  ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                  : Colors.transparent,
             ),
           ),
           child: Text(
@@ -279,9 +315,7 @@ class CodeFindPanelView extends StatelessWidget implements PreferredSizeWidget {
             width: 28,
             height: 28,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-            ),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(4)),
             child: Icon(
               icon,
               size: 16,

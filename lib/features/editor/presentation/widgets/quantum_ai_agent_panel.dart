@@ -30,7 +30,8 @@ class QuantumAiAgentPanel extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<QuantumAiAgentPanel> createState() => _QuantumAiAgentPanelState();
+  ConsumerState<QuantumAiAgentPanel> createState() =>
+      _QuantumAiAgentPanelState();
 }
 
 class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
@@ -65,7 +66,12 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     final agent = ref.watch(quantumAiAgentServiceProvider);
     final settings = ref.watch(settingsProvider);
     final workspace = ref.watch(workspaceProvider);
-    final projectName = workspace.currentPath?.split('/').where((s) => s.isNotEmpty).lastOrNull ?? 'Проект';
+    final projectName =
+        workspace.currentPath
+            ?.split('/')
+            .where((s) => s.isNotEmpty)
+            .lastOrNull ??
+        'Проект';
 
     return Container(
       color: const Color(0xFF0D0F14),
@@ -102,13 +108,18 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     );
   }
 
-  String _fmtTokens(int n) => n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
+  String _fmtTokens(int n) =>
+      n >= 1000 ? '${(n / 1000).toStringAsFixed(1)}k' : '$n';
 
   Widget _buildModeBar(BuildContext context, QuantumAiAgentService agent) {
     final undo = agent.undoableCount;
-    final hasPlan = agent.mode == AgentMode.plan &&
+    final hasPlan =
+        agent.mode == AgentMode.plan &&
         !agent.isGenerating &&
-        agent.messages.any((m) => m.role == MessageRole.assistant && m.text.contains('План готов'));
+        agent.messages.any(
+          (m) =>
+              m.role == MessageRole.assistant && m.text.contains('План готов'),
+        );
     final fill = agent.contextFill;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -127,8 +138,12 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     labelPadding: const EdgeInsets.symmetric(horizontal: 2),
-                    selectedColor: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
-                    onSelected: agent.isGenerating ? null : (_) => agent.setMode(m),
+                    selectedColor: const Color(
+                      0xFF8B5CF6,
+                    ).withValues(alpha: 0.35),
+                    onSelected: agent.isGenerating
+                        ? null
+                        : (_) => agent.setMode(m),
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -141,31 +156,65 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 onSelected: agent.setEngine,
                 itemBuilder: (_) => [
                   for (final e in AgentEngine.values)
-                    PopupMenuItem(value: e, child: Text(e.label + (e == AgentEngine.builtin ? '' : ' (CLI)'))),
+                    PopupMenuItem(
+                      value: e,
+                      child: Text(
+                        e.label + (e == AgentEngine.builtin ? '' : ' (CLI)'),
+                      ),
+                    ),
                 ],
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(color: Colors.white12),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(LucideIcons.bot, size: 12, color: Colors.white54),
-                    const SizedBox(width: 3),
-                    Text(agent.engine.label, style: const TextStyle(fontSize: 10.5, color: Colors.white70)),
-                  ]),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        LucideIcons.bot,
+                        size: 12,
+                        color: Colors.white54,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        agent.engine.label,
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          color: Colors.white70,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Tooltip(
-                message: 'Токены сессии: вход ${agent.promptTokens}, выход ${agent.completionTokens}'
+                message:
+                    'Токены сессии: вход ${agent.promptTokens}, выход ${agent.completionTokens}'
                     '${agent.usageEstimated ? ' (оценка)' : ''}\nКонтекст заполнен на ${(agent.contextFill * 100).toStringAsFixed(0)}%',
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(LucideIcons.coins, size: 12, color: Colors.white38),
-                  const SizedBox(width: 3),
-                  Text('${agent.usageEstimated ? '~' : ''}${_fmtTokens(agent.sessionTokens)}',
-                      style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white54)),
-                ]),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      LucideIcons.coins,
+                      size: 12,
+                      color: Colors.white38,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${agent.usageEstimated ? '~' : ''}${_fmtTokens(agent.sessionTokens)}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        color: Colors.white54,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               if (undo > 0) ...[
                 const SizedBox(width: 6),
@@ -177,11 +226,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     foregroundColor: Colors.orangeAccent,
                   ),
                   icon: const Icon(LucideIcons.undo_2, size: 12),
-                  label: Text('Откатить ($undo)', style: const TextStyle(fontSize: 10.5)),
+                  label: Text(
+                    'Откатить ($undo)',
+                    style: const TextStyle(fontSize: 10.5),
+                  ),
                   onPressed: () async {
                     final n = await agent.undoAllAgentChanges();
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Откачено правок агента: $n')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Откачено правок агента: $n')),
+                      );
                     }
                   },
                 ),
@@ -207,7 +261,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   backgroundColor: const Color(0xFF8B5CF6),
                 ),
                 icon: const Icon(LucideIcons.play, size: 13),
-                label: const Text('Выполнить план', style: TextStyle(fontSize: 11.5)),
+                label: const Text(
+                  'Выполнить план',
+                  style: TextStyle(fontSize: 11.5),
+                ),
                 onPressed: agent.runPlan,
               ),
             ),
@@ -227,7 +284,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF131722),
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
       ),
       child: Row(
         children: [
@@ -236,9 +295,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             decoration: BoxDecoration(
               color: const Color(0xFF8B5CF6).withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.28)),
+              border: Border.all(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.28),
+              ),
             ),
-            child: const Icon(LucideIcons.sparkles, size: 13, color: Color(0xFFA78BFA)),
+            child: const Icon(
+              LucideIcons.sparkles,
+              size: 13,
+              color: Color(0xFFA78BFA),
+            ),
           ),
           const SizedBox(width: 8),
 
@@ -263,14 +328,23 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         currentModel.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white, fontWeight: FontWeight.w600),
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 5),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1.5,
+                      ),
                       decoration: BoxDecoration(
-                        color: Color(currentModel.badgeColorValue).withValues(alpha: 0.18),
+                        color: Color(
+                          currentModel.badgeColorValue,
+                        ).withValues(alpha: 0.18),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
@@ -283,58 +357,142 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(LucideIcons.chevron_down, size: 12, color: Colors.white54),
+                    const Icon(
+                      LucideIcons.chevron_down,
+                      size: 12,
+                      color: Colors.white54,
+                    ),
                   ],
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
+
+          // Current Chat Session Pill & History trigger
+          InkWell(
+            onTap: () => _showChatHistoryModal(context, agent),
+            borderRadius: BorderRadius.circular(6),
+            child: Container(
+              height: 28,
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A0D14),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    LucideIcons.message_square,
+                    size: 12,
+                    color: Color(0xFFA78BFA),
+                  ),
+                  const SizedBox(width: 5),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 110),
+                    child: Text(
+                      agent.currentSessionTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  const Icon(
+                    LucideIcons.chevron_down,
+                    size: 10,
+                    color: Colors.white38,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+
+          // Chat History Button
+          IconButton(
+            icon: const Icon(
+              LucideIcons.history,
+              size: 13.5,
+              color: Color(0xFF818CF8),
+            ),
+            tooltip: 'История диалогов (${agent.sessions.length})',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+            onPressed: () => _showChatHistoryModal(context, agent),
+          ),
+
+          // New Chat Button
+          IconButton(
+            icon: const Icon(
+              LucideIcons.message_square_plus,
+              size: 13.5,
+              color: Color(0xFFA78BFA),
+            ),
+            tooltip: 'Начать новый диалог',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+            onPressed: () => agent.startNewChat(),
+          ),
 
           // MCP Tools & Servers
           IconButton(
-            icon: const Icon(LucideIcons.plug, size: 13, color: Color(0xFF38BDF8)),
+            icon: const Icon(
+              LucideIcons.plug,
+              size: 13,
+              color: Color(0xFF38BDF8),
+            ),
             tooltip: 'MCP Серверы и Инструменты',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 26, height: 26),
             onPressed: () => McpManagementDialog.show(context),
           ),
 
-          // New Chat
-          IconButton(
-            icon: const Icon(LucideIcons.message_square_plus, size: 13, color: Color(0xFFA78BFA)),
-            tooltip: 'Начать новый диалог',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-            onPressed: () => agent.clearChat(),
-          ),
-
           // API Keys Settings
           IconButton(
-            icon: const Icon(LucideIcons.key, size: 13, color: Color(0xFF94A3B8)),
+            icon: const Icon(
+              LucideIcons.key,
+              size: 13,
+              color: Color(0xFF94A3B8),
+            ),
             tooltip: 'Провайдеры и API Ключи',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 26, height: 26),
             onPressed: () => _showApiKeysDialog(context, settings),
           ),
 
-          // Clear Chat
+          // Delete Current Chat
           IconButton(
-            icon: const Icon(LucideIcons.trash_2, size: 13, color: Color(0xFF94A3B8)),
-            tooltip: 'Очистить историю чата',
+            icon: const Icon(
+              LucideIcons.trash_2,
+              size: 13,
+              color: Color(0xFF94A3B8),
+            ),
+            tooltip: 'Удалить текущий чат',
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 26, height: 26),
-            onPressed: () => agent.clearChat(),
+            onPressed: () =>
+                _confirmDeleteChat(context, agent, agent.currentSessionId),
           ),
 
           if (widget.onToggleExpand != null)
             IconButton(
               icon: Icon(
-                widget.isExpanded ? LucideIcons.minimize_2 : LucideIcons.maximize_2,
+                widget.isExpanded
+                    ? LucideIcons.minimize_2
+                    : LucideIcons.maximize_2,
                 size: 13,
                 color: const Color(0xFF94A3B8),
               ),
-              tooltip: widget.isExpanded ? 'Стандартная ширина' : 'Расширить панель ИИ',
+              tooltip: widget.isExpanded
+                  ? 'Стандартная ширина'
+                  : 'Расширить панель ИИ',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 26, height: 26),
               onPressed: widget.onToggleExpand,
@@ -342,7 +500,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
 
           if (widget.onClose != null)
             IconButton(
-              icon: const Icon(LucideIcons.x, size: 14, color: Color(0xFF94A3B8)),
+              icon: const Icon(
+                LucideIcons.x,
+                size: 14,
+                color: Color(0xFF94A3B8),
+              ),
               tooltip: 'Скрыть панель ИИ',
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 26, height: 26),
@@ -353,7 +515,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     );
   }
 
-  void _showModelSelectorDialog(BuildContext context, QuantumAiAgentService agent) {
+  void _showModelSelectorDialog(
+    BuildContext context,
+    QuantumAiAgentService agent,
+  ) {
     String searchQuery = '';
     String selectedCategory = 'Все';
     final customModelCtrl = TextEditingController();
@@ -377,18 +542,24 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
               ? agent.availableModels
               : QuantumModelItem.predefinedModels;
           final filteredModels = allModels.where((m) {
-            final matchesCategory = selectedCategory == 'Все' || m.category == selectedCategory;
-            final matchesQuery = searchQuery.isEmpty ||
+            final matchesCategory =
+                selectedCategory == 'Все' || m.category == selectedCategory;
+            final matchesQuery =
+                searchQuery.isEmpty ||
                 m.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
                 m.id.toLowerCase().contains(searchQuery.toLowerCase()) ||
-                m.providerName.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                m.providerName.toLowerCase().contains(
+                  searchQuery.toLowerCase(),
+                ) ||
                 m.badge.toLowerCase().contains(searchQuery.toLowerCase());
             return matchesCategory && matchesQuery;
           }).toList();
 
           return AlertDialog(
             backgroundColor: const Color(0xFF131722),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             title: Row(
@@ -399,7 +570,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(LucideIcons.cpu, color: Color(0xFFA78BFA), size: 18),
+                  child: const Icon(
+                    LucideIcons.cpu,
+                    color: Color(0xFFA78BFA),
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -418,7 +593,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         agent.isLoadingModels
                             ? 'Обновление списка с OpenRouter...'
                             : 'OpenRouter, Gemini, Groq, DeepSeek, OpenAI, Claude, Grok, Ollama',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 10.5),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 10.5,
+                        ),
                       ),
                     ],
                   ),
@@ -428,12 +606,22 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                       ? const SizedBox(
                           width: 14,
                           height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFFA78BFA),
+                          ),
                         )
-                      : const Icon(LucideIcons.refresh_cw, size: 16, color: Color(0xFFA78BFA)),
+                      : const Icon(
+                          LucideIcons.refresh_cw,
+                          size: 16,
+                          color: Color(0xFFA78BFA),
+                        ),
                   tooltip: 'Обновить модели с OpenRouter',
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
                   onPressed: agent.isLoadingModels
                       ? null
                       : () async {
@@ -443,9 +631,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 ),
                 const SizedBox(width: 4),
                 IconButton(
-                  icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                  icon: const Icon(
+                    LucideIcons.x,
+                    size: 16,
+                    color: Colors.white54,
+                  ),
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
                   onPressed: () => Navigator.pop(ctx),
                 ),
               ],
@@ -467,7 +662,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Row(
                       children: [
-                        const Icon(LucideIcons.search, size: 14, color: Colors.white38),
+                        const Icon(
+                          LucideIcons.search,
+                          size: 14,
+                          color: Colors.white38,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: TextField(
@@ -476,10 +675,17 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                                 searchQuery = val.trim();
                               });
                             },
-                            style: GoogleFonts.inter(color: Colors.white, fontSize: 12),
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 12,
+                            ),
                             decoration: const InputDecoration(
-                              hintText: 'Поиск (Gemini, Groq, DeepSeek, Claude, Free)...',
-                              hintStyle: TextStyle(color: Colors.white38, fontSize: 11),
+                              hintText:
+                                  'Поиск (Gemini, Groq, DeepSeek, Claude, Free)...',
+                              hintStyle: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 11,
+                              ),
                               border: InputBorder.none,
                               isDense: true,
                             ),
@@ -510,10 +716,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                           },
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? const Color(0xFF8B5CF6).withValues(alpha: 0.25)
+                                  ? const Color(
+                                      0xFF8B5CF6,
+                                    ).withValues(alpha: 0.25)
                                   : Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
@@ -525,9 +736,13 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                             child: Text(
                               cat,
                               style: TextStyle(
-                                color: isSelected ? const Color(0xFFA78BFA) : Colors.white70,
+                                color: isSelected
+                                    ? const Color(0xFFA78BFA)
+                                    : Colors.white70,
                                 fontSize: 11,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontWeight: isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                               ),
                             ),
                           ),
@@ -544,7 +759,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         ? Center(
                             child: Text(
                               'Модели не найдены',
-                              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.4),
+                                fontSize: 12,
+                              ),
                             ),
                           )
                         : ListView.separated(
@@ -556,7 +774,8 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                             ),
                             itemBuilder: (context, idx) {
                               final item = filteredModels[idx];
-                              final isCurrent = agent.selectedModel.id == item.id;
+                              final isCurrent =
+                                  agent.selectedModel.id == item.id;
                               final badgeColor = Color(item.badgeColorValue);
 
                               return InkWell(
@@ -566,10 +785,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                                 },
                                 borderRadius: BorderRadius.circular(8),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: isCurrent
-                                        ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                                        ? const Color(
+                                            0xFF8B5CF6,
+                                          ).withValues(alpha: 0.15)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -577,7 +801,8 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                                     children: [
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
                                               children: [
@@ -595,15 +820,23 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                                                 ),
                                                 const SizedBox(width: 6),
                                                 Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                    horizontal: 5,
-                                                    vertical: 1.5,
-                                                  ),
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 5,
+                                                        vertical: 1.5,
+                                                      ),
                                                   decoration: BoxDecoration(
-                                                    color: badgeColor.withValues(alpha: 0.2),
-                                                    borderRadius: BorderRadius.circular(4),
+                                                    color: badgeColor
+                                                        .withValues(alpha: 0.2),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
+                                                        ),
                                                     border: Border.all(
-                                                      color: badgeColor.withValues(alpha: 0.4),
+                                                      color: badgeColor
+                                                          .withValues(
+                                                            alpha: 0.4,
+                                                          ),
                                                       width: 0.5,
                                                     ),
                                                   ),
@@ -612,7 +845,8 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                                                     style: TextStyle(
                                                       color: badgeColor,
                                                       fontSize: 9,
-                                                      fontWeight: FontWeight.bold,
+                                                      fontWeight:
+                                                          FontWeight.bold,
                                                     ),
                                                   ),
                                                 ),
@@ -660,10 +894,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         Expanded(
                           child: TextField(
                             controller: customModelCtrl,
-                            style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 11),
+                            style: GoogleFonts.jetBrainsMono(
+                              color: Colors.white,
+                              fontSize: 11,
+                            ),
                             decoration: const InputDecoration(
                               hintText: 'Кастомный slug (напр. moonshotai/...)',
-                              hintStyle: TextStyle(color: Colors.white38, fontSize: 10.5),
+                              hintStyle: TextStyle(
+                                color: Colors.white38,
+                                fontSize: 10.5,
+                              ),
                               border: InputBorder.none,
                               isDense: true,
                             ),
@@ -674,7 +914,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF8B5CF6),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             minimumSize: Size.zero,
                           ),
                           onPressed: () {
@@ -684,7 +927,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                               Navigator.pop(ctx);
                             }
                           },
-                          child: const Text('Применить', style: TextStyle(fontSize: 11)),
+                          child: const Text(
+                            'Применить',
+                            style: TextStyle(fontSize: 11),
+                          ),
                         ),
                       ],
                     ),
@@ -755,17 +1001,37 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             childrenPadding: const EdgeInsets.all(8),
             collapsedBackgroundColor: Colors.white.withValues(alpha: 0.04),
             backgroundColor: Colors.white.withValues(alpha: 0.04),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            leading: const Icon(LucideIcons.wrench, size: 13, color: Color(0xFF8B5CF6)),
-            title: Text(msg.toolLabel!, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white70)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            collapsedShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            leading: const Icon(
+              LucideIcons.wrench,
+              size: 13,
+              color: Color(0xFF8B5CF6),
+            ),
+            title: Text(
+              msg.toolLabel!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                color: Colors.white70,
+              ),
+            ),
             children: [
               Align(
                 alignment: Alignment.centerLeft,
                 child: SelectableText(
-                  msg.text.length > 2500 ? '${msg.text.substring(0, 2500)}…' : msg.text,
-                  style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white60),
+                  msg.text.length > 2500
+                      ? '${msg.text.substring(0, 2500)}…'
+                      : msg.text,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    color: Colors.white60,
+                  ),
                 ),
               ),
             ],
@@ -774,8 +1040,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       );
     }
     // Пустой пузырь (ответ состоял только из вызова инструмента) не показываем.
-    if (!isUser && !msg.isStreaming && _cleanText(msg.text).isEmpty &&
-        (msg.thinking == null || msg.thinking!.isEmpty) && msg.actions.isEmpty) {
+    if (!isUser &&
+        !msg.isStreaming &&
+        _cleanText(msg.text).isEmpty &&
+        (msg.thinking == null || msg.thinking!.isEmpty) &&
+        msg.actions.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -783,7 +1052,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         children: [
           if (!isUser) ...[
             Container(
@@ -796,14 +1067,20 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   colors: [Color(0xFF8B5CF6), Color(0xFF3B82F6)],
                 ),
               ),
-              child: const Icon(LucideIcons.sparkles, size: 12, color: Colors.white),
+              child: const Icon(
+                LucideIcons.sparkles,
+                size: 12,
+                color: Colors.white,
+              ),
             ),
           ],
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
-                color: isUser ? const Color(0xFF1E2538) : const Color(0xFF131722),
+                color: isUser
+                    ? const Color(0xFF1E2538)
+                    : const Color(0xFF131722),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isUser
@@ -835,31 +1112,49 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                                   height: 60,
                                   color: Colors.black26,
                                   alignment: Alignment.center,
-                                  child: const Icon(LucideIcons.image, color: Colors.white38, size: 18),
+                                  child: const Icon(
+                                    LucideIcons.image,
+                                    color: Colors.white38,
+                                    size: 18,
+                                  ),
                                 ),
                               ),
                             ),
                           );
                         }
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.25),
                             borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(LucideIcons.file_code, size: 12, color: Color(0xFFA78BFA)),
+                              const Icon(
+                                LucideIcons.file_code,
+                                size: 12,
+                                color: Color(0xFFA78BFA),
+                              ),
                               const SizedBox(width: 5),
                               ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 160),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 160,
+                                ),
                                 child: Text(
                                   att.name,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: Colors.white),
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ],
@@ -918,9 +1213,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                           ),
                           dividerColor: const Color(0xFF283145),
                         ),
-                        link: const LinkStyle(
-                          color: Color(0xFF38BDF8),
-                        ),
+                        link: const LinkStyle(color: Color(0xFF38BDF8)),
                       ),
                       onLinkTap: (url, title) => launchUrlString(url),
                     )
@@ -931,12 +1224,20 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         const SizedBox(
                           width: 12,
                           height: 12,
-                          child: CircularProgressIndicator(color: Color(0xFF8B5CF6), strokeWidth: 1.8),
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF8B5CF6),
+                            strokeWidth: 1.8,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          msg.isThinking ? 'Мысли модели (R1)...' : 'Печатает...',
-                          style: GoogleFonts.inter(color: Colors.white60, fontSize: 11.5),
+                          msg.isThinking
+                              ? 'Мысли модели (R1)...'
+                              : 'Печатает...',
+                          style: GoogleFonts.inter(
+                            color: Colors.white60,
+                            fontSize: 11.5,
+                          ),
                         ),
                       ],
                     ),
@@ -944,7 +1245,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   // Action Cards (write_file, run_command)
                   if (msg.actions.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    ...msg.actions.map((act) => _buildActionCard(context, agent, act)),
+                    ...msg.actions.map(
+                      (act) => _buildActionCard(context, agent, act),
+                    ),
                   ],
                 ],
               ),
@@ -959,7 +1262,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 shape: BoxShape.circle,
                 color: Color(0xFF334155),
               ),
-              child: const Icon(LucideIcons.user, size: 12, color: Colors.white),
+              child: const Icon(
+                LucideIcons.user,
+                size: 12,
+                color: Colors.white,
+              ),
             ),
           ],
         ],
@@ -981,18 +1288,30 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.image, size: 14, color: Color(0xFFA78BFA)),
+                  const Icon(
+                    LucideIcons.image,
+                    size: 14,
+                    color: Color(0xFFA78BFA),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       att.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                    icon: const Icon(
+                      LucideIcons.x,
+                      size: 16,
+                      color: Colors.white54,
+                    ),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
@@ -1018,32 +1337,51 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       decoration: BoxDecoration(
         color: const Color(0xFF0B0E16),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.25)),
-      ),
-      child: ExpansionTile(
-        initiallyExpanded: msg.isThinking,
-        dense: true,
-        tilePadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-        childrenPadding: const EdgeInsets.all(8),
-        leading: const Icon(LucideIcons.brain, size: 13, color: Color(0xFFA78BFA)),
-        title: Text(
-          msg.isThinking ? 'Размышления модели...' : 'Цепочка мыслей (Reasoning)',
-          style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFFA78BFA), fontWeight: FontWeight.w600),
+        border: Border.all(
+          color: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
         ),
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Colors.black26,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: SelectableText(
-              msg.thinking ?? '',
-              style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 10.5, height: 1.4),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: ExpansionTile(
+          initiallyExpanded: msg.isThinking,
+          dense: true,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+          childrenPadding: const EdgeInsets.all(8),
+          leading: const Icon(
+            LucideIcons.brain,
+            size: 13,
+            color: Color(0xFFA78BFA),
+          ),
+          title: Text(
+            msg.isThinking
+                ? 'Размышления модели...'
+                : 'Цепочка мыслей (Reasoning)',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              color: const Color(0xFFA78BFA),
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ],
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: SelectableText(
+                msg.thinking ?? '',
+                style: GoogleFonts.jetBrainsMono(
+                  color: Colors.white70,
+                  fontSize: 10.5,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1072,7 +1410,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
           children: [
             Row(
               children: [
-                const Icon(LucideIcons.file_code, size: 14, color: Color(0xFF10B981)),
+                const Icon(
+                  LucideIcons.file_code,
+                  size: 14,
+                  color: Color(0xFF10B981),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -1089,11 +1431,19 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFFA78BFA),
-                      side: const BorderSide(color: Color(0xFF8B5CF6), width: 0.8),
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                      side: const BorderSide(
+                        color: Color(0xFF8B5CF6),
+                        width: 0.8,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                     icon: const Icon(LucideIcons.git_compare, size: 11),
                     label: const Text('Diff', style: TextStyle(fontSize: 10.5)),
@@ -1120,7 +1470,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                               final ok = await agent.executeWriteAction(action);
                               if (ok && context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Файл ${action.path} успешно записан!')),
+                                  SnackBar(
+                                    content: Text(
+                                      'Файл ${action.path} успешно записан!',
+                                    ),
+                                  ),
                                 );
                               }
                             },
@@ -1135,37 +1489,56 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   const SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF10B981),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'Запись...',
-                    style: GoogleFonts.inter(color: const Color(0xFF10B981), fontSize: 10.5),
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF10B981),
+                      fontSize: 10.5,
+                    ),
                   ),
                 ] else ...[
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: action.isExecuted
                           ? Colors.white12
-                          : (action.executionError != null ? Colors.redAccent : const Color(0xFF10B981)),
-                      foregroundColor: action.isExecuted ? Colors.white60 : Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          : (action.executionError != null
+                                ? Colors.redAccent
+                                : const Color(0xFF10B981)),
+                      foregroundColor: action.isExecuted
+                          ? Colors.white60
+                          : Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                     icon: Icon(
                       action.isExecuted
                           ? LucideIcons.check
-                          : (action.executionError != null ? LucideIcons.refresh_cw : LucideIcons.save),
+                          : (action.executionError != null
+                                ? LucideIcons.refresh_cw
+                                : LucideIcons.save),
                       size: 12,
                     ),
                     label: Text(
                       action.isExecuted
                           ? 'Записан'
                           : (action.executionError != null
-                              ? 'Повторить'
-                              : (action.isUndone ? 'Применить снова' : 'Применить')),
+                                ? 'Повторить'
+                                : (action.isUndone
+                                      ? 'Применить снова'
+                                      : 'Применить')),
                       style: const TextStyle(fontSize: 10.5),
                     ),
                     onPressed: action.isExecuted
@@ -1174,7 +1547,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                             final ok = await agent.executeWriteAction(action);
                             if (ok && context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Файл ${action.path} успешно записан!')),
+                                SnackBar(
+                                  content: Text(
+                                    'Файл ${action.path} успешно записан!',
+                                  ),
+                                ),
                               );
                             }
                           },
@@ -1199,16 +1576,25 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 decoration: BoxDecoration(
                   color: Colors.redAccent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: Colors.redAccent.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.circle_alert, size: 12, color: Colors.redAccent),
+                    const Icon(
+                      LucideIcons.circle_alert,
+                      size: 12,
+                      color: Colors.redAccent,
+                    ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         action.executionError!,
-                        style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 10.5),
+                        style: GoogleFonts.inter(
+                          color: Colors.redAccent,
+                          fontSize: 10.5,
+                        ),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1239,12 +1625,19 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
           children: [
             Row(
               children: [
-                const Icon(LucideIcons.terminal, size: 14, color: Color(0xFF38BDF8)),
+                const Icon(
+                  LucideIcons.terminal,
+                  size: 14,
+                  color: Color(0xFF38BDF8),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     action.command ?? '',
-                    style: GoogleFonts.jetBrainsMono(color: const Color(0xFF38BDF8), fontSize: 11),
+                    style: GoogleFonts.jetBrainsMono(
+                      color: const Color(0xFF38BDF8),
+                      fontSize: 11,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1252,35 +1645,54 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   const SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF38BDF8)),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF38BDF8),
+                    ),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'Выполняется...',
-                    style: GoogleFonts.inter(color: const Color(0xFF38BDF8), fontSize: 10.5),
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF38BDF8),
+                      fontSize: 10.5,
+                    ),
                   ),
                 ] else ...[
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: action.isExecuted
                           ? Colors.white12
-                          : (action.executionError != null ? Colors.redAccent : const Color(0xFF0284C7)),
-                      foregroundColor: action.isExecuted ? Colors.white60 : Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          : (action.executionError != null
+                                ? Colors.redAccent
+                                : const Color(0xFF0284C7)),
+                      foregroundColor: action.isExecuted
+                          ? Colors.white60
+                          : Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                     icon: Icon(
                       action.isExecuted
                           ? LucideIcons.check
-                          : (action.executionError != null ? LucideIcons.refresh_cw : LucideIcons.play),
+                          : (action.executionError != null
+                                ? LucideIcons.refresh_cw
+                                : LucideIcons.play),
                       size: 12,
                     ),
                     label: Text(
                       action.isExecuted
                           ? 'Выполнено'
-                          : (action.executionError != null ? 'Повторить' : 'Запустить'),
+                          : (action.executionError != null
+                                ? 'Повторить'
+                                : 'Запустить'),
                       style: const TextStyle(fontSize: 10.5),
                     ),
                     onPressed: action.isExecuted
@@ -1321,16 +1733,25 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 decoration: BoxDecoration(
                   color: Colors.redAccent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(5),
-                  border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: Colors.redAccent.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.circle_alert, size: 12, color: Colors.redAccent),
+                    const Icon(
+                      LucideIcons.circle_alert,
+                      size: 12,
+                      color: Colors.redAccent,
+                    ),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         action.executionError!,
-                        style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 10.5),
+                        style: GoogleFonts.inter(
+                          color: Colors.redAccent,
+                          fontSize: 10.5,
+                        ),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1352,7 +1773,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFF111520),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.07))),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
+        ),
       ),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
@@ -1366,7 +1789,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             decoration: BoxDecoration(
               color: const Color(0xFF181C26),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.35)),
+              border: Border.all(
+                color: const Color(0xFF8B5CF6).withValues(alpha: 0.35),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -1389,7 +1814,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                       color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Icon(LucideIcons.file_code, size: 14, color: Color(0xFFA78BFA)),
+                    child: const Icon(
+                      LucideIcons.file_code,
+                      size: 14,
+                      color: Color(0xFFA78BFA),
+                    ),
                   ),
                 const SizedBox(width: 6),
                 ConstrainedBox(
@@ -1402,11 +1831,20 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         att.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.inter(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w500),
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       Text(
-                        att.isImage ? 'Изображение' : '${(att.sizeBytes / 1024).toStringAsFixed(1)} KB',
-                        style: const TextStyle(fontSize: 9.5, color: Color(0xFF94A3B8)),
+                        att.isImage
+                            ? 'Изображение'
+                            : '${(att.sizeBytes / 1024).toStringAsFixed(1)} KB',
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          color: Color(0xFF94A3B8),
+                        ),
                       ),
                     ],
                   ),
@@ -1443,7 +1881,14 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       for (final pf in result.files) {
         final name = pf.name;
         final ext = p.extension(name).toLowerCase();
-        final isImg = const ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'].contains(ext);
+        final isImg = const [
+          '.png',
+          '.jpg',
+          '.jpeg',
+          '.webp',
+          '.gif',
+          '.bmp',
+        ].contains(ext);
         Uint8List? bytes = pf.bytes;
         if (bytes == null && pf.path != null) {
           bytes = await File(pf.path!).readAsBytes();
@@ -1454,31 +1899,35 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
           final mime = ext == '.png'
               ? 'image/png'
               : ext == '.webp'
-                  ? 'image/webp'
-                  : ext == '.gif'
-                      ? 'image/gif'
-                      : 'image/jpeg';
+              ? 'image/webp'
+              : ext == '.gif'
+              ? 'image/gif'
+              : 'image/jpeg';
           setState(() {
-            _pendingAttachments.add(ChatAttachment(
-              name: name,
-              path: pf.path ?? name,
-              mimeType: mime,
-              isImage: true,
-              base64Data: base64Encode(bytes!),
-              sizeBytes: bytes.length,
-            ));
+            _pendingAttachments.add(
+              ChatAttachment(
+                name: name,
+                path: pf.path ?? name,
+                mimeType: mime,
+                isImage: true,
+                base64Data: base64Encode(bytes!),
+                sizeBytes: bytes.length,
+              ),
+            );
           });
         } else {
           final text = utf8.decode(bytes, allowMalformed: true);
           setState(() {
-            _pendingAttachments.add(ChatAttachment(
-              name: name,
-              path: pf.path ?? name,
-              mimeType: 'text/plain',
-              isImage: false,
-              textContent: text,
-              sizeBytes: bytes!.length,
-            ));
+            _pendingAttachments.add(
+              ChatAttachment(
+                name: name,
+                path: pf.path ?? name,
+                mimeType: 'text/plain',
+                isImage: false,
+                textContent: text,
+                sizeBytes: bytes!.length,
+              ),
+            );
           });
         }
       }
@@ -1505,17 +1954,19 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       final mime = ext == '.png'
           ? 'image/png'
           : ext == '.webp'
-              ? 'image/webp'
-              : 'image/jpeg';
+          ? 'image/webp'
+          : 'image/jpeg';
       setState(() {
-        _pendingAttachments.add(ChatAttachment(
-          name: p.basename(xfile.path),
-          path: xfile.path,
-          mimeType: mime,
-          isImage: true,
-          base64Data: base64Encode(bytes),
-          sizeBytes: bytes.length,
-        ));
+        _pendingAttachments.add(
+          ChatAttachment(
+            name: p.basename(xfile.path),
+            path: xfile.path,
+            mimeType: mime,
+            isImage: true,
+            base64Data: base64Encode(bytes),
+            sizeBytes: bytes.length,
+          ),
+        );
       });
     } catch (e) {
       // Fallback to FilePicker if camera/gallery intent is unavailable on Desktop Linux
@@ -1534,14 +1985,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     final active = ed.openFiles[ed.activeTabIndex];
     final text = active.controller.text;
     setState(() {
-      _pendingAttachments.add(ChatAttachment(
-        name: active.name,
-        path: active.path,
-        mimeType: 'text/plain',
-        isImage: false,
-        textContent: text,
-        sizeBytes: text.length,
-      ));
+      _pendingAttachments.add(
+        ChatAttachment(
+          name: active.name,
+          path: active.path,
+          mimeType: 'text/plain',
+          isImage: false,
+          textContent: text,
+          sizeBytes: text.length,
+        ),
+      );
     });
   }
 
@@ -1550,7 +2003,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF131722),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
       ),
       child: SafeArea(
         top: false,
@@ -1561,7 +2016,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             PopupMenuButton<String>(
               tooltip: 'Прикрепить файл или код',
               color: const Color(0xFF181C26),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               onSelected: (val) {
                 if (val == 'file') _pickFiles();
                 if (val == 'active') _attachActiveEditorFile();
@@ -1571,9 +2028,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   value: 'active',
                   child: Row(
                     children: [
-                      Icon(LucideIcons.file_code, size: 15, color: Color(0xFFA78BFA)),
+                      Icon(
+                        LucideIcons.file_code,
+                        size: 15,
+                        color: Color(0xFFA78BFA),
+                      ),
                       SizedBox(width: 8),
-                      Text('Прикрепить открытый файл', style: TextStyle(color: Colors.white, fontSize: 12.5)),
+                      Text(
+                        'Прикрепить открытый файл',
+                        style: TextStyle(color: Colors.white, fontSize: 12.5),
+                      ),
                     ],
                   ),
                 ),
@@ -1581,9 +2045,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   value: 'file',
                   child: Row(
                     children: [
-                      Icon(LucideIcons.folder_open, size: 15, color: Color(0xFF94A3B8)),
+                      Icon(
+                        LucideIcons.folder_open,
+                        size: 15,
+                        color: Color(0xFF94A3B8),
+                      ),
                       SizedBox(width: 8),
-                      Text('Выбрать файл с устройства...', style: TextStyle(color: Colors.white, fontSize: 12.5)),
+                      Text(
+                        'Выбрать файл с устройства...',
+                        style: TextStyle(color: Colors.white, fontSize: 12.5),
+                      ),
                     ],
                   ),
                 ),
@@ -1594,9 +2065,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF181C26),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
                 ),
-                child: const Icon(LucideIcons.paperclip, size: 15, color: Color(0xFF94A3B8)),
+                child: const Icon(
+                  LucideIcons.paperclip,
+                  size: 15,
+                  color: Color(0xFF94A3B8),
+                ),
               ),
             ),
             const SizedBox(width: 6),
@@ -1605,7 +2082,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             PopupMenuButton<String>(
               tooltip: 'Прикрепить фото или скриншот',
               color: const Color(0xFF181C26),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               onSelected: (val) {
                 if (val == 'gallery') _pickPhoto(fromCamera: false);
                 if (val == 'camera') _pickPhoto(fromCamera: true);
@@ -1615,9 +2094,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   value: 'gallery',
                   child: Row(
                     children: [
-                      Icon(LucideIcons.image, size: 15, color: Color(0xFFA78BFA)),
+                      Icon(
+                        LucideIcons.image,
+                        size: 15,
+                        color: Color(0xFFA78BFA),
+                      ),
                       SizedBox(width: 8),
-                      Text('Фото / Скриншот из галереи', style: TextStyle(color: Colors.white, fontSize: 12.5)),
+                      Text(
+                        'Фото / Скриншот из галереи',
+                        style: TextStyle(color: Colors.white, fontSize: 12.5),
+                      ),
                     ],
                   ),
                 ),
@@ -1625,9 +2111,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   value: 'camera',
                   child: Row(
                     children: [
-                      Icon(LucideIcons.camera, size: 15, color: Color(0xFF94A3B8)),
+                      Icon(
+                        LucideIcons.camera,
+                        size: 15,
+                        color: Color(0xFF94A3B8),
+                      ),
                       SizedBox(width: 8),
-                      Text('Сделать снимок камеры', style: TextStyle(color: Colors.white, fontSize: 12.5)),
+                      Text(
+                        'Сделать снимок камеры',
+                        style: TextStyle(color: Colors.white, fontSize: 12.5),
+                      ),
                     ],
                   ),
                 ),
@@ -1638,9 +2131,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF181C26),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
                 ),
-                child: const Icon(LucideIcons.image, size: 15, color: Color(0xFF94A3B8)),
+                child: const Icon(
+                  LucideIcons.image,
+                  size: 15,
+                  color: Color(0xFF94A3B8),
+                ),
               ),
             ),
             const SizedBox(width: 6),
@@ -1651,7 +2150,9 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF0A0D14),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.10),
+                  ),
                 ),
                 padding: const EdgeInsets.symmetric(horizontal: 11),
                 child: TextField(
@@ -1664,7 +2165,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     hintText: _pendingAttachments.isNotEmpty
                         ? 'Добавьте комментарий к вложениям...'
                         : 'Спросите AI Агента о коде или задаче...',
-                    hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                    hintStyle: const TextStyle(
+                      color: Colors.white38,
+                      fontSize: 12,
+                    ),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -1682,11 +2186,17 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 height: 34,
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: const Icon(LucideIcons.square, size: 14, color: Colors.redAccent),
+                  icon: const Icon(
+                    LucideIcons.square,
+                    size: 14,
+                    color: Colors.redAccent,
+                  ),
                   tooltip: 'Остановить',
                   style: IconButton.styleFrom(
                     backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   onPressed: () => agent.stopGeneration(),
                 ),
@@ -1697,11 +2207,17 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 height: 34,
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: const Icon(LucideIcons.send, size: 14, color: Colors.white),
+                  icon: const Icon(
+                    LucideIcons.send,
+                    size: 14,
+                    color: Colors.white,
+                  ),
                   tooltip: 'Отправить',
                   style: IconButton.styleFrom(
                     backgroundColor: const Color(0xFF8B5CF6),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                   onPressed: () => _sendMessage(agent),
                 ),
@@ -1725,11 +2241,19 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
   }
 
   String _cleanText(String raw) {
-    return raw
+    var text = raw
         .replaceAll(RegExp(r'<action[\s\S]*?<\/action>'), '')
-        .replaceAll(RegExp(r'<tool\s+name="\w+"(?:\s+\w+="[^"]*")*\s*(?:/>|>[\s\S]*?</tool>)'), '')
-        .replaceAll(RegExp(r'<think>[\s\S]*?<\/think>'), '')
-        .trim();
+        .replaceAll(
+          RegExp(
+            r'<tool\s+name="\w+"(?:\s+\w+="[^"]*")*\s*(?:/>|>[\s\S]*?</tool>)',
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'<think>[\s\S]*?<\/think>'), '');
+    text = text.replaceAll(RegExp(r'<action[\s\S]*$'), '');
+    text = text.replaceAll(RegExp(r'<tool[\s\S]*$'), '');
+    text = text.replaceAll(RegExp(r'<think[\s\S]*$'), '');
+    return text.trim();
   }
 
   void _showApiKeysDialog(BuildContext context, SettingsState settings) {
@@ -1757,7 +2281,11 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             Expanded(
               child: Text(
                 'Провайдеры ИИ и API Ключи',
-                style: GoogleFonts.inter(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                style: GoogleFonts.inter(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
@@ -1774,35 +2302,65 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.25)),
+                    border: Border.all(
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.25),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(LucideIcons.sparkles, color: Color(0xFFA78BFA), size: 16),
+                      const Icon(
+                        LucideIcons.sparkles,
+                        color: Color(0xFFA78BFA),
+                        size: 16,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Поддерживаются 9 провайдеров: OpenRouter (единый ключ ко всем моделям), а также прямые ключи Gemini, Groq LPU, DeepSeek, OpenAI, Anthropic, xAI Grok, Mistral и локальный Ollama/LM Studio.',
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 11),
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildField('OpenRouter API Key (универсальный доступ)', orCtrl),
+                _buildField(
+                  'OpenRouter API Key (универсальный доступ)',
+                  orCtrl,
+                ),
                 const SizedBox(height: 8),
-                _buildField('Google Gemini API Key (AIzaSy... — Gemini 2.5 Pro/Flash)', gmCtrl),
+                _buildField(
+                  'Google Gemini API Key (AIzaSy... — Gemini 2.5 Pro/Flash)',
+                  gmCtrl,
+                ),
                 const SizedBox(height: 8),
-                _buildField('Groq Cloud API Key (gsk_... — сверхбыстрый Llama 3.3 / R1)', gqCtrl),
+                _buildField(
+                  'Groq Cloud API Key (gsk_... — сверхбыстрый Llama 3.3 / R1)',
+                  gqCtrl,
+                ),
                 const SizedBox(height: 8),
-                _buildField('DeepSeek API Key (sk-... — DeepSeek V3 / R1 Direct)', dsCtrl),
+                _buildField(
+                  'DeepSeek API Key (sk-... — DeepSeek V3 / R1 Direct)',
+                  dsCtrl,
+                ),
                 const SizedBox(height: 8),
-                _buildField('OpenAI API Key (sk-... — GPT-4o / o3-mini)', oaCtrl),
+                _buildField(
+                  'OpenAI API Key (sk-... — GPT-4o / o3-mini)',
+                  oaCtrl,
+                ),
                 const SizedBox(height: 8),
-                _buildField('Anthropic API Key (sk-ant-... — Claude 3.7 / 3.5)', anCtrl),
+                _buildField(
+                  'Anthropic API Key (sk-ant-... — Claude 3.7 / 3.5)',
+                  anCtrl,
+                ),
                 const SizedBox(height: 8),
-                _buildField('xAI Grok API Key (xai-... — Grok 3 / Vision)', xaCtrl),
+                _buildField(
+                  'xAI Grok API Key (xai-... — Grok 3 / Vision)',
+                  xaCtrl,
+                ),
                 const SizedBox(height: 8),
                 _buildField('Mistral / Codestral API Key', msCtrl),
                 const SizedBox(height: 14),
@@ -1810,14 +2368,29 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 const SizedBox(height: 10),
                 Text(
                   'Локальный / Custom OpenAI-совместимый сервер (Ollama / LM Studio):',
-                  style: GoogleFonts.inter(color: const Color(0xFFA78BFA), fontSize: 11.5, fontWeight: FontWeight.w600),
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFA78BFA),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                _buildField('Base URL (например http://127.0.0.1:11434/v1)', cuUrlCtrl, obscure: false),
+                _buildField(
+                  'Base URL (например http://127.0.0.1:11434/v1)',
+                  cuUrlCtrl,
+                  obscure: false,
+                ),
                 const SizedBox(height: 8),
-                _buildField('Имя модели (например qwen2.5-coder:7b)', cuModCtrl, obscure: false),
+                _buildField(
+                  'Имя модели (например qwen2.5-coder:7b)',
+                  cuModCtrl,
+                  obscure: false,
+                ),
                 const SizedBox(height: 8),
-                _buildField('Custom API Key (необязательно для Ollama)', cuKeyCtrl),
+                _buildField(
+                  'Custom API Key (необязательно для Ollama)',
+                  cuKeyCtrl,
+                ),
               ],
             ),
           ),
@@ -1825,10 +2398,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+            child: const Text(
+              'Отмена',
+              style: TextStyle(color: Colors.white54),
+            ),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+            ),
             onPressed: () {
               final sn = ref.read(settingsProvider.notifier);
               sn.setOpenrouterApiKey(orCtrl.text.trim());
@@ -1851,11 +2430,18 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     );
   }
 
-  Widget _buildField(String label, TextEditingController controller, {bool obscure = true}) {
+  Widget _buildField(
+    String label,
+    TextEditingController controller, {
+    bool obscure = true,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white70, fontSize: 11),
+        ),
         const SizedBox(height: 3),
         Container(
           height: 36,
@@ -1869,10 +2455,562 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             controller: controller,
             obscureText: obscure,
             style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 11),
-            decoration: const InputDecoration(border: InputBorder.none, isDense: true),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              isDense: true,
+            ),
           ),
         ),
       ],
+    );
+  }
+
+  void _confirmDeleteChat(
+    BuildContext context,
+    QuantumAiAgentService agent,
+    String sessionId,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131722),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.trash_2, color: Colors.redAccent, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Удалить диалог?',
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'История этого диалога будет безвозвратно удалена.',
+          style: TextStyle(color: Colors.white70, fontSize: 12),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Отмена',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              agent.deleteSession(sessionId);
+            },
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChatHistoryModal(
+    BuildContext context,
+    QuantumAiAgentService agent,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ChatHistorySheet(agent: agent),
+    );
+  }
+}
+
+class _ChatHistorySheet extends StatefulWidget {
+  final QuantumAiAgentService agent;
+
+  const _ChatHistorySheet({required this.agent});
+
+  @override
+  State<_ChatHistorySheet> createState() => _ChatHistorySheetState();
+}
+
+class _ChatHistorySheetState extends State<_ChatHistorySheet> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  String _formatDate(DateTime dt) {
+    final now = DateTime.now();
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+      return 'Сегодня, $h:$m';
+    }
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (dt.year == yesterday.year &&
+        dt.month == yesterday.month &&
+        dt.day == yesterday.day) {
+      return 'Вчера, $h:$m';
+    }
+    return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year} $h:$m';
+  }
+
+  void _showRenameDialog(BuildContext context, ChatSession session) {
+    final ctrl = TextEditingController(text: session.title);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131722),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.pencil, color: Color(0xFFA78BFA), size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'Переименовать диалог',
+              style: GoogleFonts.inter(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+          decoration: const InputDecoration(
+            isDense: true,
+            hintText: 'Название темы диалога...',
+            hintStyle: TextStyle(color: Colors.white38),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Отмена',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              widget.agent.renameSession(session.id, ctrl.text.trim());
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = widget.agent.sessions;
+    final filtered = _query.isEmpty
+        ? sessions
+        : sessions
+              .where(
+                (s) => s.title.toLowerCase().contains(_query.toLowerCase()),
+              )
+              .toList();
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.72,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F121C),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.12),
+            width: 1,
+          ),
+          left: BorderSide(
+            color: Colors.white.withValues(alpha: 0.12),
+            width: 1,
+          ),
+          right: BorderSide(
+            color: Colors.white.withValues(alpha: 0.12),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    LucideIcons.history,
+                    color: Color(0xFFA78BFA),
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'История диалогов',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Всего сохранено: ${sessions.length}',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    widget.agent.startNewChat();
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(LucideIcons.plus, size: 14),
+                  label: const Text(
+                    'Новый чат',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: const Icon(
+                    LucideIcons.x,
+                    size: 18,
+                    color: Colors.white54,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            child: Container(
+              height: 36,
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  const Icon(
+                    LucideIcons.search,
+                    size: 14,
+                    color: Colors.white38,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (v) => setState(() => _query = v.trim()),
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                      decoration: const InputDecoration(
+                        hintText: 'Поиск диалога по теме...',
+                        hintStyle: TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  if (_query.isNotEmpty)
+                    InkWell(
+                      onTap: () {
+                        _searchCtrl.clear();
+                        setState(() => _query = '');
+                      },
+                      child: const Icon(
+                        LucideIcons.x,
+                        size: 14,
+                        color: Colors.white38,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+
+          // Sessions List
+          Expanded(
+            child: filtered.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          LucideIcons.message_square_off,
+                          size: 36,
+                          color: Colors.white24,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _query.isEmpty
+                              ? 'Нет сохранённых диалогов'
+                              : 'Ничего не найдено',
+                          style: const TextStyle(
+                            color: Colors.white54,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
+                    physics: const BouncingScrollPhysics(),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final s = filtered[index];
+                      final isActive = s.id == widget.agent.currentSessionId;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? const Color(0xFF8B5CF6).withValues(alpha: 0.12)
+                              : Colors.white.withValues(alpha: 0.03),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isActive
+                                ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
+                                : Colors.white.withValues(alpha: 0.07),
+                            width: isActive ? 1.2 : 0.8,
+                          ),
+                        ),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(10),
+                          onTap: () {
+                            widget.agent.switchSession(s.id);
+                            Navigator.pop(context);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: isActive
+                                        ? const Color(
+                                            0xFF8B5CF6,
+                                          ).withValues(alpha: 0.25)
+                                        : Colors.white.withValues(alpha: 0.05),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    isActive
+                                        ? LucideIcons.circle_check
+                                        : LucideIcons.message_square,
+                                    size: 15,
+                                    color: isActive
+                                        ? const Color(0xFFA78BFA)
+                                        : Colors.white60,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              s.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.inter(
+                                                color: Colors.white,
+                                                fontSize: 12.5,
+                                                fontWeight: isActive
+                                                    ? FontWeight.w700
+                                                    : FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isActive) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 5,
+                                                    vertical: 1.5,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(
+                                                  0xFF8B5CF6,
+                                                ).withValues(alpha: 0.3),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'АКТИВНЫЙ',
+                                                style: GoogleFonts.inter(
+                                                  color: const Color(
+                                                    0xFFC4B5FD,
+                                                  ),
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            LucideIcons.clock,
+                                            size: 10,
+                                            color: Colors.white38,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            _formatDate(s.updatedAt),
+                                            style: const TextStyle(
+                                              color: Colors.white38,
+                                              fontSize: 10.5,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 10),
+                                          const Icon(
+                                            LucideIcons.message_circle,
+                                            size: 10,
+                                            color: Colors.white38,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${s.messages.length} сообщ.',
+                                            style: const TextStyle(
+                                              color: Colors.white38,
+                                              fontSize: 10.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(
+                                    LucideIcons.pencil,
+                                    size: 13,
+                                    color: Colors.white38,
+                                  ),
+                                  tooltip: 'Переименовать',
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 26,
+                                    height: 26,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () =>
+                                      _showRenameDialog(context, s),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    LucideIcons.trash_2,
+                                    size: 13,
+                                    color: Colors.white38,
+                                  ),
+                                  tooltip: 'Удалить диалог',
+                                  constraints: const BoxConstraints.tightFor(
+                                    width: 26,
+                                    height: 26,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  onPressed: () {
+                                    widget.agent.deleteSession(s.id);
+                                    setState(() {});
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/services/build_progress_tracker.dart';
+import 'build_completion_dialog.dart';
 
 /// Compact live card: stage chips, progress bar, timer, heartbeat, errors.
 class BuildProgressCard extends StatelessWidget {
@@ -31,7 +32,9 @@ class BuildProgressCard extends StatelessWidget {
         final cs = Theme.of(context).colorScheme;
         final failed = p.stage == BuildStage.failed;
         final done = p.stage == BuildStage.done;
-        final color = failed ? cs.error : (done ? Colors.greenAccent.shade400 : cs.primary);
+        final color = failed
+            ? cs.error
+            : (done ? Colors.greenAccent.shade400 : cs.primary);
         final idx = _stages.indexWhere((e) => e.$1 == p.stage);
         return Container(
           margin: const EdgeInsets.fromLTRB(8, 6, 8, 4),
@@ -45,25 +48,44 @@ class BuildProgressCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(children: [
-                Icon(failed ? Icons.error_outline : (done ? Icons.check_circle : Icons.build_circle_outlined),
-                    size: 18, color: color),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    failed ? 'Сборка не удалась' : (done ? 'Сборка готова' : 'Идёт сборка…'),
-                    style: TextStyle(fontWeight: FontWeight.w600, color: color),
+              Row(
+                children: [
+                  Icon(
+                    failed
+                        ? Icons.error_outline
+                        : (done
+                              ? Icons.check_circle
+                              : Icons.build_circle_outlined),
+                    size: 18,
+                    color: color,
                   ),
-                ),
-                Text(_fmt(p.elapsed), style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
-                if (!p.active)
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    iconSize: 18,
-                    icon: const Icon(Icons.close),
-                    onPressed: tracker.dismiss,
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      failed
+                          ? 'Сборка не удалась'
+                          : (done ? 'Сборка готова' : 'Идёт сборка…'),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
                   ),
-              ]),
+                  Text(
+                    _fmt(p.elapsed),
+                    style: const TextStyle(
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (!p.active)
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      iconSize: 18,
+                      icon: const Icon(Icons.close),
+                      onPressed: tracker.dismiss,
+                    ),
+                ],
+              ),
               const SizedBox(height: 6),
               LinearProgressIndicator(
                 value: done ? 1 : (failed ? 1 : p.fraction),
@@ -72,40 +94,89 @@ class BuildProgressCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               const SizedBox(height: 6),
-              Wrap(spacing: 6, runSpacing: 4, children: [
-                for (var i = 0; i < _stages.length; i++)
-                  Chip(
-                    visualDensity: VisualDensity.compact,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero,
-                    label: Text(_stages[i].$2, style: const TextStyle(fontSize: 11)),
-                    avatar: Icon(
-                      done || (idx > i) ? Icons.check : (idx == i && p.active ? Icons.sync : Icons.circle_outlined),
-                      size: 12,
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  for (var i = 0; i < _stages.length; i++)
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: EdgeInsets.zero,
+                      label: Text(
+                        _stages[i].$2,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      avatar: Icon(
+                        done || (idx > i)
+                            ? Icons.check
+                            : (idx == i && p.active
+                                  ? Icons.sync
+                                  : Icons.circle_outlined),
+                        size: 12,
+                      ),
                     ),
-                  ),
-              ]),
+                ],
+              ),
               if (p.message.isNotEmpty) ...[
                 const SizedBox(height: 4),
-                Text(p.message,
-                    maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, fontFamily: 'firaCode')),
+                Text(
+                  p.message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, fontFamily: 'firaCode'),
+                ),
               ],
               if (p.active && p.sinceLastOutput.inSeconds >= 8)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Text('Gradle работает, нет вывода ${p.sinceLastOutput.inSeconds} с — это нормально для долгих этапов',
-                      style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+                  child: Text(
+                    'Gradle работает, нет вывода ${p.sinceLastOutput.inSeconds} с — это нормально для долгих этапов',
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                  ),
                 ),
               if (failed && p.errors.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
-                  child: Text(p.errors.take(3).join('\n'),
-                      maxLines: 6, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: cs.error)),
+                  child: Text(
+                    p.errors.take(3).join('\n'),
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 11, color: cs.error),
+                  ),
                 ),
-              if (done && onInstall != null)
+              if (done && p.apkPath != null)
                 Align(
                   alignment: Alignment.centerRight,
-                  child: TextButton.icon(onPressed: onInstall, icon: const Icon(Icons.install_mobile, size: 18), label: const Text('Установить APK')),
+                  child: Wrap(
+                    spacing: 8,
+                    children: [
+                      if (onInstall != null)
+                        TextButton.icon(
+                          onPressed: onInstall,
+                          icon: const Icon(Icons.install_mobile, size: 16),
+                          label: const Text('Установить'),
+                        ),
+                      TextButton.icon(
+                        onPressed: () => BuildCompletionDialog.show(
+                          context,
+                          artifactPath: p.apkPath!,
+                          elapsed: p.elapsed,
+                        ),
+                        icon: const Icon(Icons.pie_chart_outline, size: 16),
+                        label: const Text('Инспектор размера'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (done && onInstall != null)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: onInstall,
+                    icon: const Icon(Icons.install_mobile, size: 18),
+                    label: const Text('Установить APK'),
+                  ),
                 ),
             ],
           ),

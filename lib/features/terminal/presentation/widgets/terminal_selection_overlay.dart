@@ -13,6 +13,7 @@ import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_ta
 class TerminalSelectionOverlay extends StatefulWidget {
   final TerminalSession session;
   final xt.TerminalViewState Function() getViewState;
+  final ScrollController? scrollController;
   final VoidCallback? onSelectAll;
   final VoidCallback? onPaste;
 
@@ -20,6 +21,7 @@ class TerminalSelectionOverlay extends StatefulWidget {
     super.key,
     required this.session,
     required this.getViewState,
+    this.scrollController,
     this.onSelectAll,
     this.onPaste,
   });
@@ -73,12 +75,19 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
         final selectedText = widget.session.xtermTerminal.buffer.getText(selection);
         final viewportSize = overlayBox?.size ?? renderTerminal.size;
 
-        final isStartVisible = startOffset.dy >= -cellSize.height * 2 &&
-            startOffset.dy <= viewportSize.height + cellSize.height;
-        final isEndVisible = endOffset.dy >= -cellSize.height * 2 &&
-            endOffset.dy <= viewportSize.height + cellSize.height;
+        final isStartVisible = startOffset.dy >= -cellSize.height * 4 &&
+            startOffset.dy <= viewportSize.height + cellSize.height * 2;
+        final isEndVisible = endOffset.dy >= -cellSize.height * 4 &&
+            endOffset.dy <= viewportSize.height + cellSize.height * 2;
 
         final isUrl = _checkIsUrl(selectedText.trim());
+
+        final startTop = (startOffset.dy + cellSize.height)
+            .clamp(0.0, math.max(0.0, viewportSize.height - 32.0))
+            .toDouble();
+        final endTop = (endOffset.dy + cellSize.height)
+            .clamp(0.0, math.max(0.0, viewportSize.height - 32.0))
+            .toDouble();
 
         return Stack(
           clipBehavior: Clip.none,
@@ -86,26 +95,32 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
             // Start selection handle
             if (isStartVisible)
               Positioned(
-                left: (startOffset.dx - 16).clamp(-16.0, viewportSize.width),
-                top: startOffset.dy + cellSize.height,
+                left: (startOffset.dx - 16)
+                    .clamp(-16.0, viewportSize.width)
+                    .toDouble(),
+                top: startTop,
                 child: _buildHandle(
                   isStart: true,
                   renderTerminal: renderTerminal,
                   range: range,
                   cellSize: cellSize,
+                  viewportSize: viewportSize,
                 ),
               ),
 
             // End selection handle
             if (isEndVisible)
               Positioned(
-                left: (endOffset.dx + cellSize.width - 16).clamp(-16.0, viewportSize.width),
-                top: endOffset.dy + cellSize.height,
+                left: (endOffset.dx + cellSize.width - 16)
+                    .clamp(-16.0, viewportSize.width)
+                    .toDouble(),
+                top: endTop,
                 child: _buildHandle(
                   isStart: false,
                   renderTerminal: renderTerminal,
                   range: range,
                   cellSize: cellSize,
+                  viewportSize: viewportSize,
                 ),
               ),
 
@@ -138,6 +153,7 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
     required dynamic renderTerminal,
     required xt.BufferRange range,
     required Size cellSize,
+    required Size viewportSize,
   }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -151,6 +167,23 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
       },
       onPanUpdate: (details) {
         final localPos = renderTerminal.globalToLocal(details.globalPosition);
+
+        // Auto-scroll when dragging near viewport top/bottom
+        final sc = widget.scrollController;
+        if (sc != null && sc.hasClients) {
+          if (localPos.dy > viewportSize.height - 35) {
+            final next = (sc.offset + cellSize.height * 1.5)
+                .clamp(0.0, sc.position.maxScrollExtent)
+                .toDouble();
+            if (next != sc.offset) sc.jumpTo(next);
+          } else if (localPos.dy < 35) {
+            final prev = (sc.offset - cellSize.height * 1.5)
+                .clamp(0.0, sc.position.maxScrollExtent)
+                .toDouble();
+            if (prev != sc.offset) sc.jumpTo(prev);
+          }
+        }
+
         // Finger touches below the line, so map to cell slightly above touch
         final targetOffset = Offset(
           localPos.dx,

@@ -33,6 +33,7 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_pane
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_drawer.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/editor_app_bar.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/code_find_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/stable_editor_widget.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/markdown_preview_widget.dart';
@@ -46,18 +47,21 @@ import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/project_sync_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
-
-
+import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 
 // ─── Вспомогательные функции для диалогов и меню ───────────────────────────
 
 void showSortMenu(BuildContext context, WidgetRef ref) async {
   final RenderBox button = context.findRenderObject() as RenderBox;
-  final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+  final RenderBox overlay =
+      Overlay.of(context).context.findRenderObject() as RenderBox;
   final RelativeRect position = RelativeRect.fromRect(
     Rect.fromPoints(
       button.localToGlobal(Offset.zero, ancestor: overlay),
-      button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+      button.localToGlobal(
+        button.size.bottomRight(Offset.zero),
+        ancestor: overlay,
+      ),
     ),
     Offset.zero & overlay.size,
   );
@@ -66,9 +70,18 @@ void showSortMenu(BuildContext context, WidgetRef ref) async {
     context: context,
     position: position,
     items: [
-      PopupMenuItem(value: FileSortMode.name, child: Text(AppLocalizations.of(context)!.sortByName)),
-      PopupMenuItem(value: FileSortMode.size, child: Text(AppLocalizations.of(context)!.sortBySize)),
-      PopupMenuItem(value: FileSortMode.date, child: Text(AppLocalizations.of(context)!.sortByDate)),
+      PopupMenuItem(
+        value: FileSortMode.name,
+        child: Text(AppLocalizations.of(context)!.sortByName),
+      ),
+      PopupMenuItem(
+        value: FileSortMode.size,
+        child: Text(AppLocalizations.of(context)!.sortBySize),
+      ),
+      PopupMenuItem(
+        value: FileSortMode.date,
+        child: Text(AppLocalizations.of(context)!.sortByDate),
+      ),
     ],
   );
   if (result != null) {
@@ -76,20 +89,39 @@ void showSortMenu(BuildContext context, WidgetRef ref) async {
   }
 }
 
-Future<void> showCreateDialog(BuildContext context, WidgetRef ref, String basePath, bool isDir) async {
+Future<void> showCreateDialog(
+  BuildContext context,
+  WidgetRef ref,
+  String basePath,
+  bool isDir,
+) async {
   final controller = TextEditingController();
   final name = await showDialog<String>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text(isDir ? AppLocalizations.of(context)!.newFolder : AppLocalizations.of(context)!.newFile),
+      title: Text(
+        isDir
+            ? AppLocalizations.of(context)!.newFolder
+            : AppLocalizations.of(context)!.newFile,
+      ),
       content: TextField(
         controller: controller,
         autofocus: true,
-        decoration: InputDecoration(hintText: isDir ? AppLocalizations.of(context)!.nameFolderHint : AppLocalizations.of(context)!.nameFileHint),
+        decoration: InputDecoration(
+          hintText: isDir
+              ? AppLocalizations.of(context)!.nameFolderHint
+              : AppLocalizations.of(context)!.nameFileHint,
+        ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(AppLocalizations.of(context)!.cancel)),
-        TextButton(onPressed: () => Navigator.pop(context, controller.text), child: Text(AppLocalizations.of(context)!.create)),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(AppLocalizations.of(context)!.cancel),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, controller.text),
+          child: Text(AppLocalizations.of(context)!.create),
+        ),
       ],
     ),
   );
@@ -101,7 +133,7 @@ Future<void> showCreateDialog(BuildContext context, WidgetRef ref, String basePa
     } else {
       await File(newPath).create();
     }
-    
+
     // Mirror to external storage
     await ref.read(projectServiceProvider.notifier).mirrorEntity(newPath);
 
@@ -144,17 +176,34 @@ void showEnvironmentBottomSheet(BuildContext context, WidgetRef ref) {
                             const SizedBox(
                               width: 24,
                               height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blueAccent),
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.blueAccent,
+                              ),
                             )
                           else
                             IconButton(
-                              icon: const Icon(LucideIcons.refresh_cw, size: 18, color: Colors.blueAccent),
-                              onPressed: () => ref.read(environmentProvider.notifier).checkEnvironment(),
+                              icon: const Icon(
+                                LucideIcons.refresh_cw,
+                                size: 18,
+                                color: Colors.blueAccent,
+                              ),
+                              onPressed: () => ref
+                                  .read(environmentProvider.notifier)
+                                  .checkEnvironment(),
                             ),
                           IconButton(
-                            icon: const Icon(LucideIcons.wrench, size: 18, color: Colors.orangeAccent),
-                            tooltip: AppLocalizations.of(context)!.fixEnvironmentArm64,
-                            onPressed: () => ref.read(environmentProvider.notifier).fixEnvironment(),
+                            icon: const Icon(
+                              LucideIcons.wrench,
+                              size: 18,
+                              color: Colors.orangeAccent,
+                            ),
+                            tooltip: AppLocalizations.of(
+                              context,
+                            )!.fixEnvironmentArm64,
+                            onPressed: () => ref
+                                .read(environmentProvider.notifier)
+                                .fixEnvironment(),
                           ),
                         ],
                       ),
@@ -165,59 +214,78 @@ void showEnvironmentBottomSheet(BuildContext context, WidgetRef ref) {
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       child: Column(
-                        children: envState.tools.map((tool) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12.0),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: tool.isInstalled 
-                                    ? Colors.green.withValues(alpha: 0.1) 
-                                    : Colors.red.withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  tool.isInstalled ? LucideIcons.circle_check : LucideIcons.circle_alert,
-                                  size: 16,
-                                  color: tool.isInstalled ? Colors.greenAccent : Colors.redAccent,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                        children: envState.tools
+                            .map(
+                              (tool) => Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: Row(
                                   children: [
-                                    Text(
-                                      tool.name,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: tool.isInstalled
+                                            ? Colors.green.withValues(
+                                                alpha: 0.1,
+                                              )
+                                            : Colors.red.withValues(alpha: 0.1),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        tool.isInstalled
+                                            ? LucideIcons.circle_check
+                                            : LucideIcons.circle_alert,
+                                        size: 16,
+                                        color: tool.isInstalled
+                                            ? Colors.greenAccent
+                                            : Colors.redAccent,
                                       ),
                                     ),
-                                    if (tool.isInstalled && tool.version != null)
-                                      Text(
-                                        tool.version!,
-                                        style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                      ),
-                                    if (tool.error != null)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4.0),
-                                        child: Text(
-                                          tool.error!,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            color: tool.isInstalled ? Colors.orangeAccent : Colors.redAccent,
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            tool.name,
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.white,
+                                            ),
                                           ),
-                                        ),
+                                          if (tool.isInstalled &&
+                                              tool.version != null)
+                                            Text(
+                                              tool.version!,
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          if (tool.error != null)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 4.0,
+                                              ),
+                                              child: Text(
+                                                tool.error!,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: tool.isInstalled
+                                                      ? Colors.orangeAccent
+                                                      : Colors.redAccent,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
+                                    ),
                                   ],
                                 ),
                               ),
-                            ],
-                          ),
-                        )).toList(),
+                            )
+                            .toList(),
                       ),
                     ),
                   ),
@@ -233,17 +301,12 @@ void showEnvironmentBottomSheet(BuildContext context, WidgetRef ref) {
 
 // ─── Боковое Меню Проводника (Изолировано) ───────────────────────────────────
 
-
-
-
 class EditorPage extends ConsumerStatefulWidget {
   const EditorPage({super.key});
 
   @override
   ConsumerState<EditorPage> createState() => _EditorPageState();
 }
-
-
 
 class _EditorPageState extends ConsumerState<EditorPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -312,13 +375,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
     // Синхронизируем терминальную вкладку с рабочей директорией проекта
     final runtime = ref.read(runtimeServiceProvider);
-    final guestPath = PathMapper.mapToGuest(workspacePath, runtime.appDirectory);
+    final guestPath = PathMapper.mapToGuest(
+      workspacePath,
+      runtime.appDirectory,
+    );
     final sessions = ref.read(terminalTabsProvider);
     final sessionIndex = sessions.indexWhere((s) => s.workingDir == guestPath);
     if (sessionIndex != -1) {
       ref.read(terminalTabsProvider.notifier).currentIndex = sessionIndex;
     }
-    
+
     // Событийный запрос Git статуса при смене рабочего пространства
     ref.read(gitProvider.notifier).refreshStatus();
 
@@ -331,9 +397,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            isRu 
-              ? 'Проект открыт. Папка .quantum/ автоматически исключена из Git.' 
-              : 'Project opened. Folder .quantum/ is automatically ignored in Git.'
+            isRu
+                ? 'Проект открыт. Папка .quantum/ автоматически исключена из Git.'
+                : 'Project opened. Folder .quantum/ is automatically ignored in Git.',
           ),
           duration: const Duration(seconds: 3),
           behavior: SnackBarBehavior.floating,
@@ -346,8 +412,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   Widget build(BuildContext context) {
     final openFiles = ref.watch(editorProvider.select((s) => s.openFiles));
     final openFilesCount = openFiles.length;
-    final rawActiveIndex = ref.watch(editorProvider.select((s) => s.activeTabIndex));
-    
+    final rawActiveIndex = ref.watch(
+      editorProvider.select((s) => s.activeTabIndex),
+    );
+
     int safeActiveIndex = rawActiveIndex;
     if (safeActiveIndex >= openFilesCount) {
       safeActiveIndex = openFilesCount > 0 ? openFilesCount - 1 : 0;
@@ -358,15 +426,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         ? openFiles[safeActiveIndex]
         : null;
 
-    final isMarkdownFile = activeFile != null &&
+    final isMarkdownFile =
+        activeFile != null &&
         (activeFile.path.toLowerCase().endsWith('.md') ||
-         activeFile.path.toLowerCase().endsWith('.markdown'));
-    
+            activeFile.path.toLowerCase().endsWith('.markdown'));
+
     final settings = ref.watch(settingsProvider);
     final workspacePath = ref.watch(workspaceProvider).currentPath;
     final panelState = ref.watch(panelProvider);
     final panelNotifier = ref.read(panelProvider.notifier);
-    
+
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth >= 768;
     final l10n = AppLocalizations.of(context)!;
@@ -383,15 +452,20 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     });
 
     final allProjects = ref.watch(projectServiceProvider);
-    final currentProjectIndex = allProjects.indexWhere((p) => p.path == workspacePath);
-    final currentProject = currentProjectIndex != -1 ? allProjects[currentProjectIndex] : null;
+    final currentProjectIndex = allProjects.indexWhere(
+      (p) => p.path == workspacePath,
+    );
+    final currentProject = currentProjectIndex != -1
+        ? allProjects[currentProjectIndex]
+        : null;
 
     final double keyboardInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = keyboardInset > 0;
 
     final mainBody = LayoutBuilder(
       builder: (context, constraints) {
-        final double availableHeight = (constraints.maxHeight - keyboardInset).clamp(120.0, constraints.maxHeight);
+        final double availableHeight = (constraints.maxHeight - keyboardInset)
+            .clamp(120.0, constraints.maxHeight);
         final isMobileTerminalWithKeyboard =
             (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
             isKeyboardOpen &&
@@ -403,7 +477,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           if (panelState.isMaximized || isMobileTerminalWithKeyboard) {
             activePanelHeight = availableHeight;
           } else {
-            activePanelHeight = panelState.panelHeight.clamp(90.0, availableHeight);
+            activePanelHeight = panelState.panelHeight.clamp(
+              90.0,
+              availableHeight,
+            );
           }
         }
 
@@ -439,32 +516,69 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             child: Row(
                               children: [
                                 Expanded(
-                                  child: Breadcrumbs(path: activeFile.path, workspacePath: workspacePath),
+                                  child: Breadcrumbs(
+                                    path: activeFile.path,
+                                    workspacePath: workspacePath,
+                                  ),
                                 ),
                                 IconButton(
-                                  icon: const Icon(LucideIcons.command, size: 13.5, color: Color(0xFF94A3B8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                                  icon: const Icon(
+                                    LucideIcons.command,
+                                    size: 13.5,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                  ),
                                   constraints: const BoxConstraints(),
-                                  onPressed: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.commands),
+                                  onPressed: () => QuickSwitcherDialog.show(
+                                    context,
+                                    initialMode: SwitcherMode.commands,
+                                  ),
                                   tooltip: 'Палитра команд (Command Palette)',
                                 ),
                                 IconButton(
-                                  icon: const Icon(LucideIcons.wand_sparkles, size: 13.5, color: Color(0xFF94A3B8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                                  icon: const Icon(
+                                    LucideIcons.wand_sparkles,
+                                    size: 13.5,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                  ),
                                   constraints: const BoxConstraints(),
-                                  onPressed: () => ref.read(editorProvider.notifier).formatActiveFile(),
+                                  onPressed: () => ref
+                                      .read(editorProvider.notifier)
+                                      .formatActiveFile(),
                                   tooltip: 'Форматировать код',
                                 ),
                                 IconButton(
-                                  icon: const Icon(LucideIcons.search, size: 13.5, color: Color(0xFF94A3B8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                                  icon: const Icon(
+                                    LucideIcons.search,
+                                    size: 13.5,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                  ),
                                   constraints: const BoxConstraints(),
-                                  onPressed: () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
-                                  tooltip: AppLocalizations.of(context)!.quickSearch,
+                                  onPressed: () => QuickSwitcherDialog.show(
+                                    context,
+                                    initialMode: SwitcherMode.files,
+                                  ),
+                                  tooltip: AppLocalizations.of(
+                                    context,
+                                  )!.quickSearch,
                                 ),
                                 IconButton(
-                                  icon: const Icon(LucideIcons.maximize_2, size: 13.5, color: Color(0xFF94A3B8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                                  icon: const Icon(
+                                    LucideIcons.maximize_2,
+                                    size: 13.5,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                  ),
                                   constraints: const BoxConstraints(),
                                   onPressed: () => _toggleZenMode(ref),
                                   tooltip: 'Режим фокуса (Zen Mode)',
@@ -472,128 +586,268 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ],
                             ),
                           ),
-                  Expanded(
-                    child: DropTarget(
-                      onDragDone: (detail) async {
-                        for (final file in detail.files) {
-                          if (workspacePath != null) {
-                            final targetPath = p.join(workspacePath, p.basename(file.path));
-                            final fileEntity = File(file.path);
-                            if (await fileEntity.exists()) {
-                              await fileEntity.copy(targetPath);
-                              ref.read(editorProvider.notifier).openFile(targetPath);
-                            }
-                          } else {
-                            ref.read(editorProvider.notifier).openFile(file.path);
-                          }
-                        }
-                      },
-                      child: CallbackShortcuts(
-                        bindings: {
-                          // Save file (Ctrl+S / Cmd+S)
-                          const SingleActivator(LogicalKeyboardKey.keyS, control: true):
-                              () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
-                          const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
-                              () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
-                          // Quick open files (Ctrl+P / Cmd+P)
-                          const SingleActivator(LogicalKeyboardKey.keyP, control: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
-                          const SingleActivator(LogicalKeyboardKey.keyP, meta: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
-                          // Command palette (Ctrl+Shift+P / Cmd+Shift+P)
-                          const SingleActivator(LogicalKeyboardKey.keyP, control: true, shift: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.commands),
-                          const SingleActivator(LogicalKeyboardKey.keyP, meta: true, shift: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.commands),
-                          // Search files (Ctrl+Shift+F / Cmd+Shift+F)
-                          const SingleActivator(LogicalKeyboardKey.keyF, control: true, shift: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
-                          const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.files),
-                          // Toggle Sidebar (Ctrl+B / Cmd+B)
-                          const SingleActivator(LogicalKeyboardKey.keyB, control: true): () {
-                            if (isDesktop) {
-                              ref.read(leftPanelOpenProvider.notifier).update((v) => !v);
-                            } else {
-                              if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-                                _scaffoldKey.currentState?.closeDrawer();
-                              } else {
-                                _scaffoldKey.currentState?.openDrawer();
+                        Expanded(
+                          child: DropTarget(
+                            onDragDone: (detail) async {
+                              for (final file in detail.files) {
+                                if (workspacePath != null) {
+                                  final targetPath = p.join(
+                                    workspacePath,
+                                    p.basename(file.path),
+                                  );
+                                  final fileEntity = File(file.path);
+                                  if (await fileEntity.exists()) {
+                                    await fileEntity.copy(targetPath);
+                                    ref
+                                        .read(editorProvider.notifier)
+                                        .openFile(targetPath);
+                                  }
+                                } else {
+                                  ref
+                                      .read(editorProvider.notifier)
+                                      .openFile(file.path);
+                                }
                               }
-                            }
-                          },
-                          const SingleActivator(LogicalKeyboardKey.keyB, meta: true): () {
-                            if (isDesktop) {
-                              ref.read(leftPanelOpenProvider.notifier).update((v) => !v);
-                            } else {
-                              if (_scaffoldKey.currentState?.isDrawerOpen ?? false) {
-                                _scaffoldKey.currentState?.closeDrawer();
-                              } else {
-                                _scaffoldKey.currentState?.openDrawer();
-                              }
-                            }
-                          },
-                          // Toggle Terminal Panel (Ctrl+` / Cmd+`)
-                          const SingleActivator(LogicalKeyboardKey.backquote, control: true):
-                              () => panelNotifier.toggle(),
-                          const SingleActivator(LogicalKeyboardKey.backquote, meta: true):
-                              () => panelNotifier.toggle(),
-                          // Quick symbols (Ctrl+T / Cmd+T)
-                          const SingleActivator(LogicalKeyboardKey.keyT, control: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.symbols),
-                          const SingleActivator(LogicalKeyboardKey.keyT, meta: true):
-                              () => QuickSwitcherDialog.show(context, initialMode: SwitcherMode.symbols),
-                          // Close active tab (Ctrl+W / Cmd+W)
-                          const SingleActivator(LogicalKeyboardKey.keyW, control: true):
-                              () => ref.read(editorProvider.notifier).closeTab(safeActiveIndex),
-                          const SingleActivator(LogicalKeyboardKey.keyW, meta: true):
-                              () => ref.read(editorProvider.notifier).closeTab(safeActiveIndex),
-                          // Find in file (Ctrl+F / Cmd+F)
-                          const SingleActivator(LogicalKeyboardKey.keyF, control: true):
-                              () => _showFindPanel(context, ref),
-                          const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
-                              () => _showFindPanel(context, ref),
-                          // Replace in file (Ctrl+H / Cmd+H)
-                          const SingleActivator(LogicalKeyboardKey.keyH, control: true):
-                              () => _showFindPanel(context, ref, replace: true),
-                          const SingleActivator(LogicalKeyboardKey.keyH, meta: true):
-                              () => _showFindPanel(context, ref, replace: true),
-                          // Duplicate line (Ctrl+D / Cmd+D)
-                          const SingleActivator(LogicalKeyboardKey.keyD, control: true):
-                              () => _duplicateLine(ref),
-                          const SingleActivator(LogicalKeyboardKey.keyD, meta: true):
-                              () => _duplicateLine(ref),
-                          // Zen mode (Ctrl+K / Cmd+K)
-                          const SingleActivator(LogicalKeyboardKey.keyK, control: true):
-                              () => _toggleZenMode(ref),
-                          const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
-                              () => _toggleZenMode(ref),
-                          // Split editor (Ctrl+\ / Cmd+\)
-                          const SingleActivator(LogicalKeyboardKey.backslash, control: true):
-                              () => _toggleSplitMode(ref),
-                          const SingleActivator(LogicalKeyboardKey.backslash, meta: true):
-                              () => _toggleSplitMode(ref),
-                          // Problems tab
-                          const SingleActivator(LogicalKeyboardKey.bracketLeft, control: true, shift: true):
-                              () => panelNotifier.selectTab(PanelTab.problems),
-                          const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true, shift: true):
-                              () => panelNotifier.selectTab(PanelTab.problems),
-                          // Run project (F5)
-                          const SingleActivator(LogicalKeyboardKey.f5): () {
-                            if (currentProject != null) {
-                              ref.read(projectServiceProvider.notifier).runProject(currentProject);
-                              panelNotifier.selectTab(PanelTab.terminal);
-                              panelNotifier.openPanel();
-                            }
-                          },
-                        },
-                        child: _isSplitMode ? _buildSplitEditor(ref, settings, activeFile) : _buildSingleEditor(ref, settings, activeFile),
-                      ),
+                            },
+                            child: CallbackShortcuts(
+                              bindings: {
+                                // Save file (Ctrl+S / Cmd+S)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyS,
+                                  control: true,
+                                ): () => ref
+                                    .read(editorProvider.notifier)
+                                    .saveFile(safeActiveIndex),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyS,
+                                  meta: true,
+                                ): () => ref
+                                    .read(editorProvider.notifier)
+                                    .saveFile(safeActiveIndex),
+                                // Quick open files (Ctrl+P / Cmd+P)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyP,
+                                  control: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.files,
+                                ),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyP,
+                                  meta: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.files,
+                                ),
+                                // Command palette (Ctrl+Shift+P / Cmd+Shift+P)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyP,
+                                  control: true,
+                                  shift: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.commands,
+                                ),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyP,
+                                  meta: true,
+                                  shift: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.commands,
+                                ),
+                                // Search files (Ctrl+Shift+F / Cmd+Shift+F)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyF,
+                                  control: true,
+                                  shift: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.files,
+                                ),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyF,
+                                  meta: true,
+                                  shift: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.files,
+                                ),
+                                // Toggle Sidebar (Ctrl+B / Cmd+B)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyB,
+                                  control: true,
+                                ): () {
+                                  if (isDesktop) {
+                                    ref
+                                        .read(leftPanelOpenProvider.notifier)
+                                        .update((v) => !v);
+                                  } else {
+                                    if (_scaffoldKey
+                                            .currentState
+                                            ?.isDrawerOpen ??
+                                        false) {
+                                      _scaffoldKey.currentState?.closeDrawer();
+                                    } else {
+                                      _scaffoldKey.currentState?.openDrawer();
+                                    }
+                                  }
+                                },
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyB,
+                                  meta: true,
+                                ): () {
+                                  if (isDesktop) {
+                                    ref
+                                        .read(leftPanelOpenProvider.notifier)
+                                        .update((v) => !v);
+                                  } else {
+                                    if (_scaffoldKey
+                                            .currentState
+                                            ?.isDrawerOpen ??
+                                        false) {
+                                      _scaffoldKey.currentState?.closeDrawer();
+                                    } else {
+                                      _scaffoldKey.currentState?.openDrawer();
+                                    }
+                                  }
+                                },
+                                // Toggle Terminal Panel (Ctrl+` / Cmd+`)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.backquote,
+                                  control: true,
+                                ): () =>
+                                    panelNotifier.toggle(),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.backquote,
+                                  meta: true,
+                                ): () =>
+                                    panelNotifier.toggle(),
+                                // Quick symbols (Ctrl+T / Cmd+T)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyT,
+                                  control: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.symbols,
+                                ),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyT,
+                                  meta: true,
+                                ): () => QuickSwitcherDialog.show(
+                                  context,
+                                  initialMode: SwitcherMode.symbols,
+                                ),
+                                // Close active tab (Ctrl+W / Cmd+W)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyW,
+                                  control: true,
+                                ): () => ref
+                                    .read(editorProvider.notifier)
+                                    .closeTab(safeActiveIndex),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyW,
+                                  meta: true,
+                                ): () => ref
+                                    .read(editorProvider.notifier)
+                                    .closeTab(safeActiveIndex),
+                                // Find in file (Ctrl+F / Cmd+F)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyF,
+                                  control: true,
+                                ): () =>
+                                    _showFindPanel(context, ref),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyF,
+                                  meta: true,
+                                ): () =>
+                                    _showFindPanel(context, ref),
+                                // Replace in file (Ctrl+H / Cmd+H)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyH,
+                                  control: true,
+                                ): () =>
+                                    _showFindPanel(context, ref, replace: true),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyH,
+                                  meta: true,
+                                ): () =>
+                                    _showFindPanel(context, ref, replace: true),
+                                // Duplicate line (Ctrl+D / Cmd+D)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyD,
+                                  control: true,
+                                ): () =>
+                                    _duplicateLine(ref),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyD,
+                                  meta: true,
+                                ): () =>
+                                    _duplicateLine(ref),
+                                // Zen mode (Ctrl+K / Cmd+K)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyK,
+                                  control: true,
+                                ): () =>
+                                    _toggleZenMode(ref),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.keyK,
+                                  meta: true,
+                                ): () =>
+                                    _toggleZenMode(ref),
+                                // Split editor (Ctrl+\ / Cmd+\)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.backslash,
+                                  control: true,
+                                ): () =>
+                                    _toggleSplitMode(ref),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.backslash,
+                                  meta: true,
+                                ): () =>
+                                    _toggleSplitMode(ref),
+                                // Problems tab
+                                const SingleActivator(
+                                  LogicalKeyboardKey.bracketLeft,
+                                  control: true,
+                                  shift: true,
+                                ): () =>
+                                    panelNotifier.selectTab(PanelTab.problems),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.bracketLeft,
+                                  meta: true,
+                                  shift: true,
+                                ): () =>
+                                    panelNotifier.selectTab(PanelTab.problems),
+                                // Run project (F5)
+                                const SingleActivator(
+                                  LogicalKeyboardKey.f5,
+                                ): () {
+                                  if (currentProject != null) {
+                                    ref
+                                        .read(projectServiceProvider.notifier)
+                                        .runProject(currentProject);
+                                    panelNotifier.selectTab(PanelTab.terminal);
+                                    panelNotifier.openPanel();
+                                  }
+                                },
+                              },
+                              child: _isSplitMode
+                                  ? _buildSplitEditor(ref, settings, activeFile)
+                                  : _buildSingleEditor(
+                                      ref,
+                                      settings,
+                                      activeFile,
+                                    ),
+                            ),
+                          ),
+                        ),
+                        if (Platform.isAndroid || Platform.isIOS || !isDesktop)
+                          KeyboardAccessoryBar(
+                            controller: activeFile.controller,
+                          ),
+                      ],
                     ),
-                  ),
-                  if (Platform.isAndroid || Platform.isIOS || !isDesktop) KeyboardAccessoryBar(controller: activeFile.controller),
-                ],
-              ),
             ),
 
             // ── Панель (overlay, выезжает снизу поверх редактора над клавиатурой) ────
@@ -644,11 +898,17 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     onTap: () => _toggleZenMode(ref),
                     borderRadius: BorderRadius.circular(20),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF141824).withValues(alpha: 0.92),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.45), width: 0.8),
+                        border: Border.all(
+                          color: Colors.cyanAccent.withValues(alpha: 0.45),
+                          width: 0.8,
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.5),
@@ -660,7 +920,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(LucideIcons.minimize_2, size: 13, color: Colors.cyanAccent),
+                          const Icon(
+                            LucideIcons.minimize_2,
+                            size: 13,
+                            color: Colors.cyanAccent,
+                          ),
                           const SizedBox(width: 5),
                           Text(
                             'Выйти из Zen',
@@ -718,7 +982,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         key: _scaffoldKey,
         resizeToAvoidBottomInset: false,
         drawer: isDesktop ? null : const FileDrawer(),
-        endDrawer: canDockSide ? null : _buildMobileAiDrawer(context, screenWidth),
+        endDrawer: canDockSide
+            ? null
+            : _buildMobileAiDrawer(context, screenWidth),
         appBar: _isZenMode
             ? null
             : PreferredSize(
@@ -727,7 +993,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                   blur: 30,
                   opacity: 0.1,
                   border: Border(
-                    bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
+                    bottom: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      width: 0.5,
+                    ),
                   ),
                   child: SafeArea(
                     child: Column(
@@ -739,21 +1008,45 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               const SizedBox(width: 8),
                               ActionIconButton(
                                 icon: LucideIcons.panel_left,
-                                color: (isDesktop && ref.watch(leftPanelOpenProvider))
+                                color:
+                                    (isDesktop &&
+                                        ref.watch(leftPanelOpenProvider))
                                     ? const Color(0xFFE2E8F0)
                                     : const Color(0xFF94A3B8),
-                                tooltip: AppLocalizations.of(context)!.openExplorer,
+                                tooltip: AppLocalizations.of(
+                                  context,
+                                )!.openExplorer,
                                 onTap: () {
                                   if (isDesktop) {
-                                    final isOpen = ref.read(leftPanelOpenProvider);
-                                    final currentTab = ref.read(drawerTabProvider);
+                                    final isOpen = ref.read(
+                                      leftPanelOpenProvider,
+                                    );
+                                    final currentTab = ref.read(
+                                      drawerTabProvider,
+                                    );
                                     if (!isOpen) {
-                                      ref.read(drawerTabProvider.notifier).state = 0;
-                                      ref.read(leftPanelOpenProvider.notifier).state = true;
+                                      ref
+                                              .read(drawerTabProvider.notifier)
+                                              .state =
+                                          0;
+                                      ref
+                                              .read(
+                                                leftPanelOpenProvider.notifier,
+                                              )
+                                              .state =
+                                          true;
                                     } else if (currentTab != 0) {
-                                      ref.read(drawerTabProvider.notifier).state = 0;
+                                      ref
+                                              .read(drawerTabProvider.notifier)
+                                              .state =
+                                          0;
                                     } else {
-                                      ref.read(leftPanelOpenProvider.notifier).state = false;
+                                      ref
+                                              .read(
+                                                leftPanelOpenProvider.notifier,
+                                              )
+                                              .state =
+                                          false;
                                     }
                                   } else {
                                     _scaffoldKey.currentState?.openDrawer();
@@ -761,9 +1054,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 },
                               ),
                               const SizedBox(width: 6),
-                              const Expanded(
-                                child: EditorAppBarTitle(),
-                              ),
+                              const Expanded(child: EditorAppBarTitle()),
                               const SizedBox(width: 8),
                               Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -773,45 +1064,148 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   ActionIconButton(
                                     icon: LucideIcons.play,
                                     color: const Color(0xFF10B981),
-                                    backgroundColor: const Color(0xFF10B981).withValues(alpha: 0.14),
-                                    borderColor: const Color(0xFF10B981).withValues(alpha: 0.32),
+                                    backgroundColor: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.14),
+                                    borderColor: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.32),
                                     tooltip: 'Запустить проект (F5)',
                                     onTap: () {
                                       if (currentProject != null) {
-                                        ref.read(projectServiceProvider.notifier).runProject(currentProject);
-                                        panelNotifier.selectTab(PanelTab.terminal);
+                                        ref
+                                            .read(
+                                              projectServiceProvider.notifier,
+                                            )
+                                            .runProject(currentProject);
+                                        panelNotifier.selectTab(
+                                          PanelTab.terminal,
+                                        );
                                         panelNotifier.openPanel();
                                       } else {
-                                        panelNotifier.selectTab(PanelTab.terminal);
+                                        panelNotifier.selectTab(
+                                          PanelTab.terminal,
+                                        );
                                         panelNotifier.openPanel();
                                       }
+                                    },
+                                  ),
+                                  const SizedBox(width: 4),
+                                  // Dedicated Build Menu Button (APK / AAB) — Amber Accent
+                                  PopupMenuButton<String>(
+                                    tooltip: 'Сборка проекта (APK / AAB)',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    color: const Color(0xFF161922),
+                                    elevation: 12,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      side: BorderSide(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                      ),
+                                    ),
+                                    icon: Container(
+                                      width: 32,
+                                      height: 32,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: const Color(
+                                          0xFFF59E0B,
+                                        ).withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(7),
+                                        border: Border.all(
+                                          color: const Color(
+                                            0xFFF59E0B,
+                                          ).withValues(alpha: 0.32),
+                                          width: 0.8,
+                                        ),
+                                      ),
+                                      child: const Icon(
+                                        LucideIcons.hammer,
+                                        size: 15,
+                                        color: Color(0xFFF59E0B),
+                                      ),
+                                    ),
+                                    itemBuilder: (context) => [
+                                      _buildBuildMenuItem(
+                                        'build_apk',
+                                        LucideIcons.package,
+                                        'Собрать Release APK',
+                                        'Готовый APK для установки (ARM64)',
+                                        Colors.orange,
+                                      ),
+                                      _buildBuildMenuItem(
+                                        'build_aab',
+                                        LucideIcons.rocket,
+                                        'Собрать AppBundle (AAB)',
+                                        'Бандл для публикации в Google Play',
+                                        Colors.purpleAccent,
+                                      ),
+                                      _buildBuildMenuItem(
+                                        'build_split',
+                                        LucideIcons.boxes,
+                                        'Собрать Split APKs',
+                                        'Отдельные APK по архитектурам',
+                                        Colors.amberAccent,
+                                      ),
+                                      _buildBuildMenuItem(
+                                        'build_debug',
+                                        LucideIcons.bug,
+                                        'Собрать Debug APK',
+                                        'Быстрая отладочная сборка',
+                                        Colors.yellow,
+                                      ),
+                                    ],
+                                    onSelected: (action) {
+                                      _triggerProjectBuild(
+                                        ref,
+                                        panelNotifier,
+                                        action,
+                                      );
                                     },
                                   ),
                                   const SizedBox(width: 4),
                                   ActionIconButton(
                                     icon: LucideIcons.save,
                                     color: const Color(0xFF94A3B8),
-                                    tooltip: AppLocalizations.of(context)!.saveTooltip,
-                                    onTap: () => ref.read(editorProvider.notifier).saveFile(safeActiveIndex),
+                                    tooltip: AppLocalizations.of(
+                                      context,
+                                    )!.saveTooltip,
+                                    onTap: () => ref
+                                        .read(editorProvider.notifier)
+                                        .saveFile(safeActiveIndex),
                                   ),
                                   if (isMarkdownFile) ...[
                                     const SizedBox(width: 4),
                                     ActionIconButton(
-                                      icon: activeFile.isMarkdownPreview ? LucideIcons.code : LucideIcons.eye,
+                                      icon: activeFile.isMarkdownPreview
+                                          ? LucideIcons.code
+                                          : LucideIcons.eye,
                                       color: activeFile.isMarkdownPreview
                                           ? const Color(0xFFA78BFA)
                                           : const Color(0xFF94A3B8),
-                                      backgroundColor: activeFile.isMarkdownPreview
-                                          ? const Color(0xFF8B5CF6).withValues(alpha: 0.15)
+                                      backgroundColor:
+                                          activeFile.isMarkdownPreview
+                                          ? const Color(
+                                              0xFF8B5CF6,
+                                            ).withValues(alpha: 0.15)
                                           : null,
                                       borderColor: activeFile.isMarkdownPreview
-                                          ? const Color(0xFF8B5CF6).withValues(alpha: 0.35)
+                                          ? const Color(
+                                              0xFF8B5CF6,
+                                            ).withValues(alpha: 0.35)
                                           : null,
                                       tooltip: activeFile.isMarkdownPreview
                                           ? 'Режим редактора (Код)'
                                           : 'Предпросмотр Markdown',
                                       onTap: () {
-                                        ref.read(editorProvider.notifier).toggleMarkdownPreview(activeFile.path);
+                                        ref
+                                            .read(editorProvider.notifier)
+                                            .toggleMarkdownPreview(
+                                              activeFile.path,
+                                            );
                                       },
                                     ),
                                   ],
@@ -819,23 +1213,50 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     const SizedBox(width: 4),
                                     Consumer(
                                       builder: (context, ref, _) {
-                                        final changesCount = ref.watch(gitProvider.select((s) => 
-                                          (s.status?.stagedFiles.length ?? 0) + 
-                                          (s.status?.modifiedFiles.length ?? 0) + 
-                                          (s.status?.untrackedFiles.length ?? 0) +
-                                          (s.status?.conflictedFiles.length ?? 0)
-                                        ));
+                                        final changesCount = ref.watch(
+                                          gitProvider.select(
+                                            (s) =>
+                                                (s.status?.stagedFiles.length ??
+                                                    0) +
+                                                (s
+                                                        .status
+                                                        ?.modifiedFiles
+                                                        .length ??
+                                                    0) +
+                                                (s
+                                                        .status
+                                                        ?.untrackedFiles
+                                                        .length ??
+                                                    0) +
+                                                (s
+                                                        .status
+                                                        ?.conflictedFiles
+                                                        .length ??
+                                                    0),
+                                          ),
+                                        );
                                         return ActionIconButton(
                                           icon: LucideIcons.git_branch,
-                                          color: (panelState.isOpened && panelState.selectedTab == PanelTab.git)
+                                          color:
+                                              (panelState.isOpened &&
+                                                  panelState.selectedTab ==
+                                                      PanelTab.git)
                                               ? const Color(0xFFE2E8F0)
-                                              : (changesCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)),
-                                          tooltip: changesCount > 0 ? 'Git ($changesCount изм.)' : 'Git',
+                                              : (changesCount > 0
+                                                    ? const Color(0xFFF59E0B)
+                                                    : const Color(0xFF94A3B8)),
+                                          tooltip: changesCount > 0
+                                              ? 'Git ($changesCount изм.)'
+                                              : 'Git',
                                           onTap: () {
-                                            if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
+                                            if (panelState.isOpened &&
+                                                panelState.selectedTab ==
+                                                    PanelTab.git) {
                                               panelNotifier.closePanel();
                                             } else {
-                                              panelNotifier.selectTab(PanelTab.git);
+                                              panelNotifier.selectTab(
+                                                PanelTab.git,
+                                              );
                                               panelNotifier.openPanel();
                                             }
                                           },
@@ -845,15 +1266,24 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     const SizedBox(width: 4),
                                     ActionIconButton(
                                       icon: LucideIcons.terminal,
-                                      color: (panelState.isOpened && panelState.selectedTab == PanelTab.terminal)
+                                      color:
+                                          (panelState.isOpened &&
+                                              panelState.selectedTab ==
+                                                  PanelTab.terminal)
                                           ? const Color(0xFFE2E8F0)
                                           : const Color(0xFF94A3B8),
-                                      tooltip: AppLocalizations.of(context)!.terminal,
+                                      tooltip: AppLocalizations.of(
+                                        context,
+                                      )!.terminal,
                                       onTap: () {
-                                        if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
+                                        if (panelState.isOpened &&
+                                            panelState.selectedTab ==
+                                                PanelTab.terminal) {
                                           panelNotifier.closePanel();
                                         } else {
-                                          panelNotifier.selectTab(PanelTab.terminal);
+                                          panelNotifier.selectTab(
+                                            PanelTab.terminal,
+                                          );
                                           panelNotifier.openPanel();
                                         }
                                       },
@@ -863,15 +1293,23 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     const SizedBox(width: 4),
                                     ActionIconButton(
                                       icon: LucideIcons.smartphone,
-                                      color: (panelState.selectedTab == PanelTab.deviceMirror && panelState.isOpened)
+                                      color:
+                                          (panelState.selectedTab ==
+                                                  PanelTab.deviceMirror &&
+                                              panelState.isOpened)
                                           ? const Color(0xFFE2E8F0)
                                           : const Color(0xFF94A3B8),
-                                      tooltip: 'Экран телефона и USB (Device Mirroring)',
+                                      tooltip:
+                                          'Экран телефона и USB (Device Mirroring)',
                                       onTap: () {
-                                        if (panelState.isOpened && panelState.selectedTab == PanelTab.deviceMirror) {
+                                        if (panelState.isOpened &&
+                                            panelState.selectedTab ==
+                                                PanelTab.deviceMirror) {
                                           panelNotifier.closePanel();
                                         } else {
-                                          panelNotifier.selectTab(PanelTab.deviceMirror);
+                                          panelNotifier.selectTab(
+                                            PanelTab.deviceMirror,
+                                          );
                                           panelNotifier.openPanel();
                                         }
                                       },
@@ -884,12 +1322,21 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     color: (canDockSide && isRightAiOpen)
                                         ? Colors.white
                                         : const Color(0xFFA78BFA),
-                                    backgroundColor: (canDockSide && isRightAiOpen)
+                                    backgroundColor:
+                                        (canDockSide && isRightAiOpen)
                                         ? const Color(0xFF8B5CF6)
-                                        : const Color(0xFF8B5CF6).withValues(alpha: 0.14),
-                                    borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.38),
+                                        : const Color(
+                                            0xFF8B5CF6,
+                                          ).withValues(alpha: 0.14),
+                                    borderColor: const Color(
+                                      0xFF8B5CF6,
+                                    ).withValues(alpha: 0.38),
                                     tooltip: 'Боковая панель Quantum AI Агента',
-                                    onTap: () => _toggleAiAgent(context, ref, canDockSide),
+                                    onTap: () => _toggleAiAgent(
+                                      context,
+                                      ref,
+                                      canDockSide,
+                                    ),
                                   ),
                                   const SizedBox(width: 4),
                                   PopupMenuButton<String>(
@@ -900,7 +1347,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     elevation: 12,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
-                                      side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+                                      side: BorderSide(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                      ),
                                     ),
                                     icon: Container(
                                       width: 32,
@@ -909,61 +1360,113 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                       decoration: BoxDecoration(
                                         color: const Color(0xFF141720),
                                         borderRadius: BorderRadius.circular(7),
-                                        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 0.8),
+                                        border: Border.all(
+                                          color: Colors.white.withValues(
+                                            alpha: 0.08,
+                                          ),
+                                          width: 0.8,
+                                        ),
                                       ),
-                                      child: const Icon(LucideIcons.ellipsis_vertical, size: 15, color: Color(0xFF94A3B8)),
+                                      child: const Icon(
+                                        LucideIcons.ellipsis_vertical,
+                                        size: 15,
+                                        color: Color(0xFF94A3B8),
+                                      ),
                                     ),
                                     onSelected: (value) async {
                                       switch (value) {
                                         case 'undo':
-                                          try { activeFile?.controller.undo(); } catch (_) {}
+                                          try {
+                                            activeFile?.controller.undo();
+                                          } catch (_) {}
                                           break;
                                         case 'redo':
-                                          try { activeFile?.controller.redo(); } catch (_) {}
+                                          try {
+                                            activeFile?.controller.redo();
+                                          } catch (_) {}
                                           break;
                                         case 'git':
-                                          if (panelState.isOpened && panelState.selectedTab == PanelTab.git) {
+                                          if (panelState.isOpened &&
+                                              panelState.selectedTab ==
+                                                  PanelTab.git) {
                                             panelNotifier.closePanel();
                                           } else {
-                                            panelNotifier.selectTab(PanelTab.git);
+                                            panelNotifier.selectTab(
+                                              PanelTab.git,
+                                            );
                                             panelNotifier.openPanel();
                                           }
                                           break;
                                         case 'terminal':
-                                          if (panelState.isOpened && panelState.selectedTab == PanelTab.terminal) {
+                                          if (panelState.isOpened &&
+                                              panelState.selectedTab ==
+                                                  PanelTab.terminal) {
                                             panelNotifier.closePanel();
                                           } else {
-                                            panelNotifier.selectTab(PanelTab.terminal);
+                                            panelNotifier.selectTab(
+                                              PanelTab.terminal,
+                                            );
                                             panelNotifier.openPanel();
                                           }
                                           break;
                                         case 'device_mirror':
-                                          if (panelState.isOpened && panelState.selectedTab == PanelTab.deviceMirror) {
+                                          if (panelState.isOpened &&
+                                              panelState.selectedTab ==
+                                                  PanelTab.deviceMirror) {
                                             panelNotifier.closePanel();
                                           } else {
-                                            panelNotifier.selectTab(PanelTab.deviceMirror);
+                                            panelNotifier.selectTab(
+                                              PanelTab.deviceMirror,
+                                            );
                                             panelNotifier.openPanel();
                                           }
                                           break;
                                         case 'ai_agent':
                                         case 'dsh':
-                                          _toggleAiAgent(context, ref, canDockSide);
+                                          _toggleAiAgent(
+                                            context,
+                                            ref,
+                                            canDockSide,
+                                          );
                                           break;
                                         case 'sync':
-                                          final currentWs = ref.read(workspaceProvider).currentPath;
+                                          final currentWs = ref
+                                              .read(workspaceProvider)
+                                              .currentPath;
                                           if (currentWs != null) {
-                                            ref.read(projectSyncProvider.notifier).startSync(currentWs, force: true);
+                                            ref
+                                                .read(
+                                                  projectSyncProvider.notifier,
+                                                )
+                                                .startSync(
+                                                  currentWs,
+                                                  force: true,
+                                                );
                                           }
                                           break;
+                                        case 'build_apk':
+                                        case 'build_aab':
+                                          _triggerProjectBuild(
+                                            ref,
+                                            panelNotifier,
+                                            value,
+                                          );
+                                          break;
                                         case 'home':
-                                          await ref.read(workspaceProvider.notifier).closeWorkspace();
+                                          await ref
+                                              .read(workspaceProvider.notifier)
+                                              .closeWorkspace();
                                           if (context.mounted) {
                                             context.go('/');
                                           }
                                           break;
                                         case 'toggle_markdown':
                                           if (activeFile != null) {
-                                            ref.read(editorProvider.notifier).toggleMarkdownPreview(activeFile.path);
+                                            ref
+                                                .read(editorProvider.notifier)
+                                                .toggleMarkdownPreview(
+                                                  activeFile.path,
+                                                );
                                           }
                                           break;
                                       }
@@ -974,9 +1477,23 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                           value: 'toggle_markdown',
                                           child: Row(
                                             children: [
-                                              Icon(activeFile.isMarkdownPreview ? LucideIcons.code : LucideIcons.eye, size: 16, color: const Color(0xFF94A3B8)),
+                                              Icon(
+                                                activeFile.isMarkdownPreview
+                                                    ? LucideIcons.code
+                                                    : LucideIcons.eye,
+                                                size: 16,
+                                                color: const Color(0xFF94A3B8),
+                                              ),
                                               const SizedBox(width: 10),
-                                              Text(activeFile.isMarkdownPreview ? 'Редактировать код' : 'Предпросмотр Markdown', style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                              Text(
+                                                activeFile.isMarkdownPreview
+                                                    ? 'Редактировать код'
+                                                    : 'Предпросмотр Markdown',
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -985,17 +1502,54 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                           value: 'git',
                                           child: Consumer(
                                             builder: (context, ref, _) {
-                                              final changesCount = ref.watch(gitProvider.select((s) => 
-                                                (s.status?.stagedFiles.length ?? 0) + 
-                                                (s.status?.modifiedFiles.length ?? 0) + 
-                                                (s.status?.untrackedFiles.length ?? 0) + 
-                                                (s.status?.conflictedFiles.length ?? 0)
-                                              ));
+                                              final changesCount = ref.watch(
+                                                gitProvider.select(
+                                                  (s) =>
+                                                      (s
+                                                              .status
+                                                              ?.stagedFiles
+                                                              .length ??
+                                                          0) +
+                                                      (s
+                                                              .status
+                                                              ?.modifiedFiles
+                                                              .length ??
+                                                          0) +
+                                                      (s
+                                                              .status
+                                                              ?.untrackedFiles
+                                                              .length ??
+                                                          0) +
+                                                      (s
+                                                              .status
+                                                              ?.conflictedFiles
+                                                              .length ??
+                                                          0),
+                                                ),
+                                              );
                                               return Row(
                                                 children: [
-                                                  Icon(LucideIcons.git_branch, size: 16, color: changesCount > 0 ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)),
+                                                  Icon(
+                                                    LucideIcons.git_branch,
+                                                    size: 16,
+                                                    color: changesCount > 0
+                                                        ? const Color(
+                                                            0xFFF59E0B,
+                                                          )
+                                                        : const Color(
+                                                            0xFF94A3B8,
+                                                          ),
+                                                  ),
                                                   const SizedBox(width: 10),
-                                                  Text(changesCount > 0 ? 'Git ($changesCount изм.)' : 'Git', style: const TextStyle(fontSize: 13, color: Colors.white)),
+                                                  Text(
+                                                    changesCount > 0
+                                                        ? 'Git ($changesCount изм.)'
+                                                        : 'Git',
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
                                                 ],
                                               );
                                             },
@@ -1005,9 +1559,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                           value: 'terminal',
                                           child: Row(
                                             children: [
-                                              Icon(LucideIcons.terminal, size: 16, color: Color(0xFF94A3B8)),
+                                              Icon(
+                                                LucideIcons.terminal,
+                                                size: 16,
+                                                color: Color(0xFF94A3B8),
+                                              ),
                                               SizedBox(width: 10),
-                                              Text('Терминал', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                              Text(
+                                                'Терминал',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -1015,9 +1579,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                           value: 'device_mirror',
                                           child: Row(
                                             children: [
-                                              Icon(LucideIcons.smartphone, size: 16, color: Color(0xFF94A3B8)),
+                                              Icon(
+                                                LucideIcons.smartphone,
+                                                size: 16,
+                                                color: Color(0xFF94A3B8),
+                                              ),
                                               SizedBox(width: 10),
-                                              Text('Экран телефона и USB', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                              Text(
+                                                'Экран телефона и USB',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -1026,9 +1600,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         value: 'sync',
                                         child: Row(
                                           children: [
-                                            Icon(LucideIcons.refresh_cw, size: 16, color: Color(0xFF94A3B8)),
+                                            Icon(
+                                              LucideIcons.refresh_cw,
+                                              size: 16,
+                                              color: Color(0xFF94A3B8),
+                                            ),
                                             SizedBox(width: 10),
-                                            Text('Синхронизировать проект', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                            Text(
+                                              'Синхронизировать проект',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -1036,9 +1620,59 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         value: 'ai_agent',
                                         child: Row(
                                           children: [
-                                            Icon(LucideIcons.sparkles, size: 16, color: Color(0xFFA78BFA)),
+                                            Icon(
+                                              LucideIcons.sparkles,
+                                              size: 16,
+                                              color: Color(0xFFA78BFA),
+                                            ),
                                             SizedBox(width: 10),
-                                            Text('Боковая панель Quantum AI', style: TextStyle(fontSize: 13, color: Colors.white)),
+                                            Text(
+                                              'Боковая панель Quantum AI',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'build_apk',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              LucideIcons.package,
+                                              size: 16,
+                                              color: Colors.orange,
+                                            ),
+                                            SizedBox(width: 10),
+                                            Text(
+                                              'Собрать Release APK',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'build_aab',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              LucideIcons.rocket,
+                                              size: 16,
+                                              color: Colors.purpleAccent,
+                                            ),
+                                            SizedBox(width: 10),
+                                            Text(
+                                              'Собрать AppBundle (AAB)',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -1047,9 +1681,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         value: 'home',
                                         child: Row(
                                           children: [
-                                            const Icon(LucideIcons.house, size: 16, color: Color(0xFF94A3B8)),
+                                            const Icon(
+                                              LucideIcons.house,
+                                              size: 16,
+                                              color: Color(0xFF94A3B8),
+                                            ),
                                             const SizedBox(width: 10),
-                                            Text(l10n.home, style: const TextStyle(fontSize: 13, color: Colors.white70)),
+                                            Text(
+                                              l10n.home,
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white70,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ),
@@ -1071,7 +1715,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         body: _buildWorkspaceLayout(
           mainBody,
           screenWidth: screenWidth,
-          leftOpen: isDesktop && ref.watch(leftPanelOpenProvider) && !_isZenMode,
+          leftOpen:
+              isDesktop && ref.watch(leftPanelOpenProvider) && !_isZenMode,
           rightAiOpen: canDockSide && isRightAiOpen && !_isZenMode,
         ),
         bottomNavigationBar: _isZenMode ? null : const StatusBar(),
@@ -1081,7 +1726,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   /// На смартфонах (< 650px) Quantum AI Агент открывается сбоку справа как растягиваемая боковая панель.
   Widget _buildMobileAiDrawer(BuildContext context, double screenWidth) {
-    final drawerWidth = (screenWidth * _mobileAiDrawerFraction).clamp(280.0, screenWidth);
+    final drawerWidth = (screenWidth * _mobileAiDrawerFraction).clamp(
+      280.0,
+      screenWidth,
+    );
     return SizedBox(
       width: drawerWidth,
       child: Drawer(
@@ -1095,8 +1743,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 behavior: HitTestBehavior.opaque,
                 onHorizontalDragUpdate: (details) {
                   setState(() {
-                    final nextWidth = (drawerWidth - details.delta.dx).clamp(280.0, screenWidth);
-                    _mobileAiDrawerFraction = (nextWidth / screenWidth).clamp(0.70, 1.0);
+                    final nextWidth = (drawerWidth - details.delta.dx).clamp(
+                      280.0,
+                      screenWidth,
+                    );
+                    _mobileAiDrawerFraction = (nextWidth / screenWidth).clamp(
+                      0.70,
+                      1.0,
+                    );
                   });
                 },
                 child: Container(
@@ -1119,7 +1773,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                   isExpanded: _mobileAiDrawerFraction > 0.95,
                   onToggleExpand: () {
                     setState(() {
-                      _mobileAiDrawerFraction = _mobileAiDrawerFraction > 0.95 ? 0.85 : 1.0;
+                      _mobileAiDrawerFraction = _mobileAiDrawerFraction > 0.95
+                          ? 0.85
+                          : 1.0;
                     });
                   },
                   onClose: () => _scaffoldKey.currentState?.closeEndDrawer(),
@@ -1146,7 +1802,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         isKeyboardOpen &&
         panelState.selectedTab == PanelTab.terminal;
 
-    final double targetHeight = (panelState.isMaximized || isMobileTerminalWithKeyboard)
+    final double targetHeight =
+        (panelState.isMaximized || isMobileTerminalWithKeyboard)
         ? maxAllowedPanelHeight
         : panelState.panelHeight.clamp(80.0, maxAllowedPanelHeight);
 
@@ -1164,17 +1821,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             topRight: Radius.circular(14),
           ),
           boxShadow: [
-            BoxShadow(
-              color: Colors.black54,
-              blurRadius: 10,
-              spreadRadius: 2,
-            ),
+            BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 2),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildPanelHeader(context, panelState, panelNotifier, maxAllowedPanelHeight),
+            _buildPanelHeader(
+              context,
+              panelState,
+              panelNotifier,
+              maxAllowedPanelHeight,
+            ),
             Expanded(
               child: panelState.panelHeight > 60
                   ? const TerminalPanelContent(onlyTerminal: false)
@@ -1194,11 +1852,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   }) {
     // Гарантируем, что центральному редактору всегда остаётся минимум 260px на планшетах и ПК
     final maxLeftWidth = (screenWidth * 0.35).clamp(180.0, 480.0);
-    final effectiveLeftWidth = leftOpen ? _leftSidebarWidth.clamp(180.0, maxLeftWidth) : 0.0;
+    final effectiveLeftWidth = leftOpen
+        ? _leftSidebarWidth.clamp(180.0, maxLeftWidth)
+        : 0.0;
 
-    final maxRightWidth = (screenWidth - effectiveLeftWidth - 260.0).clamp(260.0, 720.0);
+    final maxRightWidth = (screenWidth - effectiveLeftWidth - 260.0).clamp(
+      260.0,
+      720.0,
+    );
     final effectiveRightWidth = rightAiOpen
-        ? (_isAiDockExpanded ? maxRightWidth : _rightAiPanelWidth.clamp(260.0, maxRightWidth))
+        ? (_isAiDockExpanded
+              ? maxRightWidth
+              : _rightAiPanelWidth.clamp(260.0, maxRightWidth))
         : 0.0;
 
     return Row(
@@ -1219,7 +1884,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               onHorizontalDragStart: (_) => setState(() => _isDragging = true),
               onHorizontalDragUpdate: (details) {
                 setState(() {
-                  _leftSidebarWidth = (_leftSidebarWidth + details.delta.dx).clamp(180.0, maxLeftWidth);
+                  _leftSidebarWidth = (_leftSidebarWidth + details.delta.dx)
+                      .clamp(180.0, maxLeftWidth);
                 });
               },
               onHorizontalDragEnd: (_) => setState(() {
@@ -1234,8 +1900,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       ? const Color(0xFF8B5CF6).withValues(alpha: 0.25)
                       : const Color(0xFF0D0F14),
                   border: Border(
-                    left: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
-                    right: BorderSide(color: Colors.white.withValues(alpha: 0.06), width: 0.5),
+                    left: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      width: 0.5,
+                    ),
+                    right: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      width: 0.5,
+                    ),
                   ),
                 ),
                 child: Center(
@@ -1243,7 +1915,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     width: 2,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: _isResizingLeft ? const Color(0xFFA78BFA) : Colors.white24,
+                      color: _isResizingLeft
+                          ? const Color(0xFFA78BFA)
+                          : Colors.white24,
                       borderRadius: BorderRadius.circular(1),
                     ),
                   ),
@@ -1252,9 +1926,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             ),
           ),
         ],
-        Expanded(
-          child: mainContent,
-        ),
+        Expanded(child: mainContent),
         if (rightAiOpen) ...[
           // Вертикальный разделитель для растягивания/уменьшения окна Quantum AI Агента сбоку
           MouseRegion(
@@ -1269,7 +1941,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               onHorizontalDragUpdate: (details) {
                 setState(() {
                   _isAiDockExpanded = false;
-                  _rightAiPanelWidth = (_rightAiPanelWidth - details.delta.dx).clamp(260.0, maxRightWidth);
+                  _rightAiPanelWidth = (_rightAiPanelWidth - details.delta.dx)
+                      .clamp(260.0, maxRightWidth);
                 });
               },
               onHorizontalDragEnd: (_) => setState(() {
@@ -1284,8 +1957,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       ? const Color(0xFF8B5CF6).withValues(alpha: 0.28)
                       : const Color(0xFF0D0F14),
                   border: Border(
-                    left: BorderSide(color: Colors.white.withValues(alpha: 0.07), width: 0.5),
-                    right: BorderSide(color: Colors.white.withValues(alpha: 0.07), width: 0.5),
+                    left: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      width: 0.5,
+                    ),
+                    right: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.07),
+                      width: 0.5,
+                    ),
                   ),
                 ),
                 child: Center(
@@ -1293,7 +1972,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     width: 2,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: _isResizingRight ? const Color(0xFFA78BFA) : Colors.white24,
+                      color: _isResizingRight
+                          ? const Color(0xFFA78BFA)
+                          : Colors.white24,
                       borderRadius: BorderRadius.circular(1),
                     ),
                   ),
@@ -1380,27 +2061,39 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       height: 30,
                       child: Builder(
                         builder: (context) {
-                          final isMobile = MediaQuery.of(context).size.width <= 800;
-                          final pluginState = ref.watch(quantumPluginServiceProvider);
+                          final isMobile =
+                              MediaQuery.of(context).size.width <= 800;
+                          final pluginState = ref.watch(
+                            quantumPluginServiceProvider,
+                          );
                           final termLayout = pluginState.terminalLayout;
-                          final disabledTabs = termLayout?.disabledPanelTabs ?? const [];
+                          final disabledTabs =
+                              termLayout?.disabledPanelTabs ?? const [];
 
                           // ИИ Агент вынесен в правую боковую панель, поэтому в нижней панели оставляем только терминальные инструменты
                           List<PanelTab> visibleTabs = PanelTab.values
                               .where((t) => t != PanelTab.aiAgent)
                               .toList();
-                          if (termLayout != null && termLayout.panelTabsOrder.isNotEmpty) {
+                          if (termLayout != null &&
+                              termLayout.panelTabsOrder.isNotEmpty) {
                             visibleTabs.sort((a, b) {
-                              final idxA = termLayout.panelTabsOrder.indexOf(a.name);
-                              final idxB = termLayout.panelTabsOrder.indexOf(b.name);
+                              final idxA = termLayout.panelTabsOrder.indexOf(
+                                a.name,
+                              );
+                              final idxB = termLayout.panelTabsOrder.indexOf(
+                                b.name,
+                              );
                               if (idxA == -1 && idxB == -1) return 0;
                               if (idxA == -1) return 1;
                               if (idxB == -1) return -1;
                               return idxA.compareTo(idxB);
                             });
                           }
-                          visibleTabs = visibleTabs.where((t) => !disabledTabs.contains(t.name)).toList();
-                          if (visibleTabs.isEmpty) visibleTabs = [PanelTab.terminal];
+                          visibleTabs = visibleTabs
+                              .where((t) => !disabledTabs.contains(t.name))
+                              .toList();
+                          if (visibleTabs.isEmpty)
+                            visibleTabs = [PanelTab.terminal];
 
                           return ListView.builder(
                             scrollDirection: Axis.horizontal,
@@ -1417,24 +2110,33 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   color: Colors.transparent,
                                   child: InkWell(
                                     onTap: () {
-                                      FocusManager.instance.primaryFocus?.unfocus();
+                                      FocusManager.instance.primaryFocus
+                                          ?.unfocus();
                                       panelNotifier.selectTab(tab);
                                     },
                                     borderRadius: BorderRadius.circular(6),
                                     child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 140),
+                                      duration: const Duration(
+                                        milliseconds: 140,
+                                      ),
                                       padding: EdgeInsets.symmetric(
-                                        horizontal: isMobile ? (isSelected ? 9 : 7) : 8,
+                                        horizontal: isMobile
+                                            ? (isSelected ? 9 : 7)
+                                            : 8,
                                         vertical: 4,
                                       ),
                                       decoration: BoxDecoration(
                                         color: isSelected
-                                            ? Colors.white.withValues(alpha: 0.06)
+                                            ? Colors.white.withValues(
+                                                alpha: 0.06,
+                                              )
                                             : Colors.transparent,
                                         borderRadius: BorderRadius.circular(5),
                                         border: Border(
                                           bottom: BorderSide(
-                                            color: isSelected ? tabColor : Colors.transparent,
+                                            color: isSelected
+                                                ? tabColor
+                                                : Colors.transparent,
                                             width: 2.0,
                                           ),
                                         ),
@@ -1445,14 +2147,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                           Icon(
                                             _getTabIcon(tab),
                                             size: 13,
-                                            color: isSelected ? const Color(0xFFE2E8F0) : const Color(0xFF64748B),
+                                            color: isSelected
+                                                ? const Color(0xFFE2E8F0)
+                                                : const Color(0xFF64748B),
                                           ),
                                           if (!isMobile || isSelected) ...[
                                             const SizedBox(width: 5),
                                             Text(
                                               _getTabTitle(context, tab),
                                               style: GoogleFonts.inter(
-                                                color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                                                color: isSelected
+                                                    ? Colors.white
+                                                    : const Color(0xFF94A3B8),
                                                 fontSize: 10.5,
                                                 fontWeight: isSelected
                                                     ? FontWeight.w600
@@ -1460,52 +2166,113 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                               ),
                                             ),
                                           ],
-                                          if (tab == PanelTab.problems || tab == PanelTab.git)
+                                          if (tab == PanelTab.problems ||
+                                              tab == PanelTab.git)
                                             Consumer(
                                               builder: (context, ref, _) {
                                                 int? count;
                                                 if (tab == PanelTab.problems) {
-                                                  final ws = ref.watch(workspaceProvider).currentPath;
-                                                  count = ref.watch(editorProvider.select((s) {
-                                                    int c = 0;
-                                                    s.allDiagnostics.forEach((filePath, list) {
-                                                      if (ws != null && filePath.startsWith(ws)) {
-                                                        for (final d in list) {
-                                                          if (d.severity == CodeDiagnosticSeverity.error ||
-                                                              d.severity == CodeDiagnosticSeverity.warning) {
-                                                            c++;
+                                                  final ws = ref
+                                                      .watch(workspaceProvider)
+                                                      .currentPath;
+                                                  count = ref.watch(
+                                                    editorProvider.select((s) {
+                                                      int c = 0;
+                                                      s.allDiagnostics.forEach((
+                                                        filePath,
+                                                        list,
+                                                      ) {
+                                                        if (ws != null &&
+                                                            filePath.startsWith(
+                                                              ws,
+                                                            )) {
+                                                          for (final d
+                                                              in list) {
+                                                            if (d.severity ==
+                                                                    CodeDiagnosticSeverity
+                                                                        .error ||
+                                                                d.severity ==
+                                                                    CodeDiagnosticSeverity
+                                                                        .warning) {
+                                                              c++;
+                                                            }
                                                           }
                                                         }
-                                                      }
-                                                    });
-                                                    return c;
-                                                  }));
-                                                } else if (tab == PanelTab.git) {
-                                                  count = ref.watch(gitProvider.select((s) => 
-                                                    (s.status?.stagedFiles.length ?? 0) + 
-                                                    (s.status?.modifiedFiles.length ?? 0) + 
-                                                    (s.status?.untrackedFiles.length ?? 0) +
-                                                    (s.status?.conflictedFiles.length ?? 0)
-                                                  ));
-                                                }
-                                                if (count == null || count <= 0) return const SizedBox.shrink();
-                                                return Padding(
-                                                  padding: const EdgeInsets.only(left: 4.0),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                    decoration: BoxDecoration(
-                                                      color: tab == PanelTab.problems ? const Color(0xFFEF4444) : const Color(0xFF475569),
-                                                      borderRadius: BorderRadius.circular(6),
+                                                      });
+                                                      return c;
+                                                    }),
+                                                  );
+                                                } else if (tab ==
+                                                    PanelTab.git) {
+                                                  count = ref.watch(
+                                                    gitProvider.select(
+                                                      (s) =>
+                                                          (s
+                                                                  .status
+                                                                  ?.stagedFiles
+                                                                  .length ??
+                                                              0) +
+                                                          (s
+                                                                  .status
+                                                                  ?.modifiedFiles
+                                                                  .length ??
+                                                              0) +
+                                                          (s
+                                                                  .status
+                                                                  ?.untrackedFiles
+                                                                  .length ??
+                                                              0) +
+                                                          (s
+                                                                  .status
+                                                                  ?.conflictedFiles
+                                                                  .length ??
+                                                              0),
                                                     ),
-                                                    constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                                                  );
+                                                }
+                                                if (count == null || count <= 0)
+                                                  return const SizedBox.shrink();
+                                                return Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        left: 4.0,
+                                                      ),
+                                                  child: Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 1,
+                                                        ),
+                                                    decoration: BoxDecoration(
+                                                      color:
+                                                          tab ==
+                                                              PanelTab.problems
+                                                          ? const Color(
+                                                              0xFFEF4444,
+                                                            )
+                                                          : const Color(
+                                                              0xFF475569,
+                                                            ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                            6,
+                                                          ),
+                                                    ),
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 12,
+                                                          minHeight: 12,
+                                                        ),
                                                     child: Text(
                                                       '$count',
                                                       style: const TextStyle(
                                                         color: Colors.white,
                                                         fontSize: 7.5,
-                                                        fontWeight: FontWeight.bold,
+                                                        fontWeight:
+                                                            FontWeight.bold,
                                                       ),
-                                                      textAlign: TextAlign.center,
+                                                      textAlign:
+                                                          TextAlign.center,
                                                     ),
                                                   ),
                                                 );
@@ -1528,15 +2295,25 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     width: 26,
                     height: 26,
                     child: IconButton(
-                      icon: const Icon(LucideIcons.sliders_horizontal, size: 13, color: Color(0xFF94A3B8)),
-                      tooltip: Localizations.localeOf(context).languageCode == 'ru'
+                      icon: const Icon(
+                        LucideIcons.sliders_horizontal,
+                        size: 13,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      tooltip:
+                          Localizations.localeOf(context).languageCode == 'ru'
                           ? 'Настроить кнопки и вкладки'
                           : 'Customize buttons & tabs',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 26,
+                        height: 26,
+                      ),
                       onPressed: () => UiCustomizerModal.show(
                         context,
-                        isRu: Localizations.localeOf(context).languageCode == 'ru',
+                        isRu:
+                            Localizations.localeOf(context).languageCode ==
+                            'ru',
                       ),
                     ),
                   ),
@@ -1553,7 +2330,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         color: const Color(0xFF94A3B8),
                       ),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 26,
+                        height: 26,
+                      ),
                       onPressed: () => panelNotifier.toggleMaximized(),
                     ),
                   ),
@@ -1562,9 +2342,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     width: 26,
                     height: 26,
                     child: IconButton(
-                      icon: const Icon(LucideIcons.x, size: 13, color: Color(0xFF94A3B8)),
+                      icon: const Icon(
+                        LucideIcons.x,
+                        size: 13,
+                        color: Color(0xFF94A3B8),
+                      ),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+                      constraints: const BoxConstraints.tightFor(
+                        width: 26,
+                        height: 26,
+                      ),
                       onPressed: () => panelNotifier.closePanel(),
                     ),
                   ),
@@ -1579,7 +2366,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   Widget _buildQuickUpdatePill(WidgetRef ref) {
     final updateState = ref.watch(appUpdateServiceProvider);
-    if (!updateState.hasUpdate && !updateState.isDownloading) return const SizedBox.shrink();
+    if (!updateState.hasUpdate && !updateState.isDownloading)
+      return const SizedBox.shrink();
 
     if (updateState.isDownloading) {
       final pct = (updateState.downloadProgress * 100).toInt();
@@ -1589,7 +2377,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         decoration: BoxDecoration(
           color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.4)),
+          border: Border.all(
+            color: const Color(0xFF8B5CF6).withValues(alpha: 0.4),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1597,12 +2387,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             const SizedBox(
               width: 10,
               height: 10,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFA78BFA)),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFFA78BFA),
+              ),
             ),
             const SizedBox(width: 6),
             Text(
               '$pct%',
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFFA78BFA)),
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFA78BFA),
+              ),
             ),
           ],
         ),
@@ -1612,7 +2409,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final info = updateState.updateInfo!;
     return InkWell(
       onTap: () {
-        ref.read(appUpdateServiceProvider.notifier).downloadAndInstallUpdate(info);
+        ref
+            .read(appUpdateServiceProvider.notifier)
+            .downloadAndInstallUpdate(info);
       },
       borderRadius: BorderRadius.circular(6),
       child: Container(
@@ -1629,7 +2428,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             const SizedBox(width: 4),
             Text(
               'v${info.versionName}',
-              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white),
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
           ],
         ),
@@ -1639,15 +2442,24 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   IconData _getTabIcon(PanelTab tab) {
     switch (tab) {
-      case PanelTab.terminal: return LucideIcons.terminal;
-      case PanelTab.appLogs: return LucideIcons.list;
-      case PanelTab.run: return LucideIcons.play;
-      case PanelTab.buildLogs: return LucideIcons.hammer;
-      case PanelTab.git: return LucideIcons.git_branch;
-      case PanelTab.problems: return LucideIcons.circle_alert;
-      case PanelTab.debug: return LucideIcons.bug;
-      case PanelTab.deviceMirror: return LucideIcons.smartphone;
-      case PanelTab.aiAgent: return LucideIcons.sparkles;
+      case PanelTab.terminal:
+        return LucideIcons.terminal;
+      case PanelTab.appLogs:
+        return LucideIcons.list;
+      case PanelTab.run:
+        return LucideIcons.play;
+      case PanelTab.buildLogs:
+        return LucideIcons.hammer;
+      case PanelTab.git:
+        return LucideIcons.git_branch;
+      case PanelTab.problems:
+        return LucideIcons.circle_alert;
+      case PanelTab.debug:
+        return LucideIcons.bug;
+      case PanelTab.deviceMirror:
+        return LucideIcons.smartphone;
+      case PanelTab.aiAgent:
+        return LucideIcons.sparkles;
     }
   }
 
@@ -1660,25 +2472,42 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   String _getTabTitle(BuildContext context, PanelTab tab) {
     final l10n = AppLocalizations.of(context)!;
     switch (tab) {
-      case PanelTab.terminal: return l10n.terminal;
-      case PanelTab.appLogs: return l10n.appLogs;
-      case PanelTab.run: return l10n.run;
-      case PanelTab.buildLogs: return l10n.build;
-      case PanelTab.git: return 'Git';
-      case PanelTab.problems: return l10n.problems;
-      case PanelTab.debug: return l10n.debugger;
-      case PanelTab.deviceMirror: return 'Экран и USB';
-      case PanelTab.aiAgent: return 'Quantum AI Агент';
+      case PanelTab.terminal:
+        return l10n.terminal;
+      case PanelTab.appLogs:
+        return l10n.appLogs;
+      case PanelTab.run:
+        return l10n.run;
+      case PanelTab.buildLogs:
+        return l10n.build;
+      case PanelTab.git:
+        return 'Git';
+      case PanelTab.problems:
+        return l10n.problems;
+      case PanelTab.debug:
+        return l10n.debugger;
+      case PanelTab.deviceMirror:
+        return 'Экран и USB';
+      case PanelTab.aiAgent:
+        return 'Quantum AI Агент';
     }
   }
 
-  Widget _buildDashboard(BuildContext context, WidgetRef ref, bool isDesktop, String? workspacePath) {
-    final gitChangesCount = ref.watch(gitProvider.select((s) =>
-      (s.status?.stagedFiles.length ?? 0) +
-      (s.status?.modifiedFiles.length ?? 0) +
-      (s.status?.untrackedFiles.length ?? 0) +
-      (s.status?.conflictedFiles.length ?? 0)
-    ));
+  Widget _buildDashboard(
+    BuildContext context,
+    WidgetRef ref,
+    bool isDesktop,
+    String? workspacePath,
+  ) {
+    final gitChangesCount = ref.watch(
+      gitProvider.select(
+        (s) =>
+            (s.status?.stagedFiles.length ?? 0) +
+            (s.status?.modifiedFiles.length ?? 0) +
+            (s.status?.untrackedFiles.length ?? 0) +
+            (s.status?.conflictedFiles.length ?? 0),
+      ),
+    );
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -1728,7 +2557,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     blur: 0,
                     opacity: 0.05,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(20.0),
                       child: Column(
@@ -1749,7 +2580,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             children: [
                               _buildCircularGauge(
                                 label: 'CPU',
-                                value: '${(stats.cpuUsage * 100).toStringAsFixed(1)}%',
+                                value:
+                                    '${(stats.cpuUsage * 100).toStringAsFixed(1)}%',
                                 progress: stats.cpuUsage,
                                 color: Colors.cyanAccent,
                               ),
@@ -1760,7 +2592,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ),
                               _buildCircularGauge(
                                 label: 'GPU',
-                                value: '${(stats.gpuUsage * 100).toStringAsFixed(1)}%',
+                                value:
+                                    '${(stats.gpuUsage * 100).toStringAsFixed(1)}%',
                                 progress: stats.gpuUsage,
                                 color: Colors.greenAccent,
                               ),
@@ -1771,7 +2604,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ),
                               _buildCircularGauge(
                                 label: 'App RAM',
-                                value: '${stats.appRamFormatted} / ${stats.ramTotalGB.toStringAsFixed(0)} GB',
+                                value:
+                                    '${stats.appRamFormatted} / ${stats.ramTotalGB.toStringAsFixed(0)} GB',
                                 progress: stats.ramUsage,
                                 color: Colors.purpleAccent,
                               ),
@@ -1830,7 +2664,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     title: 'Зеркалирование экрана (USB)',
                     subtitle: 'Управление телефоном и трансляция',
                     onTap: () {
-                      ref.read(panelProvider.notifier).selectTab(PanelTab.deviceMirror);
+                      ref
+                          .read(panelProvider.notifier)
+                          .selectTab(PanelTab.deviceMirror);
                       ref.read(panelProvider.notifier).openPanel();
                     },
                   ),
@@ -1840,7 +2676,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     title: 'Терминал',
                     subtitle: 'Командная строка и сборка',
                     onTap: () {
-                      ref.read(panelProvider.notifier).selectTab(PanelTab.terminal);
+                      ref
+                          .read(panelProvider.notifier)
+                          .selectTab(PanelTab.terminal);
                       ref.read(panelProvider.notifier).openPanel();
                     },
                   ),
@@ -1888,7 +2726,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         const SizedBox(height: 8),
         Text(
           label,
-          style: GoogleFonts.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 2),
         Text(
@@ -1918,28 +2760,46 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           children: [
             Text(
               'НЕДАВНИЕ ПРОЕКТЫ',
-              style: GoogleFonts.inter(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+              style: GoogleFonts.inter(
+                color: Colors.white38,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.0,
+              ),
             ),
             const SizedBox(height: 12),
-            ...projects.map((p) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6.0),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.folder, size: 14, color: theme.colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      p['name']!,
-                      style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+            ...projects.map(
+              (p) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.folder,
+                      size: 14,
+                      color: theme.colorScheme.primary,
                     ),
-                  ),
-                  Text(
-                    p['time']!,
-                    style: GoogleFonts.inter(color: Colors.white30, fontSize: 11),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        p['name']!,
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      p['time']!,
+                      style: GoogleFonts.inter(
+                        color: Colors.white30,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )),
+            ),
           ],
         ),
       ),
@@ -1962,19 +2822,36 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               children: [
                 Text(
                   'GIT СТАТУС',
-                  style: GoogleFonts.inter(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                  style: GoogleFonts.inter(
+                    color: Colors.white38,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                  ),
                 ),
-                const Icon(LucideIcons.git_branch, size: 14, color: Colors.purpleAccent),
+                const Icon(
+                  LucideIcons.git_branch,
+                  size: 14,
+                  color: Colors.purpleAccent,
+                ),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(LucideIcons.git_fork, size: 14, color: Colors.cyanAccent),
+                const Icon(
+                  LucideIcons.git_fork,
+                  size: 14,
+                  color: Colors.cyanAccent,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Ветка: main*',
-                  style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: GoogleFonts.jetBrainsMono(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -1988,7 +2865,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       ),
     );
   }
-
 
   Widget _buildDashboardActionCard({
     required IconData icon,
@@ -2025,19 +2901,30 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                   children: [
                     Text(
                       title,
-                      style: GoogleFonts.inter(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      style: GoogleFonts.inter(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: GoogleFonts.inter(color: Colors.white30, fontSize: 10),
+                      style: GoogleFonts.inter(
+                        color: Colors.white30,
+                        fontSize: 10,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              const Icon(LucideIcons.chevron_right, size: 14, color: Colors.white24),
+              const Icon(
+                LucideIcons.chevron_right,
+                size: 14,
+                color: Colors.white24,
+              ),
             ],
           ),
         ),
@@ -2045,25 +2932,44 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     );
   }
 
-  void _showFindPanel(BuildContext context, WidgetRef ref, {bool replace = false}) {
+  void _showFindPanel(
+    BuildContext context,
+    WidgetRef ref, {
+    bool replace = false,
+  }) {
+    final finder = ref.read(activeFindControllerProvider);
+    if (finder != null) {
+      if (replace) {
+        finder.replaceMode();
+      } else {
+        finder.findMode();
+      }
+      finder.focusOnFindInput();
+      return;
+    }
+
     final editorState = ref.read(editorProvider);
-    if (editorState.openFiles.isEmpty || editorState.activeTabIndex >= editorState.openFiles.length) return;
-    
-    final controller = editorState.openFiles[editorState.activeTabIndex].controller;
-    final finder = CodeFindController(controller);
-    
+    if (editorState.openFiles.isEmpty ||
+        editorState.activeTabIndex >= editorState.openFiles.length)
+      return;
+    final controller =
+        editorState.openFiles[editorState.activeTabIndex].controller;
+    final fallbackFinder = CodeFindController(controller);
     if (replace) {
-      finder.replaceMode();
+      fallbackFinder.replaceMode();
     } else {
-      finder.findMode();
+      fallbackFinder.findMode();
     }
   }
 
   void _duplicateLine(WidgetRef ref) {
     final editorState = ref.read(editorProvider);
-    if (editorState.openFiles.isEmpty || editorState.activeTabIndex >= editorState.openFiles.length) return;
-    
-    final controller = editorState.openFiles[editorState.activeTabIndex].controller;
+    if (editorState.openFiles.isEmpty ||
+        editorState.activeTabIndex >= editorState.openFiles.length)
+      return;
+
+    final controller =
+        editorState.openFiles[editorState.activeTabIndex].controller;
     final selectedText = controller.selectedText;
     if (selectedText.isNotEmpty) {
       controller.replaceSelection('$selectedText\n$selectedText');
@@ -2098,7 +3004,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       );
       return;
     }
-    
+
     setState(() {
       _isSplitMode = !_isSplitMode;
       if (_isSplitMode) {
@@ -2107,7 +3013,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     });
   }
 
-  Widget _buildSingleEditor(WidgetRef ref, SettingsState settings, EditorFile activeFile) {
+  Widget _buildSingleEditor(
+    WidgetRef ref,
+    SettingsState settings,
+    EditorFile activeFile,
+  ) {
     final file = activeFile;
 
     if (file.isMarkdownPreview) {
@@ -2116,14 +3026,17 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         content: file.controller.text,
         filePath: file.path,
         onClose: () {
-          ref.read(editorProvider.notifier).setMarkdownPreview(file.path, false);
+          ref
+              .read(editorProvider.notifier)
+              .setMarkdownPreview(file.path, false);
         },
       );
     }
 
     if (file.isDiffView) {
       final workspacePath = ref.read(workspaceProvider).currentPath;
-      final relPath = (workspacePath != null && file.path.startsWith(workspacePath))
+      final relPath =
+          (workspacePath != null && file.path.startsWith(workspacePath))
           ? p.relative(file.path, from: workspacePath)
           : file.path;
 
@@ -2143,7 +3056,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         ? CodeAutocomplete(
             viewBuilder: (context, notifier, onSelected) {
               return QuantumAutocompleteView(
-                  notifier: notifier, onSelected: onSelected);
+                notifier: notifier,
+                onSelected: onSelected,
+              );
             },
             promptsBuilder: QuantumAutocompletePromptsBuilder(),
             child: StableEditorWidget(
@@ -2159,31 +3074,118 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           );
   }
 
-  Widget _buildSplitEditor(WidgetRef ref, SettingsState settings, EditorFile activeFile) {
+  Widget _buildSplitEditor(
+    WidgetRef ref,
+    SettingsState settings,
+    EditorFile activeFile,
+  ) {
     final editorState = ref.read(editorProvider);
-    final splitFile = _splitTabIndex >= 0 && _splitTabIndex < editorState.openFiles.length
+    final splitFile =
+        _splitTabIndex >= 0 && _splitTabIndex < editorState.openFiles.length
         ? editorState.openFiles[_splitTabIndex]
         : activeFile;
 
     return Row(
       children: [
-        Expanded(
-          child: _buildSingleEditor(ref, settings, activeFile),
-        ),
-        Container(
-          width: 2,
-          color: Colors.white.withValues(alpha: 0.1),
-        ),
-        Expanded(
-          child: _buildSingleEditor(ref, settings, splitFile),
-        ),
+        Expanded(child: _buildSingleEditor(ref, settings, activeFile)),
+        Container(width: 2, color: Colors.white.withValues(alpha: 0.1)),
+        Expanded(child: _buildSingleEditor(ref, settings, splitFile)),
       ],
     );
+  }
+
+  PopupMenuItem<String> _buildBuildMenuItem(
+    String value,
+    IconData icon,
+    String title,
+    String subtitle,
+    Color color,
+  ) {
+    return PopupMenuItem<String>(
+      value: value,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    color: Colors.white54,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _triggerProjectBuild(
+    WidgetRef ref,
+    PanelNotifier panelNotifier,
+    String action,
+  ) {
+    panelNotifier.selectTab(PanelTab.buildLogs);
+    panelNotifier.openPanel();
+
+    const checkSdk =
+        '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\\\.1[3-9].*/sdk: \\\\x27>=3.12.0 <4.0.0\\\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true)';
+
+    String cmd;
+    switch (action) {
+      case 'build_aab':
+        cmd =
+            '$checkSdk && flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB): ./app-release.aab"';
+        break;
+      case 'build_split':
+        cmd =
+            '$checkSdk && flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs ready in project root"';
+        break;
+      case 'build_debug':
+        cmd =
+            '$checkSdk && flutter build apk --debug --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"';
+        break;
+      case 'build_apk':
+      default:
+        cmd =
+            '$checkSdk && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"';
+        break;
+    }
+
+    ref
+        .read(dedicatedTerminalProvider.notifier)
+        .sendCommand(
+          DedicatedTerminalType.build,
+          cmd,
+          interrupt: true,
+          clear: false,
+        );
   }
 }
 
 // ─── Дерево файлов (изолированный StatefulWidget) ───────────────────────────
 // Отдельный виджет для дерева файлов, чтобы onRefreshParent вызывал setState
 // только на нём, а не на всём EditorPage.
-
-

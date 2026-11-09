@@ -14,12 +14,15 @@ import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifi
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/services/talker_service.dart';
 
 class QuantumModelItem {
   final String id;
   final String name;
-  final String providerName; // 'OpenRouter', 'DeepSeek Direct', 'OpenAI Direct', 'Anthropic Direct', 'Local'
-  final String category; // 'Популярные', 'Рассуждения', 'Кодинг', 'Бесплатные', 'Флагманы', 'Прямой API'
+  final String
+  providerName; // 'OpenRouter', 'DeepSeek Direct', 'OpenAI Direct', 'Anthropic Direct', 'Local'
+  final String
+  category; // 'Популярные', 'Рассуждения', 'Кодинг', 'Бесплатные', 'Флагманы', 'Прямой API'
   final String badge;
   final int badgeColorValue;
   final bool isReasoning;
@@ -37,6 +40,15 @@ class QuantumModelItem {
   });
 
   static const List<QuantumModelItem> predefinedModels = [
+    // OpenRouter Auto Free
+    QuantumModelItem(
+      id: 'openrouter/free',
+      name: 'OpenRouter Free (Auto)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'AUTO FREE',
+      badgeColorValue: 0xFF10B981,
+    ),
     // OpenRouter - DeepSeek
     QuantumModelItem(
       id: 'deepseek/deepseek-chat',
@@ -438,6 +450,24 @@ class ChatAttachment {
     this.textContent,
     this.sizeBytes = 0,
   });
+
+  Map<String, dynamic> toJson() => {
+    'name': name,
+    'path': path,
+    'mimeType': mimeType,
+    'isImage': isImage,
+    'sizeBytes': sizeBytes,
+    'textContent': textContent,
+  };
+
+  factory ChatAttachment.fromJson(Map<String, dynamic> json) => ChatAttachment(
+    name: json['name'] as String? ?? '',
+    path: json['path'] as String? ?? '',
+    mimeType: json['mimeType'] as String? ?? 'text/plain',
+    isImage: json['isImage'] as bool? ?? false,
+    sizeBytes: json['sizeBytes'] as int? ?? 0,
+    textContent: json['textContent'] as String?,
+  );
 }
 
 class AgentAction {
@@ -465,6 +495,27 @@ class AgentAction {
     this.executionError,
     this.output,
   });
+
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'path': path,
+    'content': content,
+    'command': command,
+    'isExecuted': isExecuted,
+    'executionError': executionError,
+    'output': output,
+    'isUndone': isUndone,
+  };
+
+  factory AgentAction.fromJson(Map<String, dynamic> json) => AgentAction(
+    type: json['type'] as String? ?? 'write_file',
+    path: json['path'] as String? ?? '',
+    content: json['content'] as String?,
+    command: json['command'] as String?,
+    isExecuted: json['isExecuted'] as bool? ?? false,
+    executionError: json['executionError'] as String?,
+    output: json['output'] as String?,
+  )..isUndone = json['isUndone'] as bool? ?? false;
 }
 
 class ChatMessage {
@@ -492,8 +543,106 @@ class ChatMessage {
     List<AgentAction>? actions,
     List<ChatAttachment>? attachments,
     this.toolLabel,
-  })  : actions = actions ?? [],
-        attachments = attachments ?? [];
+  }) : actions = actions ?? [],
+       attachments = attachments ?? [];
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'role': role.name,
+    'text': text,
+    'thinking': thinking,
+    'timestamp': timestamp.toIso8601String(),
+    'toolLabel': toolLabel,
+    'actions': actions.map((a) => a.toJson()).toList(),
+    'attachments': attachments.map((a) => a.toJson()).toList(),
+  };
+
+  factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
+    id: json['id'] as String? ?? 'msg_${DateTime.now().millisecondsSinceEpoch}',
+    role: MessageRole.values.firstWhere(
+      (r) => r.name == json['role'],
+      orElse: () => MessageRole.assistant,
+    ),
+    text: json['text'] as String? ?? '',
+    thinking: json['thinking'] as String?,
+    timestamp:
+        DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+    toolLabel: json['toolLabel'] as String?,
+    actions: (json['actions'] as List?)
+        ?.map((a) => AgentAction.fromJson(a as Map<String, dynamic>))
+        .toList(),
+    attachments: (json['attachments'] as List?)
+        ?.map((a) => ChatAttachment.fromJson(a as Map<String, dynamic>))
+        .toList(),
+  );
+}
+
+class ChatSession {
+  final String id;
+  String title;
+  final DateTime createdAt;
+  DateTime updatedAt;
+  String? modelId;
+  final List<ChatMessage> messages;
+
+  ChatSession({
+    required this.id,
+    required this.title,
+    required this.createdAt,
+    required this.updatedAt,
+    this.modelId,
+    required this.messages,
+  });
+
+  String get preview {
+    final firstUser = messages.firstWhere(
+      (m) => m.role == MessageRole.user,
+      orElse: () => messages.isNotEmpty
+          ? messages.first
+          : ChatMessage(
+              id: '',
+              role: MessageRole.user,
+              text: 'Новый диалог',
+              timestamp: DateTime.now(),
+            ),
+    );
+    final clean = firstUser.text.trim();
+    if (clean.length > 60) return '${clean.substring(0, 60)}...';
+    return clean.isEmpty ? 'Новый диалог' : clean;
+  }
+
+  int get userMessageCount =>
+      messages.where((m) => m.role == MessageRole.user).length;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'createdAt': createdAt.toIso8601String(),
+    'updatedAt': updatedAt.toIso8601String(),
+    'modelId': modelId,
+    'messages': messages.map((m) => m.toJson()).toList(),
+  };
+
+  factory ChatSession.fromJson(Map<String, dynamic> json) {
+    return ChatSession(
+      id:
+          json['id'] as String? ??
+          'session_${DateTime.now().millisecondsSinceEpoch}',
+      title: json['title'] as String? ?? 'Новый диалог',
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt:
+          DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
+      modelId: json['modelId'] as String?,
+      messages:
+          (json['messages'] as List?)
+              ?.map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
 }
 
 class QuantumAiAgentService extends ChangeNotifier {
@@ -507,7 +656,13 @@ class QuantumAiAgentService extends ChangeNotifier {
   /// Max autonomous tool-call rounds per user message (anti-loop).
   static const int _maxToolRounds = 8;
 
-  QuantumAiAgentService(this._runtime, this._getSettings, this._getWorkspacePath, [this._getAgentContext, McpBridge? mcp]) {
+  QuantumAiAgentService(
+    this._runtime,
+    this._getSettings,
+    this._getWorkspacePath, [
+    this._getAgentContext,
+    McpBridge? mcp,
+  ]) {
     _tools = AgentToolbox(
       mcp: mcp,
       workspacePath: _getWorkspacePath,
@@ -527,23 +682,57 @@ class QuantumAiAgentService extends ChangeNotifier {
       ),
     );
     _initDefaultGreeting();
+    unawaited(loadSessions());
     unawaited(fetchLiveOpenRouterModels());
   }
 
-  static List<QuantumModelItem> get predefinedModels => QuantumModelItem.predefinedModels;
+  static List<QuantumModelItem> get predefinedModels =>
+      QuantumModelItem.predefinedModels;
 
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 20),
-    receiveTimeout: const Duration(seconds: 120),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 120),
+    ),
+  );
 
   CancelToken? _currentCancelToken;
-  QuantumModelItem _selectedModel = QuantumModelItem.predefinedModels[0]; // DeepSeek V3 by default
+  QuantumModelItem _selectedModel =
+      QuantumModelItem.predefinedModels[0]; // DeepSeek V3 by default
   AiProvider _selectedProvider = AiProvider.deepseek;
   final List<ChatMessage> _messages = [];
+  String _currentSessionId = 'session_${DateTime.now().millisecondsSinceEpoch}';
+  String _currentSessionTitle = 'Новый диалог';
+  final List<ChatSession> _sessions = [];
+
+  String get currentSessionId => _currentSessionId;
+  String get currentSessionTitle => _currentSessionTitle;
+  List<ChatSession> get sessions => List.unmodifiable(_sessions);
+
+  @visibleForTesting
+  void addMessageForTesting(ChatMessage msg) {
+    _messages.add(msg);
+  }
+
+  @visibleForTesting
+  void setSessionsForTesting(List<ChatSession> sessions) {
+    _sessions.clear();
+    _sessions.addAll(sessions);
+  }
+
+  @visibleForTesting
+  void setCurrentSessionForTesting(ChatSession session) {
+    _currentSessionId = session.id;
+    _currentSessionTitle = session.title;
+    _messages.clear();
+    _messages.addAll(session.messages);
+  }
+
   bool _isGenerating = false;
   String _statusMessage = 'Готов к работе';
-  List<QuantumModelItem> _availableModels = List.from(QuantumModelItem.predefinedModels);
+  List<QuantumModelItem> _availableModels = List.from(
+    QuantumModelItem.predefinedModels,
+  );
   bool _isLoadingModels = false;
   AgentMode _mode = AgentMode.build;
   AgentEngine _engine = AgentEngine.builtin;
@@ -628,22 +817,27 @@ class QuantumAiAgentService extends ChangeNotifier {
               seenIds.add(id);
               final name = raw['name'] as String? ?? id.split('/').last;
               final desc = (raw['description'] as String? ?? '').toLowerCase();
-              final isReasoning = raw['reasoning'] != null ||
+              final isReasoning =
+                  raw['reasoning'] != null ||
                   id.contains('r1') ||
                   id.contains('reasoning') ||
                   desc.contains('reasoning') ||
                   desc.contains('thinking');
 
-              liveModels.add(QuantumModelItem(
-                id: id,
-                name: name.endsWith('(free)') || name.endsWith('(Free)') ? name : '$name (Free)',
-                providerName: 'OpenRouter',
-                category: 'Бесплатные',
-                badge: isReasoning ? 'FREE R1' : 'FREE',
-                badgeColorValue: 0xFF10B981,
-                isReasoning: isReasoning,
-                isOpenRouter: true,
-              ));
+              liveModels.add(
+                QuantumModelItem(
+                  id: id,
+                  name: name.endsWith('(free)') || name.endsWith('(Free)')
+                      ? name
+                      : '$name (Free)',
+                  providerName: 'OpenRouter',
+                  category: 'Бесплатные',
+                  badge: isReasoning ? 'FREE R1' : 'FREE',
+                  badgeColorValue: 0xFF10B981,
+                  isReasoning: isReasoning,
+                  isOpenRouter: true,
+                ),
+              );
             }
           }
 
@@ -656,13 +850,15 @@ class QuantumAiAgentService extends ChangeNotifier {
             final name = raw['name'] as String? ?? id.split('/').last;
             final desc = (raw['description'] as String? ?? '').toLowerCase();
             final idLower = id.toLowerCase();
-            final isReasoning = raw['reasoning'] != null ||
+            final isReasoning =
+                raw['reasoning'] != null ||
                 idLower.contains('r1') ||
                 idLower.contains('o1') ||
                 idLower.contains('o3') ||
                 idLower.contains('reasoning') ||
                 idLower.contains('thinking');
-            final isCoder = idLower.contains('coder') ||
+            final isCoder =
+                idLower.contains('coder') ||
                 idLower.contains('code') ||
                 desc.contains('coding') ||
                 desc.contains('code generation');
@@ -689,16 +885,18 @@ class QuantumAiAgentService extends ChangeNotifier {
             }
 
             seenIds.add(id);
-            liveModels.add(QuantumModelItem(
-              id: id,
-              name: name,
-              providerName: 'OpenRouter',
-              category: category,
-              badge: badge,
-              badgeColorValue: badgeColor,
-              isReasoning: isReasoning,
-              isOpenRouter: true,
-            ));
+            liveModels.add(
+              QuantumModelItem(
+                id: id,
+                name: name,
+                providerName: 'OpenRouter',
+                category: category,
+                badge: badge,
+                badgeColorValue: badgeColor,
+                isReasoning: isReasoning,
+                isOpenRouter: true,
+              ),
+            );
           }
 
           // 3. Добавляем прямые API
@@ -728,7 +926,8 @@ class QuantumAiAgentService extends ChangeNotifier {
   void setCustomModel(String modelId) {
     final trimmed = modelId.trim();
     if (trimmed.isEmpty) return;
-    final isR1 = trimmed.toLowerCase().contains('r1') ||
+    final isR1 =
+        trimmed.toLowerCase().contains('r1') ||
         trimmed.toLowerCase().contains('reasoning') ||
         trimmed.toLowerCase().contains('o3') ||
         trimmed.toLowerCase().contains('o1');
@@ -756,13 +955,236 @@ class QuantumAiAgentService extends ChangeNotifier {
   }
 
   void clearChat() {
+    unawaited(startNewChat());
+  }
+
+  Directory _getSessionsDirectory() {
+    final ws = _getWorkspacePath();
+    final String baseDir;
+    if (ws != null && ws.isNotEmpty) {
+      baseDir = p.join(ws, '.quantum', 'chat_sessions');
+    } else {
+      baseDir = p.join(
+        Platform.environment['HOME'] ?? '/root',
+        '.quantum',
+        'chat_sessions',
+      );
+    }
+    final dir = Directory(baseDir);
+    if (!dir.existsSync()) {
+      dir.createSync(recursive: true);
+    }
+    return dir;
+  }
+
+  Future<void> loadSessions() async {
+    try {
+      final dir = _getSessionsDirectory();
+      final loaded = <ChatSession>[];
+      if (await dir.exists()) {
+        final files = dir.listSync();
+        for (final f in files) {
+          if (f is File && f.path.endsWith('.json')) {
+            try {
+              final content = await f.readAsString();
+              if (content.trim().isNotEmpty) {
+                final json = jsonDecode(content);
+                if (json is Map<String, dynamic>) {
+                  loaded.add(ChatSession.fromJson(json));
+                }
+              }
+            } catch (e) {
+              TalkerService.warning(
+                'Failed to load chat session ${f.path}: $e',
+              );
+            }
+          }
+        }
+      }
+
+      // Migrate legacy .quantum/chat_history.json if present
+      final ws = _getWorkspacePath();
+      if (ws != null) {
+        final legacyFile = File(p.join(ws, '.quantum', 'chat_history.json'));
+        if (await legacyFile.exists()) {
+          try {
+            final content = await legacyFile.readAsString();
+            final legacyList = jsonDecode(content);
+            if (legacyList is List) {
+              for (final item in legacyList) {
+                if (item is Map<String, dynamic> && item['id'] != null) {
+                  final id = item['id'].toString();
+                  if (!loaded.any((s) => s.id == id)) {
+                    final legacySession = ChatSession.fromJson(item);
+                    if (legacySession.messages.isNotEmpty) {
+                      loaded.add(legacySession);
+                      final f = File(p.join(dir.path, '$id.json'));
+                      await f.writeAsString(jsonEncode(legacySession.toJson()));
+                    }
+                  }
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      loaded.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      _sessions.clear();
+      _sessions.addAll(loaded);
+
+      // Restore active session if available
+      if (_sessions.isNotEmpty && _messages.length <= 1) {
+        final latest = _sessions.first;
+        if (latest.messages.isNotEmpty) {
+          _currentSessionId = latest.id;
+          _currentSessionTitle = latest.title;
+          _messages.clear();
+          _messages.addAll(latest.messages);
+        }
+      }
+      notifyListeners();
+    } catch (e, st) {
+      TalkerService.error('Failed to load chat sessions: $e', e, st);
+    }
+  }
+
+  Future<void> saveCurrentSession() async {
+    try {
+      final dir = _getSessionsDirectory();
+      final hasUserMessages = _messages.any((m) => m.role == MessageRole.user);
+      if (!hasUserMessages && _messages.length <= 1) {
+        return;
+      }
+
+      final existingIdx = _sessions.indexWhere(
+        (s) => s.id == _currentSessionId,
+      );
+      final createdAt = existingIdx >= 0
+          ? _sessions[existingIdx].createdAt
+          : DateTime.now();
+
+      final session = ChatSession(
+        id: _currentSessionId,
+        title: _currentSessionTitle,
+        createdAt: createdAt,
+        updatedAt: DateTime.now(),
+        modelId: _selectedModel.id,
+        messages: List.of(_messages),
+      );
+
+      final file = File(p.join(dir.path, '$_currentSessionId.json'));
+      await file.writeAsString(jsonEncode(session.toJson()));
+
+      if (existingIdx >= 0) {
+        _sessions[existingIdx] = session;
+      } else {
+        _sessions.insert(0, session);
+      }
+      _sessions.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      notifyListeners();
+    } catch (e, st) {
+      TalkerService.error('Failed to save current chat session: $e', e, st);
+    }
+  }
+
+  Future<void> startNewChat({String? title}) async {
     stopGeneration();
-    _messages.clear();
+    await saveCurrentSession();
+
+    _currentSessionId = 'session_${DateTime.now().millisecondsSinceEpoch}';
+    _currentSessionTitle = title ?? 'Новый диалог';
     _promptTokens = 0;
     _completionTokens = 0;
     _lastPromptTokens = 0;
+    _messages.clear();
     _initDefaultGreeting();
     notifyListeners();
+  }
+
+  Future<void> switchSession(String sessionId) async {
+    if (sessionId == _currentSessionId) return;
+    stopGeneration();
+    await saveCurrentSession();
+
+    final dir = _getSessionsDirectory();
+    final file = File(p.join(dir.path, '$sessionId.json'));
+    if (await file.exists()) {
+      try {
+        final json =
+            jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+        final session = ChatSession.fromJson(json);
+        _currentSessionId = session.id;
+        _currentSessionTitle = session.title;
+        _messages.clear();
+        _messages.addAll(session.messages);
+        if (_messages.isEmpty) {
+          _initDefaultGreeting();
+        }
+        if (session.modelId != null) {
+          final m = _availableModels.firstWhere(
+            (item) => item.id == session.modelId,
+            orElse: () => _selectedModel,
+          );
+          _selectedModel = m;
+        }
+        notifyListeners();
+      } catch (e) {
+        TalkerService.error('Failed to switch chat session: $e');
+      }
+    }
+  }
+
+  Future<void> deleteSession(String sessionId) async {
+    try {
+      final dir = _getSessionsDirectory();
+      final file = File(p.join(dir.path, '$sessionId.json'));
+      if (await file.exists()) {
+        await file.delete();
+      }
+      _sessions.removeWhere((s) => s.id == sessionId);
+      if (_currentSessionId == sessionId) {
+        stopGeneration();
+        _currentSessionId = 'session_${DateTime.now().millisecondsSinceEpoch}';
+        _currentSessionTitle = 'Новый диалог';
+        _promptTokens = 0;
+        _completionTokens = 0;
+        _lastPromptTokens = 0;
+        _messages.clear();
+        _initDefaultGreeting();
+
+        if (_sessions.isNotEmpty) {
+          await switchSession(_sessions.first.id);
+        } else {
+          notifyListeners();
+        }
+      } else {
+        notifyListeners();
+      }
+    } catch (e) {
+      TalkerService.error('Failed to delete chat session: $e');
+    }
+  }
+
+  Future<void> renameSession(String sessionId, String newTitle) async {
+    try {
+      final title = newTitle.trim();
+      if (title.isEmpty) return;
+      final idx = _sessions.indexWhere((s) => s.id == sessionId);
+      if (idx >= 0) {
+        _sessions[idx].title = title;
+        _sessions[idx].updatedAt = DateTime.now();
+        final dir = _getSessionsDirectory();
+        final file = File(p.join(dir.path, '$sessionId.json'));
+        await file.writeAsString(jsonEncode(_sessions[idx].toJson()));
+      }
+      if (_currentSessionId == sessionId) {
+        _currentSessionTitle = title;
+      }
+      notifyListeners();
+    } catch (e) {
+      TalkerService.error('Failed to rename chat session: $e');
+    }
   }
 
   void _initDefaultGreeting() {
@@ -770,7 +1192,8 @@ class QuantumAiAgentService extends ChangeNotifier {
       ChatMessage(
         id: 'msg_welcome',
         role: MessageRole.assistant,
-        text: 'Привет! Я встроенный Quantum AI Агент. Я подключен напрямую к твоему проекту, могу анализировать файлы и скриншоты, писать код, находить ошибки и предлагать готовые изменения с кнопкой применения прямо в редактор.\n\nЧем могу помочь?',
+        text:
+            'Привет! Я встроенный Quantum AI Агент. Я подключен напрямую к твоему проекту, могу анализировать файлы и скриншоты, писать код, находить ошибки и предлагать готовые изменения с кнопкой применения прямо в редактор.\n\nЧем могу помочь?',
         timestamp: DateTime.now(),
       ),
     );
@@ -805,7 +1228,8 @@ class QuantumAiAgentService extends ChangeNotifier {
     // /init — сгенерировать .quantum/AGENTS.md (правила проекта для агента)
     if (query == '/init') {
       _mode = AgentMode.build;
-      query = 'Изучи проект инструментами (list_dir корня, прочитай pubspec.yaml/package.json/README и 2-3 ключевых файла), '
+      query =
+          'Изучи проект инструментами (list_dir корня, прочитай pubspec.yaml/package.json/README и 2-3 ключевых файла), '
           'затем создай файл .quantum/AGENTS.md: стек, архитектура и структура папок, стиль кода, команды сборки/тестов, '
           'и чего НЕ делать. Кратко, по делу, на русском.';
     }
@@ -826,7 +1250,8 @@ class QuantumAiAgentService extends ChangeNotifier {
             ChatMessage(
               id: 'msg_offline_${DateTime.now().millisecondsSinceEpoch}',
               role: MessageRole.assistant,
-              text: '⚠️ Нет активного подключения к интернету. Проверьте соединение с Wi-Fi или мобильной сетью для отправки запросов к ИИ.',
+              text:
+                  '⚠️ Нет активного подключения к интернету. Проверьте соединение с Wi-Fi или мобильной сетью для отправки запросов к ИИ.',
               timestamp: DateTime.now(),
             ),
           );
@@ -838,6 +1263,14 @@ class QuantumAiAgentService extends ChangeNotifier {
       }
     }
 
+    if (_currentSessionTitle == 'Новый диалог' ||
+        _currentSessionTitle == 'New Chat') {
+      final firstLine = query.split('\n').first.trim();
+      _currentSessionTitle = firstLine.length > 40
+          ? '${firstLine.substring(0, 40)}…'
+          : firstLine;
+    }
+
     final userMsg = ChatMessage(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
       role: MessageRole.user,
@@ -846,6 +1279,7 @@ class QuantumAiAgentService extends ChangeNotifier {
       timestamp: DateTime.now(),
     );
     _messages.add(userMsg);
+    unawaited(saveCurrentSession());
 
     final assistantMsg = ChatMessage(
       id: 'msg_${DateTime.now().millisecondsSinceEpoch + 1}',
@@ -865,7 +1299,8 @@ class QuantumAiAgentService extends ChangeNotifier {
       final settings = _getSettings();
       final wsPath = _getWorkspacePath();
 
-      if (_mcpRefreshedAt == null || DateTime.now().difference(_mcpRefreshedAt!).inSeconds > 60) {
+      if (_mcpRefreshedAt == null ||
+          DateTime.now().difference(_mcpRefreshedAt!).inSeconds > 60) {
         await _tools.refreshMcp();
         _mcpRefreshedAt = DateTime.now();
       }
@@ -927,7 +1362,9 @@ class QuantumAiAgentService extends ChangeNotifier {
         String detailedError = '';
         try {
           if (e.response?.data is ResponseBody) {
-            final raw = await utf8.decodeStream((e.response!.data as ResponseBody).stream);
+            final raw = await utf8.decodeStream(
+              (e.response!.data as ResponseBody).stream,
+            );
             final json = jsonDecode(raw);
             if (json is Map && json['error'] != null) {
               final errMap = json['error'];
@@ -942,17 +1379,26 @@ class QuantumAiAgentService extends ChangeNotifier {
           }
         } catch (_) {}
 
-        if (e.response?.statusCode == 404 || e.message?.contains('404') == true || detailedError.contains('404')) {
-          final errText = '⚠️ Модель "${_selectedModel.name}" (${_selectedModel.id}) недоступна на сервере (код 404).\n\n'
+        if (e.response?.statusCode == 404 ||
+            e.message?.contains('404') == true ||
+            detailedError.contains('404')) {
+          final errText =
+              '⚠️ Модель "${_selectedModel.name}" (${_selectedModel.id}) недоступна на сервере (код 404).\n\n'
               'OpenRouter периодически отключает устаревшие бесплатные модели или обновляет их идентификаторы.\n\n'
               '💡 **Решение:** Выберите другую бесплатную модель (например, **Llama 3.3 70B (Free)**, **DeepSeek V3 (Free)** или **Gemini 2.0 Flash (Free)**) в списке вверху панели.';
-          assistantMsg.text = assistantMsg.text.isEmpty ? errText : '${assistantMsg.text}\n\n$errText';
+          assistantMsg.text = assistantMsg.text.isEmpty
+              ? errText
+              : '${assistantMsg.text}\n\n$errText';
           _statusMessage = 'Ошибка 404: модель недоступна';
-        } else if (e.response?.statusCode == 429 || detailedError.toLowerCase().contains('rate limit')) {
-          const errText = '⚠️ Превышен лимит запросов бесплатной модели (код 429 Rate Limit).\n\n'
+        } else if (e.response?.statusCode == 429 ||
+            detailedError.toLowerCase().contains('rate limit')) {
+          const errText =
+              '⚠️ Превышен лимит запросов бесплатной модели (код 429 Rate Limit).\n\n'
               'Провайдер временно ограничил бесплатные запросы для этой модели.\n\n'
               '💡 **Решение:** Переключитесь на другую бесплатную модель из списка (например, **Llama 3.3 70B**, **Qwen 2.5 Coder 32B** или **DeepSeek R1**) — у каждой модели свой независимый лимит!';
-          assistantMsg.text = assistantMsg.text.isEmpty ? errText : '${assistantMsg.text}\n\n$errText';
+          assistantMsg.text = assistantMsg.text.isEmpty
+              ? errText
+              : '${assistantMsg.text}\n\n$errText';
           _statusMessage = 'Лимит запросов (429)';
         } else {
           final msg = detailedError.isNotEmpty ? detailedError : e.toString();
@@ -971,6 +1417,7 @@ class QuantumAiAgentService extends ChangeNotifier {
       _isGenerating = false;
       _currentCancelToken = null;
       notifyListeners();
+      unawaited(saveCurrentSession());
     }
   }
 
@@ -982,12 +1429,14 @@ class QuantumAiAgentService extends ChangeNotifier {
   Future<void> _runCliAgent(String query) async {
     final ws = _getWorkspacePath();
     final bin = _engine == AgentEngine.claudeCode ? 'claude' : 'agy';
-    _messages.add(ChatMessage(
-      id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
-      role: MessageRole.user,
-      text: query,
-      timestamp: DateTime.now(),
-    ));
+    _messages.add(
+      ChatMessage(
+        id: 'msg_${DateTime.now().millisecondsSinceEpoch}',
+        role: MessageRole.user,
+        text: query,
+        timestamp: DateTime.now(),
+      ),
+    );
     _isGenerating = true;
     _statusMessage = '${_engine.label}: работает…';
     notifyListeners();
@@ -1010,13 +1459,17 @@ class QuantumAiAgentService extends ChangeNotifier {
     }
 
     void addTool(String label, String out) {
-      _messages.add(ChatMessage(
-        id: 'tool_${DateTime.now().microsecondsSinceEpoch}',
-        role: MessageRole.system,
-        text: out.isEmpty ? '(без вывода)' : (out.length > 3000 ? '${out.substring(0, 3000)}…' : out),
-        toolLabel: label,
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(
+        ChatMessage(
+          id: 'tool_${DateTime.now().microsecondsSinceEpoch}',
+          role: MessageRole.system,
+          text: out.isEmpty
+              ? '(без вывода)'
+              : (out.length > 3000 ? '${out.substring(0, 3000)}…' : out),
+          toolLabel: label,
+          timestamp: DateTime.now(),
+        ),
+      );
       notifyListeners();
     }
 
@@ -1024,7 +1477,8 @@ class QuantumAiAgentService extends ChangeNotifier {
       final String cmd;
       if (_engine == AgentEngine.claudeCode) {
         final perm = _mode == AgentMode.build ? 'acceptEdits' : 'plan';
-        cmd = 'claude -p ${_shq(query)} --output-format stream-json --verbose --permission-mode $perm'
+        cmd =
+            'claude -p ${_shq(query)} --output-format stream-json --verbose --permission-mode $perm'
             '${_cliSessionStarted ? ' --continue' : ''}';
       } else {
         cmd = 'agy -p ${_shq(query)}';
@@ -1054,25 +1508,41 @@ class QuantumAiAgentService extends ChangeNotifier {
                   } else if (c['type'] == 'tool_use') {
                     final input = c['input'];
                     final brief = input is Map
-                        ? (input['file_path'] ?? input['command'] ?? input['pattern'] ?? input['path'] ?? input['url'] ?? '')
+                        ? (input['file_path'] ??
+                              input['command'] ??
+                              input['pattern'] ??
+                              input['path'] ??
+                              input['url'] ??
+                              '')
                         : '';
-                    addTool('${c['name']} $brief', input is Map ? const JsonEncoder.withIndent('  ').convert(input) : '');
+                    addTool(
+                      '${c['name']} $brief',
+                      input is Map
+                          ? const JsonEncoder.withIndent('  ').convert(input)
+                          : '',
+                    );
                   }
                 }
               } else if (type == 'result') {
                 final u = j['usage'];
                 if (u is Map) {
-                  final inT = ((u['input_tokens'] ?? 0) as num).toInt() +
+                  final inT =
+                      ((u['input_tokens'] ?? 0) as num).toInt() +
                       ((u['cache_read_input_tokens'] ?? 0) as num).toInt() +
                       ((u['cache_creation_input_tokens'] ?? 0) as num).toInt();
                   _promptTokens += inT;
-                  _completionTokens += ((u['output_tokens'] ?? 0) as num).toInt();
+                  _completionTokens += ((u['output_tokens'] ?? 0) as num)
+                      .toInt();
                   _lastPromptTokens = inT;
                 }
-                if (j['is_error'] == true && j['result'] != null) appendText('⚠️ ${j['result']}');
+                if (j['is_error'] == true && j['result'] != null) {
+                  appendText('⚠️ ${j['result']}');
+                }
               }
               return;
-            } catch (_) {/* не JSON — покажем как текст */}
+            } catch (_) {
+              /* не JSON — покажем как текст */
+            }
           }
           appendText(l);
         },
@@ -1082,9 +1552,11 @@ class QuantumAiAgentService extends ChangeNotifier {
       if (code != 0 && code != 130) {
         final err = stderrBuf.toString().trim();
         final notFound = code == 127 || err.contains('not found');
-        appendText(notFound
-            ? '⚠️ CLI `$bin` не найден. Установите его в разделе агентов (CLI Installer) и войдите в аккаунт.'
-            : '⚠️ `$bin` завершился с кодом $code.${err.isEmpty ? '' : '\n```\n${err.length > 1500 ? err.substring(err.length - 1500) : err}\n```'}');
+        appendText(
+          notFound
+              ? '⚠️ CLI `$bin` не найден. Установите его в разделе агентов (CLI Installer) и войдите в аккаунт.'
+              : '⚠️ `$bin` завершился с кодом $code.${err.isEmpty ? '' : '\n```\n${err.length > 1500 ? err.substring(err.length - 1500) : err}\n```'}',
+        );
       }
       _statusMessage = code == 130 ? 'Остановлено' : 'Готов к работе';
     } catch (e) {
@@ -1108,16 +1580,28 @@ class QuantumAiAgentService extends ChangeNotifier {
 
     String renderText(ChatMessage m, {required bool old}) {
       if (m.toolLabel != null) {
-        final t = old && m.text.length > 400 ? '${m.text.substring(0, 400)}…[сжато]' : m.text;
+        final t = old && m.text.length > 400
+            ? '${m.text.substring(0, 400)}…[сжато]'
+            : m.text;
         return '[Результат инструмента ${m.toolLabel}]\n$t';
       }
-      final buf = StringBuffer(old && m.text.length > 1500 ? '${m.text.substring(0, 1500)}…[сжато]' : m.text);
+      final buf = StringBuffer(
+        old && m.text.length > 1500
+            ? '${m.text.substring(0, 1500)}…[сжато]'
+            : m.text,
+      );
       for (final att in m.attachments) {
-        if (!att.isImage && att.textContent != null && att.textContent!.isNotEmpty) {
+        if (!att.isImage &&
+            att.textContent != null &&
+            att.textContent!.isNotEmpty) {
           final fileBody = old && att.textContent!.length > 800
               ? '${att.textContent!.substring(0, 800)}…[файл сжат]'
-              : (att.textContent!.length > 15000 ? '${att.textContent!.substring(0, 15000)}\n…[обрезано]' : att.textContent!);
-          buf.writeln('\n\n<attached_file name="${att.name}" path="${att.path}">');
+              : (att.textContent!.length > 15000
+                    ? '${att.textContent!.substring(0, 15000)}\n…[обрезано]'
+                    : att.textContent!);
+          buf.writeln(
+            '\n\n<attached_file name="${att.name}" path="${att.path}">',
+          );
           buf.writeln(fileBody);
           buf.writeln('</attached_file>');
         }
@@ -1129,17 +1613,28 @@ class QuantumAiAgentService extends ChangeNotifier {
       {'role': 'system', 'content': systemPrompt},
     ];
     var total = systemPrompt.length;
-    final olderCount = history.length > keepRecent ? history.length - keepRecent : 0;
+    final olderCount = history.length > keepRecent
+        ? history.length - keepRecent
+        : 0;
     for (var i = 0; i < history.length; i++) {
       final m = history[i];
       final old = i < olderCount;
       if (m.role == MessageRole.assistant && m.text.isEmpty) continue;
-      final role = (m.toolLabel != null || m.role == MessageRole.user) ? 'user' : 'assistant';
+      final role = (m.toolLabel != null || m.role == MessageRole.user)
+          ? 'user'
+          : 'assistant';
       final textContent = renderText(m, old: old);
       total += textContent.length;
 
       final imageAttachments = !old
-          ? m.attachments.where((a) => a.isImage && a.base64Data != null && a.base64Data!.isNotEmpty).toList()
+          ? m.attachments
+                .where(
+                  (a) =>
+                      a.isImage &&
+                      a.base64Data != null &&
+                      a.base64Data!.isNotEmpty,
+                )
+                .toList()
           : const <ChatAttachment>[];
 
       if (role == 'user' && imageAttachments.isNotEmpty) {
@@ -1161,7 +1656,9 @@ class QuantumAiAgentService extends ChangeNotifier {
       }
     }
     const idx = 2;
-    while (total > budgetChars && out.length > 6 && idx < out.length - keepRecent) {
+    while (total > budgetChars &&
+        out.length > 6 &&
+        idx < out.length - keepRecent) {
       final c = out[idx]['content'];
       total -= c is String ? c.length : 1000;
       out.removeAt(idx);
@@ -1187,9 +1684,12 @@ class QuantumAiAgentService extends ChangeNotifier {
     final ctx = _tools.contextBlock();
     final rules = _projectRules(wsPath);
     final modeBlock = switch (_mode) {
-      AgentMode.ask => 'РЕЖИМ ASK: Отвечай максимально подробно, профессионально и красиво оформленно. Используй богатый Markdown (структурированные разделы с эмодзи, списки, выделения, цитаты, таблицы). Код оформляй блоками с указанием языка (```dart, ```json, ```bash). Исследуй проект инструментами чтения при необходимости. НЕ предлагай блоки <action>.',
-      AgentMode.plan => 'РЕЖИМ PLAN: Проведи полный аудит архитектуры через инструменты чтения и составь визуально безупречный, детальный нумерованный план: 🎯 Цель, 📋 Пошаговый план (файлы, изменения, логика), 🛠 Архитектурные решения, ⚠️ Возможные риски, ✅ Критерии проверки. НЕ пиши блоки <action>. В конце напиши: «Готов перейти к реализации? Переключись в режим Build и нажми «Выполнить план»!».',
-      AgentMode.build => 'РЕЖИМ BUILD: Реализуй задачу полностью от начала до конца. Если есть план — следуй ему шаг за шагом. Создавай или изменяй файлы через <action type="write_file">, запускай нужные команды и проверки через <action type="run_command">.',
+      AgentMode.ask =>
+        'РЕЖИМ ASK: Отвечай максимально подробно, профессионально и красиво оформленно. Используй богатый Markdown (структурированные разделы с эмодзи, списки, выделения, цитаты, таблицы). Код оформляй блоками с указанием языка (```dart, ```json, ```bash). Исследуй проект инструментами чтения при необходимости. НЕ предлагай блоки <action>.',
+      AgentMode.plan =>
+        'РЕЖИМ PLAN: Проведи полный аудит архитектуры через инструменты чтения и составь визуально безупречный, детальный нумерованный план: 🎯 Цель, 📋 Пошаговый план (файлы, изменения, логика), 🛠 Архитектурные решения, ⚠️ Возможные риски, ✅ Критерии проверки. НЕ пиши блоки <action>. В конце напиши: «Готов перейти к реализации? Переключись в режим Build и нажми «Выполнить план»!».',
+      AgentMode.build =>
+        'РЕЖИМ BUILD: Реализуй задачу полностью от начала до конца. Если есть план — следуй ему шаг за шагом. Создавай или изменяй файлы через <action type="write_file">, запускай нужные команды и проверки через <action type="run_command">.',
     };
     return '''Ты — ведущий ИИ-разработчик и ассистент Quantum IDE (уровень Staff / Principal Engineer).
 Ты работаешь непосредственно с проектом пользователя.
@@ -1238,19 +1738,26 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
       apiKey = settings.openrouterApiKey;
       // Smart fallback to direct provider keys if OpenRouter key is empty
       if (apiKey.isEmpty) {
-        if (settings.deepseekApiKey.isNotEmpty && model.startsWith('deepseek/')) {
+        if (settings.deepseekApiKey.isNotEmpty &&
+            model.startsWith('deepseek/')) {
           endpoint = 'https://api.deepseek.com/chat/completions';
           apiKey = settings.deepseekApiKey;
           model = model.contains('r1') ? 'deepseek-reasoner' : 'deepseek-chat';
-        } else if (settings.geminiApiKey.isNotEmpty && model.startsWith('google/gemini')) {
-          endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+        } else if (settings.geminiApiKey.isNotEmpty &&
+            model.startsWith('google/gemini')) {
+          endpoint =
+              'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
           apiKey = settings.geminiApiKey;
           model = model.contains('pro') ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
-        } else if (settings.groqApiKey.isNotEmpty && (model.contains('llama-3.3') || model.contains('qwen-2.5-coder'))) {
+        } else if (settings.groqApiKey.isNotEmpty &&
+            (model.contains('llama-3.3') || model.contains('qwen-2.5-coder'))) {
           endpoint = 'https://api.groq.com/openai/v1/chat/completions';
           apiKey = settings.groqApiKey;
-          model = model.contains('qwen') ? 'qwen-2.5-coder-32b' : 'llama-3.3-70b-versatile';
-        } else if (settings.openaiApiKey.isNotEmpty && model.startsWith('openai/')) {
+          model = model.contains('qwen')
+              ? 'qwen-2.5-coder-32b'
+              : 'llama-3.3-70b-versatile';
+        } else if (settings.openaiApiKey.isNotEmpty &&
+            model.startsWith('openai/')) {
           endpoint = 'https://api.openai.com/v1/chat/completions';
           apiKey = settings.openaiApiKey;
           model = model.split('/').last;
@@ -1258,28 +1765,34 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
       }
     } else {
       final prov = _selectedModel.providerName;
-      if (prov == 'DeepSeek Direct' || _selectedModel.id.startsWith('deepseek')) {
+      if (prov == 'DeepSeek Direct' ||
+          _selectedModel.id.startsWith('deepseek')) {
         if (settings.deepseekApiKey.isNotEmpty) {
           endpoint = 'https://api.deepseek.com/chat/completions';
           apiKey = settings.deepseekApiKey;
         } else if (settings.openrouterApiKey.isNotEmpty) {
           endpoint = 'https://openrouter.ai/api/v1/chat/completions';
           apiKey = settings.openrouterApiKey;
-          model = _selectedModel.id == 'deepseek-reasoner' ? 'deepseek/deepseek-r1' : 'deepseek/deepseek-chat';
+          model = _selectedModel.id == 'deepseek-reasoner'
+              ? 'deepseek/deepseek-r1'
+              : 'deepseek/deepseek-chat';
         } else {
           endpoint = 'https://api.deepseek.com/chat/completions';
           apiKey = '';
         }
-      } else if (prov == 'Gemini Direct' || _selectedModel.id.startsWith('gemini')) {
+      } else if (prov == 'Gemini Direct' ||
+          _selectedModel.id.startsWith('gemini')) {
         if (settings.geminiApiKey.isNotEmpty) {
-          endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+          endpoint =
+              'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
           apiKey = settings.geminiApiKey;
         } else if (settings.openrouterApiKey.isNotEmpty) {
           endpoint = 'https://openrouter.ai/api/v1/chat/completions';
           apiKey = settings.openrouterApiKey;
           model = 'google/${_selectedModel.id}';
         } else {
-          endpoint = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
+          endpoint =
+              'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
           apiKey = '';
         }
       } else if (prov == 'Groq Cloud') {
@@ -1308,7 +1821,8 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
           endpoint = 'https://api.x.ai/v1/chat/completions';
           apiKey = '';
         }
-      } else if (prov == 'Mistral Direct' || _selectedModel.id.startsWith('codestral')) {
+      } else if (prov == 'Mistral Direct' ||
+          _selectedModel.id.startsWith('codestral')) {
         if (settings.mistralApiKey.isNotEmpty) {
           endpoint = 'https://api.mistral.ai/v1/chat/completions';
           apiKey = settings.mistralApiKey;
@@ -1320,7 +1834,9 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
           endpoint = 'https://api.mistral.ai/v1/chat/completions';
           apiKey = '';
         }
-      } else if (prov == 'OpenAI Direct' || _selectedModel.id.startsWith('gpt') || _selectedModel.id.startsWith('o3')) {
+      } else if (prov == 'OpenAI Direct' ||
+          _selectedModel.id.startsWith('gpt') ||
+          _selectedModel.id.startsWith('o3')) {
         if (settings.openaiApiKey.isNotEmpty) {
           endpoint = 'https://api.openai.com/v1/chat/completions';
           apiKey = settings.openaiApiKey;
@@ -1332,7 +1848,8 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
           endpoint = 'https://api.openai.com/v1/chat/completions';
           apiKey = '';
         }
-      } else if (prov == 'Anthropic Direct' || _selectedModel.id.startsWith('claude')) {
+      } else if (prov == 'Anthropic Direct' ||
+          _selectedModel.id.startsWith('claude')) {
         if (settings.anthropicApiKey.isNotEmpty) {
           endpoint = 'https://api.anthropic.com/v1/chat/completions';
           apiKey = settings.anthropicApiKey;
@@ -1351,9 +1868,15 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
         var base = settings.customApiBaseUrl.trim();
         if (base.isEmpty) base = 'http://127.0.0.1:11434/v1';
         if (base.endsWith('/')) base = base.substring(0, base.length - 1);
-        endpoint = base.endsWith('/chat/completions') ? base : '$base/chat/completions';
-        apiKey = settings.customApiKey.isNotEmpty ? settings.customApiKey : 'ollama';
-        model = settings.customApiModel.trim().isNotEmpty ? settings.customApiModel.trim() : 'qwen2.5-coder:7b';
+        endpoint = base.endsWith('/chat/completions')
+            ? base
+            : '$base/chat/completions';
+        apiKey = settings.customApiKey.isNotEmpty
+            ? settings.customApiKey
+            : 'ollama';
+        model = settings.customApiModel.trim().isNotEmpty
+            ? settings.customApiModel.trim()
+            : 'qwen2.5-coder:7b';
       }
     }
 
@@ -1397,10 +1920,7 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     final response = await _dio.post<ResponseBody>(
       endpoint,
       data: jsonEncode(body),
-      options: Options(
-        headers: headers,
-        responseType: ResponseType.stream,
-      ),
+      options: Options(headers: headers, responseType: ResponseType.stream),
       cancelToken: _currentCancelToken,
     );
 
@@ -1411,7 +1931,11 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     final thinkBuffer = StringBuffer();
     bool insideThink = false;
 
-    await for (final chunk in stream.cast<List<int>>().transform(utf8.decoder).transform(const LineSplitter())) {
+    await for (final chunk
+        in stream
+            .cast<List<int>>()
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
       final line = chunk.trim();
       if (line.isEmpty || line == 'data: [DONE]') continue;
       if (!line.startsWith('data: ')) continue;
@@ -1435,8 +1959,9 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
         final delta = choices[0]['delta'] as Map<String, dynamic>?;
         if (delta == null) continue;
 
-        // 1. Проверяем reasoning_content (DeepSeek R1 / o3-mini)
-        final reasoning = delta['reasoning_content'] as String?;
+        // 1. Проверяем reasoning_content или reasoning (DeepSeek R1 / o3-mini / OpenRouter)
+        final reasoning =
+            (delta['reasoning_content'] ?? delta['reasoning']) as String?;
         if (reasoning != null && reasoning.isNotEmpty) {
           thinkBuffer.write(reasoning);
           targetMsg.thinking = thinkBuffer.toString();
@@ -1481,14 +2006,18 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
       _usageEstimated = true;
       _promptTokens += promptEst;
       _lastPromptTokens = promptEst;
-      _completionTokens += _estimateTokens(targetMsg.text) + _estimateTokens(targetMsg.thinking ?? '');
+      _completionTokens +=
+          _estimateTokens(targetMsg.text) +
+          _estimateTokens(targetMsg.thinking ?? '');
     }
     notifyListeners();
   }
 
   void _parseActions(ChatMessage msg) {
     final text = msg.text;
-    final writeRegExp = RegExp(r'<action\s+type="write_file"\s+path="([^"]+)">([\s\S]*?)<\/action>');
+    final writeRegExp = RegExp(
+      r'<action\s+type="write_file"\s+path="([^"]+)">([\s\S]*?)<\/action>',
+    );
     final matches = writeRegExp.allMatches(text);
 
     for (final match in matches) {
@@ -1496,26 +2025,20 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
       final content = match.group(2)?.trim() ?? '';
       if (path.isNotEmpty) {
         msg.actions.add(
-          AgentAction(
-            type: 'write_file',
-            path: path,
-            content: content,
-          ),
+          AgentAction(type: 'write_file', path: path, content: content),
         );
       }
     }
 
-    final cmdRegExp = RegExp(r'<action\s+type="run_command">([\s\S]*?)<\/action>');
+    final cmdRegExp = RegExp(
+      r'<action\s+type="run_command">([\s\S]*?)<\/action>',
+    );
     final cmdMatches = cmdRegExp.allMatches(text);
     for (final match in cmdMatches) {
       final cmd = match.group(1)?.trim() ?? '';
       if (cmd.isNotEmpty) {
         msg.actions.add(
-          AgentAction(
-            type: 'run_command',
-            path: '',
-            command: cmd,
-          ),
+          AgentAction(type: 'run_command', path: '', command: cmd),
         );
       }
     }
@@ -1525,7 +2048,9 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
   String? _resolveActionPath(AgentAction action) {
     final ws = _getWorkspacePath();
     if (ws == null) return null;
-    final full = p.normalize(p.isAbsolute(action.path) ? action.path : p.join(ws, action.path));
+    final full = p.normalize(
+      p.isAbsolute(action.path) ? action.path : p.join(ws, action.path),
+    );
     // Агент не должен писать за пределами проекта.
     if (!p.isWithin(ws, full)) return null;
     return full;
@@ -1544,12 +2069,16 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     try {
       final file = File(fullPath);
       if (!action.backupTaken) {
-        action.backupContent = await file.exists() ? await file.readAsString() : null;
+        action.backupContent = await file.exists()
+            ? await file.readAsString()
+            : null;
         action.backupTaken = true;
         if (action.backupContent != null) {
           try {
             final stamp = DateTime.now().millisecondsSinceEpoch;
-            final bak = File(p.join(ws, '.quantum', 'agent_backups', '$stamp', action.path));
+            final bak = File(
+              p.join(ws, '.quantum', 'agent_backups', '$stamp', action.path),
+            );
             await bak.parent.create(recursive: true);
             await bak.writeAsString(action.backupContent!);
           } catch (_) {}
@@ -1576,7 +2105,12 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
   /// Откатывает одно применённое действие (возвращает прежнее содержимое или удаляет созданный файл).
   Future<bool> undoWriteAction(AgentAction action) async {
     final fullPath = _resolveActionPath(action);
-    if (fullPath == null || !action.isExecuted || !action.backupTaken || action.isUndone) return false;
+    if (fullPath == null ||
+        !action.isExecuted ||
+        !action.backupTaken ||
+        action.isUndone) {
+      return false;
+    }
     try {
       final file = File(fullPath);
       if (action.backupContent == null) {
@@ -1597,14 +2131,26 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
   /// Сколько правок агента сейчас применено и может быть откачено.
   int get undoableCount => _messages
       .expand((m) => m.actions)
-      .where((a) => a.type == 'write_file' && a.isExecuted && a.backupTaken && !a.isUndone)
+      .where(
+        (a) =>
+            a.type == 'write_file' &&
+            a.isExecuted &&
+            a.backupTaken &&
+            !a.isUndone,
+      )
       .length;
 
   /// «↩ Откатить все изменения агента» (в обратном порядке применения).
   Future<int> undoAllAgentChanges() async {
     final list = _messages
         .expand((m) => m.actions)
-        .where((a) => a.type == 'write_file' && a.isExecuted && a.backupTaken && !a.isUndone)
+        .where(
+          (a) =>
+              a.type == 'write_file' &&
+              a.isExecuted &&
+              a.backupTaken &&
+              !a.isUndone,
+        )
         .toList()
         .reversed;
     var n = 0;
@@ -1619,7 +2165,9 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     if (_isGenerating) return;
     _mode = AgentMode.build;
     notifyListeners();
-    await sendMessage('Выполни согласованный выше план по шагам. Начни с первого шага.');
+    await sendMessage(
+      'Выполни согласованный выше план по шагам. Начни с первого шага.',
+    );
   }
 
   /// Запускает команду терминала
@@ -1630,34 +2178,52 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
     action.executionError = null;
     notifyListeners();
     try {
-      final out = await _runtime.runCommand(action.command!, workingDirectory: ws).timeout(
-        const Duration(minutes: 5),
-        onTimeout: () => throw TimeoutException('Превышено время ожидания выполнения команды (5 мин).'),
-      );
+      final out = await _runtime
+          .runCommand(action.command!, workingDirectory: ws)
+          .timeout(
+            const Duration(minutes: 5),
+            onTimeout: () => throw TimeoutException(
+              'Превышено время ожидания выполнения команды (5 мин).',
+            ),
+          );
       action.isExecuted = true;
       action.output = out;
-      final clipped = out.length > 6000 ? '…${out.substring(out.length - 6000)}' : out;
-      _messages.add(ChatMessage(
-        id: 'tool_${DateTime.now().microsecondsSinceEpoch}',
-        role: MessageRole.system,
-        text: clipped.trim().isEmpty ? '(пустой вывод)' : clipped,
-        toolLabel: 'run_command ${action.command}',
-        timestamp: DateTime.now(),
-      ));
+      final clipped = out.length > 6000
+          ? '…${out.substring(out.length - 6000)}'
+          : out;
+      _messages.add(
+        ChatMessage(
+          id: 'tool_${DateTime.now().microsecondsSinceEpoch}',
+          role: MessageRole.system,
+          text: clipped.trim().isEmpty ? '(пустой вывод)' : clipped,
+          toolLabel: 'run_command ${action.command}',
+          timestamp: DateTime.now(),
+        ),
+      );
       notifyListeners();
       // Возвращаем результат агенту для продолжения
-      unawaited(sendMessage('Команда выполнена успешно. Результат:\n```\n${clipped.trim()}\n```\nПроанализируй вывод и продолжай задачу.'));
+      unawaited(
+        sendMessage(
+          'Команда выполнена успешно. Результат:\n```\n${clipped.trim()}\n```\nПроанализируй вывод и продолжай задачу.',
+        ),
+      );
     } catch (e) {
       action.executionError = '$e';
-      _messages.add(ChatMessage(
-        id: 'tool_err_${DateTime.now().microsecondsSinceEpoch}',
-        role: MessageRole.system,
-        text: '⚠️ Ошибка при выполнении команды `${action.command}`:\n$e',
-        toolLabel: 'error ${action.command}',
-        timestamp: DateTime.now(),
-      ));
+      _messages.add(
+        ChatMessage(
+          id: 'tool_err_${DateTime.now().microsecondsSinceEpoch}',
+          role: MessageRole.system,
+          text: '⚠️ Ошибка при выполнении команды `${action.command}`:\n$e',
+          toolLabel: 'error ${action.command}',
+          timestamp: DateTime.now(),
+        ),
+      );
       notifyListeners();
-      unawaited(sendMessage('При выполнении команды `${action.command}` произошла ошибка:\n$e\nПредложи исправление.'));
+      unawaited(
+        sendMessage(
+          'При выполнении команды `${action.command}` произошла ошибка:\n$e\nПредложи исправление.',
+        ),
+      );
     } finally {
       action.isExecuting = false;
       notifyListeners();
@@ -1665,51 +2231,61 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
   }
 }
 
-final quantumAiAgentServiceProvider = ChangeNotifierProvider<QuantumAiAgentService>((ref) {
-  final runtime = ref.watch(runtimeServiceProvider);
-  SettingsState settings() => ref.read(settingsProvider);
-  String? ws() => ref.read(workspaceProvider).currentPath;
-  AgentContext agentCtx() {
-    final ed = ref.read(editorProvider);
-    final wsPath = ref.read(workspaceProvider).currentPath;
-    EditorFile? active;
-    if (ed.openFiles.isNotEmpty && ed.activeTabIndex < ed.openFiles.length) {
-      active = ed.openFiles[ed.activeTabIndex];
-    }
-    String? content;
-    String? selection;
-    int? line;
-    if (active != null && !active.isImage) {
-      try {
-        final c = active.controller;
-        selection = c.selectedText;
-        line = c.selection.baseIndex + 1;
-        final t = c.text;
-        content = t.length > 20000 ? t.substring(0, 20000) : t;
-      } catch (_) {}
-    }
-    final diags = <String>[];
-    ed.allDiagnostics.forEach((path, list) {
-      final rel = (wsPath != null && p.isWithin(wsPath, path)) ? p.relative(path, from: wsPath) : path;
-      for (final d in list) {
-        if (d.severity == CodeDiagnosticSeverity.hint) continue;
-        diags.add('$rel:${d.range.index + 1} ${d.severity.name}: ${d.message}');
+final quantumAiAgentServiceProvider =
+    ChangeNotifierProvider<QuantumAiAgentService>((ref) {
+      final runtime = ref.watch(runtimeServiceProvider);
+      SettingsState settings() => ref.read(settingsProvider);
+      String? ws() => ref.read(workspaceProvider).currentPath;
+      AgentContext agentCtx() {
+        final ed = ref.read(editorProvider);
+        final wsPath = ref.read(workspaceProvider).currentPath;
+        EditorFile? active;
+        if (ed.openFiles.isNotEmpty &&
+            ed.activeTabIndex < ed.openFiles.length) {
+          active = ed.openFiles[ed.activeTabIndex];
+        }
+        String? content;
+        String? selection;
+        int? line;
+        if (active != null && !active.isImage) {
+          try {
+            final c = active.controller;
+            selection = c.selectedText;
+            line = c.selection.baseIndex + 1;
+            final t = c.text;
+            content = t.length > 20000 ? t.substring(0, 20000) : t;
+          } catch (_) {}
+        }
+        final diags = <String>[];
+        ed.allDiagnostics.forEach((path, list) {
+          final rel = (wsPath != null && p.isWithin(wsPath, path))
+              ? p.relative(path, from: wsPath)
+              : path;
+          for (final d in list) {
+            if (d.severity == CodeDiagnosticSeverity.hint) continue;
+            diags.add(
+              '$rel:${d.range.index + 1} ${d.severity.name}: ${d.message}',
+            );
+          }
+        });
+        return AgentContext(
+          activeFilePath: active?.path,
+          activeFileContent: content,
+          selection: selection,
+          cursorLine: line,
+          openFiles: ed.openFiles.map((f) => f.name).toList(),
+          diagnostics: diags,
+        );
       }
-    });
-    return AgentContext(
-      activeFilePath: active?.path,
-      activeFileContent: content,
-      selection: selection,
-      cursorLine: line,
-      openFiles: ed.openFiles.map((f) => f.name).toList(),
-      diagnostics: diags,
-    );
-  }
 
-  final mcpBridge = McpBridge(
-    listTools: () => ref.read(mcpServiceProvider.notifier).getAvailableMcpTools(),
-    call: (server, tool, args) => ref.read(mcpServiceProvider.notifier).executeMcpTool(server, tool, args),
-    internetAccess: () => ref.read(mcpServiceProvider.notifier).internetAccess,
-  );
-  return QuantumAiAgentService(runtime, settings, ws, agentCtx, mcpBridge);
-});
+      final mcpBridge = McpBridge(
+        listTools: () =>
+            ref.read(mcpServiceProvider.notifier).getAvailableMcpTools(),
+        call: (server, tool, args) => ref
+            .read(mcpServiceProvider.notifier)
+            .executeMcpTool(server, tool, args),
+        internetAccess: () =>
+            ref.read(mcpServiceProvider.notifier).internetAccess,
+      );
+      return QuantumAiAgentService(runtime, settings, ws, agentCtx, mcpBridge);
+    });

@@ -849,25 +849,37 @@ flutter() {
         pkill -9 -f GradleDaemon 2>/dev/null || true
         pkill -9 -f KotlinCompileDaemon 2>/dev/null || true
 
-        # Dynamically choose safe JVM heap based on real free Android RAM (/proc/meminfo)
+        # Dynamically choose safe JVM heap and concurrency based on real free Android RAM (/proc/meminfo)
         local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
         local mem_avail_mb=$(( ${mem_avail_kb:-1800000} / 1024 ))
         local jvm_xmx="1280m"
         local jvm_meta="384m"
         local dart_heap="768"
-        if [ "$mem_avail_mb" -ge 2600 ]; then
+        local gradle_workers=1
+        local gradle_parallel=false
+        if [ "$mem_avail_mb" -ge 2400 ]; then
+            jvm_xmx="1792m"
+            jvm_meta="512m"
+            dart_heap="1024"
+            gradle_workers=2
+            gradle_parallel=true
+        elif [ "$mem_avail_mb" -ge 1800 ]; then
             jvm_xmx="1536m"
             jvm_meta="448m"
             dart_heap="896"
+            gradle_workers=2
+            gradle_parallel=false
         elif [ "$mem_avail_mb" -lt 1350 ]; then
             jvm_xmx="1024m"
             jvm_meta="320m"
             dart_heap="640"
+            gradle_workers=1
+            gradle_parallel=false
         fi
 
         export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
         export DART_VM_OPTIONS="--old_gen_heap_size=${dart_heap}"
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=1 -Dorg.gradle.parallel=false -Dkotlin.compiler.execution.strategy=in-process"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${gradle_workers} -Dorg.gradle.parallel=${gradle_parallel} -Dorg.gradle.caching=true -Dkotlin.compiler.execution.strategy=in-process"
 
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
@@ -879,11 +891,15 @@ flutter() {
                 sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
                 sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
                 sed -i '/kotlin.compiler.execution.strategy/d' "$gp" 2>/dev/null || true
+                sed -i '/org.gradle.caching/d' "$gp" 2>/dev/null || true
+                sed -i '/org.gradle.parallel/d' "$gp" 2>/dev/null || true
+                sed -i '/org.gradle.workers.max/d' "$gp" 2>/dev/null || true
                 echo "org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8" >> "$gp"
                 echo "kotlin.compiler.execution.strategy=in-process" >> "$gp"
+                echo "org.gradle.caching=true" >> "$gp"
+                echo "org.gradle.parallel=${gradle_parallel}" >> "$gp"
+                echo "org.gradle.workers.max=${gradle_workers}" >> "$gp"
                 grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
-                grep -q "org.gradle.workers.max" "$gp" 2>/dev/null || echo "org.gradle.workers.max=1" >> "$gp"
-                grep -q "org.gradle.parallel" "$gp" 2>/dev/null || echo "org.gradle.parallel=false" >> "$gp"
                 grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
                 grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
                 grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
@@ -907,7 +923,7 @@ flutter() {
         done
 
         local extra_flags=()
-        if [ "$has_plat" = "false" ]; then
+        if [ "$has_plat" = "false" ] && [ "$2" != "appbundle" ]; then
             extra_flags+=("--target-platform" "android-arm64")
         fi
         if [ "$has_val" = "false" ]; then
@@ -925,30 +941,40 @@ flutter() {
             "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
             "-Pandroid.aapt2.daemon=false"
             "-Pandroid.enableJetifier=false"
-            "-Porg.gradle.workers.max=1"
-            "-Porg.gradle.parallel=false"
+            "-Porg.gradle.workers.max=${gradle_workers}"
+            "-Porg.gradle.parallel=${gradle_parallel}"
+            "-Porg.gradle.caching=true"
+            "-Dorg.gradle.caching=true"
             "-Pkotlin.compiler.execution.strategy=in-process"
             "-Dorg.gradle.daemon=false"
             "-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}"
         )
 
-        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → dart=${dart_heap}MB, jvm=${jvm_xmx}, kotlin=in-process, daemon=off)..."
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
         command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
         local ret=$?
 
         if [ $ret -eq 0 ]; then
+            if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
+                cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
+                echo -e "\033[1;32m✓ AppBundle (Google Play) готов:\033[0m ./app-release.aab"
+            fi
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
                 echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
-            elif [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
-                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release.apk 2>/dev/null || true
-                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
-            elif [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+            fi
+            local found_split=false
+            for sapk in build/app/outputs/flutter-apk/app-*-release.apk; do
+                if [ -f "$sapk" ]; then
+                    local sname="$(basename "$sapk")"
+                    cp -f "$sapk" "./$sname" 2>/dev/null || true
+                    echo -e "\033[1;32m✓ Split APK готов:\033[0m ./$sname"
+                    found_split=true
+                fi
+            done
+            if [ "$found_split" = "false" ] && [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-debug.apk" ./app-debug.apk 2>/dev/null || true
                 echo -e "\033[1;32m✓ Debug APK готов:\033[0m ./app-debug.apk"
-            elif [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
-                cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
-                echo -e "\033[1;32m✓ AppBundle готов:\033[0m ./app-release.aab"
             fi
         else
             echo -e "\033[1;31m✗ Сборка завершилась с кодом $ret\033[0m"
@@ -1232,12 +1258,23 @@ flutter() {
         local mem_avail_mb=$(( ${mem_avail_kb:-1800000} / 1024 ))
         local jvm_xmx="1280m"
         local jvm_meta="384m"
-        if [ "$mem_avail_mb" -ge 2600 ]; then
+        local gradle_workers=1
+        local gradle_parallel=false
+        if [ "$mem_avail_mb" -ge 2400 ]; then
+            jvm_xmx="1792m"
+            jvm_meta="512m"
+            gradle_workers=2
+            gradle_parallel=true
+        elif [ "$mem_avail_mb" -ge 1800 ]; then
             jvm_xmx="1536m"
             jvm_meta="448m"
+            gradle_workers=2
+            gradle_parallel=false
         elif [ "$mem_avail_mb" -lt 1350 ]; then
             jvm_xmx="1024m"
             jvm_meta="320m"
+            gradle_workers=1
+            gradle_parallel=false
         fi
         export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
 
@@ -1247,10 +1284,16 @@ flutter() {
                 touch "$gp" 2>/dev/null || true
                 sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
                 sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
+                sed -i '/kotlin.compiler.execution.strategy/d' "$gp" 2>/dev/null || true
+                sed -i '/org.gradle.caching/d' "$gp" 2>/dev/null || true
+                sed -i '/org.gradle.parallel/d' "$gp" 2>/dev/null || true
+                sed -i '/org.gradle.workers.max/d' "$gp" 2>/dev/null || true
                 echo "org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8" >> "$gp"
+                echo "kotlin.compiler.execution.strategy=in-process" >> "$gp"
+                echo "org.gradle.caching=true" >> "$gp"
+                echo "org.gradle.parallel=${gradle_parallel}" >> "$gp"
+                echo "org.gradle.workers.max=${gradle_workers}" >> "$gp"
                 grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
-                grep -q "org.gradle.workers.max" "$gp" 2>/dev/null || echo "org.gradle.workers.max=1" >> "$gp"
-                grep -q "org.gradle.parallel" "$gp" 2>/dev/null || echo "org.gradle.parallel=false" >> "$gp"
                 grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
                 grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
                 grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
@@ -1274,7 +1317,7 @@ flutter() {
         done
 
         local extra_flags=()
-        if [ "$has_plat" = "false" ]; then
+        if [ "$has_plat" = "false" ] && [ "$2" != "appbundle" ]; then
             extra_flags+=("--target-platform" "android-arm64")
         fi
         if [ "$has_val" = "false" ]; then
@@ -1292,30 +1335,40 @@ flutter() {
             "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
             "-Pandroid.aapt2.daemon=false"
             "-Pandroid.enableJetifier=false"
-            "-Porg.gradle.workers.max=1"
-            "-Porg.gradle.parallel=false"
+            "-Porg.gradle.workers.max=${gradle_workers}"
+            "-Porg.gradle.parallel=${gradle_parallel}"
+            "-Porg.gradle.caching=true"
+            "-Dorg.gradle.caching=true"
             "-Pkotlin.compiler.execution.strategy=in-process"
             "-Dorg.gradle.daemon=false"
             "-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}"
         )
 
-        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → jvm=${jvm_xmx}, daemon=off)..."
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
         command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
         local ret=$?
 
         if [ $ret -eq 0 ]; then
+            if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
+                cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
+                echo -e "\033[1;32m✓ AppBundle (Google Play) готов:\033[0m ./app-release.aab"
+            fi
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
                 echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
-            elif [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
-                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release.apk 2>/dev/null || true
-                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
-            elif [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+            fi
+            local found_split=false
+            for sapk in build/app/outputs/flutter-apk/app-*-release.apk; do
+                if [ -f "$sapk" ]; then
+                    local sname="$(basename "$sapk")"
+                    cp -f "$sapk" "./$sname" 2>/dev/null || true
+                    echo -e "\033[1;32m✓ Split APK готов:\033[0m ./$sname"
+                    found_split=true
+                fi
+            done
+            if [ "$found_split" = "false" ] && [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-debug.apk" ./app-debug.apk 2>/dev/null || true
                 echo -e "\033[1;32m✓ Debug APK готов:\033[0m ./app-debug.apk"
-            elif [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
-                cp -f "build/app/outputs/bundle/release/app-release.aab" ./app-release.aab 2>/dev/null || true
-                echo -e "\033[1;32m✓ AppBundle готов:\033[0m ./app-release.aab"
             fi
         fi
 
@@ -3326,41 +3379,7 @@ find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 4 -name "gradle.properties"
     fi
 done
 
-# Patch Groovy build.gradle to force arm64-v8a abiFilters
-find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 5 -name "build.gradle" 2>/dev/null | while read -r f; do
-    if grep -q "defaultConfig" "$f" 2>/dev/null; then
-        if ! grep -q "abiFilters" "$f" 2>/dev/null; then
-            python3 -c '
-import sys
-path = sys.argv[1]
-with open(path, "r") as file:
-    content = file.read()
-if "defaultConfig {" in content and "abiFilters" not in content:
-    patched = content.replace("defaultConfig {", "defaultConfig {\n        ndk {\n            abiFilters \x27arm64-v8a\x27\n        }")
-    with open(path, "w") as file:
-        file.write(patched)
-' "$f" 2>/dev/null
-        fi
-    fi
-done
-
-# Patch Kotlin build.gradle.kts to force arm64-v8a abiFilters
-find "/root/projects" "/sdcard/QuantumIDE" -maxdepth 5 -name "build.gradle.kts" 2>/dev/null | while read -r f; do
-    if grep -q "defaultConfig" "$f" 2>/dev/null; then
-        if ! grep -q "abiFilters" "$f" 2>/dev/null; then
-            python3 -c '
-import sys
-path = sys.argv[1]
-with open(path, "r") as file:
-    content = file.read()
-if "defaultConfig {" in content and "abiFilters" not in content:
-    patched = content.replace("defaultConfig {", "defaultConfig {\n        ndk {\n            abiFilters += listOf(\"arm64-v8a\")\n        }")
-    with open(path, "w") as file:
-        file.write(patched)
-' "$f" 2>/dev/null
-        fi
-    fi
-done
+# Project build files retain user/default ABI configuration (allowing --split-per-abi & AppBundle)
 
 # Setup completed successfully
 touch "$DONE_FLAG"
