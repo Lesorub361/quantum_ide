@@ -1,16 +1,16 @@
 {
-  "versionCode": 217,
-  "versionName": "1.2.200",
-  "notes": "QuantumIDE v1.2.200:\n• 🛡️ Исправлена порча кода при автосохранении и сворачивании IDE: блокировка параллельных сохранений (_savingPaths), сохранение только изменённых вкладок (isModified), отключение автоформатирования LSP при автосохранении и защита applyLSPEdits.\n• 📊 Точный Диспетчер задач и статус-бар: исправлены 0% CPU на Android 14+, масштабирование загрузки GPU Adreno по частоте (gpuclk/max_gpuclk) и убрана двойная скобка в названии процессора.\n• 💻 Стабильный терминал и TUI (Claude Code / Gemini CLI): устранено дублирование слов при выводе, увеличено окно буферизации OSC 8 / CSI последовательностей до 2048 байт и синхронизирован размер строк/колонок PTY.\n• 🤖 Боковая изменяемая панель Quantum AI (справа на ПК/планшетах), 9 AI-провайдеров (OpenRouter, DeepSeek, Claude, Gemini, OpenAI, Groq, Mistral, xAI Grok, Ollama), прикрепление файлов (📎) и фото (🖼️), а также строгий монохромный дизайн кнопок.",
+  "versionCode": 219,
+  "versionName": "1.2.202",
+  "notes": "QuantumIDE v1.2.202:\n• 📺 Исправлено исчезновение буфера терминала при разделении экрана (Split-Screen) и возврате в полный экран.\n• ⌨️ Блокировка самовольного всплытия клавиатуры телефона при прокрутке и касании терминала (только по кнопке [Клава]).\n• 🔤 Исправлен русский ввод: устранены искажения, скачки и дублирование букв при вводе через Android IME (C.UTF-8 + дебаунс композиции).\n• ⏎ Добавлена выделенная кнопка ENTER на виртуальной клавиатуре терминала для легкого подтверждения действий в Antigravity и CLI.\n• 💧 Исправлено выделение текста: маркеры («капельки») плавно автоскроллят терминал при дотягивании до края и не пропадают.\n• 🔘 Горизонтальный скролл экшен-бара терминала — кнопки больше не сжимаются в нечитаемые точки (P...).",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.200/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.202/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.200",
-  "buildNumber": 217,
-  "tag_name": "v1.2.200",
-  "releaseNotes": "Critical fixes: prevent LSP/auto-save file corruption on app switch, accurate CPU/GPU metrics in Task Manager, fix terminal duplicate words & TUI column alignment, right-side resizable AI Agent dock with file/image attachments and 9 AI providers."
+  "version": "1.2.202",
+  "buildNumber": 219,
+  "tag_name": "v1.2.202",
+  "releaseNotes": "QuantumIDE v1.2.202: Terminal split-screen resize fix, prevent auto-popup of soft keyboard on scroll, Russian IME duplicate input fix, dedicated ENTER virtual key for CLI prompts, auto-scrolling selection handles."
 }
