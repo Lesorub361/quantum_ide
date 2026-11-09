@@ -13,6 +13,7 @@ import '../../models/project_model.dart';
 import '../services/runtime_service.dart';
 import '../services/workspace_service.dart';
 import '../../features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
+import '../services/build_resource_optimizer.dart';
 
 class ProjectService extends StateNotifier<List<Project>> {
   final Ref _ref;
@@ -1044,19 +1045,20 @@ edition = "2021"
       await _copyGradleWrapper(p.join(projectPath, 'android'));
     }
 
-    // --- android/gradle.properties (Safe memory for mobile) ---
+    // --- android/gradle.properties (Dynamically auto-tuned for hardware) ---
     final gradlePropsFile = File(p.join(projectPath, 'android', 'gradle.properties'));
-    const safeProps = '''org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=320m
+    final resourceConfig = BuildResourceOptimizer.computeResourceConfig();
+    final safeProps = '''org.gradle.jvmargs=-Xmx${resourceConfig.jvmHeapMb}m -XX:MaxMetaspaceSize=${resourceConfig.jvmMetaspaceMb}m
 android.useAndroidX=true
 android.enableJetifier=true
 org.gradle.daemon=false
-org.gradle.parallel=false
-org.gradle.workers.max=1
+org.gradle.parallel=${resourceConfig.parallel}
+org.gradle.workers.max=${resourceConfig.workers}
 android.aapt2.daemon=false
 org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
 ''';
     await gradlePropsFile.writeAsString(safeProps);
-    debugPrint('[ProjectService] Injected safe mobile gradle.properties');
+    debugPrint('[ProjectService] Injected adaptive mobile gradle.properties (workers=${resourceConfig.workers}, jvm=${resourceConfig.jvmHeapMb}m)');
 
     // --- android/local.properties ---
     final localProps = File(p.join(projectPath, 'android', 'local.properties'));
@@ -1174,8 +1176,9 @@ flutter {
 }
 ''');
 
-    // ── gradle.properties ──
-    await _createFile(p.join(androidDir, 'gradle.properties'), 'org.gradle.jvmargs=-Xmx1024m -XX:MaxMetaspaceSize=320m\nandroid.useAndroidX=true\nandroid.enableJetifier=true\norg.gradle.daemon=false\norg.gradle.parallel=false\norg.gradle.workers.max=1\norg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64\n');
+    // ── gradle.properties (Adaptive) ──
+    final newProjConfig = BuildResourceOptimizer.computeResourceConfig();
+    await _createFile(p.join(androidDir, 'gradle.properties'), 'org.gradle.jvmargs=-Xmx${newProjConfig.jvmHeapMb}m -XX:MaxMetaspaceSize=${newProjConfig.jvmMetaspaceMb}m\nandroid.useAndroidX=true\nandroid.enableJetifier=true\norg.gradle.daemon=false\norg.gradle.parallel=${newProjConfig.parallel}\norg.gradle.workers.max=${newProjConfig.workers}\norg.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64\n');
 
     // ── local.properties ──
     await _createFile(p.join(androidDir, 'local.properties'), 'flutter.sdk=/root/flutter\nflutter.buildMode=debug\nflutter.versionName=1.0.0\nflutter.versionCode=1\n');

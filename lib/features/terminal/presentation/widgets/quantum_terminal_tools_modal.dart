@@ -420,14 +420,24 @@ class _QuantumTerminalToolsModalState extends ConsumerState<QuantumTerminalTools
             runSpacing: 8,
             children: [
               _buildQuickActionChip(
+                'Сборка APK ARM64 ⚡ (64-бит)',
+                LucideIcons.zap,
+                () => _sendToTerminal('flutter build apk --release --target-platform android-arm64', execute: true),
+              ),
+              _buildQuickActionChip(
+                'Сборка APK ARMv7 (32-бит)',
+                LucideIcons.smartphone,
+                () => _sendToTerminal('flutter build apk --release --target-platform android-arm', execute: true),
+              ),
+              _buildQuickActionChip(
+                'Сборка APK x86_64',
+                LucideIcons.monitor,
+                () => _sendToTerminal('flutter build apk --release --target-platform android-x64', execute: true),
+              ),
+              _buildQuickActionChip(
                 'Сборка AppBundle (AAB Google Play)',
                 LucideIcons.rocket,
                 () => _sendToTerminal('flutter build appbundle --release', execute: true),
-              ),
-              _buildQuickActionChip(
-                'Сборка Release APK (ARM64)',
-                LucideIcons.package,
-                () => _sendToTerminal('flutter build apk --release', execute: true),
               ),
               _buildQuickActionChip(
                 'Сборка Split APKs (v7/v8/x64)',

@@ -23,6 +23,9 @@ import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
+import 'package:quantum_ide/core/services/build_resource_optimizer.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/build_target_dialog.dart';
 
 // Standalone Sidebar Run Panel
 const String _ktRepairCmd =
@@ -648,7 +651,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         '(pkill -9 -f GradleDaemon 2>/dev/null || true); '
         '(pkill -9 -f KotlinCompileDaemon 2>/dev/null || true); '
         '(mkdir -p ~/.gradle 2>/dev/null || true); '
-        '(printf "org.gradle.daemon=false\\norg.gradle.parallel=false\\norg.gradle.workers.max=1\\nandroid.aapt2.daemon=false\\norg.gradle.jvmargs=-Xmx768m -XX:+UseSerialGC\\n" > ~/.gradle/gradle.properties 2>/dev/null || true); ';
+        '(sed -i "/extra-gen-snapshot-options/d" ~/.gradle/gradle.properties 2>/dev/null || true); ';
     final finalCmd = cdCmd.isNotEmpty
         ? '$clearScreen && $killZombiesAndPrepMem$cdCmd && $banner && ($cmd)$restoreTty'
         : '$clearScreen && $killZombiesAndPrepMem$banner && ($cmd)$restoreTty';
@@ -710,6 +713,21 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
       'cp app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk && echo "✓ Web APK успешно собран: ./app-debug.apk"',
     ].join(' && ');
     _runDedicatedCommand(workspacePath, cmd);
+  }
+
+  void _openBuildDialog(String? workspacePath) {
+    final projectName = workspacePath != null ? p.basename(workspacePath) : null;
+    AdaptiveDialogHelper.showAdaptiveSheet(
+      context: context,
+      desktopMaxWidth: 560,
+      desktopMaxHeight: 680,
+      builder: (ctx) => BuildTargetDialog(
+        initialProjectName: projectName,
+        onStartBuild: (command, displayCmd, target) {
+          _runDedicatedCommand(workspacePath, command, displayCmd: displayCmd);
+        },
+      ),
+    );
   }
 
   xt.TerminalTheme _getTerminalTheme(String themeName) {
@@ -1016,22 +1034,32 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
       default:
         buildActions = [
-          _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
+          _buildActionButton('⚡ Выбор сборки...', LucideIcons.sliders_horizontal, const Color(0xFF10B981),
+              () => _openBuildDialog(workspaceState.currentPath)),
+          _buildActionButton('APK 64-бит (arm64)', LucideIcons.zap, Colors.amber,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --debug --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk',
-                  displayCmd: 'flutter build apk --debug')),
-          _buildActionButton(l10n.buildAPK, LucideIcons.package, Colors.orange,
+                  BuildResourceOptimizer.generateBuildCommand(target: BuildTargetType.arm64),
+                  displayCmd: 'flutter build apk --release (ARM64 64-бит)')),
+          _buildActionButton('APK 32-бит (arm)', LucideIcons.smartphone, Colors.blueAccent,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)',
-                  displayCmd: 'flutter build apk --release')),
+                  BuildResourceOptimizer.generateBuildCommand(target: BuildTargetType.arm32),
+                  displayCmd: 'flutter build apk --release (ARMv7 32-бит)')),
+          _buildActionButton('APK x86_64', LucideIcons.monitor, Colors.cyanAccent,
+              () => _runDedicatedCommand(workspaceState.currentPath,
+                  BuildResourceOptimizer.generateBuildCommand(target: BuildTargetType.x86_64),
+                  displayCmd: 'flutter build apk --release (x86_64)')),
           _buildActionButton('AAB (Google Play)', LucideIcons.rocket, Colors.purpleAccent,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB): ./app-release.aab"',
+                  BuildResourceOptimizer.generateBuildCommand(target: BuildTargetType.aab),
                   displayCmd: 'flutter build appbundle --release')),
-          _buildActionButton('Split APKs', LucideIcons.boxes, Colors.amberAccent,
+          _buildActionButton('Split APKs', LucideIcons.boxes, Colors.orangeAccent,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs (v7/v8/x64) ready in project root"',
+                  BuildResourceOptimizer.generateBuildCommand(target: BuildTargetType.split),
                   displayCmd: 'flutter build apk --release --split-per-abi')),
+          _buildActionButton('Debug APK', LucideIcons.bug, Colors.yellow,
+              () => _runDedicatedCommand(workspaceState.currentPath,
+                  BuildResourceOptimizer.generateBuildCommand(target: BuildTargetType.debug),
+                  displayCmd: 'flutter build apk --debug')),
           _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,

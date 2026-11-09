@@ -48,6 +48,8 @@ import 'package:quantum_ide/features/editor/presentation/widgets/project_sync_pa
 import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
+import 'package:quantum_ide/core/services/build_resource_optimizer.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/build_target_dialog.dart';
 
 // ─── Вспомогательные функции для диалогов и меню ───────────────────────────
 
@@ -1130,40 +1132,70 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     ),
                                     itemBuilder: (context) => [
                                       _buildBuildMenuItem(
-                                        'build_apk',
-                                        LucideIcons.package,
-                                        'Собрать Release APK',
-                                        'Готовый APK для установки (ARM64)',
-                                        Colors.orange,
+                                        'open_dialog',
+                                        LucideIcons.sliders_horizontal,
+                                        'Настройка и запуск сборки...',
+                                        'Выбор архитектуры, RAM и воркеров CPU',
+                                        const Color(0xFF10B981),
+                                      ),
+                                      const PopupMenuDivider(),
+                                      _buildBuildMenuItem(
+                                        'build_arm64',
+                                        LucideIcons.zap,
+                                        'APK ARM64 (64-бит) ⚡',
+                                        'В 4-5 раз быстрее · Для планшета/телефона',
+                                        Colors.amber,
                                       ),
                                       _buildBuildMenuItem(
-                                        'build_aab',
-                                        LucideIcons.rocket,
-                                        'Собрать AppBundle (AAB)',
-                                        'Бандл для публикации в Google Play',
-                                        Colors.purpleAccent,
+                                        'build_arm32',
+                                        LucideIcons.smartphone,
+                                        'APK ARMv7 (32-бит)',
+                                        'Для старых смартфонов (32-bit ARM)',
+                                        Colors.blueAccent,
+                                      ),
+                                      _buildBuildMenuItem(
+                                        'build_x64',
+                                        LucideIcons.monitor,
+                                        'APK x86_64',
+                                        'Для эмуляторов Android и ПК',
+                                        Colors.cyanAccent,
                                       ),
                                       _buildBuildMenuItem(
                                         'build_split',
                                         LucideIcons.boxes,
-                                        'Собрать Split APKs',
-                                        'Отдельные APK по архитектурам',
-                                        Colors.amberAccent,
+                                        'Split APKs (все архитектуры)',
+                                        'Отдельные APK: arm64, armv7, x86_64',
+                                        Colors.orangeAccent,
+                                      ),
+                                      _buildBuildMenuItem(
+                                        'build_aab',
+                                        LucideIcons.rocket,
+                                        'AppBundle (AAB)',
+                                        'Бандл для публикации в Google Play Store',
+                                        Colors.purpleAccent,
                                       ),
                                       _buildBuildMenuItem(
                                         'build_debug',
                                         LucideIcons.bug,
-                                        'Собрать Debug APK',
-                                        'Быстрая отладочная сборка',
+                                        'Debug APK (ARM64)',
+                                        'Быстрая отладочная сборка с логами',
                                         Colors.yellow,
                                       ),
                                     ],
                                     onSelected: (action) {
-                                      _triggerProjectBuild(
-                                        ref,
-                                        panelNotifier,
-                                        action,
-                                      );
+                                      if (action == 'open_dialog') {
+                                        _openBuildTargetDialog(
+                                          context,
+                                          ref,
+                                          panelNotifier,
+                                        );
+                                      } else {
+                                        _triggerProjectBuild(
+                                          ref,
+                                          panelNotifier,
+                                          action,
+                                        );
+                                      }
                                     },
                                   ),
                                   const SizedBox(width: 4),
@@ -3143,6 +3175,38 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     );
   }
 
+  void _openBuildTargetDialog(
+    BuildContext context,
+    WidgetRef ref,
+    PanelNotifier panelNotifier,
+  ) {
+    final workspaceState = ref.read(workspaceProvider);
+    final projectName = workspaceState.currentPath != null
+        ? p.basename(workspaceState.currentPath!)
+        : null;
+
+    AdaptiveDialogHelper.showAdaptiveSheet(
+      context: context,
+      desktopMaxWidth: 560,
+      desktopMaxHeight: 680,
+      builder: (ctx) => BuildTargetDialog(
+        initialProjectName: projectName,
+        onStartBuild: (command, displayCmd, target) {
+          panelNotifier.selectTab(PanelTab.buildLogs);
+          panelNotifier.openPanel();
+          ref
+              .read(dedicatedTerminalProvider.notifier)
+              .sendCommand(
+                DedicatedTerminalType.build,
+                command,
+                interrupt: true,
+                clear: false,
+              );
+        },
+      ),
+    );
+  }
+
   void _triggerProjectBuild(
     WidgetRef ref,
     PanelNotifier panelNotifier,
@@ -3151,29 +3215,34 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     panelNotifier.selectTab(PanelTab.buildLogs);
     panelNotifier.openPanel();
 
-    const checkSdk =
-        '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\\\.1[3-9].*/sdk: \\\\x27>=3.12.0 <4.0.0\\\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true)';
-
-    String cmd;
+    BuildTargetType target;
     switch (action) {
+      case 'build_arm32':
+        target = BuildTargetType.arm32;
+        break;
+      case 'build_x64':
+        target = BuildTargetType.x86_64;
+        break;
       case 'build_aab':
-        cmd =
-            '$checkSdk && flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB): ./app-release.aab"';
+        target = BuildTargetType.aab;
         break;
       case 'build_split':
-        cmd =
-            '$checkSdk && flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs ready in project root"';
+        target = BuildTargetType.split;
         break;
       case 'build_debug':
-        cmd =
-            '$checkSdk && flutter build apk --debug --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"';
+        target = BuildTargetType.debug;
         break;
+      case 'build_arm64':
       case 'build_apk':
       default:
-        cmd =
-            '$checkSdk && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"';
+        target = BuildTargetType.arm64;
         break;
     }
+
+    final cmd = BuildResourceOptimizer.generateBuildCommand(
+      target: target,
+      mode: BuildPerformanceMode.balanced,
+    );
 
     ref
         .read(dedicatedTerminalProvider.notifier)

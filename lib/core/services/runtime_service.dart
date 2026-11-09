@@ -797,6 +797,14 @@ alias fb-apk-release="flutter build apk --release"
 alias fb-bundle="flutter build appbundle --release"
 alias fb-appbundle="flutter build appbundle --release"
 alias build-apk="flutter build apk --release"
+alias build-arm64="flutter build apk --release --target-platform android-arm64"
+alias build-arm32="flutter build apk --release --target-platform android-arm"
+alias build-x64="flutter build apk --release --target-platform android-x64"
+alias build-aab="flutter build appbundle --release"
+alias fb-arm64="flutter build apk --release --target-platform android-arm64"
+alias fb-arm32="flutter build apk --release --target-platform android-arm"
+alias fb-x64="flutter build apk --release --target-platform android-x64"
+alias fb-aab="flutter build appbundle --release"
 alias build-apk-split="flutter build apk --release --split-per-abi"
 alias fb-apk-split="flutter build apk --release --split-per-abi"
 alias build-apk-all="flutter build apk --release --split-per-abi"
@@ -849,32 +857,71 @@ flutter() {
         pkill -9 -f GradleDaemon 2>/dev/null || true
         pkill -9 -f KotlinCompileDaemon 2>/dev/null || true
 
-        # Dynamically choose safe JVM heap and concurrency based on real free Android RAM (/proc/meminfo)
+        # Dynamically auto-tune CPU workers, JVM heap and Dart heap based on real hardware (CPU cores + free RAM)
+        local cpu_cores=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 4)
+        [ -z "$cpu_cores" ] || [ "$cpu_cores" -lt 1 ] && cpu_cores=4
+
         local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
-        local mem_avail_mb=$(( ${mem_avail_kb:-1800000} / 1024 ))
+        local mem_avail_mb=$(( ${mem_avail_kb:-2000000} / 1024 ))
+
         local jvm_xmx="1280m"
         local jvm_meta="384m"
         local dart_heap="768"
-        local gradle_workers=1
-        local gradle_parallel=false
-        if [ "$mem_avail_mb" -ge 2400 ]; then
-            jvm_xmx="1792m"
+        local gradle_workers=2
+        local gradle_parallel=true
+
+        if [ "$mem_avail_mb" -ge 6000 ]; then
+            jvm_xmx="2560m"
+            jvm_meta="512m"
+            dart_heap="1280"
+            if [ "$cpu_cores" -ge 8 ]; then
+                gradle_workers=6
+            elif [ "$cpu_cores" -ge 6 ]; then
+                gradle_workers=4
+            elif [ "$cpu_cores" -ge 4 ]; then
+                gradle_workers=3
+            else
+                gradle_workers=2
+            fi
+        elif [ "$mem_avail_mb" -ge 3200 ]; then
+            # Sweet spot for 4GB-8GB tablets/phones (e.g. 8 cores with ~3.9GB available RAM)
+            jvm_xmx="2048m"
             jvm_meta="512m"
             dart_heap="1024"
-            gradle_workers=2
-            gradle_parallel=true
-        elif [ "$mem_avail_mb" -ge 1800 ]; then
-            jvm_xmx="1536m"
+            if [ "$cpu_cores" -ge 8 ]; then
+                gradle_workers=4
+            elif [ "$cpu_cores" -ge 6 ]; then
+                gradle_workers=4
+            elif [ "$cpu_cores" -ge 4 ]; then
+                gradle_workers=3
+            else
+                gradle_workers=2
+            fi
+        elif [ "$mem_avail_mb" -ge 2000 ]; then
+            jvm_xmx="1600m"
             jvm_meta="448m"
             dart_heap="896"
+            if [ "$cpu_cores" -ge 6 ]; then
+                gradle_workers=3
+            else
+                gradle_workers=2
+            fi
+        elif [ "$mem_avail_mb" -ge 1400 ]; then
+            jvm_xmx="1280m"
+            jvm_meta="384m"
+            dart_heap="768"
             gradle_workers=2
             gradle_parallel=false
-        elif [ "$mem_avail_mb" -lt 1350 ]; then
+        else
             jvm_xmx="1024m"
             jvm_meta="320m"
             dart_heap="640"
             gradle_workers=1
             gradle_parallel=false
+        fi
+
+        if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
+            gradle_workers="$GRADLE_WORKERS_OVERRIDE"
         fi
 
         export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
@@ -910,10 +957,15 @@ flutter() {
         local has_val=false
         local has_tree=false
         local has_pub=false
+        local has_workers=false
+        local has_parallel=false
+        local has_jvm=false
         local cleaned_args=()
         for a in "$@"; do
             case "$a" in
-                -Dorg.gradle.jvmargs=*) continue ;;
+                -Dorg.gradle.jvmargs=*) has_jvm=true ;;
+                *org.gradle.workers.max*) has_workers=true ;;
+                *org.gradle.parallel*) has_parallel=true ;;
                 *target-platform*|*--split-per-abi*) has_plat=true ;;
                 *android-skip-build-dependency-validation*) has_val=true ;;
                 *no-tree-shake-icons*) has_tree=true ;;
@@ -941,16 +993,22 @@ flutter() {
             "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
             "-Pandroid.aapt2.daemon=false"
             "-Pandroid.enableJetifier=false"
-            "-Porg.gradle.workers.max=${gradle_workers}"
-            "-Porg.gradle.parallel=${gradle_parallel}"
             "-Porg.gradle.caching=true"
             "-Dorg.gradle.caching=true"
             "-Pkotlin.compiler.execution.strategy=in-process"
             "-Dorg.gradle.daemon=false"
-            "-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}"
         )
+        if [ "$has_workers" = "false" ]; then
+            extra_flags+=("-Porg.gradle.workers.max=${gradle_workers}")
+        fi
+        if [ "$has_parallel" = "false" ]; then
+            extra_flags+=("-Porg.gradle.parallel=${gradle_parallel}")
+        fi
+        if [ "$has_jvm" = "false" ]; then
+            extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}")
+        fi
 
-        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB, CPU=${cpu_cores} ядер → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
         command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
         local ret=$?
 
@@ -962,6 +1020,19 @@ flutter() {
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
                 echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+            fi
+            if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release-arm64.apk 2>/dev/null || true
+                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK (ARM64 64-бит) готов:\033[0m ./app-release-arm64.apk"
+            fi
+            if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ./app-release-arm32.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK (ARMv7 32-бит) готов:\033[0m ./app-release-arm32.apk"
+            fi
+            if [ -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ./app-release-x64.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK (x86_64) готов:\033[0m ./app-release-x64.apk"
             fi
             local found_split=false
             for sapk in build/app/outputs/flutter-apk/app-*-release.apk; do
@@ -1128,6 +1199,10 @@ if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
     term_fetch 2>/dev/null || true
     echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
     echo -e '    \e[38;5;141mll\e[0m             → ls -la'
+    echo -e '    \e[38;5;141mbuild-arm64\e[0m    → flutter build apk (release ARM64 64-bit, быстрый)'
+    echo -e '    \e[38;5;141mbuild-arm32\e[0m    → flutter build apk (release ARMv7 32-bit)'
+    echo -e '    \e[38;5;141mbuild-x64\e[0m      → flutter build apk (release x86_64)'
+    echo -e '    \e[38;5;141mbuild-aab\e[0m      → flutter build appbundle (Google Play AAB)'
     echo -e '    \e[38;5;141mbuild-apk\e[0m      → flutter build apk (release arm64 safe)'
     echo -e '    \e[38;5;141mbuild-bundle\e[0m   → flutter build appbundle (release safe)'
     echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
@@ -1225,6 +1300,14 @@ alias fb-apk-release="flutter build apk --release"
 alias fb-bundle="flutter build appbundle --release"
 alias fb-appbundle="flutter build appbundle --release"
 alias build-apk="flutter build apk --release"
+alias build-arm64="flutter build apk --release --target-platform android-arm64"
+alias build-arm32="flutter build apk --release --target-platform android-arm"
+alias build-x64="flutter build apk --release --target-platform android-x64"
+alias build-aab="flutter build appbundle --release"
+alias fb-arm64="flutter build apk --release --target-platform android-arm64"
+alias fb-arm32="flutter build apk --release --target-platform android-arm"
+alias fb-x64="flutter build apk --release --target-platform android-x64"
+alias fb-aab="flutter build appbundle --release"
 alias build-apk-split="flutter build apk --release --split-per-abi"
 alias fb-apk-split="flutter build apk --release --split-per-abi"
 alias build-apk-all="flutter build apk --release --split-per-abi"
@@ -1254,29 +1337,79 @@ flutter() {
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
+        # Dynamically auto-tune CPU workers, JVM heap and Dart heap based on real hardware (CPU cores + free RAM)
+        local cpu_cores=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 4)
+        [ -z "$cpu_cores" ] || [ "$cpu_cores" -lt 1 ] && cpu_cores=4
+
         local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
-        local mem_avail_mb=$(( ${mem_avail_kb:-1800000} / 1024 ))
+        local mem_avail_mb=$(( ${mem_avail_kb:-2000000} / 1024 ))
+
         local jvm_xmx="1280m"
         local jvm_meta="384m"
-        local gradle_workers=1
-        local gradle_parallel=false
-        if [ "$mem_avail_mb" -ge 2400 ]; then
-            jvm_xmx="1792m"
+        local dart_heap="768"
+        local gradle_workers=2
+        local gradle_parallel=true
+
+        if [ "$mem_avail_mb" -ge 6000 ]; then
+            jvm_xmx="2560m"
             jvm_meta="512m"
-            gradle_workers=2
-            gradle_parallel=true
-        elif [ "$mem_avail_mb" -ge 1800 ]; then
-            jvm_xmx="1536m"
+            dart_heap="1280"
+            if [ "$cpu_cores" -ge 8 ]; then
+                gradle_workers=6
+            elif [ "$cpu_cores" -ge 6 ]; then
+                gradle_workers=4
+            elif [ "$cpu_cores" -ge 4 ]; then
+                gradle_workers=3
+            else
+                gradle_workers=2
+            fi
+        elif [ "$mem_avail_mb" -ge 3200 ]; then
+            # Sweet spot for 4GB-8GB tablets/phones (e.g. 8 cores with ~3.9GB available RAM)
+            jvm_xmx="2048m"
+            jvm_meta="512m"
+            dart_heap="1024"
+            if [ "$cpu_cores" -ge 8 ]; then
+                gradle_workers=4
+            elif [ "$cpu_cores" -ge 6 ]; then
+                gradle_workers=4
+            elif [ "$cpu_cores" -ge 4 ]; then
+                gradle_workers=3
+            else
+                gradle_workers=2
+            fi
+        elif [ "$mem_avail_mb" -ge 2000 ]; then
+            jvm_xmx="1600m"
             jvm_meta="448m"
+            dart_heap="896"
+            if [ "$cpu_cores" -ge 6 ]; then
+                gradle_workers=3
+            else
+                gradle_workers=2
+            fi
+        elif [ "$mem_avail_mb" -ge 1400 ]; then
+            jvm_xmx="1280m"
+            jvm_meta="384m"
+            dart_heap="768"
             gradle_workers=2
             gradle_parallel=false
-        elif [ "$mem_avail_mb" -lt 1350 ]; then
+        else
             jvm_xmx="1024m"
             jvm_meta="320m"
+            dart_heap="640"
             gradle_workers=1
             gradle_parallel=false
         fi
+
+        if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
+            gradle_workers="$GRADLE_WORKERS_OVERRIDE"
+        fi
+
         export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
+        export DART_VM_OPTIONS="--old_gen_heap_size=${dart_heap}"
+        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${gradle_workers} -Dorg.gradle.parallel=${gradle_parallel} -Dorg.gradle.caching=true -Dkotlin.compiler.execution.strategy=in-process"
+
+        /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
         mkdir -p ~/.gradle 2>/dev/null || true
         for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
@@ -1304,10 +1437,15 @@ flutter() {
         local has_val=false
         local has_tree=false
         local has_pub=false
+        local has_workers=false
+        local has_parallel=false
+        local has_jvm=false
         local cleaned_args=()
         for a in "$@"; do
             case "$a" in
-                -Dorg.gradle.jvmargs=*) continue ;;
+                -Dorg.gradle.jvmargs=*) has_jvm=true ;;
+                *org.gradle.workers.max*) has_workers=true ;;
+                *org.gradle.parallel*) has_parallel=true ;;
                 *target-platform*|*--split-per-abi*) has_plat=true ;;
                 *android-skip-build-dependency-validation*) has_val=true ;;
                 *no-tree-shake-icons*) has_tree=true ;;
@@ -1335,16 +1473,22 @@ flutter() {
             "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
             "-Pandroid.aapt2.daemon=false"
             "-Pandroid.enableJetifier=false"
-            "-Porg.gradle.workers.max=${gradle_workers}"
-            "-Porg.gradle.parallel=${gradle_parallel}"
             "-Porg.gradle.caching=true"
             "-Dorg.gradle.caching=true"
             "-Pkotlin.compiler.execution.strategy=in-process"
             "-Dorg.gradle.daemon=false"
-            "-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}"
         )
+        if [ "$has_workers" = "false" ]; then
+            extra_flags+=("-Porg.gradle.workers.max=${gradle_workers}")
+        fi
+        if [ "$has_parallel" = "false" ]; then
+            extra_flags+=("-Porg.gradle.parallel=${gradle_parallel}")
+        fi
+        if [ "$has_jvm" = "false" ]; then
+            extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}")
+        fi
 
-        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB → jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB, CPU=${cpu_cores} ядер → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
         command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
         local ret=$?
 
@@ -1356,6 +1500,19 @@ flutter() {
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
                 echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+            fi
+            if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release-arm64.apk 2>/dev/null || true
+                cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK (ARM64 64-бит) готов:\033[0m ./app-release-arm64.apk"
+            fi
+            if [ -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk" ./app-release-arm32.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK (ARMv7 32-бит) готов:\033[0m ./app-release-arm32.apk"
+            fi
+            if [ -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ]; then
+                cp -f "build/app/outputs/flutter-apk/app-x86_64-release.apk" ./app-release-x64.apk 2>/dev/null || true
+                echo -e "\033[1;32m✓ APK (x86_64) готов:\033[0m ./app-release-x64.apk"
             fi
             local found_split=false
             for sapk in build/app/outputs/flutter-apk/app-*-release.apk; do
@@ -1370,6 +1527,8 @@ flutter() {
                 cp -f "build/app/outputs/flutter-apk/app-debug.apk" ./app-debug.apk 2>/dev/null || true
                 echo -e "\033[1;32m✓ Debug APK готов:\033[0m ./app-debug.apk"
             fi
+        else
+            echo -e "\033[1;31m✗ Сборка завершилась с кодом $ret\033[0m"
         fi
 
         pkill -9 -x aapt2 2>/dev/null || true
@@ -1385,6 +1544,10 @@ if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
     [ -x /usr/local/bin/term-fetch ] && /usr/local/bin/term-fetch
     echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
     echo -e '    \e[38;5;141mll\e[0m             → ls -la'
+    echo -e '    \e[38;5;141mbuild-arm64\e[0m    → flutter build apk (release ARM64 64-bit, быстрый)'
+    echo -e '    \e[38;5;141mbuild-arm32\e[0m    → flutter build apk (release ARMv7 32-bit)'
+    echo -e '    \e[38;5;141mbuild-x64\e[0m      → flutter build apk (release x86_64)'
+    echo -e '    \e[38;5;141mbuild-aab\e[0m      → flutter build appbundle (Google Play AAB)'
     echo -e '    \e[38;5;141mbuild-apk\e[0m      → flutter build apk (release arm64 safe)'
     echo -e '    \e[38;5;141mbuild-bundle\e[0m   → flutter build appbundle (release safe)'
     echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
