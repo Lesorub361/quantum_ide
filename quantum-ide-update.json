@@ -1,16 +1,16 @@
 {
-  "versionCode": 220,
-  "versionName": "1.2.203",
-  "notes": "QuantumIDE v1.2.203:\n• ⚡ Интерактивный диалог выбора архитектуры: сборка APK ARM64 (64-бит, в 4-5 раз быстрее), APK ARMv7 (32-бит), APK x86_64, Split APKs и AppBundle (AAB).\n• 🚀 Адаптивное задействование ядер и памяти: автоподбор воркеров Gradle (4-6 ядер) под процессор устройства без риска зависаний.\n• 🛡️ Устранено ограничение 2 ядер и падение Gradle Daemon при компиляции.\n• 📁 Автоматическое копирование собранных APK всех архитектур в корень проекта.\n• 🛠️ Добавлены быстрые алиасы: build-arm64, build-arm32, build-x64, build-aab.",
+  "versionCode": 221,
+  "versionName": "1.2.204",
+  "notes": "QuantumIDE v1.2.204:\n• 📱 Оптимизация интерфейса для планшетов и телефонов: навигационные стрелки курсора (< >), Undo/Redo и спецсимволы в KeyboardAccessoryBar теперь всегда активны на планшетах.\n• 📂 Оверлейная шторка файлов (FileDrawer) для планшетов без сжатия рабочего пространства редактора.\n• 🧹 Очистка дублирующихся кнопок: удалены 9 избыточных пунктов из меню 3 точек редактора и дубли из шапки главного экрана.\n• 📦 Переработка экрана Пакетов: понятные русские описания всех пакетов и SDK, трехъярусная карточка на мобильных устройствах, устранен оверфлоу баннера Vulkan.\n• 🛡️ Устранены ошибки переполнения RenderFlex (баннеры, системные метрики RAM/CPU/GPU, AppBar).",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.203/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.204/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.203",
-  "buildNumber": 220,
-  "tag_name": "v1.2.203",
-  "releaseNotes": "QuantumIDE v1.2.203: Interactive build target dialog (ARM64, ARMv7, x86_64, Split, AAB), dynamic CPU cores and free RAM auto-tuning (4-6 Gradle workers), 4x faster compilation."
+  "version": "1.2.204",
+  "buildNumber": 221,
+  "tag_name": "v1.2.204",
+  "releaseNotes": "QuantumIDE v1.2.204: Tablet & phone UI optimization, persistent cursor navigation and symbols bar on tablets, overlay file drawer, deduplicated menus, full Russian package descriptions, and RenderFlex fixes."
 }
