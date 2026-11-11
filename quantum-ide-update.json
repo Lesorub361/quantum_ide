@@ -1,16 +1,16 @@
 {
-  "versionCode": 224,
-  "versionName": "1.2.207",
-  "notes": "QuantumIDE v1.2.207:\n• 📱 Включена панель навигации (стрелки курсора, Отменить / Вернуть, номер строки и символы) для планшетов в альбомном режиме.\n• 🤖 Оптимизирован ИИ-агент с OpenRouter: добавлена понятная подсказка при исчерпании платного баланса (402) с рекомендацией бесплатных моделей.\n• 🛡️ Устранены оставшиеся проверки /proc/stat в SELinux на Android.\n• ⌨️ Исправлен русский ввод в терминале xterm.",
+  "versionCode": 225,
+  "versionName": "1.2.208",
+  "notes": "QuantumIDE v1.2.208:\n• 🔢 Чёткая нумерация строк слева от кода (Gutter) с высокой контрастностью и подсветкой активной строки.\n• ⚡ Мгновенное применение правок ИИ в редактор: автоматическая перезагрузка открытых вкладок без потери данных.\n• 🤖 Универсальный ИИ-агент для любых проектов: Node.js, Python, Rust, Go, Web (HTML/JS) и Flutter.\n• 🎯 Поэтапное принятие изменений (Cursor-style) с кнопкой «Принять все» и удобным просмотром этапов.\n• 🚀 Быстрый переход к строке (Go to Line) по клику на номер строки на панели навигации.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.207/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.208/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.207",
-  "buildNumber": 224,
-  "tag_name": "v1.2.207",
-  "releaseNotes": "QuantumIDE v1.2.207: Enable KeyboardAccessoryBar on tablets in landscape mode with live cursor line/column display, handle OpenRouter 402 Insufficient credits gracefully, optimize SELinux proc probes."
+  "version": "1.2.208",
+  "buildNumber": 225,
+  "tag_name": "v1.2.208",
+  "releaseNotes": "QuantumIDE v1.2.208: High-contrast line numbers gutter, multi-stack AI agent support, instant in-editor live reload on action apply, step-by-step Accept All action cards, Go to line navigation dialog."
 }

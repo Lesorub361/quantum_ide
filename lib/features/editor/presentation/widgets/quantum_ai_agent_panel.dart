@@ -1244,9 +1244,15 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
 
                   // Action Cards (write_file, run_command)
                   if (msg.actions.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    ...msg.actions.map(
-                      (act) => _buildActionCard(context, agent, act),
+                    _buildActionsHeader(context, agent, msg),
+                    ...msg.actions.asMap().entries.map(
+                      (entry) => _buildActionCard(
+                        context,
+                        agent,
+                        entry.value,
+                        stepIndex: entry.key + 1,
+                        totalSteps: msg.actions.length,
+                      ),
                     ),
                   ],
                 ],
@@ -1386,12 +1392,97 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
     );
   }
 
+  Widget _buildActionsHeader(
+    BuildContext context,
+    QuantumAiAgentService agent,
+    ChatMessage msg,
+  ) {
+    final pendingCount = msg.actions.where((a) => !a.isExecuted && a.type == 'write_file').length;
+    final total = msg.actions.length;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF131722),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: pendingCount > 0
+              ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
+              : const Color(0xFF10B981).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            pendingCount > 0 ? LucideIcons.list_checks : LucideIcons.check_circle_2,
+            size: 14,
+            color: pendingCount > 0 ? const Color(0xFFA78BFA) : const Color(0xFF10B981),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              pendingCount > 0
+                  ? 'Этапы изменений ($pendingCount из $total ожидают применения):'
+                  : 'Все этапы изменений применены ($total)',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (pendingCount > 1) ...[
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              ),
+              icon: const Icon(LucideIcons.check_check, size: 12),
+              label: const Text('Принять все', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold)),
+              onPressed: () async {
+                final ws = ref.read(workspaceProvider).currentPath;
+                for (final act in msg.actions) {
+                  if (!act.isExecuted && act.type == 'write_file') {
+                    final ok = await agent.executeWriteAction(act);
+                    if (ok && ws != null) {
+                      final fullPath = File(act.path).isAbsolute ? act.path : p.join(ws, act.path);
+                      await ref.read(editorProvider.notifier).reloadFileFromDisk(fullPath);
+                    }
+                  }
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Все изменения успешно применены и обновлены в редакторе!'),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionCard(
     BuildContext context,
     QuantumAiAgentService agent,
-    AgentAction action,
-  ) {
+    AgentAction action, {
+    int? stepIndex,
+    int? totalSteps,
+  }) {
     if (action.type == 'write_file') {
+      final stepPrefix = (stepIndex != null && totalSteps != null && totalSteps > 1)
+          ? 'Этап $stepIndex/$totalSteps • '
+          : '';
       return Container(
         margin: const EdgeInsets.only(top: 6),
         padding: const EdgeInsets.all(8),
@@ -1418,7 +1509,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Файл: ${action.path}  (${(action.content ?? '').split('\n').length} стр.)',
+                    '$stepPrefix${action.path}  (${(action.content ?? '').split('\n').length} стр.)',
                     style: GoogleFonts.jetBrainsMono(
                       color: const Color(0xFF10B981),
                       fontSize: 11,
@@ -1468,11 +1559,18 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                             newContent: action.content ?? '',
                             onApply: () async {
                               final ok = await agent.executeWriteAction(action);
+                              final ws = ref.read(workspaceProvider).currentPath;
+                              if (ws != null) {
+                                final fullPath = File(action.path).isAbsolute
+                                    ? action.path
+                                    : p.join(ws, action.path);
+                                await ref.read(editorProvider.notifier).reloadFileFromDisk(fullPath);
+                              }
                               if (ok && context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'Файл ${action.path} успешно записан!',
+                                      'Файл ${action.path} успешно записан и обновлён!',
                                     ),
                                   ),
                                 );
@@ -1545,11 +1643,18 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                         ? null
                         : () async {
                             final ok = await agent.executeWriteAction(action);
+                            final ws = ref.read(workspaceProvider).currentPath;
+                            if (ws != null) {
+                              final fullPath = File(action.path).isAbsolute
+                                  ? action.path
+                                  : p.join(ws, action.path);
+                              await ref.read(editorProvider.notifier).reloadFileFromDisk(fullPath);
+                            }
                             if (ok && context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Файл ${action.path} успешно записан!',
+                                    'Файл ${action.path} успешно записан и обновлён!',
                                   ),
                                 ),
                               );
@@ -1564,7 +1669,16 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                     iconSize: 15,
                     color: Colors.orangeAccent,
                     icon: const Icon(LucideIcons.undo_2),
-                    onPressed: () => agent.undoWriteAction(action),
+                    onPressed: () async {
+                      final ok = await agent.undoWriteAction(action);
+                      final ws = ref.read(workspaceProvider).currentPath;
+                      if (ws != null) {
+                        final fullPath = File(action.path).isAbsolute
+                            ? action.path
+                            : p.join(ws, action.path);
+                        await ref.read(editorProvider.notifier).reloadFileFromDisk(fullPath);
+                      }
+                    },
                   ),
               ],
             ),

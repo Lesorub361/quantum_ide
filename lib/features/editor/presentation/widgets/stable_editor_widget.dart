@@ -1077,7 +1077,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           decoration: const BoxDecoration(
             color: Color(0xFF07090E),
             border: Border(
-              right: BorderSide(color: Color(0xFF151924), width: 0.8),
+              right: BorderSide(color: Color(0xFF1E293B), width: 1.0),
             ),
           ),
           child: Stack(
@@ -1097,22 +1097,26 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (settings.lineNumbers) ...[
-                    DefaultCodeLineNumber(
-                      controller: controller,
-                      notifier: notifier,
-                      textStyle: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.28),
-                        fontSize: (settings.fontSize * 0.88).clamp(9.0, 20.0),
-                        fontFamily: _getFontFamily(settings.editorFontFamily),
-                      ),
-                      focusedTextStyle: TextStyle(
-                        color: Colors.cyanAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: (settings.fontSize * 0.88).clamp(9.0, 20.0),
-                        fontFamily: _getFontFamily(settings.editorFontFamily),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6, right: 4),
+                      child: DefaultCodeLineNumber(
+                        controller: controller,
+                        notifier: notifier,
+                        textStyle: TextStyle(
+                          color: const Color(0xFF64748B),
+                          fontSize: (settings.fontSize * 0.92).clamp(11.5, 22.0),
+                          fontFamily: _getFontFamily(settings.editorFontFamily),
+                          fontWeight: FontWeight.w500,
+                        ),
+                        focusedTextStyle: TextStyle(
+                          color: const Color(0xFF38BDF8),
+                          fontWeight: FontWeight.bold,
+                          fontSize: (settings.fontSize * 0.92).clamp(11.5, 22.0),
+                          fontFamily: _getFontFamily(settings.editorFontFamily),
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                   ],
                   DefaultCodeChunkIndicator(
                     width: 18,

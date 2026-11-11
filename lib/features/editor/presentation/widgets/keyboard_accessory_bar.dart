@@ -268,6 +268,79 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     );
   }
 
+  void _showGoToLineDialog(BuildContext context) {
+    final textCtrl = TextEditingController();
+    final totalLines = controller.codeLines.length;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131722),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: Row(
+          children: [
+            const Icon(LucideIcons.navigation, color: Color(0xFF38BDF8), size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'Перейти к строке (1–$totalLines)',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: TextField(
+          controller: textCtrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 14),
+          decoration: InputDecoration(
+            hintText: 'Номер строки...',
+            hintStyle: const TextStyle(color: Colors.white38),
+            filled: true,
+            fillColor: const Color(0xFF090B10),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          ),
+          onSubmitted: (val) {
+            final target = int.tryParse(val.trim());
+            if (target != null && target >= 1 && target <= totalLines) {
+              controller.selection = CodeLineSelection.collapsed(
+                index: target - 1,
+                offset: 0,
+              );
+              Navigator.pop(ctx);
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF38BDF8),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              final target = int.tryParse(textCtrl.text.trim());
+              if (target != null && target >= 1 && target <= totalLines) {
+                controller.selection = CodeLineSelection.collapsed(
+                  index: target - 1,
+                  offset: 0,
+                );
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Перейти', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
@@ -438,12 +511,24 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                   builder: (context, val, _) {
                     final line = val.selection.extentIndex + 1;
                     final col = val.selection.extentOffset + 1;
-                    return Text(
-                      'Стр $line:$col • ${settings.fontSize.toInt()} px',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        color: const Color(0xFF94A3B8),
-                        fontWeight: FontWeight.w600,
+                    return InkWell(
+                      onTap: () => _showGoToLineDialog(context),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF131722),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          'Стр $line:$col • ${settings.fontSize.toInt()} px',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            color: const Color(0xFF38BDF8),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     );
                   },
@@ -557,6 +642,34 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             tooltip: 'Звук клавиатуры (ASMR)',
             onPressed: () {
               KeyboardSoundService.showSwitchSelectorDialog(context);
+            },
+          ),
+          ValueListenableBuilder<CodeLineEditingValue>(
+            valueListenable: controller,
+            builder: (context, val, _) {
+              final line = val.selection.extentIndex + 1;
+              final col = val.selection.extentOffset + 1;
+              return InkWell(
+                onTap: () => _showGoToLineDialog(context),
+                borderRadius: BorderRadius.circular(4),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF141720),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '$line:$col',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      color: const Color(0xFF38BDF8),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              );
             },
           ),
           Container(
