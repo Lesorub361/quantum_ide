@@ -1955,6 +1955,9 @@ fi
 if [ ! -s "\$CONFIG/proc_fakes/fips_enabled" ]; then
     echo "0" > "\$CONFIG/proc_fakes/fips_enabled"
 fi
+if [ ! -s "\$CONFIG/proc_fakes/statm" ]; then
+    echo "100000 50000 10000 100 0 40000 0" > "\$CONFIG/proc_fakes/statm"
+fi
 touch "\$CONFIG/sys_fakes/empty"
 CONFIG="\$FILES_DIR/config"
 
@@ -2174,6 +2177,7 @@ if [ \$# -gt 2 ]; then
         --bind="\$CONFIG/proc_fakes/cap_last_cap:/proc/sys/kernel/cap_last_cap" \\
         --bind="\$CONFIG/proc_fakes/max_user_watches:/proc/sys/fs/inotify/max_user_watches" \\
         --bind="\$CONFIG/proc_fakes/fips_enabled:/proc/sys/crypto/fips_enabled" \\
+        --bind="\$CONFIG/proc_fakes/statm:/proc/self/statm" \\
         --bind="\$CONFIG/sys_fakes/empty:/sys/fs/selinux" \\
         --bind="\$FILES_DIR/projects:/root/projects" \\
         --bind="/storage/emulated/0:/sdcard" \\
@@ -2224,6 +2228,7 @@ else
         --bind="\$CONFIG/proc_fakes/cap_last_cap:/proc/sys/kernel/cap_last_cap" \\
         --bind="\$CONFIG/proc_fakes/max_user_watches:/proc/sys/fs/inotify/max_user_watches" \\
         --bind="\$CONFIG/proc_fakes/fips_enabled:/proc/sys/crypto/fips_enabled" \\
+        --bind="\$CONFIG/proc_fakes/statm:/proc/self/statm" \\
         --bind="\$CONFIG/sys_fakes/empty:/sys/fs/selinux" \\
         --bind="\$FILES_DIR/projects:/root/projects" \\
         --bind="/storage/emulated/0:/sdcard" \\

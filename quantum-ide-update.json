@@ -1,16 +1,16 @@
 {
-  "versionCode": 221,
-  "versionName": "1.2.204",
-  "notes": "QuantumIDE v1.2.204:\n• 📱 Оптимизация интерфейса для планшетов и телефонов: навигационные стрелки курсора (< >), Undo/Redo и спецсимволы в KeyboardAccessoryBar теперь всегда активны на планшетах.\n• 📂 Оверлейная шторка файлов (FileDrawer) для планшетов без сжатия рабочего пространства редактора.\n• 🧹 Очистка дублирующихся кнопок: удалены 9 избыточных пунктов из меню 3 точек редактора и дубли из шапки главного экрана.\n• 📦 Переработка экрана Пакетов: понятные русские описания всех пакетов и SDK, трехъярусная карточка на мобильных устройствах, устранен оверфлоу баннера Vulkan.\n• 🛡️ Устранены ошибки переполнения RenderFlex (баннеры, системные метрики RAM/CPU/GPU, AppBar).",
+  "versionCode": 222,
+  "versionName": "1.2.205",
+  "notes": "QuantumIDE v1.2.205:\n• 🛡️ Устранена критическая ошибка рендеринга (SafeClamp): предотвращён сбой double.clamp(min, max) при открытии клавиатуры и в портретном режиме.\n• ⚡ Ликвидирован бесконечный спам ошибок SELinux: добавлен fake-узел statm в виртуальную FS PRoot.\n• 🔒 Повышена стабильность экрана Пакетов: предотвращён вылет context.push при закрытом контексте SnackBar.\n• 🚀 Оптимизация фоновых сервисов и стабильность интерфейса.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.204/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.205/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.204",
-  "buildNumber": 221,
-  "tag_name": "v1.2.204",
-  "releaseNotes": "QuantumIDE v1.2.204: Tablet & phone UI optimization, persistent cursor navigation and symbols bar on tablets, overlay file drawer, deduplicated menus, full Russian package descriptions, and RenderFlex fixes."
+  "version": "1.2.205",
+  "buildNumber": 222,
+  "tag_name": "v1.2.205",
+  "releaseNotes": "QuantumIDE v1.2.205: Fix double.clamp ArgumentError with SafeClampDouble extension on all responsive panels, add PRoot fake statm to prevent kernel AVC audit log floods, safe SnackBar navigation guards in package page."
 }

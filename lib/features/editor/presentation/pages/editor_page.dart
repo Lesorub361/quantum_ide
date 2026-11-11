@@ -1,6 +1,18 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+
+extension SafeClampDouble on double {
+  double safeClamp(double lower, double upper) {
+    final effectiveMin = lower < upper ? lower : upper;
+    final effectiveMax = lower < upper ? upper : lower;
+    if (isNaN) return effectiveMin;
+    if (this < effectiveMin) return effectiveMin;
+    if (this > effectiveMax) return effectiveMax;
+    return this;
+  }
+}
 
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -466,8 +478,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
     final mainBody = LayoutBuilder(
       builder: (context, constraints) {
-        final double availableHeight = (constraints.maxHeight - keyboardInset)
-            .clamp(120.0, constraints.maxHeight);
+        final double maxH = constraints.maxHeight;
+        final double availableHeight = (maxH - keyboardInset)
+            .safeClamp(120.0, maxH);
         final isMobileTerminalWithKeyboard =
             (Platform.isAndroid || Platform.isIOS || !isDesktop) &&
             isKeyboardOpen &&
@@ -479,7 +492,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           if (panelState.isMaximized || isMobileTerminalWithKeyboard) {
             activePanelHeight = availableHeight;
           } else {
-            activePanelHeight = panelState.panelHeight.clamp(
+            activePanelHeight = panelState.panelHeight.safeClamp(
               90.0,
               availableHeight,
             );
@@ -1580,7 +1593,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   /// На смартфонах (< 650px) Quantum AI Агент открывается сбоку справа как растягиваемая боковая панель.
   Widget _buildMobileAiDrawer(BuildContext context, double screenWidth) {
-    final drawerWidth = (screenWidth * _mobileAiDrawerFraction).clamp(
+    final drawerWidth = (screenWidth * _mobileAiDrawerFraction).safeClamp(
       280.0,
       screenWidth,
     );
@@ -1597,11 +1610,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 behavior: HitTestBehavior.opaque,
                 onHorizontalDragUpdate: (details) {
                   setState(() {
-                    final nextWidth = (drawerWidth - details.delta.dx).clamp(
+                    final nextWidth = (drawerWidth - details.delta.dx).safeClamp(
                       280.0,
                       screenWidth,
                     );
-                    _mobileAiDrawerFraction = (nextWidth / screenWidth).clamp(
+                    _mobileAiDrawerFraction = (nextWidth / screenWidth).safeClamp(
                       0.70,
                       1.0,
                     );
@@ -1659,7 +1672,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final double targetHeight =
         (panelState.isMaximized || isMobileTerminalWithKeyboard)
         ? maxAllowedPanelHeight
-        : panelState.panelHeight.clamp(80.0, maxAllowedPanelHeight);
+        : panelState.panelHeight.safeClamp(80.0, maxAllowedPanelHeight);
 
     return OverflowBox(
       minHeight: targetHeight,
@@ -1705,19 +1718,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     required bool rightAiOpen,
   }) {
     // Гарантируем, что центральному редактору всегда остаётся минимум 260px на планшетах и ПК
-    final maxLeftWidth = (screenWidth * 0.35).clamp(180.0, 480.0);
+    final maxLeftWidth = (screenWidth * 0.35).safeClamp(180.0, 480.0);
     final effectiveLeftWidth = leftOpen
-        ? _leftSidebarWidth.clamp(180.0, maxLeftWidth)
+        ? _leftSidebarWidth.safeClamp(180.0, maxLeftWidth)
         : 0.0;
 
-    final maxRightWidth = (screenWidth - effectiveLeftWidth - 260.0).clamp(
+    final maxRightWidth = (screenWidth - effectiveLeftWidth - 260.0).safeClamp(
       260.0,
       720.0,
     );
     final effectiveRightWidth = rightAiOpen
         ? (_isAiDockExpanded
               ? maxRightWidth
-              : _rightAiPanelWidth.clamp(260.0, maxRightWidth))
+              : _rightAiPanelWidth.safeClamp(260.0, maxRightWidth))
         : 0.0;
 
     return Row(
@@ -1739,7 +1752,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               onHorizontalDragUpdate: (details) {
                 setState(() {
                   _leftSidebarWidth = (_leftSidebarWidth + details.delta.dx)
-                      .clamp(180.0, maxLeftWidth);
+                      .safeClamp(180.0, maxLeftWidth);
                 });
               },
               onHorizontalDragEnd: (_) => setState(() {
@@ -1796,7 +1809,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 setState(() {
                   _isAiDockExpanded = false;
                   _rightAiPanelWidth = (_rightAiPanelWidth - details.delta.dx)
-                      .clamp(260.0, maxRightWidth);
+                      .safeClamp(260.0, maxRightWidth);
                 });
               },
               onHorizontalDragEnd: (_) => setState(() {
@@ -1871,7 +1884,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       onVerticalDragUpdate: (details) {
         const double minPanelHeight = 80.0;
         final newHeight = (panelState.panelHeight - details.primaryDelta!)
-            .clamp(minPanelHeight, maxAllowedPanelHeight);
+            .safeClamp(minPanelHeight, maxAllowedPanelHeight);
         panelNotifier.updateHeight(newHeight);
       },
       onVerticalDragEnd: (details) {

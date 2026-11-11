@@ -815,7 +815,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     action: SnackBarAction(
                       label: AppLocalizations.of(context)!.viewAction,
                       textColor: theme.colorScheme.primary,
-                      onPressed: () => context.push('/terminal'),
+                      onPressed: () {
+                        if (context.mounted) {
+                          context.push('/terminal');
+                        }
+                      },
                     ),
                   ),
                 );
@@ -1070,7 +1074,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     action: SnackBarAction(
                       label: AppLocalizations.of(context)!.viewAction,
                       textColor: theme.colorScheme.primary,
-                      onPressed: () => context.push('/terminal'),
+                      onPressed: () {
+                        if (context.mounted) {
+                          context.push('/terminal');
+                        }
+                      },
                     ),
                   ),
                 );
@@ -1198,7 +1206,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     action: SnackBarAction(
                       label: AppLocalizations.of(context)!.viewAction,
                       textColor: theme.colorScheme.primary,
-                      onPressed: () => context.push('/terminal'),
+                      onPressed: () {
+                        if (context.mounted) {
+                          context.push('/terminal');
+                        }
+                      },
                     ),
                   ),
                 );
@@ -1679,7 +1691,11 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
         action: SnackBarAction(
           label: AppLocalizations.of(context)!.viewAction,
           textColor: theme.colorScheme.onPrimary,
-          onPressed: () => context.push('/terminal'),
+          onPressed: () {
+            if (context.mounted) {
+              context.push('/terminal');
+            }
+          },
         ),
       ),
     );
