@@ -473,8 +473,8 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                             'monospace',
                           ],
                         ),
-                        keyboardType: TextInputType.visiblePassword,
-                        deleteDetection: true,
+                        keyboardType: TextInputType.text,
+                        deleteDetection: false,
                       ))
                 : Center(child: Text(l10n.startTheProject, style: const TextStyle(color: Colors.white38))),
           ),
@@ -1178,8 +1178,8 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                         'monospace',
                                       ],
                                     ),
-                                    keyboardType: TextInputType.visiblePassword,
-                                    deleteDetection: true,
+                                    keyboardType: TextInputType.text,
+                                    deleteDetection: false,
                                   ),
                                 ))
                           : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),

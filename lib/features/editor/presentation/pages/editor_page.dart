@@ -2,18 +2,6 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-
-extension SafeClampDouble on double {
-  double safeClamp(double lower, double upper) {
-    final effectiveMin = lower < upper ? lower : upper;
-    final effectiveMax = lower < upper ? upper : lower;
-    if (isNaN) return effectiveMin;
-    if (this < effectiveMin) return effectiveMin;
-    if (this > effectiveMax) return effectiveMax;
-    return this;
-  }
-}
-
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,6 +50,17 @@ import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 import 'package:quantum_ide/core/services/build_resource_optimizer.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/build_target_dialog.dart';
+
+extension SafeClampDouble on double {
+  double safeClamp(double lower, double upper) {
+    final effectiveMin = lower < upper ? lower : upper;
+    final effectiveMax = lower < upper ? upper : lower;
+    if (isNaN) return effectiveMin;
+    if (this < effectiveMin) return effectiveMin;
+    if (this > effectiveMax) return effectiveMax;
+    return this;
+  }
+}
 
 // ─── Вспомогательные функции для диалогов и меню ───────────────────────────
 

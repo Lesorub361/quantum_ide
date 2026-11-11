@@ -3181,7 +3181,8 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               ),
                               focusNode: _getFocusNode(keyId),
                               autofocus: !isMobile,
-                              deleteDetection: true,
+                              deleteDetection: false,
+                              keyboardType: TextInputType.text,
                               autoResize: true,
                               hardwareKeyboardOnly:
                                   isMobile && !_isMobileKeyboardActive,
