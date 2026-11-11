@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:quantum_ide/core/services/sqlite/sqlite_facade.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
 import 'package:quantum_ide/core/services/ghost_qa_service.dart';
 import 'package:quantum_ide/core/services/talker_service.dart';
@@ -132,8 +132,7 @@ Future<void> _initializeAndroid() async {
 /// Initialize Desktop-specific settings (Linux, Windows, macOS)
 Future<void> _initializeDesktop() async {
   try {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
+    initDesktopSqlite();
     debugPrint('Desktop initialization complete (SQLite FFI enabled)');
   } catch (e) {
     debugPrint('Desktop initialization error: $e');

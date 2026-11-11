@@ -21,12 +21,11 @@ import '../../../../core/services/project_service.dart';
 import '../../../../core/services/workspace_service.dart';
 import '../../../git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/core/services/symbol_indexer_service.dart';
-import 'package:flutter_pty/flutter_pty.dart';
+import 'package:quantum_ide/core/services/pty/pty_facade.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/collaboration_service.dart';
 import 'package:quantum_ide/core/services/fast_syntax_engine.dart';
-import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 
 class EditorFile {

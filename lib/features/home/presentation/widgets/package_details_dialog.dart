@@ -175,7 +175,7 @@ class PackageDetailsDialog extends ConsumerWidget {
     }
   }
 
-  String _getDetailedDescription(OptionalPackage pkg) {
+  static String getPackageDescription(OptionalPackage pkg) {
     switch (pkg.id) {
       case 'python':
         return 'Полноценная среда Python 3 с менеджером пакетов pip и поддержкой изолированных виртуальных окружений venv. Необходима для AI-скриптов, ML-моделей и утилит.';
@@ -205,6 +205,15 @@ class PackageDetailsDialog extends ConsumerWidget {
         return 'Набор нативных компиляторов GNU C/C++ (gcc, g++, make), системных заголовочных файлов и утилит сборки нативного кода.';
       case 'android-sdk':
         return 'Базовый Android SDK: platform-tools (adb), cmdline-tools (sdkmanager), системные образы и Java 17 для сборки Android-приложений.';
+      case 'android-sdk-tools-arm64':
+        return 'Полный набор нативных инструментов ARM64 Android Build-Tools (aapt2, zipalign, adb, aidl) для сборки APK прямо на телефоне и планшете.';
+      case 'build-fix':
+        return 'Комплексный ремонт окружения: исправляет ошибки сборки AAPT2, очищает зависшие флаги памяти Gradle и обновляет пути к SDK.';
+      case 'flutter-release-engine':
+      case 'flutter-release-fix':
+        return 'Эмулятор QEMU x86_64 и glibc-библиотеки для компилятора gen_snapshot. Позволяет собирать релизные Release APK и AAB без ошибок.';
+      case 'vulkan-graphics':
+        return 'Прямое аппаратное 3D-ускорение GPU для PRoot Linux: драйверы Turnip Adreno, Vulkan 1.4 и Zink OpenGL для быстрой отрисовки.';
       case 'openjdk-21':
         return 'Современная виртуальная машина Java 21 Long-Term Support (LTS). Рекомендуется для новейших плагинов Gradle, языковых серверов и сборщиков.';
       case 'gradle-8.13':
@@ -228,7 +237,8 @@ class PackageDetailsDialog extends ConsumerWidget {
       case 'clangd-lsp':
         return 'Clangd Language Server для C и C++: анализ кода на базе LLVM, подсветка ошибок в реальном времени и автодополнение.';
       case 'rust-lsp':
-        return 'Инструменты Rust (rustc, cargo) и Rust Analyzer для умной работы с исходным кодом на языке Rust.';
+      case 'rust-arm64':
+        return 'Инструменты Rust (rustc, cargo) и Rust Analyzer для умной работы с исходным кодом на языке Rust с компиляцией под ARM64.';
       case 'go-lsp':
         return 'Компилятор Go и языковой сервер gopls для разработки серверных модулей и микросервисов.';
       case 'ripgrep':
@@ -244,6 +254,22 @@ class PackageDetailsDialog extends ConsumerWidget {
       case 'flutter-distributor':
         return 'Инструмент для автоматической сборки и публикации релизов Flutter приложений в APK, AAB, Web, Linux deb/tar и AppStore/PlayStore.';
       default:
+        if (pkg.id.startsWith('ndk-')) {
+          final ver = pkg.id.replaceFirst('ndk-', '');
+          return 'Нативный пакет Android NDK версии $ver (ARM64 C/C++ компиляторы Clang, LLVM и заголовочные файлы платформы для сборки библиотек).';
+        }
+        if (pkg.id.startsWith('build-tools-')) {
+          final ver = pkg.id.replaceFirst('build-tools-', '');
+          return 'Набор утилит сборки Android Build-Tools $ver: компилятор ресурсов AAPT2, упаковщик dex (D8) и оптимизатор выравнивания.';
+        }
+        if (pkg.id.startsWith('platform-')) {
+          final ver = pkg.id.replaceFirst('platform-', '');
+          return 'Системные библиотеки целевой платформы Android API $ver (android.jar) для компиляции приложений под данную версию Android.';
+        }
+        if (pkg.id.startsWith('cmake-')) {
+          final ver = pkg.id.replaceFirst('cmake-', '');
+          return 'Система мета-сборки CMake $ver (нативная сборка ARM64) для компиляции C++ библиотек и плагинов.';
+        }
         return pkg.description;
     }
   }
@@ -256,7 +282,7 @@ class PackageDetailsDialog extends ConsumerWidget {
     final statusColor = isInstalled ? const Color(0xFF10B981) : Colors.white38;
     final binaries = _getBinariesForPackage(package);
     final installPath = _getInstallPath(package);
-    final detailedDesc = _getDetailedDescription(package);
+    final detailedDesc = getPackageDescription(package);
 
     return Dialog(
       backgroundColor: Colors.transparent,

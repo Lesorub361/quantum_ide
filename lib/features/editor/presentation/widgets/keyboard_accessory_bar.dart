@@ -275,9 +275,9 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     final isKeyboardOpen = bottomInset > 0;
     final screenWidth = MediaQuery.sizeOf(context).width;
 
-    // На планшетах в альбомной ориентации и ПК (>= 900px), когда экранная клавиатура закрыта,
-    // не загромождаем экран мобильной полоской символов.
-    if (!isKeyboardOpen && screenWidth >= 900) {
+    // На очень широких экранах мониторов ПК (>= 1200px) при закрытой клавиатуре не загромождаем экран.
+    // На планшетах и телефонах стрелки навигации и Undo/Redo всегда доступны.
+    if (!isKeyboardOpen && screenWidth >= 1200) {
       return const SizedBox.shrink();
     }
 

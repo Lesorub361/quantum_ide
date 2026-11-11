@@ -892,17 +892,19 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
                           'Vulkan 3D & Mesa Turnip',
                           style: GoogleFonts.inter(
-                            fontSize: 18,
+                            fontSize: 17,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
@@ -943,26 +945,24 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.cyanAccent,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                icon: const Icon(LucideIcons.download, size: 16),
-                label: Text(
-                  'Установить Vulkan 3D Stack',
-                  style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                onPressed: () {
-                  PackageInstallDialog.show(context, vulkanPkg!);
-                },
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.cyanAccent,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-            ],
+              icon: const Icon(LucideIcons.download, size: 16),
+              label: Text(
+                'Установить Vulkan 3D Stack',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: () {
+                PackageInstallDialog.show(context, vulkanPkg!);
+              },
+            ),
           ),
         ],
       ),
@@ -1224,135 +1224,162 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
   Widget _buildPackageCard(BuildContext context, WidgetRef ref, OptionalPackage pkg) {
     final theme = Theme.of(context);
     final Color accentColor = pkg.isInstalled ? const Color(0xFF10B981) : theme.colorScheme.primary;
+    final description = PackageDetailsDialog.getPackageDescription(pkg);
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isCompact = screenWidth < 500;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: const Color(0xFF111520),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: pkg.isInstalled
-              ? const Color(0xFF10B981).withValues(alpha: 0.25)
+              ? const Color(0xFF10B981).withValues(alpha: 0.3)
               : Colors.white.withValues(alpha: 0.08),
           width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: Colors.black.withValues(alpha: 0.25),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: () => PackageDetailsDialog.show(context, pkg),
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          accentColor.withValues(alpha: 0.18),
-                          accentColor.withValues(alpha: 0.05),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                  // Top Row: Icon + Name & Version + Category tag
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              accentColor.withValues(alpha: 0.22),
+                              accentColor.withValues(alpha: 0.06),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: accentColor.withValues(alpha: 0.35)),
+                        ),
+                        child: Icon(pkg.icon, color: accentColor, size: 22),
                       ),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: accentColor.withValues(alpha: 0.3)),
-                    ),
-                    child: Icon(pkg.icon, color: accentColor, size: 22),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Flexible(
-                              child: Text(
-                                pkg.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14.5,
-                                ),
+                            Text(
+                              pkg.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
                               ),
                             ),
-                            if (pkg.version != null && pkg.version!.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.cyanAccent.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3), width: 0.6),
-                                ),
-                                child: Text(
-                                  pkg.version!,
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.cyanAccent,
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.06),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.12), width: 0.6),
+                                  ),
+                                  child: Text(
+                                    pkg.category,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white70,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                            if (pkg.isInstalled) ...[
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(LucideIcons.badge_check, color: Color(0xFF10B981), size: 11),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      AppLocalizations.of(context)!.statusInstalledCaps,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 8,
-                                        fontWeight: FontWeight.w900,
-                                        color: const Color(0xFF10B981),
+                                if (pkg.version != null && pkg.version!.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.cyanAccent.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: Colors.cyanAccent.withValues(alpha: 0.3), width: 0.6),
+                                    ),
+                                    child: Text(
+                                      pkg.version!,
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.cyanAccent,
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 5),
-                        Text(
-                          pkg.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            color: Colors.white60,
-                            fontSize: 11.5,
-                            height: 1.3,
-                          ),
-                        ),
+                      ),
+                      if (!isCompact) ...[
+                        const SizedBox(width: 12),
+                        _buildInstallButton(context, ref, pkg),
                       ],
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Description (High Contrast, Readable Russian Text)
+                  Text(
+                    description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFFCBD5E1),
+                      fontSize: 12.5,
+                      height: 1.42,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  _buildInstallButton(context, ref, pkg),
+                  if (isCompact) ...[
+                    const SizedBox(height: 12),
+                    const Divider(height: 1, color: Colors.white10),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => PackageDetailsDialog.show(context, pkg),
+                          icon: const Icon(LucideIcons.info, size: 14, color: Color(0xFF94A3B8)),
+                          label: Text(
+                            'Подробнее',
+                            style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF94A3B8)),
+                          ),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        _buildInstallButton(context, ref, pkg),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

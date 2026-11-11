@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_pty/flutter_pty.dart';
+import 'package:quantum_ide/core/services/pty/pty_facade.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm/xterm.dart' as xt;

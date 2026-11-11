@@ -983,7 +983,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       child: Scaffold(
         key: _scaffoldKey,
         resizeToAvoidBottomInset: false,
-        drawer: isDesktop ? null : const FileDrawer(),
+        drawer: const FileDrawer(),
         endDrawer: canDockSide
             ? null
             : _buildMobileAiDrawer(context, screenWidth),
@@ -1011,7 +1011,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ActionIconButton(
                                 icon: LucideIcons.panel_left,
                                 color:
-                                    (isDesktop &&
+                                    (screenWidth >= 1024 &&
                                         ref.watch(leftPanelOpenProvider))
                                     ? const Color(0xFFE2E8F0)
                                     : const Color(0xFF94A3B8),
@@ -1019,7 +1019,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   context,
                                 )!.openExplorer,
                                 onTap: () {
-                                  if (isDesktop) {
+                                  if (screenWidth >= 1024) {
                                     final isOpen = ref.read(
                                       leftPanelOpenProvider,
                                     );
@@ -1407,59 +1407,19 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     ),
                                     onSelected: (value) async {
                                       switch (value) {
-                                        case 'undo':
-                                          try {
-                                            activeFile?.controller.undo();
-                                          } catch (_) {}
+                                        case 'format':
+                                          await ref
+                                              .read(editorProvider.notifier)
+                                              .formatActiveFile();
                                           break;
-                                        case 'redo':
-                                          try {
-                                            activeFile?.controller.redo();
-                                          } catch (_) {}
-                                          break;
-                                        case 'git':
-                                          if (panelState.isOpened &&
-                                              panelState.selectedTab ==
-                                                  PanelTab.git) {
-                                            panelNotifier.closePanel();
-                                          } else {
-                                            panelNotifier.selectTab(
-                                              PanelTab.git,
-                                            );
-                                            panelNotifier.openPanel();
-                                          }
-                                          break;
-                                        case 'terminal':
-                                          if (panelState.isOpened &&
-                                              panelState.selectedTab ==
-                                                  PanelTab.terminal) {
-                                            panelNotifier.closePanel();
-                                          } else {
-                                            panelNotifier.selectTab(
-                                              PanelTab.terminal,
-                                            );
-                                            panelNotifier.openPanel();
-                                          }
-                                          break;
-                                        case 'device_mirror':
-                                          if (panelState.isOpened &&
-                                              panelState.selectedTab ==
-                                                  PanelTab.deviceMirror) {
-                                            panelNotifier.closePanel();
-                                          } else {
-                                            panelNotifier.selectTab(
-                                              PanelTab.deviceMirror,
-                                            );
-                                            panelNotifier.openPanel();
-                                          }
-                                          break;
-                                        case 'ai_agent':
-                                        case 'dsh':
-                                          _toggleAiAgent(
-                                            context,
-                                            ref,
-                                            canDockSide,
+                                        case 'find':
+                                          final finder = ref.read(
+                                            activeFindControllerProvider,
                                           );
+                                          if (finder != null) {
+                                            finder.findMode();
+                                            finder.focusOnFindInput();
+                                          }
                                           break;
                                         case 'sync':
                                           final currentWs = ref
@@ -1476,13 +1436,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                                 );
                                           }
                                           break;
-                                        case 'build_apk':
-                                        case 'build_aab':
-                                          _triggerProjectBuild(
-                                            ref,
-                                            panelNotifier,
-                                            value,
-                                          );
+                                        case 'settings':
+                                          context.push('/settings');
                                           break;
                                         case 'home':
                                           await ref
@@ -1492,142 +1447,49 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                             context.go('/');
                                           }
                                           break;
-                                        case 'toggle_markdown':
-                                          if (activeFile != null) {
-                                            ref
-                                                .read(editorProvider.notifier)
-                                                .toggleMarkdownPreview(
-                                                  activeFile.path,
-                                                );
-                                          }
-                                          break;
                                       }
                                     },
                                     itemBuilder: (context) => [
-                                      if (isMarkdownFile)
-                                        PopupMenuItem(
-                                          value: 'toggle_markdown',
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                activeFile.isMarkdownPreview
-                                                    ? LucideIcons.code
-                                                    : LucideIcons.eye,
-                                                size: 16,
-                                                color: const Color(0xFF94A3B8),
+                                      const PopupMenuItem(
+                                        value: 'format',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              LucideIcons.code_xml,
+                                              size: 16,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                            SizedBox(width: 10),
+                                            Text(
+                                              'Форматировать код',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white,
                                               ),
-                                              const SizedBox(width: 10),
-                                              Text(
-                                                activeFile.isMarkdownPreview
-                                                    ? 'Редактировать код'
-                                                    : 'Предпросмотр Markdown',
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
+                                            ),
+                                          ],
                                         ),
-                                      if (screenWidth < 520) ...[
-                                        PopupMenuItem(
-                                          value: 'git',
-                                          child: Consumer(
-                                            builder: (context, ref, _) {
-                                              final changesCount = ref.watch(
-                                                gitProvider.select(
-                                                  (s) =>
-                                                      (s
-                                                              .status
-                                                              ?.stagedFiles
-                                                              .length ??
-                                                          0) +
-                                                      (s
-                                                              .status
-                                                              ?.modifiedFiles
-                                                              .length ??
-                                                          0) +
-                                                      (s
-                                                              .status
-                                                              ?.untrackedFiles
-                                                              .length ??
-                                                          0) +
-                                                      (s
-                                                              .status
-                                                              ?.conflictedFiles
-                                                              .length ??
-                                                          0),
-                                                ),
-                                              );
-                                              return Row(
-                                                children: [
-                                                  Icon(
-                                                    LucideIcons.git_branch,
-                                                    size: 16,
-                                                    color: changesCount > 0
-                                                        ? const Color(
-                                                            0xFFF59E0B,
-                                                          )
-                                                        : const Color(
-                                                            0xFF94A3B8,
-                                                          ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  Text(
-                                                    changesCount > 0
-                                                        ? 'Git ($changesCount изм.)'
-                                                        : 'Git',
-                                                    style: const TextStyle(
-                                                      fontSize: 13,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                ],
-                                              );
-                                            },
-                                          ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'find',
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              LucideIcons.search,
+                                              size: 16,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                            SizedBox(width: 10),
+                                            Text(
+                                              'Поиск в файле (Ctrl+F)',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const PopupMenuItem(
-                                          value: 'terminal',
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                LucideIcons.terminal,
-                                                size: 16,
-                                                color: Color(0xFF94A3B8),
-                                              ),
-                                              SizedBox(width: 10),
-                                              Text(
-                                                'Терминал',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'device_mirror',
-                                          child: Row(
-                                            children: [
-                                              Icon(
-                                                LucideIcons.smartphone,
-                                                size: 16,
-                                                color: Color(0xFF94A3B8),
-                                              ),
-                                              SizedBox(width: 10),
-                                              Text(
-                                                'Экран телефона и USB',
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
+                                      ),
                                       const PopupMenuItem(
                                         value: 'sync',
                                         child: Row(
@@ -1649,57 +1511,17 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                         ),
                                       ),
                                       const PopupMenuItem(
-                                        value: 'ai_agent',
+                                        value: 'settings',
                                         child: Row(
                                           children: [
                                             Icon(
-                                              LucideIcons.sparkles,
+                                              LucideIcons.settings,
                                               size: 16,
-                                              color: Color(0xFFA78BFA),
+                                              color: Color(0xFF94A3B8),
                                             ),
                                             SizedBox(width: 10),
                                             Text(
-                                              'Боковая панель Quantum AI',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'build_apk',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              LucideIcons.package,
-                                              size: 16,
-                                              color: Colors.orange,
-                                            ),
-                                            SizedBox(width: 10),
-                                            Text(
-                                              'Собрать Release APK',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'build_aab',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              LucideIcons.rocket,
-                                              size: 16,
-                                              color: Colors.purpleAccent,
-                                            ),
-                                            SizedBox(width: 10),
-                                            Text(
-                                              'Собрать AppBundle (AAB)',
+                                              'Настройки',
                                               style: TextStyle(
                                                 fontSize: 13,
                                                 color: Colors.white,
@@ -2124,8 +1946,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           visibleTabs = visibleTabs
                               .where((t) => !disabledTabs.contains(t.name))
                               .toList();
-                          if (visibleTabs.isEmpty)
+                          if (visibleTabs.isEmpty) {
                             visibleTabs = [PanelTab.terminal];
+                          }
 
                           return ListView.builder(
                             scrollDirection: Axis.horizontal,
@@ -2262,8 +2085,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                                     ),
                                                   );
                                                 }
-                                                if (count == null || count <= 0)
+                                                if (count == null || count <= 0) {
                                                   return const SizedBox.shrink();
+                                                }
                                                 return Padding(
                                                   padding:
                                                       const EdgeInsets.only(
@@ -2398,8 +2222,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
   Widget _buildQuickUpdatePill(WidgetRef ref) {
     final updateState = ref.watch(appUpdateServiceProvider);
-    if (!updateState.hasUpdate && !updateState.isDownloading)
+    if (!updateState.hasUpdate && !updateState.isDownloading) {
       return const SizedBox.shrink();
+    }
 
     if (updateState.isDownloading) {
       final pct = (updateState.downloadProgress * 100).toInt();
@@ -2982,8 +2807,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
 
     final editorState = ref.read(editorProvider);
     if (editorState.openFiles.isEmpty ||
-        editorState.activeTabIndex >= editorState.openFiles.length)
+        editorState.activeTabIndex >= editorState.openFiles.length) {
       return;
+    }
     final controller =
         editorState.openFiles[editorState.activeTabIndex].controller;
     final fallbackFinder = CodeFindController(controller);
@@ -2997,8 +2823,9 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   void _duplicateLine(WidgetRef ref) {
     final editorState = ref.read(editorProvider);
     if (editorState.openFiles.isEmpty ||
-        editorState.activeTabIndex >= editorState.openFiles.length)
+        editorState.activeTabIndex >= editorState.openFiles.length) {
       return;
+    }
 
     final controller =
         editorState.openFiles[editorState.activeTabIndex].controller;

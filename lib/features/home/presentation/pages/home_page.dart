@@ -311,24 +311,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ),
                           const SizedBox(width: 16),
                           SizedBox(
-                            width: 240,
+                            width: 280,
                             child: _buildSearchField(),
-                          ),
-                          const SizedBox(width: 8),
-                          _buildAppActionButton(
-                            icon: LucideIcons.git_branch,
-                            tooltip: 'Git и GitHub',
-                            onTap: () => context.push('/github'),
-                          ),
-                          _buildAppActionButton(
-                            icon: LucideIcons.blocks,
-                            tooltip: 'Инструменты разработчика',
-                            onTap: () => _showDeveloperToolsSheet(context),
-                          ),
-                          _buildAppActionButton(
-                            icon: LucideIcons.settings,
-                            tooltip: AppLocalizations.of(context)!.settings,
-                            onTap: () => context.push('/settings'),
                           ),
                         ],
                       ),
@@ -396,12 +380,6 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showProjectDialog(context, ref),
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-        child: const Icon(LucideIcons.plus),
       ),
     );
   }
@@ -697,20 +675,23 @@ class _HomePageState extends ConsumerState<HomePage> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AppLocalizations.of(context)!.welcomeTitle,
-                                style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                AppLocalizations.of(context)!.welcomeSubtitle,
-                                style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
-                              ),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  AppLocalizations.of(context)!.welcomeTitle,
+                                  style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w900, color: theme.colorScheme.onSurface, letterSpacing: -0.5),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  AppLocalizations.of(context)!.welcomeSubtitle,
+                                  style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.7)),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 24),
                           SizedBox(
                             width: 320,
                             child: _buildSearchField(),
@@ -958,22 +939,26 @@ class _HomePageState extends ConsumerState<HomePage> {
       flexibleSpace: FlexibleSpaceBar(
         titlePadding: const EdgeInsets.only(left: 20, bottom: 12),
         centerTitle: false,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Quantum IDE',
-              style: GoogleFonts.inter(
-                fontSize: 18,
-                fontWeight: FontWeight.w900,
-                color: theme.colorScheme.onSurface,
-                letterSpacing: -0.5,
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Quantum IDE',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: theme.colorScheme.onSurface,
+                  letterSpacing: -0.5,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            _buildVersionChip(context),
-          ],
+              const SizedBox(width: 8),
+              _buildVersionChip(context),
+            ],
+          ),
         ),
         background: Container(
           decoration: BoxDecoration(
@@ -1573,7 +1558,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         Text(
                           'Рекомендуемые компоненты окружения',
@@ -1583,7 +1571,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                             color: theme.colorScheme.onSurface,
                           ),
                         ),
-                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
@@ -1624,8 +1611,11 @@ class _HomePageState extends ConsumerState<HomePage> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               TextButton(
                 onPressed: () {
@@ -1635,7 +1625,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                 },
                 child: Text('Позже', style: GoogleFonts.inter(color: Colors.white54, fontSize: 13)),
               ),
-              const SizedBox(width: 8),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.cyanAccent,
@@ -1940,6 +1929,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(LucideIcons.cpu, size: 12, color: Colors.cyanAccent),
                             const SizedBox(width: 4),
@@ -1949,9 +1939,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                             ),
                           ],
                         ),
-                        Text(
-                          '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
-                          style: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Text(
+                            '${(stats.cpuUsage * 100).toStringAsFixed(0)}%',
+                            style: GoogleFonts.inter(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ],
                     ),
@@ -1977,6 +1971,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(LucideIcons.zap, size: 12, color: Colors.greenAccent),
                             const SizedBox(width: 4),
@@ -1986,9 +1981,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                             ),
                           ],
                         ),
-                        Text(
-                          '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
-                          style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Text(
+                            '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
+                            style: GoogleFonts.inter(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ],
                     ),
@@ -2014,6 +2013,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const Icon(LucideIcons.memory_stick, size: 12, color: Colors.purpleAccent),
                             const SizedBox(width: 4),
@@ -2023,9 +2023,13 @@ class _HomePageState extends ConsumerState<HomePage> {
                             ),
                           ],
                         ),
-                        Text(
-                          stats.appRamFormatted,
-                          style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Text(
+                            stats.appRamFormatted,
+                            style: GoogleFonts.inter(color: Colors.purpleAccent, fontSize: 10.5, fontWeight: FontWeight.bold),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
                         ),
                       ],
                     ),
