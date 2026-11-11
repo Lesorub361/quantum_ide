@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -275,9 +276,10 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     final isKeyboardOpen = bottomInset > 0;
     final screenWidth = MediaQuery.sizeOf(context).width;
 
-    // На очень широких экранах мониторов ПК (>= 1200px) при закрытой клавиатуре не загромождаем экран.
-    // На планшетах и телефонах стрелки навигации и Undo/Redo всегда доступны.
-    if (!isKeyboardOpen && screenWidth >= 1200) {
+    // Скрываем только на десктопных ПК (Windows/Linux/macOS) при очень широких экранах мониторов (>= 1200px).
+    // На мобильных устройствах (Android/iOS планшеты и смартфоны) панель с Undo/Redo, стрелками навигации
+    // и символами всегда доступна.
+    if (!isKeyboardOpen && !Platform.isAndroid && !Platform.isIOS && screenWidth >= 1200) {
       return const SizedBox.shrink();
     }
 
@@ -431,13 +433,20 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '${settings.fontSize.toInt()} px',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    color: const Color(0xFF94A3B8),
-                    fontWeight: FontWeight.w600,
-                  ),
+                ValueListenableBuilder<CodeLineEditingValue>(
+                  valueListenable: controller,
+                  builder: (context, val, _) {
+                    final line = val.selection.extentIndex + 1;
+                    final col = val.selection.extentOffset + 1;
+                    return Text(
+                      'Стр $line:$col • ${settings.fontSize.toInt()} px',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: const Color(0xFF94A3B8),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(width: 6),
                 buildBtn(

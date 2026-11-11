@@ -1400,6 +1400,19 @@ class QuantumAiAgentService extends ChangeNotifier {
               ? errText
               : '${assistantMsg.text}\n\n$errText';
           _statusMessage = 'Лимит запросов (429)';
+        } else if (e.response?.statusCode == 402 ||
+            detailedError.toLowerCase().contains('insufficient credits') ||
+            detailedError.toLowerCase().contains('payment required')) {
+          const errText =
+              '💳 **Недостаточно платного баланса OpenRouter (код 402)**.\n\n'
+              'Для выбранной платной модели баланс аккаунта израсходован (\$0.00).\n\n'
+              '💡 **Решение:**\n'
+              '1. В списке моделей вверху панели выберите категорию **«Бесплатные»** и выберите любую модель с меткой **FREE** (например, **OpenRouter Free (Auto)**, **DeepSeek R1 (Free)** или **Qwen 2.5 Coder (Free)**) — они работают **полностью бесплатно** (1000 запросов в день)!\n'
+              '2. Либо пополните баланс на сайте openrouter.ai/settings/credits.';
+          assistantMsg.text = assistantMsg.text.isEmpty
+              ? errText
+              : '${assistantMsg.text}\n\n$errText';
+          _statusMessage = 'Баланс \$0 (код 402)';
         } else {
           final msg = detailedError.isNotEmpty ? detailedError : e.toString();
           assistantMsg.text += '\n\n⚠️ **Ошибка генерации:** $msg';

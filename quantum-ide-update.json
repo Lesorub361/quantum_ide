@@ -1,16 +1,16 @@
 {
-  "versionCode": 223,
-  "versionName": "1.2.206",
-  "notes": "QuantumIDE v1.2.206:\n• ⌨️ Исправлен ввод на русском языке (кириллица) в терминале: устранены сбои, проглатывание первых букв и дубликаты символов при наборе с мобильной клавиатуры.\n• 🛡️ Устранена критическая ошибка рендеринга (SafeClamp): предотвращён сбой double.clamp(min, max) при открытии клавиатуры и в портретном режиме.\n• ⚡ Ликвидирован бесконечный спам ошибок SELinux: добавлен fake-узел statm в виртуальную FS PRoot.\n• 🔒 Повышена стабильность экрана Пакетов: предотвращён вылет context.push при закрытом контексте SnackBar.\n• 🚀 Оптимизация сборки и импортов.",
+  "versionCode": 224,
+  "versionName": "1.2.207",
+  "notes": "QuantumIDE v1.2.207:\n• 📱 Включена панель навигации (стрелки курсора, Отменить / Вернуть, номер строки и символы) для планшетов в альбомном режиме.\n• 🤖 Оптимизирован ИИ-агент с OpenRouter: добавлена понятная подсказка при исчерпании платного баланса (402) с рекомендацией бесплатных моделей.\n• 🛡️ Устранены оставшиеся проверки /proc/stat в SELinux на Android.\n• ⌨️ Исправлен русский ввод в терминале xterm.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.206/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.207/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.206",
-  "buildNumber": 223,
-  "tag_name": "v1.2.206",
-  "releaseNotes": "QuantumIDE v1.2.206: Fix Russian (Cyrillic) terminal mobile keyboard IME input bug, imports placement in editor page, SafeClampDouble layout guards, PRoot fake statm node."
+  "version": "1.2.207",
+  "buildNumber": 224,
+  "tag_name": "v1.2.207",
+  "releaseNotes": "QuantumIDE v1.2.207: Enable KeyboardAccessoryBar on tablets in landscape mode with live cursor line/column display, handle OpenRouter 402 Insufficient credits gracefully, optimize SELinux proc probes."
 }

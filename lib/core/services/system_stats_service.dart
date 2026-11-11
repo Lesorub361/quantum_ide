@@ -166,7 +166,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   int _lastCpuTotal = 0;
   int _lastCpuIdle = 0;
 
-  bool _procStatBlocked = false;
+  bool _procStatBlocked = Platform.isAndroid;
   bool _sysfsCpuBlocked = false;
   bool _gpuSysfsBlocked = false;
 
