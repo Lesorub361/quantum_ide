@@ -71,6 +71,40 @@ class QuantumModelItem {
 
     // Real Active Free Models on OpenRouter
     QuantumModelItem(
+      id: 'cohere/north-mini-code:free',
+      name: 'North Mini Code (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FREE CODE',
+      badgeColorValue: 0xFF10B981,
+    ),
+    QuantumModelItem(
+      id: 'nvidia/nemotron-3.5-lightning:free',
+      name: 'Nemotron 3.5 Lightning (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'FAST FREE',
+      badgeColorValue: 0xFF06B6D4,
+      isReasoning: true,
+    ),
+    QuantumModelItem(
+      id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+      name: 'Nemotron 3 Ultra 550B (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: '550B FREE',
+      badgeColorValue: 0xFF8B5CF6,
+      isReasoning: true,
+    ),
+    QuantumModelItem(
+      id: 'google/gemma-4-31b-it:free',
+      name: 'Gemma 4 31B (Free)',
+      providerName: 'OpenRouter',
+      category: 'Бесплатные',
+      badge: 'GEMMA FREE',
+      badgeColorValue: 0xFF3B82F6,
+    ),
+    QuantumModelItem(
       id: 'meta-llama/llama-3.3-70b-instruct:free',
       name: 'Llama 3.3 70B (Free)',
       providerName: 'OpenRouter',
@@ -1768,6 +1802,10 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
 </action>
 
 8. Оформляй ответы аккуратно и красиво: форматируй в GitHub Markdown, выделяй код и пути, отвечай на языке пользователя (по умолчанию на русском).
+9. ЕСЛИ ПОЛЬЗОВАТЕЛЬ ЗАДАЁТ ОБЩИЙ ВОПРОС О ПРОЕКТЕ (например «что улучшим в проекте?», «проверь проект», «сделай аудит», «как запустить?», «найди баги»):
+   - НИКОГДА НЕ ПЕРЕСПРАШИВАЙ пользователя о структуре или стеке!
+   - ТЫ ОБЯЗАН СРАЗУ САМ исследовать проект: вызови <tool name="list_dir" path="."/>, прочитай манифест (pubspec.yaml / package.json / requirements.txt / Cargo.toml), проверь get_diagnostics, изучи главный файл приложения (например lib/main.dart / src/index.ts).
+   - После исследования предложи конкретный, экспертный список улучшений (архитектура, быстродействие, надёжность, UI/UX) и в режиме Build сразу создай или улучши код через блоки <action type="write_file">.
 ''';
   }
 
@@ -2006,19 +2044,27 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
         final delta = choices[0]['delta'] as Map<String, dynamic>?;
         if (delta == null) continue;
 
-        // 1. Проверяем reasoning_content или reasoning (DeepSeek R1 / o3-mini / OpenRouter)
-        final reasoning =
-            (delta['reasoning_content'] ?? delta['reasoning']) as String?;
+        // 1. Проверяем reasoning_content, reasoning или reasoning_details (DeepSeek R1 / o3-mini / OpenRouter)
+        String? reasoning;
+        final rawReasoning = delta['reasoning_content'] ?? delta['reasoning'];
+        if (rawReasoning is String) {
+          reasoning = rawReasoning;
+        } else if (delta['reasoning_details'] is List) {
+          final list = delta['reasoning_details'] as List;
+          if (list.isNotEmpty && list[0] is Map && list[0]['text'] is String) {
+            reasoning = list[0]['text'] as String;
+          }
+        }
+
         if (reasoning != null && reasoning.isNotEmpty) {
           thinkBuffer.write(reasoning);
           targetMsg.thinking = thinkBuffer.toString();
           targetMsg.isThinking = true;
           notifyListeners();
-          continue;
         }
 
         // 2. Обычный контент
-        final content = delta['content'] as String?;
+        final content = (delta['content'] ?? delta['text']) as String?;
         if (content != null && content.isNotEmpty) {
           // Проверяем теги <think> и </think> в обычном контенте
           if (content.contains('<think>')) {
@@ -2048,6 +2094,9 @@ ${_tools.mcpDescription.isEmpty ? '' : 'MCP-инструменты (аргуме
           notifyListeners();
         }
       } catch (_) {}
+    }
+    if (targetMsg.text.trim().isEmpty && thinkBuffer.isNotEmpty) {
+      targetMsg.text = '*(Ответ сформирован в блоке размышлений выше)*';
     }
     if (!gotUsage) {
       _usageEstimated = true;

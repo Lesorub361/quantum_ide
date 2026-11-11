@@ -1,16 +1,16 @@
 {
-  "versionCode": 225,
-  "versionName": "1.2.208",
-  "notes": "QuantumIDE v1.2.208:\n• 🔢 Чёткая нумерация строк слева от кода (Gutter) с высокой контрастностью и подсветкой активной строки.\n• ⚡ Мгновенное применение правок ИИ в редактор: автоматическая перезагрузка открытых вкладок без потери данных.\n• 🤖 Универсальный ИИ-агент для любых проектов: Node.js, Python, Rust, Go, Web (HTML/JS) и Flutter.\n• 🎯 Поэтапное принятие изменений (Cursor-style) с кнопкой «Принять все» и удобным просмотром этапов.\n• 🚀 Быстрый переход к строке (Go to Line) по клику на номер строки на панели навигации.",
+  "versionCode": 226,
+  "versionName": "1.2.209",
+  "notes": "QuantumIDE v1.2.209:\n• 🎨 Полный редизайн интерфейса AI-чата: адаптивный адаптивный заголовок, который больше не перекрывает кнопки и не уходит за экран на любых телефонах и планшетах.\n• 📱 Кнопка «На весь экран», «Новый диалог», «История» и меню опций аккуратно скомпонованы без обрезания.\n• 🤖 Исправлена остановка агента на общих запросах («что улучшим в проекте»): агент теперь автоматически исследует корень проекта, манифест и код перед ответом.\n• ⚡ Быстрые умные подсказки: аудит проекта, поиск ошибок, оптимизация скорости, тесты и архитектура.\n• 💬 Современный стиль сообщений Cursor/Mobile-Harness: копирование ответа в один клик, теги моделей, размышления Reasoning.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.208/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.209/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.208",
-  "buildNumber": 225,
-  "tag_name": "v1.2.208",
-  "releaseNotes": "QuantumIDE v1.2.208: High-contrast line numbers gutter, multi-stack AI agent support, instant in-editor live reload on action apply, step-by-step Accept All action cards, Go to line navigation dialog."
+  "version": "1.2.209",
+  "buildNumber": 226,
+  "tag_name": "v1.2.209",
+  "releaseNotes": "QuantumIDE v1.2.209: Sleek AI chat redesign, responsive non-overflowing header, auto project discovery on broad queries, smart action prompt chips, modern Cursor-style message cards."
 }

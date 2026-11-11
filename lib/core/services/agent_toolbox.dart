@@ -405,6 +405,22 @@ class AgentToolbox {
     final c = getContext();
     final ws = workspacePath();
     final b = StringBuffer();
+    if (ws != null) {
+      try {
+        final d = Directory(ws);
+        if (d.existsSync()) {
+          final entries = d
+              .listSync(followLinks: false)
+              .map((e) => p.basename(e.path) + (e is Directory ? '/' : ''))
+              .where((n) => !_skipDirs.contains(n.replaceAll('/', '')))
+              .take(25)
+              .join(', ');
+          if (entries.isNotEmpty) {
+            b.writeln('Структура корня проекта: $entries');
+          }
+        }
+      } catch (_) {}
+    }
     if (c.activeFilePath != null) {
       final rel = ws != null && p.isWithin(ws, c.activeFilePath!) ? p.relative(c.activeFilePath!, from: ws) : c.activeFilePath!;
       b.writeln('Открытый файл: $rel${c.cursorLine != null ? ' (курсор на строке ${c.cursorLine})' : ''}');
