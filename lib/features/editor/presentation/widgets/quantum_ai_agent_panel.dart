@@ -461,7 +461,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints.tightFor(width: 28, height: 28),
             icon: const Icon(
-              LucideIcons.more_vertical,
+              LucideIcons.ellipsis_vertical,
               size: 14,
               color: Color(0xFF94A3B8),
             ),
