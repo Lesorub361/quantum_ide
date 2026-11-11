@@ -1415,7 +1415,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
       child: Row(
         children: [
           Icon(
-            pendingCount > 0 ? LucideIcons.list_checks : LucideIcons.check_circle_2,
+            pendingCount > 0 ? LucideIcons.list_checks : LucideIcons.circle_check,
             size: 14,
             color: pendingCount > 0 ? const Color(0xFFA78BFA) : const Color(0xFF10B981),
           ),
