@@ -16,7 +16,7 @@ dependencies:
   re_editor: ^0.10.0
   re_highlight: ^0.0.3
   path_provider: ^2.1.5
-  file_picker: ^11.0.3
+  file_picker: ^13.3.3
   permission_handler: ^11.4.0
   flutter_lucide: 1.9.0
   flex_color_scheme: ^8.4.0
