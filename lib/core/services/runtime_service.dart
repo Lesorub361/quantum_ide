@@ -58,6 +58,18 @@ class RuntimeService extends ChangeNotifier {
     return true;
   }
 
+  Future<void> _cleanupWithdrawnMigrationLeftovers() async {
+    try {
+      final f = File(p.join(_filesDir, 'tmp', 'rootfs.tar.zst'));
+      if (await f.exists()) {
+        await f.delete();
+        debugPrint('RuntimeService: removed leftover rootfs.tar.zst');
+      }
+    } catch (e) {
+      debugPrint('RuntimeService: cleanup skipped: $e');
+    }
+  }
+
   Future<void> init() async {
     if (_isInitialized || _isInitializing) return;
     _isInitializing = true;
@@ -66,6 +78,10 @@ class RuntimeService extends ChangeNotifier {
         _filesDir = await _channel.invokeMethod('getFilesDir');
         _nativeLibDir = await _channel.invokeMethod('getNativeLibDir');
         debugPrint('RuntimeService: filesDir=$_filesDir, nativeLibDir=$_nativeLibDir');
+
+        // 0. Remove leftovers of the withdrawn v1.2.211 Ubuntu 24.04 migration
+        //    (downloaded image archive). The installed system is left untouched.
+        await _cleanupWithdrawnMigrationLeftovers();
 
         // 1. Prepare base directories and config files first
         await _prepareFileSystem();
