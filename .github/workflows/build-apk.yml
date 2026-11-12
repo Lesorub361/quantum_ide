@@ -115,6 +115,13 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Patch plugins for AGP 9 (proguard-android.txt is unsupported)
+        run: |
+          grep -rlE "proguard-android\.txt" "$HOME/.pub-cache/hosted" --include=build.gradle --include=build.gradle.kts 2>/dev/null | while read -r f; do
+            echo "Patching $f"
+            sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" "$f"
+          done || true
+
       - name: Build release APK (Universal & Split ABIs)
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8'"
