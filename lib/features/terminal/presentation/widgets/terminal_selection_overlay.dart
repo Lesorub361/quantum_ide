@@ -331,7 +331,7 @@ class _TerminalSelectionOverlayState extends State<TerminalSelectionOverlay> {
                 color: Colors.white70,
                 onTap: () {
                   HapticFeedback.lightImpact();
-                  Share.share(selectedText);
+                  SharePlus.instance.share(ShareParams(text: selectedText));
                   widget.session.xtermViewController.clearSelection();
                 },
               ),

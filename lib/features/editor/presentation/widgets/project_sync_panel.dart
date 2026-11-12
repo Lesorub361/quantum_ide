@@ -353,9 +353,11 @@ class _ProjectSyncOutputPanelState extends ConsumerState<ProjectSyncOutputPanel>
                   onPressed: () {
                     final logText = currentLines.join('\n');
                     if (logText.isNotEmpty) {
-                      Share.share(
-                        logText,
-                        subject: l10n?.shareProjectSyncLogs ?? 'Quantum IDE - Project sync log',
+                      SharePlus.instance.share(
+                        ShareParams(
+                          text: logText,
+                          subject: l10n?.shareProjectSyncLogs ?? 'Quantum IDE - Project sync log',
+                        ),
                       );
                     }
                   },

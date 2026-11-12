@@ -183,9 +183,10 @@ class _BuildCompletionDialogState extends ConsumerState<BuildCompletionDialog> {
 
   Future<void> _shareArtifact() async {
     try {
-      await Share.shareXFiles([
-        XFile(widget.artifactPath),
-      ], text: 'Сборка QuantumIDE: ${p.basename(widget.artifactPath)}');
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile(widget.artifactPath)],
+        text: 'Сборка QuantumIDE: ${p.basename(widget.artifactPath)}',
+      ));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
