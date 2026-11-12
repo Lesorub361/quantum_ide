@@ -37,14 +37,14 @@ dependencies:
   flutter_markdown_plus: ^1.0.12
   photo_view: ^0.15.0
   fl_chart: ^0.70.2
-  device_info_plus: ^11.5.0
-  package_info_plus: ^8.3.1
+  device_info_plus: ^13.3.0
+  package_info_plus: ^10.2.2
   # Mobile UX & IDE Tools
   image_picker: ^1.1.2
   flutter_secure_storage: ^9.2.4
   share_plus: ^13.3.1
   dartssh2: ^2.22.1
-  wakelock_plus: ^1.2.8
+  wakelock_plus: ^1.8.2
   
   crypto: ^3.0.6
   sqflite: ^2.4.4+2
@@ -64,7 +64,7 @@ dependencies:
   cached_network_image: ^3.4.1
   flutter_slidable: ^3.1.2
   reorderables: ^0.6.0
-  battery_plus: ^6.1.0
+  battery_plus: ^7.1.2
   haptic_feedback: ^0.5.1
 
   # AI Agent & Streaming Engine
