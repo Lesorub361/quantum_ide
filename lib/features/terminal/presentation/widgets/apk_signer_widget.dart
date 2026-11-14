@@ -214,13 +214,13 @@ class _ApkSignerWidgetState extends ConsumerState<ApkSignerWidget> {
   Future<void> _pickFile({required bool isApk}) async {
     final l10n = AppLocalizations.of(context)!;
     try {
-      final FilePickerResult? result = await FilePicker.pickFiles(
+      final PlatformFile? result = await FilePicker.pickFile(
         type: FileType.custom,
         allowedExtensions: isApk ? ['apk'] : ['jks', 'keystore'],
       );
 
-      if (result != null && result.files.single.path != null) {
-        final path = result.files.single.path!;
+      if (result != null && result.path != null) {
+        final path = result.path!;
         setState(() {
           if (isApk) {
             _customApkController.text = path;

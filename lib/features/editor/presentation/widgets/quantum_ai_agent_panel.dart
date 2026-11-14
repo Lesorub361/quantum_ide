@@ -2315,13 +2315,10 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
 
   Future<void> _pickFiles() async {
     try {
-      final result = await FilePicker.pickFiles(
-        allowMultiple: true,
-        withData: true,
-      );
-      if (result == null || result.files.isEmpty) return;
+      final result = await FilePicker.pickFiles();
+      if (result.isEmpty) return;
 
-      for (final pf in result.files) {
+      for (final pf in result) {
         final name = pf.name;
         final ext = p.extension(name).toLowerCase();
         final isImg = const [
@@ -2332,11 +2329,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
           '.gif',
           '.bmp',
         ].contains(ext);
-        Uint8List? bytes = pf.bytes;
-        if (bytes == null && pf.path != null) {
-          bytes = await File(pf.path!).readAsBytes();
-        }
-        if (bytes == null) continue;
+        final Uint8List bytes = await pf.readAsBytes();
 
         if (isImg) {
           final mime = ext == '.png'
@@ -2353,7 +2346,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 path: pf.path ?? name,
                 mimeType: mime,
                 isImage: true,
-                base64Data: base64Encode(bytes!),
+                base64Data: base64Encode(bytes),
                 sizeBytes: bytes.length,
               ),
             );
@@ -2368,7 +2361,7 @@ class _QuantumAiAgentPanelState extends ConsumerState<QuantumAiAgentPanel> {
                 mimeType: 'text/plain',
                 isImage: false,
                 textContent: text,
-                sizeBytes: bytes!.length,
+                sizeBytes: bytes.length,
               ),
             );
           });

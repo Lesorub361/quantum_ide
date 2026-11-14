@@ -24,12 +24,12 @@ class _DatabaseViewerPageState extends ConsumerState<DatabaseViewerPage> {
   }
 
   Future<void> _pickDatabase() async {
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['db', 'sqlite', 'sqlite3'],
     );
-    if (result != null && result.files.single.path != null) {
-      ref.read(databaseViewerProvider.notifier).openDatabase(result.files.single.path!);
+    if (result != null && result.path != null) {
+      ref.read(databaseViewerProvider.notifier).openDatabase(result.path!);
     }
   }
 
