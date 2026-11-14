@@ -3161,16 +3161,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         },
                         child: LayoutBuilder(
                           builder: (context, viewConstraints) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                final ctrl = _terminalScrollControllers[keyId];
-                                if (ctrl != null &&
-                                    ctrl.hasClients &&
-                                    ctrl.wasFollowingCursor) {
-                                  ctrl.jumpTo(ctrl.position.maxScrollExtent);
-                                }
-                              }
-                            });
                             return xt.TerminalView(
                               key: _getTerminalKey(keyId),
                               session.xtermTerminal,
@@ -3181,11 +3171,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               ),
                               focusNode: _getFocusNode(keyId),
                               autofocus: !isMobile,
-                              deleteDetection: false,
-                              keyboardType: TextInputType.text,
+                              deleteDetection: Platform.isAndroid || Platform.isIOS,
+                              keyboardType: TextInputType.emailAddress,
                               autoResize: true,
-                              hardwareKeyboardOnly:
-                                  isMobile && !_isMobileKeyboardActive,
+                              hardwareKeyboardOnly: false,
                               onKeyEvent: (focusNode, event) {
                                 if (event is! KeyUpEvent &&
                                     event.logicalKey ==
@@ -3224,12 +3213,10 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                                   }
                                 }
 
-                                if (!isMobile) {
-                                  _openTerminalKeyboard(
-                                    session,
-                                    isSecondary: isSecondary,
-                                  );
-                                }
+                                _openTerminalKeyboard(
+                                  session,
+                                  isSecondary: isSecondary,
+                                );
                               },
                               padding: const EdgeInsets.all(10),
                               theme: theme,

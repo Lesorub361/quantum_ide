@@ -456,7 +456,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                     : xt.TerminalView(
                         session.xtermTerminal,
                         controller: session.xtermViewController,
-                        autofocus: true,
+                        autofocus: !(Platform.isAndroid || Platform.isIOS),
                         theme: theme,
                         backgroundOpacity: 0,
                         textStyle: xt.TerminalStyle(
@@ -473,8 +473,8 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
                             'monospace',
                           ],
                         ),
-                        keyboardType: TextInputType.text,
-                        deleteDetection: false,
+                        keyboardType: TextInputType.emailAddress,
+                        deleteDetection: Platform.isAndroid || Platform.isIOS,
                       ))
                 : Center(child: Text(l10n.startTheProject, style: const TextStyle(color: Colors.white38))),
           ),
@@ -1161,7 +1161,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                   child: xt.TerminalView(
                                     session.xtermTerminal,
                                     controller: session.xtermViewController,
-                                    autofocus: true,
+                                    autofocus: !(Platform.isAndroid || Platform.isIOS),
                                     theme: theme,
                                     backgroundOpacity: 0,
                                     textStyle: xt.TerminalStyle(
@@ -1178,8 +1178,8 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                         'monospace',
                                       ],
                                     ),
-                                    keyboardType: TextInputType.text,
-                                    deleteDetection: false,
+                                    keyboardType: TextInputType.emailAddress,
+                                    deleteDetection: Platform.isAndroid || Platform.isIOS,
                                   ),
                                 ))
                           : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),
