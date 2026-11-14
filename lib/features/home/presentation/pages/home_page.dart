@@ -1918,7 +1918,18 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
+          Text(
+            '${stats.socName} • ${stats.gpuName}',
+            style: GoogleFonts.inter(
+              fontSize: 10,
+              color: Colors.white54,
+              fontWeight: FontWeight.w500,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(

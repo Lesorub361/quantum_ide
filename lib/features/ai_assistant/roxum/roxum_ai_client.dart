@@ -226,15 +226,84 @@ class RoxumToolCallRecord {
   }
 }
 
+class RoxumAttachment {
+  final String name;
+  final String mimeType;
+  final String? base64Data;
+  final String? textContent;
+  final int sizeBytes;
+
+  const RoxumAttachment({
+    required this.name,
+    required this.mimeType,
+    this.base64Data,
+    this.textContent,
+    this.sizeBytes = 0,
+  });
+
+  bool get isImage => mimeType.startsWith('image/') && base64Data != null;
+}
+
+class RoxumUsageStats {
+  final int promptTokens;
+  final int completionTokens;
+  final int totalTokens;
+  final double costUsd;
+
+  const RoxumUsageStats({
+    this.promptTokens = 0,
+    this.completionTokens = 0,
+    this.totalTokens = 0,
+    this.costUsd = 0.0,
+  });
+
+  RoxumUsageStats operator +(RoxumUsageStats other) {
+    return RoxumUsageStats(
+      promptTokens: promptTokens + other.promptTokens,
+      completionTokens: completionTokens + other.completionTokens,
+      totalTokens: totalTokens + other.totalTokens,
+      costUsd: costUsd + other.costUsd,
+    );
+  }
+}
+
+class OpenRouterKeyLimits {
+  final String label;
+  final double? limitUsd;
+  final double? limitRemainingUsd;
+  final double usageUsd;
+  final double usageDailyUsd;
+  final double usageMonthlyUsd;
+  final bool isFreeTier;
+  final int? freeDailyUsed;
+  final int? freeDailyLimit;
+  final int? freeDailyRemaining;
+
+  const OpenRouterKeyLimits({
+    required this.label,
+    this.limitUsd,
+    this.limitRemainingUsd,
+    this.usageUsd = 0.0,
+    this.usageDailyUsd = 0.0,
+    this.usageMonthlyUsd = 0.0,
+    this.isFreeTier = false,
+    this.freeDailyUsed,
+    this.freeDailyLimit,
+    this.freeDailyRemaining,
+  });
+}
+
 class _ParsedTurn {
   final String text;
   final List<({String id, String name, Map<String, dynamic> args})> toolCalls;
   final Map<String, dynamic> rawAssistantMessage;
+  final RoxumUsageStats usage;
 
   const _ParsedTurn({
     required this.text,
     required this.toolCalls,
     required this.rawAssistantMessage,
+    this.usage = const RoxumUsageStats(),
   });
 }
 
@@ -246,6 +315,76 @@ class RoxumAiClient {
     _client = null;
   }
 
+  static Future<List<String>> fetchRemoteModels({
+    required String baseUrl,
+    String apiKey = '',
+  }) async {
+    final trimmed = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (trimmed.isEmpty) return const [];
+    final modelsUrl = trimmed.endsWith('/models') ? trimmed : '$trimmed/models';
+    final res = await http
+        .get(
+          Uri.parse(modelsUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            if (apiKey.trim().isNotEmpty)
+              'Authorization': 'Bearer ${apiKey.trim()}',
+          },
+        )
+        .timeout(const Duration(seconds: 8));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('HTTP ${res.statusCode}: ${res.body}');
+    }
+    final decoded = jsonDecode(res.body);
+    final ids = <String>[];
+    if (decoded is Map && decoded['data'] is List) {
+      for (final item in decoded['data'] as List) {
+        if (item is Map && item['id'] != null) {
+          ids.add(item['id'].toString());
+        }
+      }
+    } else if (decoded is Map && decoded['models'] is List) {
+      for (final item in decoded['models'] as List) {
+        if (item is Map && (item['name'] ?? item['id']) != null) {
+          ids.add((item['name'] ?? item['id']).toString());
+        }
+      }
+    }
+    return ids;
+  }
+
+  static Future<OpenRouterKeyLimits> fetchOpenRouterKeyLimits(
+    String apiKey,
+  ) async {
+    final res = await http
+        .get(
+          Uri.parse('https://openrouter.ai/api/v1/key'),
+          headers: {
+            'Authorization': 'Bearer ${apiKey.trim()}',
+          },
+        )
+        .timeout(const Duration(seconds: 8));
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('HTTP ${res.statusCode}: ${res.body}');
+    }
+    final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+    final data = (decoded['data'] as Map?)?.cast<String, dynamic>() ?? decoded;
+    final freeDaily =
+        (data['free_model_daily_requests'] as Map?)?.cast<String, dynamic>();
+    return OpenRouterKeyLimits(
+      label: data['label']?.toString() ?? 'OpenRouter Key',
+      limitUsd: (data['limit'] as num?)?.toDouble(),
+      limitRemainingUsd: (data['limit_remaining'] as num?)?.toDouble(),
+      usageUsd: (data['usage'] as num?)?.toDouble() ?? 0.0,
+      usageDailyUsd: (data['usage_daily'] as num?)?.toDouble() ?? 0.0,
+      usageMonthlyUsd: (data['usage_monthly'] as num?)?.toDouble() ?? 0.0,
+      isFreeTier: data['is_free_tier'] == true,
+      freeDailyUsed: (freeDaily?['used'] as num?)?.toInt(),
+      freeDailyLimit: (freeDaily?['limit'] as num?)?.toInt(),
+      freeDailyRemaining: (freeDaily?['remaining'] as num?)?.toInt(),
+    );
+  }
+
   Future<String> runAgentLoop({
     required RoxumModelOption model,
     required List<Map<String, dynamic>> historyMessages,
@@ -253,6 +392,7 @@ class RoxumAiClient {
     required RoxumAgenticTools? agenticTools,
     required void Function(RoxumToolCallRecord record) onToolEvent,
     required void Function(String partialText) onAssistantText,
+    void Function(RoxumUsageStats usage)? onUsage,
     required bool Function() isCancelled,
   }) async {
     _client?.close();
@@ -287,6 +427,9 @@ class RoxumAiClient {
 
         final decoded = jsonDecode(res.body) as Map<String, dynamic>;
         final turn = _parseResponse(model.method, decoded);
+        if (turn.usage.totalTokens > 0 || turn.usage.costUsd > 0) {
+          onUsage?.call(turn.usage);
+        }
 
         if (turn.text.isNotEmpty) {
           onAssistantText(turn.text);
@@ -412,6 +555,11 @@ class RoxumAiClient {
             }
           }
         }
+        final openAiUsage = (json['usage'] as Map?)?.cast<String, dynamic>();
+        final oPrompt = (openAiUsage?['prompt_tokens'] as num?)?.toInt() ?? 0;
+        final oComp = (openAiUsage?['completion_tokens'] as num?)?.toInt() ?? 0;
+        final oTotal = (openAiUsage?['total_tokens'] as num?)?.toInt() ?? (oPrompt + oComp);
+        final oCost = (openAiUsage?['cost'] as num?)?.toDouble() ?? 0.0;
         return _ParsedTurn(
           text: text,
           toolCalls: calls,
@@ -420,6 +568,12 @@ class RoxumAiClient {
             'content': text,
             if (rawCalls != null && rawCalls.isNotEmpty) 'tool_calls': rawCalls,
           },
+          usage: RoxumUsageStats(
+            promptTokens: oPrompt,
+            completionTokens: oComp,
+            totalTokens: oTotal,
+            costUsd: oCost,
+          ),
         );
 
       case RoxumToolCallingMethod.anthropicMessages:
@@ -446,6 +600,9 @@ class RoxumAiClient {
             });
           }
         }
+        final antUsage = (json['usage'] as Map?)?.cast<String, dynamic>();
+        final aIn = (antUsage?['input_tokens'] as num?)?.toInt() ?? 0;
+        final aOut = (antUsage?['output_tokens'] as num?)?.toInt() ?? 0;
         return _ParsedTurn(
           text: textBuf.toString(),
           toolCalls: calls,
@@ -454,6 +611,11 @@ class RoxumAiClient {
             'content': textBuf.toString(),
             if (rawToolCalls.isNotEmpty) 'tool_calls': rawToolCalls,
           },
+          usage: RoxumUsageStats(
+            promptTokens: aIn,
+            completionTokens: aOut,
+            totalTokens: aIn + aOut,
+          ),
         );
 
       case RoxumToolCallingMethod.geminiFunctionCalling:
@@ -489,6 +651,10 @@ class RoxumAiClient {
             });
           }
         }
+        final gemUsage = (json['usageMetadata'] as Map?)?.cast<String, dynamic>();
+        final gIn = (gemUsage?['promptTokenCount'] as num?)?.toInt() ?? 0;
+        final gOut = (gemUsage?['candidatesTokenCount'] as num?)?.toInt() ?? 0;
+        final gTotal = (gemUsage?['totalTokenCount'] as num?)?.toInt() ?? (gIn + gOut);
         return _ParsedTurn(
           text: textBuf.toString(),
           toolCalls: calls,
@@ -497,6 +663,11 @@ class RoxumAiClient {
             'content': textBuf.toString(),
             if (rawToolCalls.isNotEmpty) 'tool_calls': rawToolCalls,
           },
+          usage: RoxumUsageStats(
+            promptTokens: gIn,
+            completionTokens: gOut,
+            totalTokens: gTotal,
+          ),
         );
     }
   }
@@ -546,10 +717,38 @@ class RoxumAiClient {
         }
         out.add({'role': 'assistant', 'content': blocks});
       } else {
-        out.add({
-          'role': role == 'assistant' ? 'assistant' : 'user',
-          'content': m['content']?.toString() ?? '',
-        });
+        final rawContent = m['content'];
+        if (rawContent is List) {
+          final blocks = <Map<String, dynamic>>[];
+          for (final item in rawContent) {
+            if (item is! Map) continue;
+            if (item['type'] == 'text') {
+              blocks.add({'type': 'text', 'text': item['text']?.toString() ?? ''});
+            } else if (item['type'] == 'image_url') {
+              final url = (item['image_url'] as Map?)?['url']?.toString() ?? '';
+              final match = RegExp(r'^data:([^;]+);base64,(.+)$').firstMatch(url);
+              if (match != null) {
+                blocks.add({
+                  'type': 'image',
+                  'source': {
+                    'type': 'base64',
+                    'media_type': match.group(1)!,
+                    'data': match.group(2)!,
+                  },
+                });
+              }
+            }
+          }
+          out.add({
+            'role': role == 'assistant' ? 'assistant' : 'user',
+            'content': blocks,
+          });
+        } else {
+          out.add({
+            'role': role == 'assistant' ? 'assistant' : 'user',
+            'content': rawContent?.toString() ?? '',
+          });
+        }
       }
     }
     return out;
@@ -605,12 +804,38 @@ class RoxumAiClient {
         }
         out.add({'role': 'model', 'parts': parts});
       } else {
-        out.add({
-          'role': role == 'assistant' ? 'model' : 'user',
-          'parts': [
-            {'text': m['content']?.toString() ?? ''},
-          ],
-        });
+        final rawContent = m['content'];
+        if (rawContent is List) {
+          final parts = <Map<String, dynamic>>[];
+          for (final item in rawContent) {
+            if (item is! Map) continue;
+            if (item['type'] == 'text') {
+              parts.add({'text': item['text']?.toString() ?? ''});
+            } else if (item['type'] == 'image_url') {
+              final url = (item['image_url'] as Map?)?['url']?.toString() ?? '';
+              final match = RegExp(r'^data:([^;]+);base64,(.+)$').firstMatch(url);
+              if (match != null) {
+                parts.add({
+                  'inlineData': {
+                    'mimeType': match.group(1)!,
+                    'data': match.group(2)!,
+                  },
+                });
+              }
+            }
+          }
+          out.add({
+            'role': role == 'assistant' ? 'model' : 'user',
+            'parts': parts,
+          });
+        } else {
+          out.add({
+            'role': role == 'assistant' ? 'model' : 'user',
+            'parts': [
+              {'text': rawContent?.toString() ?? ''},
+            ],
+          });
+        }
       }
     }
     return out;

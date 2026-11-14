@@ -291,6 +291,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
 
   Future<void> _updateStatsImpl({bool fetchProcesses = false}) async {
     double cpu = 0.0;
+    bool hasProcStatCpu = false;
     final appCpu = await _parseAppCpuUsage();
 
     final cpuStats = await _parseCpuStats();
@@ -312,10 +313,14 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         final diffIdle = idleTime - _lastCpuIdle;
         if (diffTotal > 0) {
           cpu = (1.0 - (diffIdle / diffTotal)).clamp(0.01, 1.0);
+          hasProcStatCpu = true;
         }
       }
       _lastCpuTotal = total;
       _lastCpuIdle = idleTime;
+      if (!hasProcStatCpu && appCpu != null) {
+        cpu = appCpu.clamp(0.01, 1.0);
+      }
     } else {
       // На Android 10+ /proc/stat закрыт SELinux: комбинируем точное время /proc/self/stat и частоты CPU sysfs
       final sysfsCpu = await _parseCpuUsageFromSysfs();
@@ -388,17 +393,22 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       }
     }
 
-    // Единая шкала: общая нагрузка ВСЕГДА не меньше базового замера CPU и суммы IDE + сборщик.
+    // Единая шкала: если /proc/stat доступен (Linux / старые Android), доверяем точному замеру ядра.
+    // Иначе (Android 10+ SELinux) используем максимум из sysfs, IDE и дочерних процессов.
     final appCpuPercent =
         processes.where((p) => p.pid == pid).fold<double>(0, (a, p) => a + p.cpuPercent);
-    final visiblePercent = (_lastTotalCores / _cpuCores * 100.0);
     final baseCpuPercent = cpu * 100.0;
-    final floorPercent = [
-      baseCpuPercent,
-      appCpuPercent + builderCpuPercent,
-      visiblePercent,
-    ].reduce((a, b) => a > b ? a : b);
-    cpu = (floorPercent / 100.0).clamp(0.01, 1.0);
+    if (hasProcStatCpu) {
+      cpu = (baseCpuPercent / 100.0).clamp(0.01, 1.0);
+    } else {
+      final visiblePercent = (_lastTotalCores / _cpuCores * 100.0);
+      final floorPercent = [
+        baseCpuPercent,
+        appCpuPercent + builderCpuPercent,
+        visiblePercent,
+      ].reduce((a, b) => a > b ? a : b);
+      cpu = (floorPercent / 100.0).clamp(0.01, 1.0);
+    }
     builderCpuPercent = builderCpuPercent.clamp(0.0, 100.0);
     final builderCores = builderCpuPercent / 100.0 * _cpuCores;
 
@@ -897,12 +907,44 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     } else if (Platform.isLinux) {
       try {
         final cpuInfo = await File('/proc/cpuinfo').readAsString();
+        String? fallbackModel;
         for (final line in cpuInfo.split('\n')) {
-          if (line.startsWith('model name')) {
-            final parts = line.split(':');
-            if (parts.length > 1) {
-              _cachedSocName = parts[1].trim();
-              return _cachedSocName!;
+          final lower = line.toLowerCase();
+          if (lower.startsWith('model name') ||
+              lower.startsWith('hardware') ||
+              lower.startsWith('processor')) {
+            final idx = line.indexOf(':');
+            if (idx != -1) {
+              final val = line.substring(idx + 1).trim();
+              if (val.isNotEmpty && int.tryParse(val) == null) {
+                if (lower.startsWith('model name')) {
+                  _cachedSocName = '$val · $_cpuCores ядер';
+                  return _cachedSocName!;
+                }
+                fallbackModel ??= val;
+              }
+            }
+          }
+        }
+        if (fallbackModel != null) {
+          _cachedSocName = '$fallbackModel · $_cpuCores ядер';
+          return _cachedSocName!;
+        }
+      } catch (_) {}
+
+      try {
+        final res = await Process.run('lscpu', []);
+        if (res.exitCode == 0) {
+          for (final line in res.stdout.toString().split('\n')) {
+            if (line.toLowerCase().startsWith('model name')) {
+              final idx = line.indexOf(':');
+              if (idx != -1) {
+                final val = line.substring(idx + 1).trim();
+                if (val.isNotEmpty) {
+                  _cachedSocName = '$val · $_cpuCores ядер';
+                  return _cachedSocName!;
+                }
+              }
             }
           }
         }
@@ -988,6 +1030,71 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     } catch (_) {}
 
     try {
+      if (Platform.isLinux) {
+        try {
+          final lspci = await Process.run('lspci', []).timeout(const Duration(seconds: 2));
+          if (lspci.exitCode == 0) {
+            final lines = lspci.stdout.toString().split('\n');
+            for (final line in lines) {
+              if (line.contains('VGA compatible controller') ||
+                  line.contains('3D controller') ||
+                  line.contains('Display controller')) {
+                final colonIdx = line.indexOf(':', line.indexOf(':') + 1);
+                if (colonIdx != -1) {
+                  var gpuDesc = line.substring(colonIdx + 1).trim();
+                  gpuDesc = gpuDesc.replaceAll(RegExp(r'\s*\(rev [^)]+\)$'), '').trim();
+                  if (gpuDesc.isNotEmpty) {
+                    _cachedGpuName = gpuDesc;
+                    return _cachedGpuName!;
+                  }
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
+        try {
+          final glx = await Process.run('glxinfo', ['-B']).timeout(const Duration(seconds: 2));
+          if (glx.exitCode == 0) {
+            for (final line in glx.stdout.toString().split('\n')) {
+              final trimmed = line.trim();
+              if (trimmed.startsWith('Device:')) {
+                final val = trimmed.substring(7).trim();
+                if (val.isNotEmpty) {
+                  _cachedGpuName = val;
+                  return _cachedGpuName!;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
+        // Fallback по /sys/class/drm/card*/device/vendor
+        try {
+          final drmDir = Directory('/sys/class/drm');
+          if (await drmDir.exists()) {
+            await for (final entry in drmDir.list()) {
+              final name = entry.path.split('/').last;
+              if (!RegExp(r'^card\d+$').hasMatch(name)) continue;
+              final vendorFile = File('${entry.path}/device/vendor');
+              if (await vendorFile.exists()) {
+                final vendor = (await vendorFile.readAsString()).trim().toLowerCase();
+                if (vendor == '0x10de') {
+                  _cachedGpuName = 'NVIDIA GPU';
+                  return _cachedGpuName!;
+                } else if (vendor == '0x1002') {
+                  _cachedGpuName = 'AMD Radeon GPU';
+                  return _cachedGpuName!;
+                } else if (vendor == '0x8086') {
+                  _cachedGpuName = 'Intel Graphics';
+                  return _cachedGpuName!;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
       if (!Platform.isWindows) {
         final res = await Process.run('getprop', ['ro.hardware.egl']);
         final egl = res.stdout.toString().trim().toLowerCase();

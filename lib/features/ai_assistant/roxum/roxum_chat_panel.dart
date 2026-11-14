@@ -1,6 +1,8 @@
 // Ported & adapted from roxum-ide (MIT License) - https://github.com/heckmon/roxum-ide
 
 import 'dart:convert';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
@@ -34,6 +36,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   final ScrollController _scrollController = ScrollController();
   bool _pendingExpanded = false;
   int? _editingTurnIndex;
+  final List<RoxumAttachment> _attachments = [];
 
   @override
   void dispose() {
@@ -53,15 +56,78 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     });
   }
 
+  Future<void> _pickAttachment({required bool imagesOnly}) async {
+    try {
+      final files = await FilePicker.pickFiles(
+        type: imagesOnly ? FileType.image : FileType.any,
+      );
+      if (files.isEmpty || !mounted) return;
+
+      final added = <RoxumAttachment>[];
+      for (final file in files) {
+        final filePath = file.path;
+        if (filePath == null) continue;
+        final bytes = await File(filePath).readAsBytes();
+        final ext = p.extension(file.name).toLowerCase();
+        final isImg = imagesOnly ||
+            const ['.png', '.jpg', '.jpeg', '.webp', '.gif'].contains(ext);
+        if (isImg) {
+          final mime = switch (ext) {
+            '.png' => 'image/png',
+            '.webp' => 'image/webp',
+            '.gif' => 'image/gif',
+            _ => 'image/jpeg',
+          };
+          added.add(
+            RoxumAttachment(
+              name: file.name,
+              mimeType: mime,
+              base64Data: base64Encode(bytes),
+              sizeBytes: bytes.length,
+            ),
+          );
+        } else {
+          String? textContent;
+          if (bytes.length <= 120 * 1024) {
+            try {
+              textContent = utf8.decode(bytes);
+            } catch (_) {}
+          }
+          added.add(
+            RoxumAttachment(
+              name: file.name,
+              mimeType: 'text/plain',
+              textContent: textContent,
+              sizeBytes: bytes.length,
+            ),
+          );
+        }
+      }
+      if (!mounted) return;
+      if (added.isNotEmpty) {
+        setState(() => _attachments.addAll(added));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось прикрепить файл: $e')),
+      );
+    }
+  }
+
   void _sendPrompt() {
     final text = _promptController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty && _attachments.isEmpty) return;
     final truncateIdx = _editingTurnIndex;
+    final attached = List<RoxumAttachment>.from(_attachments);
     _editingTurnIndex = null;
     _promptController.clear();
-    ref
-        .read(roxumChatProvider.notifier)
-        .sendPrompt(text, truncateFromIndex: truncateIdx);
+    setState(() => _attachments.clear());
+    ref.read(roxumChatProvider.notifier).sendPrompt(
+          text,
+          truncateFromIndex: truncateIdx,
+          attachments: attached,
+        );
     _scrollToBottom();
   }
 
@@ -70,7 +136,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     final chatState = ref.watch(roxumChatProvider);
     final settings = ref.watch(settingsProvider);
     final editorState = ref.watch(editorProvider);
-    final models = RoxumModelOption.fromSettings(settings);
+    final models = ref.read(roxumChatProvider.notifier).availableModels(settings);
     final session = chatState.currentSession;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -146,6 +212,18 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                           ),
                         ),
                         const SizedBox(width: 4),
+                        IconButton(
+                          onPressed: () => _showProvidersDialog(context),
+                          icon: Icon(
+                            LucideIcons.plug,
+                            size: 17,
+                            color: models.isEmpty
+                                ? Colors.orangeAccent
+                                : const Color(0xFF38BDF8),
+                          ),
+                          tooltip: 'Подключить провайдера / API',
+                          visualDensity: VisualDensity.compact,
+                        ),
                         IconButton(
                           onPressed: () =>
                               _showToolPermissionsSheet(context, chatState),
@@ -246,12 +324,84 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                       ),
               ),
 
-              // ── Active File Chip + Roxum Input Box ──
+              // ── Token Counter + OpenRouter Limits Bar ──
+              if (chatState.sessionUsage.totalTokens > 0 ||
+                  settings.openrouterApiKey.trim().isNotEmpty)
+                _buildUsageTelemetryBar(
+                  chatState: chatState,
+                  hasOpenRouterKey: settings.openrouterApiKey.trim().isNotEmpty,
+                  surfaceColor: surfaceColor,
+                  textColor: textColor,
+                ),
+
+              // ── Active File Chip + Attachments + Roxum Input Box ──
               Padding(
                 padding: const EdgeInsets.only(top: 6, bottom: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_attachments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: _attachments.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final att = entry.value;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: surfaceColor,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: const Color(0xFF38BDF8)
+                                      .withValues(alpha: 0.4),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    att.isImage
+                                        ? Icons.image_outlined
+                                        : Icons.insert_drive_file_outlined,
+                                    size: 13,
+                                    color: const Color(0xFF38BDF8),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  ConstrainedBox(
+                                    constraints:
+                                        const BoxConstraints(maxWidth: 140),
+                                    child: Text(
+                                      att.name,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  InkWell(
+                                    onTap: () => setState(
+                                      () => _attachments.removeAt(idx),
+                                    ),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 13,
+                                      color: mutedColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
                     if (editorState.activeFilePath != null)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
@@ -315,6 +465,35 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                             width: 1.5,
                           ),
                         ),
+                        prefixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: chatState.isGenerating
+                                  ? null
+                                  : () => _pickAttachment(imagesOnly: true),
+                              icon: Icon(
+                                Icons.image_outlined,
+                                size: 18,
+                                color: mutedColor,
+                              ),
+                              tooltip: 'Прикрепить фото',
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            IconButton(
+                              onPressed: chatState.isGenerating
+                                  ? null
+                                  : () => _pickAttachment(imagesOnly: false),
+                              icon: Icon(
+                                Icons.attach_file,
+                                size: 18,
+                                color: mutedColor,
+                              ),
+                              tooltip: 'Прикрепить файл',
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ),
                         suffixIcon: IconButton(
                           onPressed: chatState.isGenerating
                               ? () => ref
@@ -350,19 +529,35 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     required bool isDark,
   }) {
     if (models.isEmpty) {
-      return Container(
-        height: 34,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
-        ),
-        alignment: Alignment.centerLeft,
-        child: const Text(
-          'Добавьте API-ключ в Настройках -> AI',
-          style: TextStyle(fontSize: 12, color: Colors.orangeAccent),
-          overflow: TextOverflow.ellipsis,
+      return InkWell(
+        onTap: () => _showProvidersDialog(context),
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+          ),
+          alignment: Alignment.centerLeft,
+          child: const Row(
+            children: [
+              Icon(LucideIcons.plug, size: 13, color: Colors.orangeAccent),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Подключить провайдера / API',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orangeAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -815,8 +1010,18 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                   ),
                   const SizedBox(height: 6),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      if (turn.usage.totalTokens > 0)
+                        Text(
+                          '↓${turn.usage.promptTokens} · ↑${turn.usage.completionTokens}${turn.usage.costUsd > 0 ? ' · \$${turn.usage.costUsd.toStringAsFixed(4)}' : ''}',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: textColor.withValues(alpha: 0.45),
+                          ),
+                        )
+                      else
+                        const SizedBox.shrink(),
                       InkWell(
                         onTap: () {
                           Clipboard.setData(
@@ -1076,5 +1281,442 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
         );
       },
     );
+  }
+
+  Widget _buildUsageTelemetryBar({
+    required RoxumChatState chatState,
+    required bool hasOpenRouterKey,
+    required Color surfaceColor,
+    required Color textColor,
+  }) {
+    final u = chatState.sessionUsage;
+    final orLimits = chatState.openRouterLimits;
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: textColor.withValues(alpha: 0.08)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            LucideIcons.gauge,
+            size: 13,
+            color: Color(0xFF38BDF8),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 2,
+              children: [
+                Text(
+                  '↓ ${u.promptTokens}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: textColor.withValues(alpha: 0.75),
+                  ),
+                ),
+                Text(
+                  '↑ ${u.completionTokens}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: textColor.withValues(alpha: 0.75),
+                  ),
+                ),
+                Text(
+                  'Σ ${u.totalTokens}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                ),
+                if (u.costUsd > 0)
+                  Text(
+                    '\$${u.costUsd.toStringAsFixed(4)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF22C55E),
+                    ),
+                  ),
+                if (orLimits != null)
+                  Text(
+                    orLimits.limitRemainingUsd != null
+                        ? 'OR ост: \$${orLimits.limitRemainingUsd!.toStringAsFixed(2)}'
+                        : (orLimits.freeDailyRemaining != null
+                            ? 'OR Free: ${orLimits.freeDailyRemaining}/${orLimits.freeDailyLimit}'
+                            : 'OR: \$${orLimits.usageUsd.toStringAsFixed(3)}'),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFA78BFA),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (hasOpenRouterKey)
+            InkWell(
+              onTap: () => ref
+                  .read(roxumChatProvider.notifier)
+                  .refreshOpenRouterLimits(),
+              child: Tooltip(
+                message: 'Обновить лимиты OpenRouter',
+                child: Icon(
+                  Icons.refresh,
+                  size: 14,
+                  color: textColor.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showProvidersDialog(BuildContext context) async {
+    final s = ref.read(settingsProvider);
+    final openRouterCtrl = TextEditingController(text: s.openrouterApiKey);
+    final customUrlCtrl = TextEditingController(text: s.customApiBaseUrl);
+    final customKeyCtrl = TextEditingController(text: s.customApiKey);
+    final customModelCtrl = TextEditingController(text: s.customApiModel);
+    final geminiCtrl = TextEditingController(text: s.geminiApiKey);
+    final deepseekCtrl = TextEditingController(text: s.deepseekApiKey);
+    final openaiCtrl = TextEditingController(text: s.openaiApiKey);
+    final anthropicCtrl = TextEditingController(text: s.anthropicApiKey);
+    final groqCtrl = TextEditingController(text: s.groqApiKey);
+
+    OpenRouterKeyLimits? limitsPreview;
+    String? limitsError;
+    bool checkingLimits = false;
+
+    List<String> fetchedModels = const [];
+    String? modelsError;
+    bool fetchingModels = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(LucideIcons.plug, size: 18, color: Color(0xFF38BDF8)),
+                  SizedBox(width: 8),
+                  Text('Провайдеры и API', style: TextStyle(fontSize: 16)),
+                ],
+              ),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'OpenRouter',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: openRouterCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'OpenRouter API Key (sk-or-v1-...)',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: checkingLimits
+                                ? null
+                                : () async {
+                                    final key = openRouterCtrl.text.trim();
+                                    if (key.isEmpty) return;
+                                    setModalState(() {
+                                      checkingLimits = true;
+                                      limitsError = null;
+                                    });
+                                    try {
+                                      final res = await RoxumAiClient
+                                          .fetchOpenRouterKeyLimits(key);
+                                      setModalState(() {
+                                        limitsPreview = res;
+                                        checkingLimits = false;
+                                      });
+                                    } catch (e) {
+                                      setModalState(() {
+                                        limitsError = e.toString();
+                                        checkingLimits = false;
+                                      });
+                                    }
+                                  },
+                            icon: checkingLimits
+                                ? const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.speed, size: 14),
+                            label: const Text('Проверить лимиты'),
+                          ),
+                        ],
+                      ),
+                      if (limitsError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            limitsError!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                        ),
+                      if (limitsPreview != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0178B9).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Ключ: ${limitsPreview!.label}',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                'Потрачено всего: \$${limitsPreview!.usageUsd.toStringAsFixed(4)} • Сегодня: \$${limitsPreview!.usageDailyUsd.toStringAsFixed(4)}',
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              if (limitsPreview!.limitRemainingUsd != null)
+                                Text(
+                                  'Остаток лимита: \$${limitsPreview!.limitRemainingUsd!.toStringAsFixed(2)}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              if (limitsPreview!.freeDailyRemaining != null)
+                                Text(
+                                  'Бесплатные запросы сегодня: ${limitsPreview!.freeDailyRemaining} / ${limitsPreview!.freeDailyLimit}',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                            ],
+                          ),
+                        ),
+                      const Divider(height: 20),
+                      const Text(
+                        'Локальный ИИ / Custom OpenAI (/v1)',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: customUrlCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Base URL (например http://10.61.156.225:8080/v1)',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: customKeyCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Bearer Token / API Key (если нужен)',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: customModelCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'ID модели',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      OutlinedButton.icon(
+                        onPressed: fetchingModels
+                            ? null
+                            : () async {
+                                setModalState(() {
+                                  fetchingModels = true;
+                                  modelsError = null;
+                                });
+                                try {
+                                  final list =
+                                      await RoxumAiClient.fetchRemoteModels(
+                                    baseUrl: customUrlCtrl.text.trim(),
+                                    apiKey: customKeyCtrl.text.trim(),
+                                  );
+                                  setModalState(() {
+                                    fetchedModels = list;
+                                    if (list.isNotEmpty &&
+                                        customModelCtrl.text.trim().isEmpty) {
+                                      customModelCtrl.text = list.first;
+                                    }
+                                    fetchingModels = false;
+                                  });
+                                } catch (e) {
+                                  setModalState(() {
+                                    modelsError = e.toString();
+                                    fetchingModels = false;
+                                  });
+                                }
+                              },
+                        icon: fetchingModels
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.cloud_download_outlined, size: 14),
+                        label: const Text('Загрузить модели (/v1/models)'),
+                      ),
+                      if (modelsError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            modelsError!,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                        ),
+                      if (fetchedModels.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: fetchedModels.map((id) {
+                              return ActionChip(
+                                label: Text(id, style: const TextStyle(fontSize: 11)),
+                                onPressed: () =>
+                                    setModalState(() => customModelCtrl.text = id),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      const Divider(height: 20),
+                      const Text(
+                        'Другие облачные провайдеры',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: geminiCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Google Gemini API Key',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: deepseekCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'DeepSeek API Key',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: openaiCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'OpenAI API Key',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: anthropicCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Anthropic Claude API Key',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: groqCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Groq API Key',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Отмена'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    final notifier = ref.read(settingsProvider.notifier);
+                    await notifier.setOpenrouterApiKey(openRouterCtrl.text.trim());
+                    await notifier.setCustomApiBaseUrl(customUrlCtrl.text.trim());
+                    await notifier.setCustomApiKey(customKeyCtrl.text.trim());
+                    await notifier.setCustomApiModel(customModelCtrl.text.trim());
+                    await notifier.setGeminiApiKey(geminiCtrl.text.trim());
+                    await notifier.setDeepseekApiKey(deepseekCtrl.text.trim());
+                    await notifier.setOpenaiApiKey(openaiCtrl.text.trim());
+                    await notifier.setAnthropicApiKey(anthropicCtrl.text.trim());
+                    await notifier.setGroqApiKey(groqCtrl.text.trim());
+                    final chatNotifier = ref.read(roxumChatProvider.notifier);
+                    if (customUrlCtrl.text.trim().isNotEmpty) {
+                      chatNotifier.refreshCustomModels();
+                    }
+                    if (openRouterCtrl.text.trim().isNotEmpty) {
+                      chatNotifier.refreshOpenRouterLimits();
+                    }
+                    if (dialogCtx.mounted) Navigator.of(dialogCtx).pop();
+                  },
+                  child: const Text('Сохранить'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    openRouterCtrl.dispose();
+    customUrlCtrl.dispose();
+    customKeyCtrl.dispose();
+    customModelCtrl.dispose();
+    geminiCtrl.dispose();
+    deepseekCtrl.dispose();
+    openaiCtrl.dispose();
+    anthropicCtrl.dispose();
+    groqCtrl.dispose();
   }
 }

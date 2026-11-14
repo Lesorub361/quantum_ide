@@ -20,6 +20,8 @@ class RoxumConversationTurn {
   final String userRequest;
   final String aiResponse;
   final List<RoxumToolCallRecord> toolCalls;
+  final List<String> attachmentNames;
+  final RoxumUsageStats usage;
   final bool isError;
   final DateTime timestamp;
 
@@ -28,6 +30,8 @@ class RoxumConversationTurn {
     required this.userRequest,
     this.aiResponse = '',
     this.toolCalls = const [],
+    this.attachmentNames = const [],
+    this.usage = const RoxumUsageStats(),
     this.isError = false,
     required this.timestamp,
   });
@@ -36,6 +40,8 @@ class RoxumConversationTurn {
     String? userRequest,
     String? aiResponse,
     List<RoxumToolCallRecord>? toolCalls,
+    List<String>? attachmentNames,
+    RoxumUsageStats? usage,
     bool? isError,
   }) {
     return RoxumConversationTurn(
@@ -43,6 +49,8 @@ class RoxumConversationTurn {
       userRequest: userRequest ?? this.userRequest,
       aiResponse: aiResponse ?? this.aiResponse,
       toolCalls: toolCalls ?? this.toolCalls,
+      attachmentNames: attachmentNames ?? this.attachmentNames,
+      usage: usage ?? this.usage,
       isError: isError ?? this.isError,
       timestamp: timestamp,
     );
@@ -124,6 +132,10 @@ class RoxumChatState {
   final bool isGenerating;
   final Map<String, bool> toolSelections;
   final Map<String, RoxumPendingEdit> pendingEdits;
+  final RoxumUsageStats sessionUsage;
+  final OpenRouterKeyLimits? openRouterLimits;
+  final List<RoxumModelOption> discoveredCustomModels;
+  final bool isRefreshingModels;
 
   const RoxumChatState({
     required this.sessions,
@@ -133,6 +145,10 @@ class RoxumChatState {
     this.isGenerating = false,
     required this.toolSelections,
     this.pendingEdits = const {},
+    this.sessionUsage = const RoxumUsageStats(),
+    this.openRouterLimits,
+    this.discoveredCustomModels = const [],
+    this.isRefreshingModels = false,
   });
 
   RoxumChatSession get currentSession {
@@ -150,6 +166,10 @@ class RoxumChatState {
     bool? isGenerating,
     Map<String, bool>? toolSelections,
     Map<String, RoxumPendingEdit>? pendingEdits,
+    RoxumUsageStats? sessionUsage,
+    OpenRouterKeyLimits? openRouterLimits,
+    List<RoxumModelOption>? discoveredCustomModels,
+    bool? isRefreshingModels,
   }) {
     return RoxumChatState(
       sessions: sessions ?? this.sessions,
@@ -159,6 +179,11 @@ class RoxumChatState {
       isGenerating: isGenerating ?? this.isGenerating,
       toolSelections: toolSelections ?? this.toolSelections,
       pendingEdits: pendingEdits ?? this.pendingEdits,
+      sessionUsage: sessionUsage ?? this.sessionUsage,
+      openRouterLimits: openRouterLimits ?? this.openRouterLimits,
+      discoveredCustomModels:
+          discoveredCustomModels ?? this.discoveredCustomModels,
+      isRefreshingModels: isRefreshingModels ?? this.isRefreshingModels,
     );
   }
 }
@@ -311,19 +336,76 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     }
   }
 
+  List<RoxumModelOption> availableModels(SettingsState settings) {
+    final base = RoxumModelOption.fromSettings(settings);
+    if (state.discoveredCustomModels.isEmpty) return base;
+    final seen = base.map((m) => m.id).toSet();
+    return [
+      ...base,
+      ...state.discoveredCustomModels.where((m) => !seen.contains(m.id)),
+    ];
+  }
+
+  Future<void> refreshCustomModels() async {
+    final settings = ref.read(settingsProvider);
+    final baseUrl = settings.customApiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (baseUrl.isEmpty) return;
+    state = state.copyWith(isRefreshingModels: true);
+    try {
+      final ids = await RoxumAiClient.fetchRemoteModels(
+        baseUrl: baseUrl,
+        apiKey: settings.customApiKey.trim(),
+      );
+      final discovered = ids
+          .map(
+            (id) => RoxumModelOption(
+              id: 'custom:$id',
+              name: id,
+              provider: 'Local / Custom',
+              url: '$baseUrl/chat/completions',
+              apiKey: settings.customApiKey.trim(),
+              model: id,
+              method: RoxumToolCallingMethod.openAiCompatible,
+            ),
+          )
+          .toList();
+      state = state.copyWith(
+        discoveredCustomModels: discovered,
+        isRefreshingModels: false,
+        selectedModelId: state.selectedModelId ??
+            (discovered.isNotEmpty ? discovered.first.id : null),
+      );
+    } catch (e) {
+      TalkerService.warning('[RoxumChat] Failed to fetch custom models: $e');
+      state = state.copyWith(isRefreshingModels: false);
+    }
+  }
+
+  Future<void> refreshOpenRouterLimits() async {
+    final key = ref.read(settingsProvider).openrouterApiKey.trim();
+    if (key.isEmpty) return;
+    try {
+      final limits = await RoxumAiClient.fetchOpenRouterKeyLimits(key);
+      state = state.copyWith(openRouterLimits: limits);
+    } catch (e) {
+      TalkerService.warning('[RoxumChat] Failed to fetch OpenRouter limits: $e');
+    }
+  }
+
   Future<void> sendPrompt(
     String prompt, {
     int? truncateFromIndex,
+    List<RoxumAttachment> attachments = const [],
   }) async {
     final trimmed = prompt.trim();
-    if (trimmed.isEmpty || state.isGenerating) return;
+    if ((trimmed.isEmpty && attachments.isEmpty) || state.isGenerating) return;
 
     final settings = ref.read(settingsProvider);
-    final models = RoxumModelOption.fromSettings(settings);
+    final models = availableModels(settings);
     if (models.isEmpty) {
       _appendErrorTurn(
         trimmed,
-        'Нет настроенных API-ключей. Откройте Настройки -> AI и добавьте ключ (Gemini, DeepSeek, OpenAI, Anthropic, OpenRouter или Custom/Ollama).',
+        'Нет настроенных провайдеров. Нажмите «Подключить API» в шапке чата, чтобы добавить ключ или локальный сервер (например http://IP:8080/v1).',
       );
       return;
     }
@@ -337,15 +419,21 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         ? state.currentSession.turns.take(truncateFromIndex).toList()
         : List<RoxumConversationTurn>.from(state.currentSession.turns);
 
+    final effectiveDisplay = trimmed.isNotEmpty
+        ? trimmed
+        : 'Вложения (${attachments.map((a) => a.name).join(', ')})';
     final turnId = const Uuid().v4();
     final newTurn = RoxumConversationTurn(
       id: turnId,
-      userRequest: trimmed,
+      userRequest: effectiveDisplay,
+      attachmentNames: attachments.map((a) => a.name).toList(),
       timestamp: DateTime.now(),
     );
 
     final updatedTitle = baseTurns.isEmpty
-        ? (trimmed.length > 42 ? '${trimmed.substring(0, 42)}...' : trimmed)
+        ? (effectiveDisplay.length > 42
+            ? '${effectiveDisplay.substring(0, 42)}...'
+            : effectiveDisplay)
         : state.currentSession.title;
 
     _updateCurrentSession(
@@ -367,6 +455,30 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
             'Respond concisely in the user\'s language.';
 
+    final textBuffer = StringBuffer(trimmed);
+    final imageParts = <Map<String, dynamic>>[];
+    for (final att in attachments) {
+      if (att.isImage) {
+        imageParts.add({
+          'type': 'image_url',
+          'image_url': {
+            'url': 'data:${att.mimeType};base64,${att.base64Data}',
+          },
+        });
+      } else if (att.textContent != null && att.textContent!.isNotEmpty) {
+        textBuffer.write('\n\n<attached_file name="${att.name}">\n${att.textContent}\n</attached_file>');
+      } else {
+        textBuffer.write('\n\n[Прикреплён файл: ${att.name} (${att.sizeBytes} байт)]');
+      }
+    }
+
+    final dynamic currentUserContent = imageParts.isEmpty
+        ? textBuffer.toString()
+        : [
+            {'type': 'text', 'text': textBuffer.toString()},
+            ...imageParts,
+          ];
+
     final history = <Map<String, dynamic>>[
       {'role': 'system', 'content': systemPrompt},
       for (final t in baseTurns) ...[
@@ -374,7 +486,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         if (t.aiResponse.isNotEmpty)
           {'role': 'assistant', 'content': t.aiResponse},
       ],
-      {'role': 'user', 'content': trimmed},
+      {'role': 'user', 'content': currentUserContent},
     ];
 
     final pendingCopy = Map<String, RoxumPendingEdit>.from(state.pendingEdits);
@@ -414,7 +526,18 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         onAssistantText: (text) {
           _updateTurn(turnId, (turn) => turn.copyWith(aiResponse: text));
         },
+        onUsage: (usage) {
+          state = state.copyWith(sessionUsage: state.sessionUsage + usage);
+          _updateTurn(
+            turnId,
+            (turn) => turn.copyWith(usage: turn.usage + usage),
+          );
+        },
       );
+
+      if (model.provider == 'OpenRouter') {
+        refreshOpenRouterLimits();
+      }
 
       if (!_cancelled && finalAnswer.isNotEmpty) {
         _updateTurn(turnId, (turn) => turn.copyWith(aiResponse: finalAnswer));
