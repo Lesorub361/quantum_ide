@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_code_crafter/code_crafter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/services/code_crafter_ai_service.dart';
+import 'package:quantum_ide/core/services/lsp_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
@@ -25,6 +30,8 @@ class CodeCrafterEditorWrapper extends ConsumerStatefulWidget {
 class _CodeCrafterEditorWrapperState
     extends ConsumerState<CodeCrafterEditorWrapper> {
   late final CodeCrafterController _crafterController;
+  LspBridgeConfig? _lspBridge;
+  StreamSubscription<FileDiagnostics>? _diagSubscription;
   bool _isSyncingFromReEditor = false;
   bool _isSyncingFromCrafter = false;
 
@@ -36,6 +43,110 @@ class _CodeCrafterEditorWrapperState
       ..language = _resolveLanguage(widget.file.path);
     _crafterController.addListener(_onCrafterChanged);
     widget.file.controller.addListener(_onReEditorChanged);
+    _initLspBridge();
+  }
+
+  String _resolveLanguageId(String filePath) {
+    final ext = p.extension(filePath).toLowerCase();
+    return switch (ext) {
+      '.dart' => 'dart',
+      '.js' || '.mjs' || '.cjs' => 'javascript',
+      '.ts' || '.tsx' || '.jsx' => 'typescript',
+      '.py' => 'python',
+      '.json' => 'json',
+      '.yaml' || '.yml' => 'yaml',
+      '.html' || '.htm' => 'html',
+      '.css' || '.scss' => 'css',
+      '.md' || '.markdown' => 'markdown',
+      '.c' || '.h' => 'c',
+      '.cpp' || '.hpp' || '.cc' => 'cpp',
+      '.rs' => 'rust',
+      '.go' => 'go',
+      '.java' => 'java',
+      '.kt' || '.kts' => 'kotlin',
+      _ => 'plaintext',
+    };
+  }
+
+  List<Map<String, dynamic>> _mapDiagnostics(List<CodeDiagnostic> items) {
+    return items.map((d) {
+      final severity = switch (d.severity) {
+        CodeDiagnosticSeverity.error => 1,
+        CodeDiagnosticSeverity.warning => 2,
+        CodeDiagnosticSeverity.hint => 3,
+      };
+      return <String, dynamic>{
+        'severity': severity,
+        'message': d.message,
+        'range': {
+          'start': {'line': d.range.index, 'character': d.range.start},
+          'end': {'line': d.range.index, 'character': d.range.end},
+        },
+      };
+    }).toList();
+  }
+
+  void _initLspBridge() {
+    _diagSubscription?.cancel();
+    _lspBridge?.dispose();
+
+    final lspService = ref.read(lspServiceProvider);
+    final workspacePath =
+        ref.read(workspaceProvider).currentPath ?? p.dirname(widget.file.path);
+    final filePath = widget.file.path;
+
+    late final LspBridgeConfig bridge;
+    bridge = LspBridgeConfig(
+      filePath: filePath,
+      workspacePath: workspacePath,
+      languageId: _resolveLanguageId(filePath),
+      onOpen: () async {
+        await lspService.onFileOpened(filePath, _crafterController.text);
+        if (widget.file.diagnostics.isNotEmpty) {
+          bridge.pushDiagnostics(_mapDiagnostics(widget.file.diagnostics));
+        }
+      },
+      onUpdate: (content) async {
+        await lspService.onFileChanged(filePath, content);
+      },
+      onCompletion: (line, character) async {
+        final items = await lspService.getCompletions(
+          filePath,
+          line,
+          character,
+        );
+        return items
+            .map(
+              (item) => LspCompletion(
+                label: item.label,
+                itemType: CompletionItemType.values.firstWhere(
+                  (t) => t.value == item.kind,
+                  orElse: () => CompletionItemType.text,
+                ),
+              ),
+            )
+            .toList();
+      },
+      onHover: (line, character) async {
+        final hover = await lspService.getHover(filePath, line, character);
+        return hover?.contents ?? '';
+      },
+    );
+
+    _lspBridge = bridge;
+    _diagSubscription = lspService.diagnosticsStream.listen((fileDiags) {
+      if (fileDiags.path == filePath) {
+        bridge.pushDiagnostics(_mapDiagnostics(fileDiags.diagnostics));
+      }
+    });
+
+    if (widget.file.diagnostics.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          bridge.pushDiagnostics(_mapDiagnostics(widget.file.diagnostics));
+        }
+      });
+    }
   }
 
   @override
@@ -49,11 +160,16 @@ class _CodeCrafterEditorWrapperState
       _crafterController.language = _resolveLanguage(widget.file.path);
       _crafterController.text = widget.file.controller.text;
       _isSyncingFromReEditor = false;
+      _initLspBridge();
+    } else if (oldWidget.file.diagnostics != widget.file.diagnostics) {
+      _lspBridge?.pushDiagnostics(_mapDiagnostics(widget.file.diagnostics));
     }
   }
 
   @override
   void dispose() {
+    _diagSubscription?.cancel();
+    _lspBridge?.dispose();
     widget.file.controller.removeListener(_onReEditorChanged);
     _crafterController.removeListener(_onCrafterChanged);
     _crafterController.dispose();
@@ -235,6 +351,8 @@ class _CodeCrafterEditorWrapperState
       child: CodeCrafter(
         controller: _crafterController,
         initialText: widget.file.controller.text,
+        filePath: widget.file.path,
+        lspConfig: _lspBridge,
         editorTheme: editorTheme,
         wrapLines: settings.wordWrap,
         enableBreakPoints: isCode,

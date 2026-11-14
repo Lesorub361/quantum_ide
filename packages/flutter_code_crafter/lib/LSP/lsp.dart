@@ -9,6 +9,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 part 'lsp_socket.dart';
 part 'lsp_stdio.dart';
+part 'lsp_bridge.dart';
 
 sealed class LspConfig {
   /// The file path of the document to be processed by the LSP.

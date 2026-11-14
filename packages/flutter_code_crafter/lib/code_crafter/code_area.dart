@@ -218,6 +218,9 @@ class _CodeCrafterState extends State<CodeCrafter> {
             _diagnostics = List.from(errors);
             Shared().diagnostics = _diagnostics;
           }
+          if (mounted) {
+            setState(() {});
+          }
         }
       });
     }
@@ -237,7 +240,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
         );
       }
     }
-    if (widget.filePath != null) {
+    if (widget.filePath != null && widget.initialText == null) {
       (() async {
         content = await File(widget.filePath!).readAsString();
         widget.controller.value = TextEditingValue(
@@ -246,7 +249,9 @@ class _CodeCrafterState extends State<CodeCrafter> {
         );
       })();
     }
-    if (widget.initialText != null && widget.filePath != null) {
+    if (widget.initialText != null &&
+        widget.filePath != null &&
+        widget.lspConfig is! LspBridgeConfig) {
       throw Exception(
         'Initial text and file path cannot be both provided. Please provide either initialText or filePath.',
       );
@@ -311,21 +316,26 @@ class _CodeCrafterState extends State<CodeCrafter> {
           _aiSuggestion = false;
         });
       }
-      if (widget.lspConfig == null) {
+      List<String> buildWordSuggestions() {
         final RegExp regExp = RegExp(r'\b\w+\b');
         final List<String> words = regExp
             .allMatches(widget.controller.text)
             .map((m) => m.group(0)!)
             .toList();
-        _suggestions.clear();
+        final List<String> out = [];
         final lowerPrefix = prefix.toLowerCase();
         for (var i in words) {
           if (i.length > prefix.length &&
               i.toLowerCase().startsWith(lowerPrefix) &&
-              !_suggestions.contains(i)) {
-            _suggestions.add(i);
+              !out.contains(i)) {
+            out.add(i);
           }
         }
+        return out;
+      }
+
+      if (widget.lspConfig == null || !_lspReady) {
+        _suggestions = buildWordSuggestions();
 
         if (isTyping &&
             _suggestions.isNotEmpty &&
@@ -354,11 +364,14 @@ class _CodeCrafterState extends State<CodeCrafter> {
           final List<LspCompletion> suggestion = await widget.lspConfig!
               .getCompletions(line, character);
           _hoverDetails = await widget.lspConfig!.getHover(line, character);
+          final List<dynamic> effectiveSuggestions = suggestion.isNotEmpty
+              ? suggestion
+              : buildWordSuggestions();
           if (isTyping &&
-              suggestion.isNotEmpty &&
+              effectiveSuggestions.isNotEmpty &&
               cursorOffset > 0 &&
               prefix.isNotEmpty) {
-            _suggestions = suggestion;
+            _suggestions = effectiveSuggestions;
             _selected = 0;
             _sortSuggestions(prefix);
             final triggerChar = currentText[cursorOffset - 1];
