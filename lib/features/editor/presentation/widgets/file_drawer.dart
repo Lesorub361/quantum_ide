@@ -347,13 +347,23 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
             'preview', 'packages', 'run', 'build', 'liveShare', 'plugins', 'appLogs'
           ];
 
+    final settings = ref.watch(settingsProvider);
+    final drawerPalette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+
     // Activity bar on the left
     final activityBarWidth = isMobile ? 38.0 : 44.0;
     final activityBar = Container(
       width: activityBarWidth,
       decoration: BoxDecoration(
-        color: const Color(0xFF090B0F),
-        border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.05), width: 0.5)),
+        color: drawerPalette?.canvas ?? const Color(0xFF090B0F),
+        border: Border(
+          right: BorderSide(
+            color: drawerPalette?.border ?? Colors.white.withValues(alpha: 0.05),
+            width: 0.5,
+          ),
+        ),
       ),
       child: Column(
         children: [
@@ -689,11 +699,6 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         ],
       ),
     );
-
-    final settings = ref.watch(settingsProvider);
-    final drawerPalette = settings.syncAppWithTerminalPalette
-        ? resolveConduitPalette(settings.terminalTheme)
-        : null;
 
     if (widget.isInline) {
       return Container(

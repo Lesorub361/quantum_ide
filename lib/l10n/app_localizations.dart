@@ -5407,6 +5407,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Quantum IDE - Project sync log'**
   String get shareProjectSyncLogs;
+
+  /// No description provided for @files.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get files;
+
+  /// No description provided for @editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Editor'**
+  String get editor;
+
+  /// No description provided for @closeOthers.
+  ///
+  /// In en, this message translates to:
+  /// **'Close Others'**
+  String get closeOthers;
+
+  /// No description provided for @closeToRight.
+  ///
+  /// In en, this message translates to:
+  /// **'Close to the Right'**
+  String get closeToRight;
+
+  /// No description provided for @copyPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Path'**
+  String get copyPath;
+
+  /// No description provided for @insert.
+  ///
+  /// In en, this message translates to:
+  /// **'Insert'**
+  String get insert;
+
+  /// No description provided for @addCustomMcp.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Custom MCP'**
+  String get addCustomMcp;
+
+  /// No description provided for @unifiedThemeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unified Theme (Terminal + Editor + IDE)'**
+  String get unifiedThemeTitle;
+
+  /// No description provided for @unifiedThemeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply terminal palette colors to editor & app UI'**
+  String get unifiedThemeSubtitle;
+
+  /// No description provided for @palettesAndPresets.
+  ///
+  /// In en, this message translates to:
+  /// **'Palettes, Background & Presets (Conduit)'**
+  String get palettesAndPresets;
+
+  /// No description provided for @codeCrafterEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Flutter CodeCrafter Engine'**
+  String get codeCrafterEngine;
+
+  /// No description provided for @codeCrafterEngineSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use flutter_code_crafter editor widget (LSP, folding, breakpoints, AI)'**
+  String get codeCrafterEngineSubtitle;
+
+  /// No description provided for @thinkingAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent Thoughts'**
+  String get thinkingAgent;
+
+  /// No description provided for @thinkingNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking…'**
+  String get thinkingNow;
+
+  /// No description provided for @generatingResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'Generating response…'**
+  String get generatingResponse;
+
+  /// No description provided for @runningAgentStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Running agent step…'**
+  String get runningAgentStep;
+
+  /// No description provided for @exploredLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Explored'**
+  String get exploredLabel;
+
+  /// No description provided for @acceptFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept File'**
+  String get acceptFile;
+
+  /// No description provided for @revertFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Revert File'**
+  String get revertFile;
 }
 
 class _AppLocalizationsDelegate

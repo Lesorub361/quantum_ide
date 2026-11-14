@@ -2951,4 +2951,62 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shareProjectSyncLogs => 'Quantum IDE - 项目同步日志';
+
+  @override
+  String get files => '文件';
+
+  @override
+  String get editor => '编辑器';
+
+  @override
+  String get closeOthers => '关闭其他';
+
+  @override
+  String get closeToRight => '关闭右侧';
+
+  @override
+  String get copyPath => '复制路径';
+
+  @override
+  String get insert => '插入';
+
+  @override
+  String get addCustomMcp => '添加自定义 MCP';
+
+  @override
+  String get unifiedThemeTitle => '统一主题（终端 + 编辑器 + IDE）';
+
+  @override
+  String get unifiedThemeSubtitle => '将终端调色板应用到编辑器和应用界面';
+
+  @override
+  String get palettesAndPresets => '调色板、背景与预设 (Conduit)';
+
+  @override
+  String get codeCrafterEngine => 'Flutter CodeCrafter 引擎';
+
+  @override
+  String get codeCrafterEngineSubtitle =>
+      '启用 flutter_code_crafter 编辑器（LSP、代码折叠、断点、AI）';
+
+  @override
+  String get thinkingAgent => '智能体思考';
+
+  @override
+  String get thinkingNow => '思考中…';
+
+  @override
+  String get generatingResponse => '正在生成回复…';
+
+  @override
+  String get runningAgentStep => '正在执行智能体步骤…';
+
+  @override
+  String get exploredLabel => '已探索';
+
+  @override
+  String get acceptFile => '接受文件';
+
+  @override
+  String get revertFile => '撤销文件修改';
 }

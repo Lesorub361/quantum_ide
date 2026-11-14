@@ -1031,8 +1031,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       }
     }
 
+    final termSettings = ref.watch(settingsProvider);
+    final termPalette = termSettings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(termSettings.terminalTheme)
+        : null;
+
     return Container(
-      decoration: const BoxDecoration(color: Color(0xFF0D0F14)),
+      decoration: BoxDecoration(
+        color: termPalette?.panel ?? const Color(0xFF0D0F14),
+      ),
       child: SafeArea(
         bottom: true,
         child: Padding(

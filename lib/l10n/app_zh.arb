@@ -164,7 +164,7 @@
   "projectAnalysis": "项目分析",
   "problemsFound": "发现问题: {count} ({errors} 个错误, {warnings} 个警告)",
   "fixWithAi": "使用 AI 修复",
-  "runningCommand": "正在运行命令: {command}...",
+  "runningCommand": "执行命令",
   "applyingChange": "正在应用更改: {path}...",
   "fileSuccessfullyWritten": "文件 {path} 写入成功。",
   "fileSuccessfullyDeleted": "文件 {path} 删除成功。",
@@ -888,8 +888,12 @@
   "sessionRestoredDetail": "已从 `.quantum/chat_history.json` 加载 {count} 条消息。\n代理记忆：上下文中有 {files} 个文件。\n继续之前的工作。",
   "@sessionRestoredDetail": {
     "placeholders": {
-      "count": { "type": "int" },
-      "files": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "files": {
+        "type": "int"
+      }
     }
   },
   "signInWithGitHub": "通过 GitHub 登录",
@@ -901,7 +905,9 @@
   "repoClonedSuccess": "代码仓库已成功克隆到 {path}",
   "@repoClonedSuccess": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "cloneFailed": "克隆代码仓库失败，请检查网络或令牌权限。",
@@ -918,13 +924,17 @@
   "releaseTriggeredSuccess": "版本 {tag} 已创建并推送！GitHub Actions 已开始云端构建 APK。",
   "@releaseTriggeredSuccess": {
     "placeholders": {
-      "tag": { "type": "String" }
+      "tag": {
+        "type": "String"
+      }
     }
   },
   "releaseTriggerFailed": "推送发布失败：{error}",
   "@releaseTriggerFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "setupCiCdWorkflow": "添加云端构建 CI/CD 工作流",
@@ -940,7 +950,6 @@
   "keepScreenOnActive": "屏幕常亮（已开启）",
   "interruptProcess": "中断 (Ctrl+C)",
   "selectTextInTerminal": "在终端中选择文本",
-  "runningCommand": "执行命令",
   "closeSelection": "关闭 ✕",
   "keypadKb": "键盘",
   "keypadMore": "更多",
@@ -949,5 +958,24 @@
   "projectSynced": "项目已同步",
   "syncFailed": "同步失败",
   "syncing": "同步中...",
-  "shareProjectSyncLogs": "Quantum IDE - 项目同步日志"
+  "shareProjectSyncLogs": "Quantum IDE - 项目同步日志",
+  "files": "文件",
+  "editor": "编辑器",
+  "closeOthers": "关闭其他",
+  "closeToRight": "关闭右侧",
+  "copyPath": "复制路径",
+  "insert": "插入",
+  "addCustomMcp": "添加自定义 MCP",
+  "unifiedThemeTitle": "统一主题（终端 + 编辑器 + IDE）",
+  "unifiedThemeSubtitle": "将终端调色板应用到编辑器和应用界面",
+  "palettesAndPresets": "调色板、背景与预设 (Conduit)",
+  "codeCrafterEngine": "Flutter CodeCrafter 引擎",
+  "codeCrafterEngineSubtitle": "启用 flutter_code_crafter 编辑器（LSP、代码折叠、断点、AI）",
+  "thinkingAgent": "智能体思考",
+  "thinkingNow": "思考中…",
+  "generatingResponse": "正在生成回复…",
+  "runningAgentStep": "正在执行智能体步骤…",
+  "exploredLabel": "已探索",
+  "acceptFile": "接受文件",
+  "revertFile": "撤销文件修改"
 }

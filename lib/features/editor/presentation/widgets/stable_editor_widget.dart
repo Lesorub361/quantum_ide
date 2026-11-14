@@ -11,6 +11,7 @@ import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.d
 import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/code_crafter_ai_service.dart';
+import 'package:quantum_ide/features/editor/presentation/widgets/code_crafter_editor_wrapper.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart'
     hide CodeKeywordPrompt;
@@ -1122,7 +1123,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       performanceService.optimizeForLargeFile(file.controller);
     }
 
-    Widget editorWidget = CodeEditor(
+    Widget editorWidget = settings.useCodeCrafterEditor
+        ? CodeCrafterEditorWrapper(file: file)
+        : CodeEditor(
       controller: file.controller,
       scrollController: _scrollController,
       wordWrap: settings.wordWrap,
@@ -1163,33 +1166,35 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
                 children: [
                   if (settings.lineNumbers) ...[
                     Padding(
-                      padding: const EdgeInsets.only(left: 6, right: 4),
+                      padding: const EdgeInsets.only(left: 4, right: 2),
                       child: DefaultCodeLineNumber(
                         controller: controller,
                         notifier: notifier,
                         textStyle: TextStyle(
-                          color: const Color(0xFF64748B),
-                          fontSize: (settings.fontSize * 0.92).clamp(11.5, 22.0),
+                          color: gutterPalette?.mutedForeground ??
+                              const Color(0xFF64748B),
+                          fontSize: (settings.fontSize * 0.88).clamp(11.0, 20.0),
                           fontFamily: _getFontFamily(settings.editorFontFamily),
                           fontWeight: FontWeight.w500,
                         ),
                         focusedTextStyle: TextStyle(
-                          color: const Color(0xFF38BDF8),
+                          color: gutterPalette?.accent ?? const Color(0xFF38BDF8),
                           fontWeight: FontWeight.bold,
-                          fontSize: (settings.fontSize * 0.92).clamp(11.5, 22.0),
+                          fontSize: (settings.fontSize * 0.88).clamp(11.0, 20.0),
                           fontFamily: _getFontFamily(settings.editorFontFamily),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 2),
                   ],
                   DefaultCodeChunkIndicator(
-                    width: 18,
+                    width: 12,
                     controller: chunkController,
                     notifier: notifier,
                     painter: DefaultCodeChunkIndicatorPainter(
-                      color: Colors.cyanAccent.withValues(alpha: 0.65),
-                      size: const Size(9, 9),
+                      color: (gutterPalette?.accent ?? Colors.cyanAccent)
+                          .withValues(alpha: 0.65),
+                      size: const Size(8, 8),
                     ),
                   ),
                 ],
@@ -1234,7 +1239,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       style: CodeEditorStyle(
         fontSize: settings.fontSize,
         fontFamily: _getFontFamily(settings.editorFontFamily),
-        fontHeight: 1.48,
+        fontHeight: 1.38,
         cursorColor: settings.syncAppWithTerminalPalette
             ? resolveConduitPalette(settings.terminalTheme).accent
             : Colors.cyanAccent,

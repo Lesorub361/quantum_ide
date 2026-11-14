@@ -274,7 +274,7 @@
     }
   },
   "fixWithAi": "Fix with AI",
-  "runningCommand": "Running command: {command}...",
+  "runningCommand": "RUNNING COMMAND",
   "@runningCommand": {
     "placeholders": {
       "command": {
@@ -1837,8 +1837,12 @@
   "sessionRestoredDetail": "Loaded {count} messages from `.quantum/chat_history.json`.\nAgent memory: {files} files in context.\nContinue where you left off.",
   "@sessionRestoredDetail": {
     "placeholders": {
-      "count": { "type": "int" },
-      "files": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "files": {
+        "type": "int"
+      }
     }
   },
   "signInWithGitHub": "Sign in with GitHub",
@@ -1850,7 +1854,9 @@
   "repoClonedSuccess": "Repository cloned successfully to {path}",
   "@repoClonedSuccess": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "cloneFailed": "Failed to clone repository. Check connection or token permissions.",
@@ -1867,13 +1873,17 @@
   "releaseTriggeredSuccess": "Release {tag} created and pushed! Cloud APK build started on GitHub Actions.",
   "@releaseTriggeredSuccess": {
     "placeholders": {
-      "tag": { "type": "String" }
+      "tag": {
+        "type": "String"
+      }
     }
   },
   "releaseTriggerFailed": "Failed to push release: {error}",
   "@releaseTriggerFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "setupCiCdWorkflow": "Add Cloud Build CI/CD Workflow",
@@ -1889,7 +1899,6 @@
   "keepScreenOnActive": "Keep Screen On (Active)",
   "interruptProcess": "Interrupt (Ctrl+C)",
   "selectTextInTerminal": "Select Text in Terminal",
-  "runningCommand": "RUNNING COMMAND",
   "closeSelection": "Close ✕",
   "keypadKb": "KB",
   "keypadMore": "More",
@@ -1898,5 +1907,24 @@
   "projectSynced": "Project Synced",
   "syncFailed": "Sync Failed",
   "syncing": "Syncing...",
-  "shareProjectSyncLogs": "Quantum IDE - Project sync log"
+  "shareProjectSyncLogs": "Quantum IDE - Project sync log",
+  "files": "Files",
+  "editor": "Editor",
+  "closeOthers": "Close Others",
+  "closeToRight": "Close to the Right",
+  "copyPath": "Copy Path",
+  "insert": "Insert",
+  "addCustomMcp": "Add Custom MCP",
+  "unifiedThemeTitle": "Unified Theme (Terminal + Editor + IDE)",
+  "unifiedThemeSubtitle": "Apply terminal palette colors to editor & app UI",
+  "palettesAndPresets": "Palettes, Background & Presets (Conduit)",
+  "codeCrafterEngine": "Flutter CodeCrafter Engine",
+  "codeCrafterEngineSubtitle": "Use flutter_code_crafter editor widget (LSP, folding, breakpoints, AI)",
+  "thinkingAgent": "Agent Thoughts",
+  "thinkingNow": "Thinking…",
+  "generatingResponse": "Generating response…",
+  "runningAgentStep": "Running agent step…",
+  "exploredLabel": "Explored",
+  "acceptFile": "Accept File",
+  "revertFile": "Revert File"
 }

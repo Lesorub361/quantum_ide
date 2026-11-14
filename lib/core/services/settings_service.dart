@@ -29,6 +29,7 @@ class SettingsState {
   final bool formatOnSave;
   final bool hardwareKeyboardMode;
   final bool syncAppWithTerminalPalette;
+  final bool useCodeCrafterEditor;
   final bool isInitialized;
 
   SettingsState({
@@ -58,6 +59,7 @@ class SettingsState {
     this.formatOnSave = false,
     this.hardwareKeyboardMode = false,
     this.syncAppWithTerminalPalette = true,
+    this.useCodeCrafterEditor = false,
     this.deepseekApiKey = '',
     this.openrouterApiKey = '',
     this.openaiApiKey = '',
@@ -114,6 +116,7 @@ class SettingsState {
     bool? formatOnSave,
     bool? hardwareKeyboardMode,
     bool? syncAppWithTerminalPalette,
+    bool? useCodeCrafterEditor,
     String? deepseekApiKey,
     String? openrouterApiKey,
     String? openaiApiKey,
@@ -158,6 +161,7 @@ class SettingsState {
       hardwareKeyboardMode: hardwareKeyboardMode ?? this.hardwareKeyboardMode,
       syncAppWithTerminalPalette:
           syncAppWithTerminalPalette ?? this.syncAppWithTerminalPalette,
+      useCodeCrafterEditor: useCodeCrafterEditor ?? this.useCodeCrafterEditor,
       deepseekApiKey: deepseekApiKey ?? this.deepseekApiKey,
       openrouterApiKey: openrouterApiKey ?? this.openrouterApiKey,
       openaiApiKey: openaiApiKey ?? this.openaiApiKey,
@@ -251,6 +255,8 @@ class SettingsService extends StateNotifier<SettingsState> {
       hardwareKeyboardMode: prefs.getBool('settings_hardware_keyboard_mode') ?? false,
       syncAppWithTerminalPalette:
           prefs.getBool('settings_sync_app_with_terminal_palette') ?? true,
+      useCodeCrafterEditor:
+          prefs.getBool('settings_use_code_crafter_editor') ?? false,
       deepseekApiKey: prefs.getString(_keyDeepseekApiKey) ?? '',
       openrouterApiKey: prefs.getString(_keyOpenrouterApiKey) ?? '',
       openaiApiKey: prefs.getString(_keyOpenaiApiKey) ?? '',
@@ -278,6 +284,12 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(syncAppWithTerminalPalette: enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('settings_sync_app_with_terminal_palette', enabled);
+  }
+
+  Future<void> setUseCodeCrafterEditor(bool enabled) async {
+    state = state.copyWith(useCodeCrafterEditor: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('settings_use_code_crafter_editor', enabled);
   }
 
   Future<void> applyWorkspacePreset({

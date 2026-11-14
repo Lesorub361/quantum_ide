@@ -3041,4 +3041,64 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get shareProjectSyncLogs => 'Quantum IDE - Journal de synchronisation';
+
+  @override
+  String get files => 'Fichiers';
+
+  @override
+  String get editor => 'Éditeur';
+
+  @override
+  String get closeOthers => 'Fermer les autres';
+
+  @override
+  String get closeToRight => 'Fermer à droite';
+
+  @override
+  String get copyPath => 'Copier le chemin';
+
+  @override
+  String get insert => 'Insérer';
+
+  @override
+  String get addCustomMcp => 'Ajouter un MCP personnalisé';
+
+  @override
+  String get unifiedThemeTitle => 'Thème unifié (Terminal + Éditeur + IDE)';
+
+  @override
+  String get unifiedThemeSubtitle =>
+      'Appliquer la palette du terminal à l\'éditeur et à l\'interface';
+
+  @override
+  String get palettesAndPresets =>
+      'Palettes, arrière-plan et préréglages (Conduit)';
+
+  @override
+  String get codeCrafterEngine => 'Moteur Flutter CodeCrafter';
+
+  @override
+  String get codeCrafterEngineSubtitle =>
+      'Utiliser l\'éditeur flutter_code_crafter (LSP, pliage, points d\'arrêt, IA)';
+
+  @override
+  String get thinkingAgent => 'Réflexions de l\'agent';
+
+  @override
+  String get thinkingNow => 'Réflexion…';
+
+  @override
+  String get generatingResponse => 'Génération de la réponse…';
+
+  @override
+  String get runningAgentStep => 'Exécution de l\'étape…';
+
+  @override
+  String get exploredLabel => 'Exploré';
+
+  @override
+  String get acceptFile => 'Accepter le fichier';
+
+  @override
+  String get revertFile => 'Annuler les modifications';
 }

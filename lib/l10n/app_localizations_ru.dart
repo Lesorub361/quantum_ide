@@ -3033,4 +3033,63 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get shareProjectSyncLogs => 'Quantum IDE - Лог синхронизации проекта';
+
+  @override
+  String get files => 'Файлы';
+
+  @override
+  String get editor => 'Редактор';
+
+  @override
+  String get closeOthers => 'Закрыть другие';
+
+  @override
+  String get closeToRight => 'Закрыть справа';
+
+  @override
+  String get copyPath => 'Копировать путь';
+
+  @override
+  String get insert => 'Вставить';
+
+  @override
+  String get addCustomMcp => 'Добавить свой MCP';
+
+  @override
+  String get unifiedThemeTitle => 'Единый стиль (Терминал + Редактор + IDE)';
+
+  @override
+  String get unifiedThemeSubtitle =>
+      'Применять выбранную палитру терминала ко всему интерфейсу и редактору кода';
+
+  @override
+  String get palettesAndPresets => 'Палитры, фон и пресеты (Conduit)';
+
+  @override
+  String get codeCrafterEngine => 'Движок Flutter CodeCrafter';
+
+  @override
+  String get codeCrafterEngineSubtitle =>
+      'Включить редактор flutter_code_crafter (LSP, сворачивание кода, точки останова, AI)';
+
+  @override
+  String get thinkingAgent => 'Мысли агента';
+
+  @override
+  String get thinkingNow => 'Размышляю…';
+
+  @override
+  String get generatingResponse => 'Генерирую ответ…';
+
+  @override
+  String get runningAgentStep => 'Выполняю шаг агента…';
+
+  @override
+  String get exploredLabel => 'Изучено';
+
+  @override
+  String get acceptFile => 'Принять файл';
+
+  @override
+  String get revertFile => 'Откатить файл';
 }

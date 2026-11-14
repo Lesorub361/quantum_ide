@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class RoxumThinkingCard extends StatefulWidget {
   final String reasoningText;
@@ -33,14 +34,17 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final isDark = ThemeData.estimateBrightnessForColor(widget.surfaceColor) ==
         Brightness.dark;
     final thinkAccent =
         isDark ? const Color(0xFFC4B5FD) : const Color(0xFF6D28D9);
     final sec = (widget.durationMs / 1000).toStringAsFixed(1);
     final label = widget.isStreaming && widget.reasoningText.isNotEmpty
-        ? 'Размышляю…'
-        : (widget.durationMs > 0 ? 'Мысли агента · $secс' : 'Мысли агента');
+        ? l10n.thinkingNow
+        : (widget.durationMs > 0
+            ? '${l10n.thinkingAgent} · ${sec}s'
+            : l10n.thinkingAgent);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -200,7 +204,7 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      'Изучено · ${calls.length} ${_plural(calls.length)}',
+                      '${AppLocalizations.of(context)!.exploredLabel} · ${calls.length}',
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
@@ -531,9 +535,9 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
                     const SizedBox(width: 6),
                     InkWell(
                       onTap: widget.onUndo,
-                      child: const Tooltip(
-                        message: 'Откатить файл',
-                        child: Icon(
+                      child: Tooltip(
+                        message: AppLocalizations.of(context)!.revertFile,
+                        child: const Icon(
                           Icons.undo,
                           size: 16,
                           color: Colors.redAccent,
@@ -543,9 +547,9 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
                     const SizedBox(width: 6),
                     InkWell(
                       onTap: widget.onKeep,
-                      child: const Tooltip(
-                        message: 'Принять файл',
-                        child: Icon(
+                      child: Tooltip(
+                        message: AppLocalizations.of(context)!.acceptFile,
+                        child: const Icon(
                           Icons.check,
                           size: 16,
                           color: Color(0xFF22C55E),
@@ -742,17 +746,17 @@ class RoxumCodeBlockCard extends StatelessWidget {
                 if (onInsertIntoEditor != null) ...[
                   InkWell(
                     onTap: onInsertIntoEditor,
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.input_rounded,
                           size: 13,
                           color: Color(0xFF22C55E),
                         ),
-                        SizedBox(width: 4),
+                        const SizedBox(width: 4),
                         Text(
-                          'Вставить',
-                          style: TextStyle(
+                          AppLocalizations.of(context)!.insert,
+                          style: const TextStyle(
                             fontSize: 10.5,
                             color: Color(0xFF22C55E),
                             fontWeight: FontWeight.w600,
@@ -767,9 +771,9 @@ class RoxumCodeBlockCard extends StatelessWidget {
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: code));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Код скопирован'),
-                        duration: Duration(seconds: 1),
+                      SnackBar(
+                        content: Text(AppLocalizations.of(context)!.codeCopied),
+                        duration: const Duration(seconds: 1),
                       ),
                     );
                   },
@@ -778,7 +782,7 @@ class RoxumCodeBlockCard extends StatelessWidget {
                       Icon(Icons.copy, size: 13, color: muted),
                       const SizedBox(width: 4),
                       Text(
-                        'Копировать',
+                        AppLocalizations.of(context)!.copy,
                         style: TextStyle(fontSize: 10.5, color: muted),
                       ),
                     ],

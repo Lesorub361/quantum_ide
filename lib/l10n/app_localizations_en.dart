@@ -3029,4 +3029,63 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shareProjectSyncLogs => 'Quantum IDE - Project sync log';
+
+  @override
+  String get files => 'Files';
+
+  @override
+  String get editor => 'Editor';
+
+  @override
+  String get closeOthers => 'Close Others';
+
+  @override
+  String get closeToRight => 'Close to the Right';
+
+  @override
+  String get copyPath => 'Copy Path';
+
+  @override
+  String get insert => 'Insert';
+
+  @override
+  String get addCustomMcp => 'Add Custom MCP';
+
+  @override
+  String get unifiedThemeTitle => 'Unified Theme (Terminal + Editor + IDE)';
+
+  @override
+  String get unifiedThemeSubtitle =>
+      'Apply terminal palette colors to editor & app UI';
+
+  @override
+  String get palettesAndPresets => 'Palettes, Background & Presets (Conduit)';
+
+  @override
+  String get codeCrafterEngine => 'Flutter CodeCrafter Engine';
+
+  @override
+  String get codeCrafterEngineSubtitle =>
+      'Use flutter_code_crafter editor widget (LSP, folding, breakpoints, AI)';
+
+  @override
+  String get thinkingAgent => 'Agent Thoughts';
+
+  @override
+  String get thinkingNow => 'Thinking…';
+
+  @override
+  String get generatingResponse => 'Generating response…';
+
+  @override
+  String get runningAgentStep => 'Running agent step…';
+
+  @override
+  String get exploredLabel => 'Explored';
+
+  @override
+  String get acceptFile => 'Accept File';
+
+  @override
+  String get revertFile => 'Revert File';
 }

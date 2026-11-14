@@ -274,7 +274,7 @@
     }
   },
   "fixWithAi": "Исправить ИИ",
-  "runningCommand": "Выполняю команду: {command}...",
+  "runningCommand": "ЗАПУСК КОМАНДЫ",
   "@runningCommand": {
     "placeholders": {
       "command": {
@@ -1588,8 +1588,12 @@
   "sessionRestoredDetail": "Загружено {count} сообщений из `.quantum/chat_history.json`.\nПамять агента: {files} файлов в контексте.\nПродолжайте с того места, где остановились.",
   "@sessionRestoredDetail": {
     "placeholders": {
-      "count": { "type": "int" },
-      "files": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "files": {
+        "type": "int"
+      }
     }
   },
   "signInWithGitHub": "Войти через GitHub",
@@ -1601,7 +1605,9 @@
   "repoClonedSuccess": "Репозиторий успешно клонирован в {path}",
   "@repoClonedSuccess": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "cloneFailed": "Не удалось клонировать репозиторий. Проверьте соединение и токен.",
@@ -1618,13 +1624,17 @@
   "releaseTriggeredSuccess": "Релиз {tag} создан и отправлен! Облачная сборка APK запущена на GitHub Actions.",
   "@releaseTriggeredSuccess": {
     "placeholders": {
-      "tag": { "type": "String" }
+      "tag": {
+        "type": "String"
+      }
     }
   },
   "releaseTriggerFailed": "Ошибка отправки релиза: {error}",
   "@releaseTriggerFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "setupCiCdWorkflow": "Добавить CI/CD сценарий облачной сборки",
@@ -1640,7 +1650,6 @@
   "keepScreenOnActive": "Экран не гаснет (активно)",
   "interruptProcess": "Прервать (Ctrl+C)",
   "selectTextInTerminal": "Выделить текст в терминале",
-  "runningCommand": "ЗАПУСК КОМАНДЫ",
   "closeSelection": "К вводу ✕",
   "keypadKb": "Клава",
   "keypadMore": "Ещё",
@@ -1649,5 +1658,24 @@
   "projectSynced": "Проект синхронизирован",
   "syncFailed": "Ошибка синхронизации",
   "syncing": "Синхронизация...",
-  "shareProjectSyncLogs": "Quantum IDE - Лог синхронизации проекта"
+  "shareProjectSyncLogs": "Quantum IDE - Лог синхронизации проекта",
+  "files": "Файлы",
+  "editor": "Редактор",
+  "closeOthers": "Закрыть другие",
+  "closeToRight": "Закрыть справа",
+  "copyPath": "Копировать путь",
+  "insert": "Вставить",
+  "addCustomMcp": "Добавить свой MCP",
+  "unifiedThemeTitle": "Единый стиль (Терминал + Редактор + IDE)",
+  "unifiedThemeSubtitle": "Применять выбранную палитру терминала ко всему интерфейсу и редактору кода",
+  "palettesAndPresets": "Палитры, фон и пресеты (Conduit)",
+  "codeCrafterEngine": "Движок Flutter CodeCrafter",
+  "codeCrafterEngineSubtitle": "Включить редактор flutter_code_crafter (LSP, сворачивание кода, точки останова, AI)",
+  "thinkingAgent": "Мысли агента",
+  "thinkingNow": "Размышляю…",
+  "generatingResponse": "Генерирую ответ…",
+  "runningAgentStep": "Выполняю шаг агента…",
+  "exploredLabel": "Изучено",
+  "acceptFile": "Принять файл",
+  "revertFile": "Откатить файл"
 }

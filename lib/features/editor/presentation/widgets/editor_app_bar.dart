@@ -9,6 +9,7 @@ import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/quick_switcher_dialog.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:path/path.dart' as p;
 
 class EditorAppBarTitle extends ConsumerWidget {
@@ -115,44 +116,44 @@ class EditorTabBar extends ConsumerWidget {
         side: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5),
       ),
       items: [
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           value: 'close',
           child: Row(
             children: [
-              Icon(LucideIcons.x, size: 14, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('Закрыть', style: TextStyle(fontSize: 12, color: Colors.white)),
+              const Icon(LucideIcons.x, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(AppLocalizations.of(context)!.close, style: const TextStyle(fontSize: 12, color: Colors.white)),
             ],
           ),
         ),
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           value: 'close_others',
           child: Row(
             children: [
-              Icon(LucideIcons.circle_minus, size: 14, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('Закрыть другие', style: TextStyle(fontSize: 12, color: Colors.white)),
+              const Icon(LucideIcons.circle_minus, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(AppLocalizations.of(context)!.closeOthers, style: const TextStyle(fontSize: 12, color: Colors.white)),
             ],
           ),
         ),
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           value: 'close_right',
           child: Row(
             children: [
-              Icon(LucideIcons.arrow_right, size: 14, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('Закрыть справа', style: TextStyle(fontSize: 12, color: Colors.white)),
+              const Icon(LucideIcons.arrow_right, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(AppLocalizations.of(context)!.closeToRight, style: const TextStyle(fontSize: 12, color: Colors.white)),
             ],
           ),
         ),
         const PopupMenuDivider(height: 1),
-        const PopupMenuItem<String>(
+        PopupMenuItem<String>(
           value: 'copy_path',
           child: Row(
             children: [
-              Icon(LucideIcons.copy, size: 14, color: Colors.white70),
-              SizedBox(width: 8),
-              Text('Копировать путь', style: TextStyle(fontSize: 12, color: Colors.white)),
+              const Icon(LucideIcons.copy, size: 14, color: Colors.white70),
+              const SizedBox(width: 8),
+              Text(AppLocalizations.of(context)!.copyPath, style: const TextStyle(fontSize: 12, color: Colors.white)),
             ],
           ),
         ),

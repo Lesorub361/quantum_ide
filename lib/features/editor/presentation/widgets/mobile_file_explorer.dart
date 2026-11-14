@@ -4,10 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/file_tree_node.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/shared/providers/drawer_provider.dart';
 
@@ -56,12 +59,16 @@ class _MobileFileExplorerState extends ConsumerState<MobileFileExplorer> {
     final workspacePath = ref.watch(workspaceProvider).currentPath ?? '';
     final l10n = AppLocalizations.of(context)!;
     final screenSize = MediaQuery.of(context).size;
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
 
     return Container(
       height: screenSize.height * 0.95,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0D0F14),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: palette?.panel ?? const Color(0xFF0D0F14),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         children: [

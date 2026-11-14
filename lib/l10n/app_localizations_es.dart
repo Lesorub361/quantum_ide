@@ -3041,4 +3041,63 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get shareProjectSyncLogs => 'Quantum IDE - Registro de sincronización';
+
+  @override
+  String get files => 'Archivos';
+
+  @override
+  String get editor => 'Editor';
+
+  @override
+  String get closeOthers => 'Cerrar otros';
+
+  @override
+  String get closeToRight => 'Cerrar a la derecha';
+
+  @override
+  String get copyPath => 'Copiar ruta';
+
+  @override
+  String get insert => 'Insertar';
+
+  @override
+  String get addCustomMcp => 'Añadir MCP personalizado';
+
+  @override
+  String get unifiedThemeTitle => 'Tema unificado (Terminal + Editor + IDE)';
+
+  @override
+  String get unifiedThemeSubtitle =>
+      'Aplicar los colores de la paleta del terminal al editor y a la interfaz';
+
+  @override
+  String get palettesAndPresets => 'Paletas, fondo y preajustes (Conduit)';
+
+  @override
+  String get codeCrafterEngine => 'Motor Flutter CodeCrafter';
+
+  @override
+  String get codeCrafterEngineSubtitle =>
+      'Usar el editor flutter_code_crafter (LSP, plegado, puntos de interrupción, IA)';
+
+  @override
+  String get thinkingAgent => 'Pensamientos del agente';
+
+  @override
+  String get thinkingNow => 'Pensando…';
+
+  @override
+  String get generatingResponse => 'Generando respuesta…';
+
+  @override
+  String get runningAgentStep => 'Ejecutando paso del agente…';
+
+  @override
+  String get exploredLabel => 'Explorado';
+
+  @override
+  String get acceptFile => 'Aceptar archivo';
+
+  @override
+  String get revertFile => 'Revertir archivo';
 }

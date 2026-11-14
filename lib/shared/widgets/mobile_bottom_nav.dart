@@ -7,6 +7,7 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
 class MobileBottomNav extends ConsumerWidget {
@@ -67,7 +68,7 @@ class MobileBottomNav extends ConsumerWidget {
               if (!disabled.contains('files'))
                 _NavButton(
                   icon: LucideIcons.folder_tree,
-                  label: 'Files',
+                  label: AppLocalizations.of(context)!.files,
                   isActive: false,
                   onTap: () {
                     HapticFeedback.lightImpact();
@@ -77,7 +78,7 @@ class MobileBottomNav extends ConsumerWidget {
               if (!disabled.contains('editor'))
                 _NavButton(
                   icon: LucideIcons.file_code,
-                  label: 'Editor',
+                  label: AppLocalizations.of(context)!.editor,
                   isActive: hasOpenFiles,
                   badge: openFilesCount > 0 ? openFilesCount : 0,
                   onTap: () {
@@ -90,7 +91,7 @@ class MobileBottomNav extends ConsumerWidget {
               if (!disabled.contains('terminal'))
                 _NavButton(
                   icon: LucideIcons.terminal,
-                  label: 'Terminal',
+                  label: AppLocalizations.of(context)!.terminal,
                   isActive: isTerminalOpen,
                   activeColor: const Color(0xFF00E5FF),
                   onTap: () {

@@ -453,21 +453,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           _switchTile(
             context,
-            title: isRu
-                ? 'Единый стиль (Терминал + Редактор + IDE)'
-                : 'Unified Theme (Terminal + Editor + IDE)',
-            subtitle: isRu
-                ? 'Применять выбранную палитру терминала ко всему интерфейсу и редактору кода'
-                : 'Apply terminal palette colors to editor & app UI',
+            title: AppLocalizations.of(context)!.unifiedThemeTitle,
+            subtitle: AppLocalizations.of(context)!.unifiedThemeSubtitle,
             value: s.syncAppWithTerminalPalette,
             onChanged: sn.setSyncAppWithTerminalPalette,
+          ),
+          _switchTile(
+            context,
+            title: AppLocalizations.of(context)!.codeCrafterEngine,
+            subtitle: AppLocalizations.of(context)!.codeCrafterEngineSubtitle,
+            value: s.useCodeCrafterEditor,
+            onChanged: sn.setUseCodeCrafterEditor,
           ),
           _tile(
             context,
             icon: LucideIcons.sparkles,
-            title: isRu
-                ? 'Палитры, фон и пресеты (Conduit)'
-                : 'Palettes, Background & Presets',
+            title: AppLocalizations.of(context)!.palettesAndPresets,
             subtitle: resolveConduitPalette(s.terminalTheme).label,
             onTap: () => showConduitAppearanceSheet(context, ref),
           ),

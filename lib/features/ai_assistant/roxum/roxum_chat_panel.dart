@@ -21,6 +21,7 @@ import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart'
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
+import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class RoxumChatPanel extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
@@ -146,27 +147,56 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     final models = ref.read(roxumChatProvider.notifier).availableModels(settings);
     final session = chatState.currentSession;
 
-    final brightness = Theme.of(context).brightness;
-    final isDark = brightness == Brightness.dark;
+    final systemIsDark = Theme.of(context).brightness == Brightness.dark;
     final palette = settings.syncAppWithTerminalPalette
         ? resolveConduitPalette(settings.terminalTheme)
         : null;
-    final bgColor = palette?.canvasFor(brightness) ??
-        (isDark ? const Color(0xFF0D0F14) : const Color(0xFFF8FAFC));
-    final surfaceColor = palette?.panelFor(brightness) ??
+    final bgColor = palette?.canvas ??
+        (systemIsDark ? const Color(0xFF0D0F14) : const Color(0xFFF8FAFC));
+    final isDark =
+        ThemeData.estimateBrightnessForColor(bgColor) == Brightness.dark;
+    final rawSurface = palette?.panel ??
         (isDark ? const Color(0xFF151924) : const Color(0xFFFFFFFF));
-    final textColor = palette?.foregroundFor(brightness) ??
-        (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
-    final mutedColor =
-        palette?.mutedForegroundFor(brightness) ?? textColor.withValues(alpha: 0.6);
+    final surfaceIsDark =
+        ThemeData.estimateBrightnessForColor(rawSurface) == Brightness.dark;
+    final surfaceColor = (surfaceIsDark == isDark)
+        ? rawSurface
+        : (isDark ? const Color(0xFF151924) : const Color(0xFFFFFFFF));
+    final rawFg = palette?.foreground;
+    final textColor = (rawFg != null &&
+            (ThemeData.estimateBrightnessForColor(rawFg) == Brightness.dark) !=
+                isDark)
+        ? rawFg
+        : (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
+    final mutedColor = textColor.withValues(alpha: 0.65);
+    final accentColor = palette?.accent ?? const Color(0xFF38BDF8);
 
     final selectedModelId = models.any((m) => m.id == chatState.selectedModelId)
         ? chatState.selectedModelId
         : (models.isNotEmpty ? models.first.id : null);
 
-    return Container(
-      color: bgColor,
-      child: SafeArea(
+    final panelTheme = Theme.of(context).copyWith(
+      brightness: isDark ? Brightness.dark : Brightness.light,
+      colorScheme: Theme.of(context).colorScheme.copyWith(
+            brightness: isDark ? Brightness.dark : Brightness.light,
+            surface: surfaceColor,
+            surfaceContainerHighest: isDark
+                ? Color.lerp(surfaceColor, Colors.white, 0.08)!
+                : Color.lerp(surfaceColor, Colors.black, 0.06)!,
+            onSurface: textColor,
+            primary: accentColor,
+          ),
+      textTheme: Theme.of(context).textTheme.apply(
+            bodyColor: textColor,
+            displayColor: textColor,
+          ),
+    );
+
+    return Theme(
+      data: panelTheme,
+      child: Container(
+        color: bgColor,
+        child: SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -547,6 +577,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -896,7 +927,8 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
         child: DropdownButton<RoxumChatMode>(
           value: mode,
           isDense: true,
-          dropdownColor: isDark ? const Color(0xFF1E2230) : Colors.white,
+          dropdownColor:
+              isDark ? const Color(0xFF1E2230) : const Color(0xFFFFFFFF),
           icon: Icon(
             Icons.arrow_drop_down,
             color: textColor.withValues(alpha: 0.6),
@@ -1412,7 +1444,9 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           ),
           const SizedBox(width: 8),
           Text(
-            isToolRunning ? 'Выполняю шаг агента…' : 'Генерирую ответ…',
+            isToolRunning
+                ? AppLocalizations.of(context)!.runningAgentStep
+                : AppLocalizations.of(context)!.generatingResponse,
             style: TextStyle(
               fontSize: 12,
               color: textColor.withValues(alpha: 0.8),
@@ -2321,11 +2355,11 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 FilledButton.tonalIcon(
                   onPressed: () => _showAddCustomMcpDialog(dialogCtx, modalRef),
                   icon: const Icon(LucideIcons.plus, size: 15),
-                  label: const Text('Добавить свой MCP'),
+                  label: Text(AppLocalizations.of(context)!.addCustomMcp),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(dialogCtx).pop(),
-                  child: const Text('Закрыть'),
+                  child: Text(AppLocalizations.of(context)!.close),
                 ),
               ],
             );
@@ -2428,7 +2462,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Отмена'),
+              child: Text(AppLocalizations.of(ctx)!.cancel),
             ),
             FilledButton(
               onPressed: () {

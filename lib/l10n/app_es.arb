@@ -1176,7 +1176,7 @@
   "requiresApiKeyLabel": "Requiere clave API",
   "retry": "Reintentar",
   "rootFiles": "[Archivos en raíz]",
-  "runningCommand": "Ejecutando comando: {command}...",
+  "runningCommand": "EJECUTANDO COMANDO",
   "scanningError": "Error de escaneo: {error}",
   "searchCaseSensitive": "Distinguir mayúsculas/minúsculas",
   "searchError": "Error de búsqueda: {error}",
@@ -1260,8 +1260,12 @@
   "sessionRestoredDetail": "Cargados {count} mensajes de `.quantum/chat_history.json`.\nMemoria del agente: {files} archivos en contexto.\nContinúa donde lo dejaste.",
   "@sessionRestoredDetail": {
     "placeholders": {
-      "count": { "type": "int" },
-      "files": { "type": "int" }
+      "count": {
+        "type": "int"
+      },
+      "files": {
+        "type": "int"
+      }
     }
   },
   "signInWithGitHub": "Iniciar sesión con GitHub",
@@ -1273,7 +1277,9 @@
   "repoClonedSuccess": "Repositorio clonado con éxito en {path}",
   "@repoClonedSuccess": {
     "placeholders": {
-      "path": { "type": "String" }
+      "path": {
+        "type": "String"
+      }
     }
   },
   "cloneFailed": "Error al clonar el repositorio. Verifique la conexión o los permisos del token.",
@@ -1290,13 +1296,17 @@
   "releaseTriggeredSuccess": "¡Versión {tag} creada y enviada! Compilación APK iniciada en GitHub Actions.",
   "@releaseTriggeredSuccess": {
     "placeholders": {
-      "tag": { "type": "String" }
+      "tag": {
+        "type": "String"
+      }
     }
   },
   "releaseTriggerFailed": "Error al enviar la versión: {error}",
   "@releaseTriggerFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "setupCiCdWorkflow": "Agregar flujo CI/CD de compilación en la nube",
@@ -1312,7 +1322,6 @@
   "keepScreenOnActive": "Pantalla encendida (activo)",
   "interruptProcess": "Interrumpir (Ctrl+C)",
   "selectTextInTerminal": "Seleccionar texto en terminal",
-  "runningCommand": "EJECUTANDO COMANDO",
   "closeSelection": "Cerrar ✕",
   "keypadKb": "Teclado",
   "keypadMore": "Más",
@@ -1321,5 +1330,24 @@
   "projectSynced": "Proyecto sincronizado",
   "syncFailed": "Error de sincronización",
   "syncing": "Sincronizando...",
-  "shareProjectSyncLogs": "Quantum IDE - Registro de sincronización"
+  "shareProjectSyncLogs": "Quantum IDE - Registro de sincronización",
+  "files": "Archivos",
+  "editor": "Editor",
+  "closeOthers": "Cerrar otros",
+  "closeToRight": "Cerrar a la derecha",
+  "copyPath": "Copiar ruta",
+  "insert": "Insertar",
+  "addCustomMcp": "Añadir MCP personalizado",
+  "unifiedThemeTitle": "Tema unificado (Terminal + Editor + IDE)",
+  "unifiedThemeSubtitle": "Aplicar los colores de la paleta del terminal al editor y a la interfaz",
+  "palettesAndPresets": "Paletas, fondo y preajustes (Conduit)",
+  "codeCrafterEngine": "Motor Flutter CodeCrafter",
+  "codeCrafterEngineSubtitle": "Usar el editor flutter_code_crafter (LSP, plegado, puntos de interrupción, IA)",
+  "thinkingAgent": "Pensamientos del agente",
+  "thinkingNow": "Pensando…",
+  "generatingResponse": "Generando respuesta…",
+  "runningAgentStep": "Ejecutando paso del agente…",
+  "exploredLabel": "Explorado",
+  "acceptFile": "Aceptar archivo",
+  "revertFile": "Revertir archivo"
 }
