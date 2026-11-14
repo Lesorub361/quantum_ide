@@ -49,7 +49,9 @@ import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agen
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 import 'package:quantum_ide/core/services/build_resource_optimizer.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/build_target_dialog.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 
 extension SafeClampDouble on double {
   double safeClamp(double lower, double upper) {
@@ -323,6 +325,13 @@ class EditorPage extends ConsumerStatefulWidget {
 
 class _EditorPageState extends ConsumerState<EditorPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  AppPalette? get _palette {
+    final settings = ref.watch(settingsProvider);
+    return settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+  }
   bool _isDragging = false;
   bool _isSplitMode = false;
   int _splitTabIndex = -1;
@@ -526,10 +535,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             height: 30,
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF0D0F14),
+                              color: _palette?.panel ?? const Color(0xFF0D0F14),
                               border: Border(
                                 bottom: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.06),
+                                  color: _palette?.border ??
+                                      Colors.white.withValues(alpha: 0.06),
                                   width: 0.8,
                                 ),
                               ),
@@ -1250,7 +1260,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     return SizedBox(
       width: drawerWidth,
       child: Drawer(
-        backgroundColor: const Color(0xFF0D0F14),
+        backgroundColor: _palette?.panel ?? const Color(0xFF0D0F14),
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         child: SafeArea(
           child: Row(
@@ -1272,7 +1282,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 },
                 child: Container(
                   width: 8,
-                  color: const Color(0xFF141720),
+                  color: _palette?.panelElevated ?? const Color(0xFF141720),
                   child: Center(
                     child: Container(
                       width: 2,
@@ -1331,13 +1341,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       child: Container(
         height: targetHeight,
         clipBehavior: Clip.hardEdge,
-        decoration: const BoxDecoration(
-          color: Color(0xFF0D0F14),
-          borderRadius: BorderRadius.only(
+        decoration: BoxDecoration(
+          color: _palette?.panel ?? const Color(0xFF0D0F14),
+          borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(14),
             topRight: Radius.circular(14),
           ),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 2),
           ],
         ),
@@ -1414,8 +1424,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 width: 6,
                 decoration: BoxDecoration(
                   color: _isResizingLeft
-                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.25)
-                      : const Color(0xFF0D0F14),
+                      ? (_palette?.accent ?? const Color(0xFF8B5CF6)).withValues(alpha: 0.25)
+                      : (_palette?.panel ?? const Color(0xFF0D0F14)),
                   border: Border(
                     left: BorderSide(
                       color: Colors.white.withValues(alpha: 0.06),
@@ -1471,8 +1481,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 width: 7,
                 decoration: BoxDecoration(
                   color: _isResizingRight
-                      ? const Color(0xFF8B5CF6).withValues(alpha: 0.28)
-                      : const Color(0xFF0D0F14),
+                      ? (_palette?.accent ?? const Color(0xFF8B5CF6)).withValues(alpha: 0.28)
+                      : (_palette?.panel ?? const Color(0xFF0D0F14)),
                   border: Border(
                     left: BorderSide(
                       color: Colors.white.withValues(alpha: 0.07),
@@ -1546,13 +1556,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         }
       },
       child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF12151E),
-          borderRadius: BorderRadius.only(
+        decoration: BoxDecoration(
+          color: _palette?.panelElevated ?? const Color(0xFF12151E),
+          borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(14),
             topRight: Radius.circular(14),
           ),
-          border: Border(bottom: BorderSide(color: Colors.white10, width: 0.5)),
+          border: Border(
+            bottom: BorderSide(
+              color: _palette?.border ?? Colors.white10,
+              width: 0.5,
+            ),
+          ),
         ),
         padding: const EdgeInsets.symmetric(vertical: 5),
         child: Column(

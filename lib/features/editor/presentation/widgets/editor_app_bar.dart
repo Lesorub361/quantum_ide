@@ -4,8 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/quick_switcher_dialog.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:path/path.dart' as p;
 
 class EditorAppBarTitle extends ConsumerWidget {
@@ -188,6 +191,10 @@ class EditorTabBar extends ConsumerWidget {
     final openFiles = ref.watch(editorProvider.select((s) => s.openFiles));
     final activeTabIndex = ref.watch(editorProvider.select((s) => s.activeTabIndex));
     final notifier = ref.read(editorProvider.notifier);
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
 
     if (openFiles.isEmpty) {
       return const SizedBox.shrink();
@@ -196,16 +203,19 @@ class EditorTabBar extends ConsumerWidget {
     return Container(
       height: 42,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            Color(0xFF090C14),
-            Color(0xFF0E121D),
+            palette?.canvas ?? const Color(0xFF090C14),
+            palette?.panel ?? const Color(0xFF0E121D),
           ],
         ),
         border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.07), width: 0.8),
+          bottom: BorderSide(
+            color: palette?.border ?? Colors.white.withValues(alpha: 0.07),
+            width: 0.8,
+          ),
         ),
       ),
       child: Row(
@@ -237,12 +247,12 @@ class EditorTabBar extends ConsumerWidget {
                       padding: const EdgeInsets.fromLTRB(10, 2, 8, 2),
                       decoration: BoxDecoration(
                         gradient: isActive
-                            ? const LinearGradient(
+                            ? LinearGradient(
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                                 colors: [
-                                  Color(0xFF1A2234),
-                                  Color(0xFF141928),
+                                  palette?.panelElevated ?? const Color(0xFF1A2234),
+                                  palette?.panel ?? const Color(0xFF141928),
                                 ],
                               )
                             : LinearGradient(
@@ -256,8 +266,8 @@ class EditorTabBar extends ConsumerWidget {
                         borderRadius: BorderRadius.circular(9),
                         border: Border.all(
                           color: isActive
-                              ? Colors.cyanAccent.withValues(alpha: 0.45)
-                              : Colors.white.withValues(alpha: 0.05),
+                              ? (palette?.accent ?? Colors.cyanAccent).withValues(alpha: 0.45)
+                              : (palette?.border ?? Colors.white.withValues(alpha: 0.05)),
                           width: isActive ? 1.0 : 0.6,
                         ),
                         boxShadow: isActive

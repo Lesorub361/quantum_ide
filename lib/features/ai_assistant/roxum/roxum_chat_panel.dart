@@ -13,11 +13,13 @@ import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 
 class RoxumChatPanel extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
@@ -143,12 +145,19 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     final models = ref.read(roxumChatProvider.notifier).availableModels(settings);
     final session = chatState.currentSession;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0D0F14) : const Color(0xFFF8FAFC);
-    final surfaceColor =
-        isDark ? const Color(0xFF151924) : const Color(0xFFFFFFFF);
-    final textColor = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
-    final mutedColor = textColor.withValues(alpha: 0.6);
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+    final bgColor = palette?.canvasFor(brightness) ??
+        (isDark ? const Color(0xFF0D0F14) : const Color(0xFFF8FAFC));
+    final surfaceColor = palette?.panelFor(brightness) ??
+        (isDark ? const Color(0xFF151924) : const Color(0xFFFFFFFF));
+    final textColor = palette?.foregroundFor(brightness) ??
+        (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
+    final mutedColor =
+        palette?.mutedForegroundFor(brightness) ?? textColor.withValues(alpha: 0.6);
 
     final selectedModelId = models.any((m) => m.id == chatState.selectedModelId)
         ? chatState.selectedModelId
@@ -1335,6 +1344,8 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                       return RoxumCodeBlockCard(
                         code: code,
                         language: name,
+                        surfaceColor: surfaceColor,
+                        textColor: textColor,
                         onInsertIntoEditor: activeFile != null
                             ? () {
                                 activeFile.controller.replaceSelection(code);
@@ -2192,6 +2203,11 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 ),
               ),
               actions: [
+                FilledButton.tonalIcon(
+                  onPressed: () => _showAddCustomMcpDialog(dialogCtx, modalRef),
+                  icon: const Icon(LucideIcons.plus, size: 15),
+                  label: const Text('Добавить свой MCP'),
+                ),
                 TextButton(
                   onPressed: () => Navigator.of(dialogCtx).pop(),
                   child: const Text('Закрыть'),
@@ -2202,5 +2218,145 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
         );
       },
     );
+  }
+
+  Future<void> _showAddCustomMcpDialog(
+    BuildContext context,
+    WidgetRef modalRef,
+  ) async {
+    final nameCtrl = TextEditingController();
+    final cmdCtrl = TextEditingController();
+    final argsCtrl = TextEditingController();
+    final urlCtrl = TextEditingController();
+    var serverType = McpServerType.stdio;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocalState) => AlertDialog(
+          title: const Text('Новый MCP-сервер', style: TextStyle(fontSize: 16)),
+          content: SizedBox(
+            width: 390,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Название (например, my-mcp)',
+                      isDense: true,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<McpServerType>(
+                    segments: const [
+                      ButtonSegment(
+                        value: McpServerType.stdio,
+                        label: Text('stdio (команда)'),
+                      ),
+                      ButtonSegment(
+                        value: McpServerType.sse,
+                        label: Text('SSE (URL)'),
+                      ),
+                    ],
+                    selected: {serverType},
+                    onSelectionChanged: (s) {
+                      setLocalState(() {
+                        serverType = s.first;
+                        errorText = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (serverType == McpServerType.stdio) ...[
+                    TextField(
+                      controller: cmdCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Команда (например, npx или uvx)',
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: argsCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Аргументы через пробел',
+                        hintText: '-y @modelcontextprotocol/server-memory',
+                        isDense: true,
+                      ),
+                    ),
+                  ] else
+                    TextField(
+                      controller: urlCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'SSE URL (например, http://localhost:3000/sse)',
+                        isDense: true,
+                      ),
+                    ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      errorText!,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = nameCtrl.text.trim();
+                final cmd = cmdCtrl.text.trim();
+                final url = urlCtrl.text.trim();
+                if (name.isEmpty) {
+                  setLocalState(() => errorText = 'Укажите название сервера');
+                  return;
+                }
+                if (serverType == McpServerType.stdio && cmd.isEmpty) {
+                  setLocalState(() => errorText = 'Укажите команду запуска');
+                  return;
+                }
+                if (serverType == McpServerType.sse && url.isEmpty) {
+                  setLocalState(() => errorText = 'Укажите URL сервера');
+                  return;
+                }
+                final args = argsCtrl.text
+                    .trim()
+                    .split(RegExp(r'\s+'))
+                    .where((e) => e.isNotEmpty)
+                    .toList();
+                modalRef.read(mcpServiceProvider.notifier).addServer(
+                      McpServerConfig(
+                        name: name,
+                        type: serverType,
+                        command: serverType == McpServerType.stdio ? cmd : '',
+                        args: serverType == McpServerType.stdio ? args : const [],
+                        url: serverType == McpServerType.sse ? url : '',
+                      ),
+                    );
+                Navigator.of(ctx).pop();
+              },
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    nameCtrl.dispose();
+    cmdCtrl.dispose();
+    argsCtrl.dispose();
+    urlCtrl.dispose();
   }
 }

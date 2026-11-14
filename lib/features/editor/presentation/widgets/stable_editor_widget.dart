@@ -1132,11 +1132,17 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           CodeFindPanelView(controller: controller, readOnly: readOnly),
       toolbarController: _toolbarController,
       indicatorBuilder: (context, controller, chunkController, notifier) {
+        final gutterPalette = settings.syncAppWithTerminalPalette
+            ? resolveConduitPalette(settings.terminalTheme)
+            : null;
         return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF07090E),
+          decoration: BoxDecoration(
+            color: gutterPalette?.panel ?? const Color(0xFF07090E),
             border: Border(
-              right: BorderSide(color: Color(0xFF1E293B), width: 1.0),
+              right: BorderSide(
+                color: gutterPalette?.border ?? const Color(0xFF1E293B),
+                width: 1.0,
+              ),
             ),
           ),
           child: Stack(

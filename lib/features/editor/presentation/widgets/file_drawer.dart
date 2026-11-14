@@ -32,6 +32,9 @@ import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_pan
 import 'package:quantum_ide/features/editor/presentation/widgets/live_share_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/extensions_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/app_logs_panel.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 
 
 class FileDrawer extends ConsumerStatefulWidget {
@@ -687,11 +690,22 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
       ),
     );
 
+    final settings = ref.watch(settingsProvider);
+    final drawerPalette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+
     if (widget.isInline) {
       return Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF0D0F14).withValues(alpha: 0.5),
-          border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
+          color: (drawerPalette?.panel ?? const Color(0xFF0D0F14))
+              .withValues(alpha: drawerPalette != null ? 0.92 : 0.5),
+          border: Border(
+            right: BorderSide(
+              color: drawerPalette?.border ?? Colors.white.withValues(alpha: 0.1),
+              width: 0.5,
+            ),
+          ),
         ),
         child: content,
       );
@@ -705,9 +719,14 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
     return GlassContainer(
       blur: 30,
       opacity: 0.92,
-      color: const Color(0xFF0F1117),
+      color: drawerPalette?.panel ?? const Color(0xFF0F1117),
       borderRadius: BorderRadius.zero,
-      border: Border(right: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 0.5)),
+      border: Border(
+        right: BorderSide(
+          color: drawerPalette?.border ?? Colors.white.withValues(alpha: 0.1),
+          width: 0.5,
+        ),
+      ),
       child: Drawer(
         width: drawerWidth,
         backgroundColor: Colors.transparent,

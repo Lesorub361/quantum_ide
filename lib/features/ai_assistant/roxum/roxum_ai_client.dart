@@ -709,7 +709,8 @@ class RoxumAiClient {
         );
 
         final _ParsedTurn turn;
-        if (model.method == RoxumToolCallingMethod.openAiCompatible) {
+        if (model.method == RoxumToolCallingMethod.openAiCompatible &&
+            tools.isEmpty) {
           turn = await _sendOpenAiStreaming(
             client: client,
             model: model,

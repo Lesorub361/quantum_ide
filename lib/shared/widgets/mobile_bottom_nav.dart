@@ -3,7 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
 class MobileBottomNav extends ConsumerWidget {
@@ -32,12 +35,19 @@ class MobileBottomNav extends ConsumerWidget {
     final hasOpenFiles = openFilesCount > 0;
     final panelState = ref.watch(panelProvider);
     final isTerminalOpen = panelState.isOpened && panelState.selectedTab == PanelTab.terminal;
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF090B10),
+        color: palette?.panel ?? const Color(0xFF090B10),
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+          top: BorderSide(
+            color: palette?.border ?? Colors.white.withValues(alpha: 0.08),
+            width: 0.5,
+          ),
         ),
         boxShadow: [
           BoxShadow(

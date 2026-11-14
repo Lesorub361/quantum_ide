@@ -452,10 +452,12 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final workspace = ref.read(workspaceProvider).currentPath ?? '';
     final activeFilePath = ref.read(editorProvider).activeFilePath;
     final systemPrompt = state.chatMode == RoxumChatMode.agent
-        ? 'You are Roxum Agent inside QuantumIDE. Workspace: "$workspace". '
+        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace via function/tool calls '
+            '(read_file, write_file, edit_file, list_directory, search_files, grep_search, run_terminal_command, get_diagnostics, git_status, and MCP tools). '
+            'Workspace root: "$workspace". '
             '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}'
-            'Use tools to inspect files, check diagnostics, edit code cleanly, and run commands when needed. '
-            'Respond concisely in the user\'s language.'
+            'IMPORTANT: NEVER say you cannot read/edit files or run commands—you CAN and MUST invoke your tools directly to inspect the codebase, make edits, and verify changes. '
+            'Always act using tools first, then summarize concisely in the user\'s language.'
         : 'You are a helpful coding assistant inside QuantumIDE. '
             '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
             'Respond concisely in the user\'s language.';

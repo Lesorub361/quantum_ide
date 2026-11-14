@@ -33,6 +33,10 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = ThemeData.estimateBrightnessForColor(widget.surfaceColor) ==
+        Brightness.dark;
+    final thinkAccent =
+        isDark ? const Color(0xFFC4B5FD) : const Color(0xFF6D28D9);
     final sec = (widget.durationMs / 1000).toStringAsFixed(1);
     final label = widget.isStreaming && widget.reasoningText.isNotEmpty
         ? 'Размышляю…'
@@ -41,10 +45,10 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: widget.surfaceColor.withValues(alpha: 0.72),
+        color: widget.surfaceColor,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: const Color(0xFFA78BFA).withValues(alpha: 0.28),
+          color: thinkAccent.withValues(alpha: 0.32),
         ),
       ),
       child: Column(
@@ -57,23 +61,26 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     LucideIcons.brain,
                     size: 14,
-                    color: Color(0xFFA78BFA),
+                    color: thinkAccent,
                   )
                       .animate(
                         onPlay: (c) => widget.isStreaming ? c.repeat() : c.stop(),
                       )
-                      .shimmer(duration: 1200.ms, color: Colors.white54),
+                      .shimmer(
+                        duration: 1200.ms,
+                        color: widget.textColor.withValues(alpha: 0.45),
+                      ),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
                       label,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFFC4B5FD),
+                        color: thinkAccent,
                       ),
                     ),
                   ),
@@ -272,11 +279,9 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       decoration: BoxDecoration(
-        color: isShell
-            ? const Color(0xFF0A0D14)
-            : widget.surfaceColor.withValues(alpha: 0.82),
+        color: widget.surfaceColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accent.withValues(alpha: 0.28)),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -326,7 +331,7 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
                       style: isShell
                           ? GoogleFonts.jetBrainsMono(
                               fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.9),
+                              color: widget.textColor,
                             )
                           : TextStyle(
                               fontSize: 11.5,
@@ -456,15 +461,22 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
         _showAllLines ? diffLines : diffLines.take(16).toList();
     final hiddenCount = diffLines.length - visibleLines.length;
 
+    final isDark = ThemeData.estimateBrightnessForColor(widget.surfaceColor) ==
+        Brightness.dark;
+    final insertFg =
+        isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D);
+    final deleteFg =
+        isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B0E16),
+        color: widget.surfaceColor,
         borderRadius: BorderRadius.circular(11),
         border: Border.all(
           color: widget.isPending
               ? const Color(0xFF38BDF8).withValues(alpha: 0.45)
-              : widget.textColor.withValues(alpha: 0.12),
+              : widget.textColor.withValues(alpha: 0.14),
         ),
       ),
       child: Column(
@@ -573,9 +585,9 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
                       _ => ' ',
                     };
                     final fg = switch (dl.op) {
-                      DIFF_INSERT => const Color(0xFF86EFAC),
-                      DIFF_DELETE => const Color(0xFFFCA5A5),
-                      _ => Colors.white60,
+                      DIFF_INSERT => insertFg,
+                      DIFF_DELETE => deleteFg,
+                      _ => widget.textColor.withValues(alpha: 0.72),
                     };
                     return Container(
                       color: bg,
@@ -606,7 +618,7 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
                   decoration: BoxDecoration(
                     border: Border(
                       top: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.06),
+                        color: widget.textColor.withValues(alpha: 0.08),
                       ),
                     ),
                   ),
@@ -674,22 +686,33 @@ class RoxumCodeBlockCard extends StatelessWidget {
   final String code;
   final String language;
   final VoidCallback? onInsertIntoEditor;
+  final Color? surfaceColor;
+  final Color? textColor;
 
   const RoxumCodeBlockCard({
     super.key,
     required this.code,
     required this.language,
     this.onInsertIntoEditor,
+    this.surfaceColor,
+    this.textColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = surfaceColor ??
+        (isDark ? const Color(0xFF0A0D14) : const Color(0xFFF1F5F9));
+    final fg = textColor ?? (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
+    final accent = isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7);
+    final muted = fg.withValues(alpha: 0.65);
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFF0A0D14),
+        color: bg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: fg.withValues(alpha: 0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -697,7 +720,7 @@ class RoxumCodeBlockCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
+              color: fg.withValues(alpha: 0.05),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(9)),
             ),
@@ -708,7 +731,7 @@ class RoxumCodeBlockCard extends StatelessWidget {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF38BDF8),
+                    color: accent,
                   ),
                 ),
                 const Spacer(),
@@ -746,13 +769,13 @@ class RoxumCodeBlockCard extends StatelessWidget {
                       ),
                     );
                   },
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.copy, size: 13, color: Colors.white60),
-                      SizedBox(width: 4),
+                      Icon(Icons.copy, size: 13, color: muted),
+                      const SizedBox(width: 4),
                       Text(
                         'Копировать',
-                        style: TextStyle(fontSize: 10.5, color: Colors.white60),
+                        style: TextStyle(fontSize: 10.5, color: muted),
                       ),
                     ],
                   ),
@@ -768,7 +791,7 @@ class RoxumCodeBlockCard extends StatelessWidget {
               style: GoogleFonts.jetBrainsMono(
                 fontSize: 11.5,
                 height: 1.45,
-                color: const Color(0xFFE2E8F0),
+                color: fg,
               ),
             ),
           ),

@@ -15,6 +15,9 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/models/code_diagnostic.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:quantum_ide/core/services/build_progress_tracker.dart';
+import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/build_completion_dialog.dart';
 
 class StatusBar extends ConsumerStatefulWidget {
@@ -78,15 +81,20 @@ class _StatusBarState extends ConsumerState<StatusBar> {
       workspacePath,
     );
 
+    final settings = ref.watch(settingsProvider);
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+
     return RepaintBoundary(
       child: Container(
         height: 22,
         padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF090B10),
+          color: palette?.panel ?? const Color(0xFF090B10),
           border: Border(
             top: BorderSide(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: palette?.border ?? Colors.white.withValues(alpha: 0.06),
               width: 0.5,
             ),
           ),
