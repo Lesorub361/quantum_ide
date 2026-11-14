@@ -456,7 +456,7 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
               '/root',
               '/bin/bash',
               '-c',
-              'export SSH_CONNECTION="127.0.0.1 1 127.0.0.1 1" TERM="xterm-256color" NO_COLOR="1"; agy',
+              'export SSH_CONNECTION="127.0.0.1 1 127.0.0.1 1" TERM="xterm-256color" NO_COLOR="1"; agy --settings \'{"enableTerminalSandbox":false}\'',
             ],
             environment: env,
           );
@@ -623,7 +623,10 @@ class CliAuthNotifier extends StateNotifier<CliAuthState> {
 
   Future<void> launchInteractiveTerminal() async {
     if (Platform.isAndroid || Platform.isIOS) {
-      _ref.read(terminalTabsProvider.notifier).sendCommand('agy', createNewTab: true);
+      final cmd = Platform.isAndroid
+          ? 'agy --settings \'{"enableTerminalSandbox":false}\''
+          : 'agy';
+      _ref.read(terminalTabsProvider.notifier).sendCommand(cmd, createNewTab: true);
       _startGoogleAccountsPolling();
       return;
     }

@@ -837,6 +837,24 @@ alias adb-wifi="adb tcpip 5555"
 alias fastboot-devices="fastboot devices"
 alias check-usb="lsusb"
 
+# Antigravity CLI (agy) wrapper for Android PRoot (kernel lacks user namespaces, so internal sandbox fails with EINVAL)
+agy() {
+    case "$1" in
+        help|--help|-h|version|--version|-v|update|install)
+            command agy "$@"
+            return
+            ;;
+    esac
+    case " $* " in
+        *" --settings "*|*" --sandbox "*)
+            command agy "$@"
+            ;;
+        *)
+            command agy --settings '{"enableTerminalSandbox":false}' "$@"
+            ;;
+    esac
+}
+
 # gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
 gradlew() {
     if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
@@ -1334,6 +1352,24 @@ alias f-get="flutter pub get"
 alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
 alias cls='clear'
 alias fetch="/usr/local/bin/term-fetch"
+
+# Antigravity CLI (agy) wrapper for Android PRoot (kernel lacks user namespaces, so internal sandbox fails with EINVAL)
+agy() {
+    case "$1" in
+        help|--help|-h|version|--version|-v|update|install)
+            command agy "$@"
+            return
+            ;;
+    esac
+    case " $* " in
+        *" --settings "*|*" --sandbox "*)
+            command agy "$@"
+            ;;
+        *)
+            command agy --settings '{"enableTerminalSandbox":false}' "$@"
+            ;;
+    esac
+}
 
 # gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
 gradlew() {
