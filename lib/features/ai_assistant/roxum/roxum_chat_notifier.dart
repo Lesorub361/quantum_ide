@@ -20,7 +20,10 @@ class RoxumConversationTurn {
   final String id;
   final String userRequest;
   final String aiResponse;
+  final String reasoningText;
+  final int thinkingDurationMs;
   final List<RoxumToolCallRecord> toolCalls;
+  final List<RoxumPendingEdit> fileEdits;
   final List<String> attachmentNames;
   final RoxumUsageStats usage;
   final bool isError;
@@ -30,7 +33,10 @@ class RoxumConversationTurn {
     required this.id,
     required this.userRequest,
     this.aiResponse = '',
+    this.reasoningText = '',
+    this.thinkingDurationMs = 0,
     this.toolCalls = const [],
+    this.fileEdits = const [],
     this.attachmentNames = const [],
     this.usage = const RoxumUsageStats(),
     this.isError = false,
@@ -40,7 +46,10 @@ class RoxumConversationTurn {
   RoxumConversationTurn copyWith({
     String? userRequest,
     String? aiResponse,
+    String? reasoningText,
+    int? thinkingDurationMs,
     List<RoxumToolCallRecord>? toolCalls,
+    List<RoxumPendingEdit>? fileEdits,
     List<String>? attachmentNames,
     RoxumUsageStats? usage,
     bool? isError,
@@ -49,7 +58,10 @@ class RoxumConversationTurn {
       id: id,
       userRequest: userRequest ?? this.userRequest,
       aiResponse: aiResponse ?? this.aiResponse,
+      reasoningText: reasoningText ?? this.reasoningText,
+      thinkingDurationMs: thinkingDurationMs ?? this.thinkingDurationMs,
       toolCalls: toolCalls ?? this.toolCalls,
+      fileEdits: fileEdits ?? this.fileEdits,
       attachmentNames: attachmentNames ?? this.attachmentNames,
       usage: usage ?? this.usage,
       isError: isError ?? this.isError,
@@ -482,6 +494,8 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       {'role': 'user', 'content': currentUserContent},
     ];
 
+    final startedAt = DateTime.now();
+    final turnEditedPaths = <String>{};
     final pendingCopy = Map<String, RoxumPendingEdit>.from(state.pendingEdits);
     final toolsRunner = state.chatMode == RoxumChatMode.agent
         ? RoxumAgenticTools(
@@ -489,6 +503,14 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             pendingEdits: pendingCopy,
             onPendingEditsChanged: (updated) {
               state = state.copyWith(pendingEdits: updated);
+              for (final k in updated.keys) {
+                turnEditedPaths.add(k);
+              }
+              final editsForTurn = turnEditedPaths
+                  .map((p) => updated[p])
+                  .whereType<RoxumPendingEdit>()
+                  .toList();
+              _updateTurn(turnId, (t) => t.copyWith(fileEdits: editsForTurn));
             },
           )
         : null;
@@ -530,6 +552,16 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         },
         onAssistantText: (text) {
           _updateTurn(turnId, (turn) => turn.copyWith(aiResponse: text));
+        },
+        onReasoningText: (reasoning) {
+          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
+          _updateTurn(
+            turnId,
+            (turn) => turn.copyWith(
+              reasoningText: reasoning,
+              thinkingDurationMs: elapsed,
+            ),
+          );
         },
         onUsage: (usage) {
           state = state.copyWith(sessionUsage: state.sessionUsage + usage);

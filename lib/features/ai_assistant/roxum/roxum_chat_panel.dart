@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
@@ -14,6 +15,7 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 
@@ -1182,47 +1184,122 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                     color: const Color(0xFF0178B9).withValues(alpha: 0.4),
                   ),
                 ),
-                child: Text(
-                  turn.userRequest,
-                  style: TextStyle(color: textColor, fontSize: 13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (turn.attachmentNames.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: Wrap(
+                          spacing: 4,
+                          runSpacing: 4,
+                          children: turn.attachmentNames
+                              .map(
+                                (name) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    '📎 $name',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: textColor.withValues(alpha: 0.8),
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    Text(
+                      turn.userRequest,
+                      style: TextStyle(color: textColor, fontSize: 13),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
           const SizedBox(height: 8),
 
-          // ── Tool Call Cards ──
-          if (turn.toolCalls.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Column(
-                children: turn.toolCalls
-                    .map((tc) => _buildToolCallTile(tc, surfaceColor, textColor))
-                    .toList(),
-              ),
+          // ── Reasoning / Thinking Card ──
+          if (turn.reasoningText.isNotEmpty)
+            RoxumThinkingCard(
+              reasoningText: turn.reasoningText,
+              durationMs: turn.thinkingDurationMs,
+              isStreaming: isGeneratingThis && turn.aiResponse.isEmpty,
+              surfaceColor: surfaceColor,
+              textColor: textColor,
             ),
+
+          // ── Cursor-style Agent Step Timeline ──
+          if (turn.toolCalls.isNotEmpty)
+            RoxumAgentTimeline(
+              toolCalls: turn.toolCalls,
+              surfaceColor: surfaceColor,
+              textColor: textColor,
+            ),
+
+          // ── Inline File Diff Cards (Keep / Undo / Open) ──
+          if (turn.fileEdits.isNotEmpty)
+            ...turn.fileEdits.map((edit) {
+              final pendingMap = ref.read(roxumChatProvider).pendingEdits;
+              final isPending = pendingMap.containsKey(edit.filePath);
+              return RoxumFileDiffCard(
+                edit: edit,
+                isPending: isPending,
+                surfaceColor: surfaceColor,
+                textColor: textColor,
+                onOpenFile: () =>
+                    ref.read(editorProvider.notifier).openFile(edit.filePath),
+                onKeep: () =>
+                    ref.read(roxumChatProvider.notifier).keepEdit(edit.filePath),
+                onUndo: () =>
+                    ref.read(roxumChatProvider.notifier).undoEdit(edit.filePath),
+              );
+            }),
 
           // ── Assistant Response ──
           if (isGeneratingThis && turn.aiResponse.isEmpty)
-            Row(
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Color(0xFF38BDF8),
-                  ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Думаю...',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: textColor.withValues(alpha: 0.65),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Color(0xFF38BDF8),
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 8),
+                  Text(
+                    turn.toolCalls.any((t) => t.isRunning)
+                        ? 'Выполняю шаг агента…'
+                        : 'Генерирую ответ…',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: textColor.withValues(alpha: 0.8),
+                    ),
+                  )
+                      .animate(onPlay: (c) => c.repeat())
+                      .shimmer(duration: 1200.ms, color: const Color(0xFF38BDF8)),
+                ],
+              ),
             )
           else if (turn.aiResponse.isNotEmpty)
             Container(
@@ -1248,6 +1325,29 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                       fontSize: 13,
                       height: 1.45,
                     ),
+                    codeBuilder: (ctx, name, code, closed) {
+                      final ed = ref.read(editorProvider);
+                      final activeFile = (ed.openFiles.isNotEmpty &&
+                              ed.activeTabIndex >= 0 &&
+                              ed.activeTabIndex < ed.openFiles.length)
+                          ? ed.openFiles[ed.activeTabIndex]
+                          : null;
+                      return RoxumCodeBlockCard(
+                        code: code,
+                        language: name,
+                        onInsertIntoEditor: activeFile != null
+                            ? () {
+                                activeFile.controller.replaceSelection(code);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Код вставлен в редактор'),
+                                    duration: Duration(seconds: 1),
+                                  ),
+                                );
+                              }
+                            : null,
+                      );
+                    },
                   ),
                   const SizedBox(height: 6),
                   Row(

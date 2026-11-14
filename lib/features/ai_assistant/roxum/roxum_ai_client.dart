@@ -687,6 +687,7 @@ class RoxumAiClient {
     required RoxumAgenticTools? agenticTools,
     required void Function(RoxumToolCallRecord record) onToolEvent,
     required void Function(String partialText) onAssistantText,
+    void Function(String reasoningText)? onReasoningText,
     void Function(RoxumUsageStats usage)? onUsage,
     required bool Function() isCancelled,
   }) async {
@@ -706,38 +707,57 @@ class RoxumAiClient {
           messages: messages,
           tools: tools,
         );
-        final res = await client
-            .post(
-              Uri.parse(model.url),
-              headers: model.headers,
-              body: jsonEncode(payload),
-            )
-            .timeout(const Duration(seconds: 90));
+
+        final _ParsedTurn turn;
+        if (model.method == RoxumToolCallingMethod.openAiCompatible) {
+          turn = await _sendOpenAiStreaming(
+            client: client,
+            model: model,
+            payload: payload,
+            onAssistantText: onAssistantText,
+            onReasoningText: onReasoningText,
+            isCancelled: isCancelled,
+          );
+        } else {
+          final res = await client
+              .post(
+                Uri.parse(model.url),
+                headers: model.headers,
+                body: jsonEncode(payload),
+              )
+              .timeout(const Duration(seconds: 90));
+
+          if (isCancelled()) return '';
+
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            throw Exception('HTTP ${res.statusCode}: ${res.body}');
+          }
+
+          final decoded = jsonDecode(res.body) as Map<String, dynamic>;
+          turn = _parseResponse(model.method, decoded);
+          if (turn.text.isNotEmpty) {
+            final extracted = _splitThinkTags(turn.text);
+            if (extracted.reasoning.isNotEmpty) {
+              onReasoningText?.call(extracted.reasoning);
+            }
+            onAssistantText(extracted.answer);
+          }
+        }
 
         if (isCancelled()) return '';
 
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          throw Exception('HTTP ${res.statusCode}: ${res.body}');
-        }
-
-        final decoded = jsonDecode(res.body) as Map<String, dynamic>;
-        final turn = _parseResponse(model.method, decoded);
         if (turn.usage.totalTokens > 0 || turn.usage.costUsd > 0) {
           onUsage?.call(turn.usage);
         }
 
-        if (turn.text.isNotEmpty) {
-          onAssistantText(turn.text);
-        }
-
         if (turn.toolCalls.isEmpty || agenticTools == null) {
-          return turn.text;
+          return _splitThinkTags(turn.text).answer;
         }
 
         messages.add(turn.rawAssistantMessage);
 
         for (final call in turn.toolCalls) {
-          if (isCancelled()) return turn.text;
+          if (isCancelled()) return _splitThinkTags(turn.text).answer;
 
           final runningRecord = RoxumToolCallRecord(
             id: call.id,
@@ -771,6 +791,194 @@ class RoxumAiClient {
         _client = null;
       }
     }
+  }
+
+  ({String reasoning, String answer}) _splitThinkTags(String raw) {
+    final thinkRegex = RegExp(r'<think>([\s\S]*?)</think>', multiLine: true);
+    final matches = thinkRegex.allMatches(raw).toList();
+    if (matches.isEmpty) {
+      final openIdx = raw.indexOf('<think>');
+      if (openIdx != -1) {
+        return (
+          reasoning: raw.substring(openIdx + 7).trim(),
+          answer: raw.substring(0, openIdx).trim(),
+        );
+      }
+      return (reasoning: '', answer: raw);
+    }
+    final reasoning = matches.map((m) => m.group(1)?.trim() ?? '').join('\n\n');
+    final answer = raw.replaceAll(thinkRegex, '').trim();
+    return (reasoning: reasoning, answer: answer);
+  }
+
+  Future<_ParsedTurn> _sendOpenAiStreaming({
+    required http.Client client,
+    required RoxumModelOption model,
+    required Map<String, dynamic> payload,
+    required void Function(String partialText) onAssistantText,
+    void Function(String reasoningText)? onReasoningText,
+    required bool Function() isCancelled,
+  }) async {
+    final streamPayload = Map<String, dynamic>.from(payload)
+      ..['stream'] = true
+      ..['stream_options'] = {'include_usage': true};
+
+    final req = http.Request('POST', Uri.parse(model.url));
+    req.headers.addAll(model.headers);
+    req.body = jsonEncode(streamPayload);
+
+    final streamed = await client.send(req).timeout(const Duration(seconds: 90));
+    if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+      final errBody = await streamed.stream.bytesToString();
+      // Retry once without stream if endpoint rejects stream_options
+      if (streamed.statusCode == 400 || streamed.statusCode == 422) {
+        final fallbackRes = await client
+            .post(
+              Uri.parse(model.url),
+              headers: model.headers,
+              body: jsonEncode(payload),
+            )
+            .timeout(const Duration(seconds: 90));
+        if (fallbackRes.statusCode >= 200 && fallbackRes.statusCode < 300) {
+          final decoded = jsonDecode(fallbackRes.body) as Map<String, dynamic>;
+          final parsed = _parseResponse(model.method, decoded);
+          final split = _splitThinkTags(parsed.text);
+          if (split.reasoning.isNotEmpty) onReasoningText?.call(split.reasoning);
+          if (split.answer.isNotEmpty) onAssistantText(split.answer);
+          return parsed;
+        }
+      }
+      throw Exception('HTTP ${streamed.statusCode}: $errBody');
+    }
+
+    final contentType = streamed.headers['content-type'] ?? '';
+    if (!contentType.contains('text/event-stream')) {
+      final body = await streamed.stream.bytesToString();
+      final decoded = jsonDecode(body) as Map<String, dynamic>;
+      final parsed = _parseResponse(model.method, decoded);
+      final split = _splitThinkTags(parsed.text);
+      if (split.reasoning.isNotEmpty) onReasoningText?.call(split.reasoning);
+      if (split.answer.isNotEmpty) onAssistantText(split.answer);
+      return parsed;
+    }
+
+    final contentBuf = StringBuffer();
+    final reasoningBuf = StringBuffer();
+    final toolBuffers = <int, ({StringBuffer id, StringBuffer name, StringBuffer args})>{};
+    RoxumUsageStats usage = const RoxumUsageStats();
+
+    var lineCarry = '';
+    await for (final chunk in streamed.stream.transform(utf8.decoder)) {
+      if (isCancelled()) break;
+      final combined = lineCarry + chunk;
+      final lines = combined.split('\n');
+      lineCarry = lines.removeLast();
+
+      for (final rawLine in lines) {
+        final line = rawLine.trim();
+        if (!line.startsWith('data:')) continue;
+        final dataStr = line.substring(5).trim();
+        if (dataStr.isEmpty || dataStr == '[DONE]') continue;
+
+        try {
+          final json = jsonDecode(dataStr) as Map<String, dynamic>;
+          final u = (json['usage'] as Map?)?.cast<String, dynamic>();
+          if (u != null) {
+            final pTok = (u['prompt_tokens'] as num?)?.toInt() ?? 0;
+            final cTok = (u['completion_tokens'] as num?)?.toInt() ?? 0;
+            final tTok = (u['total_tokens'] as num?)?.toInt() ?? (pTok + cTok);
+            final cost = (u['cost'] as num?)?.toDouble() ?? 0.0;
+            usage = RoxumUsageStats(
+              promptTokens: pTok,
+              completionTokens: cTok,
+              totalTokens: tTok,
+              costUsd: cost,
+            );
+          }
+
+          final choices = (json['choices'] as List?) ?? const [];
+          if (choices.isEmpty) continue;
+          final delta = (choices.first['delta'] as Map?)?.cast<String, dynamic>();
+          if (delta == null) continue;
+
+          final rDelta = delta['reasoning_content']?.toString() ??
+              delta['reasoning']?.toString();
+          if (rDelta != null && rDelta.isNotEmpty) {
+            reasoningBuf.write(rDelta);
+            onReasoningText?.call(reasoningBuf.toString());
+          }
+
+          final cDelta = delta['content']?.toString();
+          if (cDelta != null && cDelta.isNotEmpty) {
+            contentBuf.write(cDelta);
+            final split = _splitThinkTags(contentBuf.toString());
+            if (split.reasoning.isNotEmpty && reasoningBuf.isEmpty) {
+              onReasoningText?.call(split.reasoning);
+            }
+            onAssistantText(split.answer);
+          }
+
+          final tcList = delta['tool_calls'];
+          if (tcList is List) {
+            for (final item in tcList) {
+              if (item is! Map) continue;
+              final idx = (item['index'] as num?)?.toInt() ?? 0;
+              final entry = toolBuffers.putIfAbsent(
+                idx,
+                () => (
+                  id: StringBuffer(),
+                  name: StringBuffer(),
+                  args: StringBuffer(),
+                ),
+              );
+              if (item['id'] != null) entry.id.write(item['id'].toString());
+              final fn = item['function'] as Map?;
+              if (fn != null) {
+                if (fn['name'] != null) entry.name.write(fn['name'].toString());
+                if (fn['arguments'] != null) {
+                  entry.args.write(fn['arguments'].toString());
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    final calls = <({String id, String name, Map<String, dynamic> args})>[];
+    final rawCalls = <Map<String, dynamic>>[];
+    final sortedKeys = toolBuffers.keys.toList()..sort();
+    for (final idx in sortedKeys) {
+      final buf = toolBuffers[idx]!;
+      final id = buf.id.isNotEmpty ? buf.id.toString() : 'call_$idx';
+      final name = buf.name.toString();
+      final rawArgs = buf.args.isNotEmpty ? buf.args.toString() : '{}';
+      Map<String, dynamic> parsedArgs = {};
+      try {
+        final d = jsonDecode(rawArgs);
+        if (d is Map<String, dynamic>) parsedArgs = d;
+      } catch (_) {}
+      if (name.isNotEmpty) {
+        calls.add((id: id, name: name, args: parsedArgs));
+        rawCalls.add({
+          'id': id,
+          'type': 'function',
+          'function': {'name': name, 'arguments': rawArgs},
+        });
+      }
+    }
+
+    final finalSplit = _splitThinkTags(contentBuf.toString());
+    return _ParsedTurn(
+      text: finalSplit.answer,
+      toolCalls: calls,
+      rawAssistantMessage: {
+        'role': 'assistant',
+        'content': finalSplit.answer,
+        if (rawCalls.isNotEmpty) 'tool_calls': rawCalls,
+      },
+      usage: usage,
+    );
   }
 
   Map<String, dynamic> _buildPayload({
