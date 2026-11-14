@@ -14,6 +14,7 @@ import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart';
@@ -1236,167 +1237,279 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           ),
           const SizedBox(height: 8),
 
-          // ── Reasoning / Thinking Card ──
-          if (turn.reasoningText.isNotEmpty)
-            RoxumThinkingCard(
-              reasoningText: turn.reasoningText,
-              durationMs: turn.thinkingDurationMs,
-              isStreaming: isGeneratingThis && turn.aiResponse.isEmpty,
+          if (turn.timeline.isNotEmpty) ...[
+            ..._buildChronologicalTimeline(
+              turn: turn,
+              isGeneratingThis: isGeneratingThis,
               surfaceColor: surfaceColor,
               textColor: textColor,
             ),
-
-          // ── Cursor-style Agent Step Timeline ──
-          if (turn.toolCalls.isNotEmpty)
-            RoxumAgentTimeline(
-              toolCalls: turn.toolCalls,
-              surfaceColor: surfaceColor,
-              textColor: textColor,
-            ),
-
-          // ── Inline File Diff Cards (Keep / Undo / Open) ──
-          if (turn.fileEdits.isNotEmpty)
-            ...turn.fileEdits.map((edit) {
-              final pendingMap = ref.read(roxumChatProvider).pendingEdits;
-              final isPending = pendingMap.containsKey(edit.filePath);
-              return RoxumFileDiffCard(
-                edit: edit,
-                isPending: isPending,
+            if (isGeneratingThis)
+              _buildGeneratingIndicator(
+                isToolRunning: turn.toolCalls.any((t) => t.isRunning),
                 surfaceColor: surfaceColor,
                 textColor: textColor,
-                onOpenFile: () =>
-                    ref.read(editorProvider.notifier).openFile(edit.filePath),
-                onKeep: () =>
-                    ref.read(roxumChatProvider.notifier).keepEdit(edit.filePath),
-                onUndo: () =>
-                    ref.read(roxumChatProvider.notifier).undoEdit(edit.filePath),
-              );
-            }),
+              )
+            else if (turn.aiResponse.isNotEmpty)
+              _buildTurnFooter(turn, textColor),
+          ] else ...[
+            // ── Legacy / persisted turn rendering ──
+            if (turn.reasoningText.isNotEmpty)
+              RoxumThinkingCard(
+                reasoningText: turn.reasoningText,
+                durationMs: turn.thinkingDurationMs,
+                isStreaming: isGeneratingThis && turn.aiResponse.isEmpty,
+                surfaceColor: surfaceColor,
+                textColor: textColor,
+              ),
+            if (turn.toolCalls.isNotEmpty)
+              RoxumAgentTimeline(
+                toolCalls: turn.toolCalls,
+                surfaceColor: surfaceColor,
+                textColor: textColor,
+              ),
+            if (turn.fileEdits.isNotEmpty)
+              ...turn.fileEdits.map(
+                (edit) => _buildDiffCard(edit, surfaceColor, textColor),
+              ),
+            if (isGeneratingThis && turn.aiResponse.isEmpty)
+              _buildGeneratingIndicator(
+                isToolRunning: turn.toolCalls.any((t) => t.isRunning),
+                surfaceColor: surfaceColor,
+                textColor: textColor,
+              )
+            else if (turn.aiResponse.isNotEmpty) ...[
+              _buildAssistantTextCard(
+                text: turn.aiResponse,
+                isError: turn.isError,
+                surfaceColor: surfaceColor,
+                textColor: textColor,
+              ),
+              _buildTurnFooter(turn, textColor),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
 
-          // ── Assistant Response ──
-          if (isGeneratingThis && turn.aiResponse.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: surfaceColor.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
+  List<Widget> _buildChronologicalTimeline({
+    required RoxumConversationTurn turn,
+    required bool isGeneratingThis,
+    required Color surfaceColor,
+    required Color textColor,
+  }) {
+    final widgets = <Widget>[];
+    final items = turn.timeline;
+    var i = 0;
+    while (i < items.length) {
+      final item = items[i];
+      if (item.kind == RoxumTimelineKind.toolCall && item.toolCall != null) {
+        final batch = <RoxumToolCallRecord>[];
+        while (i < items.length &&
+            items[i].kind == RoxumTimelineKind.toolCall &&
+            items[i].toolCall != null) {
+          batch.add(items[i].toolCall!);
+          i++;
+        }
+        widgets.add(
+          RoxumAgentTimeline(
+            toolCalls: batch,
+            surfaceColor: surfaceColor,
+            textColor: textColor,
+          ),
+        );
+        continue;
+      }
+
+      switch (item.kind) {
+        case RoxumTimelineKind.reasoning:
+          if (item.text.isNotEmpty) {
+            widgets.add(
+              RoxumThinkingCard(
+                reasoningText: item.text,
+                durationMs: turn.thinkingDurationMs,
+                isStreaming: isGeneratingThis && i == items.length - 1,
+                surfaceColor: surfaceColor,
+                textColor: textColor,
+              ),
+            );
+          }
+          break;
+        case RoxumTimelineKind.text:
+          if (item.text.trim().isNotEmpty) {
+            widgets.add(
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _buildAssistantTextCard(
+                  text: item.text,
+                  isError: turn.isError && i == items.length - 1,
+                  surfaceColor: surfaceColor,
+                  textColor: textColor,
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Color(0xFF38BDF8),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    turn.toolCalls.any((t) => t.isRunning)
-                        ? 'Выполняю шаг агента…'
-                        : 'Генерирую ответ…',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: textColor.withValues(alpha: 0.8),
-                    ),
-                  )
-                      .animate(onPlay: (c) => c.repeat())
-                      .shimmer(duration: 1200.ms, color: const Color(0xFF38BDF8)),
-                ],
+            );
+          }
+          break;
+        case RoxumTimelineKind.fileEdit:
+          if (item.fileEdit != null) {
+            widgets.add(_buildDiffCard(item.fileEdit!, surfaceColor, textColor));
+          }
+          break;
+        case RoxumTimelineKind.toolCall:
+          break;
+      }
+      i++;
+    }
+    return widgets;
+  }
+
+  Widget _buildDiffCard(
+    RoxumPendingEdit edit,
+    Color surfaceColor,
+    Color textColor,
+  ) {
+    final pendingMap = ref.read(roxumChatProvider).pendingEdits;
+    final isPending = pendingMap.containsKey(edit.filePath);
+    return RoxumFileDiffCard(
+      edit: edit,
+      isPending: isPending,
+      surfaceColor: surfaceColor,
+      textColor: textColor,
+      onOpenFile: () => ref.read(editorProvider.notifier).openFile(edit.filePath),
+      onKeep: () => ref.read(roxumChatProvider.notifier).keepEdit(edit.filePath),
+      onUndo: () => ref.read(roxumChatProvider.notifier).undoEdit(edit.filePath),
+    );
+  }
+
+  Widget _buildGeneratingIndicator({
+    required bool isToolRunning,
+    required Color surfaceColor,
+    required Color textColor,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: surfaceColor.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFF38BDF8),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            isToolRunning ? 'Выполняю шаг агента…' : 'Генерирую ответ…',
+            style: TextStyle(
+              fontSize: 12,
+              color: textColor.withValues(alpha: 0.8),
+            ),
+          )
+              .animate(onPlay: (c) => c.repeat())
+              .shimmer(duration: 1200.ms, color: const Color(0xFF38BDF8)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssistantTextCard({
+    required String text,
+    required bool isError,
+    required Color surfaceColor,
+    required Color textColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: isError
+            ? Colors.redAccent.withValues(alpha: 0.1)
+            : surfaceColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isError
+              ? Colors.redAccent.withValues(alpha: 0.35)
+              : textColor.withValues(alpha: 0.08),
+        ),
+      ),
+      child: GptMarkdown(
+        text,
+        style: TextStyle(
+          color: isError ? Colors.redAccent : textColor,
+          fontSize: 13,
+          height: 1.45,
+        ),
+        codeBuilder: (ctx, name, code, closed) {
+          final ed = ref.read(editorProvider);
+          final activeFile = (ed.openFiles.isNotEmpty &&
+                  ed.activeTabIndex >= 0 &&
+                  ed.activeTabIndex < ed.openFiles.length)
+              ? ed.openFiles[ed.activeTabIndex]
+              : null;
+          return RoxumCodeBlockCard(
+            code: code,
+            language: name,
+            surfaceColor: surfaceColor,
+            textColor: textColor,
+            onInsertIntoEditor: activeFile != null
+                ? () {
+                    activeFile.controller.replaceSelection(code);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Код вставлен в редактор'),
+                        duration: Duration(seconds: 1),
+                      ),
+                    );
+                  }
+                : null,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildTurnFooter(RoxumConversationTurn turn, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          if (turn.usage.totalTokens > 0)
+            Text(
+              '↓${turn.usage.promptTokens} · ↑${turn.usage.completionTokens}${turn.usage.costUsd > 0 ? ' · \$${turn.usage.costUsd.toStringAsFixed(4)}' : ''}',
+              style: TextStyle(
+                fontSize: 10.5,
+                color: textColor.withValues(alpha: 0.45),
               ),
             )
-          else if (turn.aiResponse.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(11),
-              decoration: BoxDecoration(
-                color: turn.isError
-                    ? Colors.redAccent.withValues(alpha: 0.1)
-                    : surfaceColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: turn.isError
-                      ? Colors.redAccent.withValues(alpha: 0.35)
-                      : textColor.withValues(alpha: 0.08),
+          else
+            const SizedBox.shrink(),
+          InkWell(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: turn.aiResponse));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Ответ скопирован'),
+                  duration: Duration(seconds: 1),
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GptMarkdown(
-                    turn.aiResponse,
-                    style: TextStyle(
-                      color: turn.isError ? Colors.redAccent : textColor,
-                      fontSize: 13,
-                      height: 1.45,
-                    ),
-                    codeBuilder: (ctx, name, code, closed) {
-                      final ed = ref.read(editorProvider);
-                      final activeFile = (ed.openFiles.isNotEmpty &&
-                              ed.activeTabIndex >= 0 &&
-                              ed.activeTabIndex < ed.openFiles.length)
-                          ? ed.openFiles[ed.activeTabIndex]
-                          : null;
-                      return RoxumCodeBlockCard(
-                        code: code,
-                        language: name,
-                        surfaceColor: surfaceColor,
-                        textColor: textColor,
-                        onInsertIntoEditor: activeFile != null
-                            ? () {
-                                activeFile.controller.replaceSelection(code);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Код вставлен в редактор'),
-                                    duration: Duration(seconds: 1),
-                                  ),
-                                );
-                              }
-                            : null,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      if (turn.usage.totalTokens > 0)
-                        Text(
-                          '↓${turn.usage.promptTokens} · ↑${turn.usage.completionTokens}${turn.usage.costUsd > 0 ? ' · \$${turn.usage.costUsd.toStringAsFixed(4)}' : ''}',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: textColor.withValues(alpha: 0.45),
-                          ),
-                        )
-                      else
-                        const SizedBox.shrink(),
-                      InkWell(
-                        onTap: () {
-                          Clipboard.setData(
-                            ClipboardData(text: turn.aiResponse),
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Ответ скопирован'),
-                              duration: Duration(seconds: 1),
-                            ),
-                          );
-                        },
-                        child: Icon(
-                          Icons.copy_outlined,
-                          size: 14,
-                          color: textColor.withValues(alpha: 0.5),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              );
+            },
+            child: Icon(
+              Icons.copy_outlined,
+              size: 14,
+              color: textColor.withValues(alpha: 0.5),
             ),
+          ),
         ],
       ),
     );

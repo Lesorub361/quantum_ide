@@ -16,6 +16,24 @@ import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifi
 
 enum RoxumChatMode { ask, agent }
 
+enum RoxumTimelineKind { reasoning, text, toolCall, fileEdit }
+
+class RoxumTimelineItem {
+  final String id;
+  final RoxumTimelineKind kind;
+  final String text;
+  final RoxumToolCallRecord? toolCall;
+  final RoxumPendingEdit? fileEdit;
+
+  const RoxumTimelineItem({
+    required this.id,
+    required this.kind,
+    this.text = '',
+    this.toolCall,
+    this.fileEdit,
+  });
+}
+
 class RoxumConversationTurn {
   final String id;
   final String userRequest;
@@ -24,6 +42,7 @@ class RoxumConversationTurn {
   final int thinkingDurationMs;
   final List<RoxumToolCallRecord> toolCalls;
   final List<RoxumPendingEdit> fileEdits;
+  final List<RoxumTimelineItem> timeline;
   final List<String> attachmentNames;
   final RoxumUsageStats usage;
   final bool isError;
@@ -37,6 +56,7 @@ class RoxumConversationTurn {
     this.thinkingDurationMs = 0,
     this.toolCalls = const [],
     this.fileEdits = const [],
+    this.timeline = const [],
     this.attachmentNames = const [],
     this.usage = const RoxumUsageStats(),
     this.isError = false,
@@ -50,6 +70,7 @@ class RoxumConversationTurn {
     int? thinkingDurationMs,
     List<RoxumToolCallRecord>? toolCalls,
     List<RoxumPendingEdit>? fileEdits,
+    List<RoxumTimelineItem>? timeline,
     List<String>? attachmentNames,
     RoxumUsageStats? usage,
     bool? isError,
@@ -62,6 +83,7 @@ class RoxumConversationTurn {
       thinkingDurationMs: thinkingDurationMs ?? this.thinkingDurationMs,
       toolCalls: toolCalls ?? this.toolCalls,
       fileEdits: fileEdits ?? this.fileEdits,
+      timeline: timeline ?? this.timeline,
       attachmentNames: attachmentNames ?? this.attachmentNames,
       usage: usage ?? this.usage,
       isError: isError ?? this.isError,
@@ -453,11 +475,15 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     final activeFilePath = ref.read(editorProvider).activeFilePath;
     final systemPrompt = state.chatMode == RoxumChatMode.agent
         ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace via function/tool calls '
-            '(read_file, write_file, edit_file, list_directory, search_files, grep_search, run_terminal_command, get_diagnostics, git_status, and MCP tools). '
+            '(readFile, writeFile, editFile, listFiles, grepInFiles, runCommand, getLspDiagnostics, gitStatus, and MCP tools). '
             'Workspace root: "$workspace". '
             '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}'
-            'IMPORTANT: NEVER say you cannot read/edit files or run commands—you CAN and MUST invoke your tools directly to inspect the codebase, make edits, and verify changes. '
-            'Always act using tools first, then summarize concisely in the user\'s language.'
+            'Work in clear stages: '
+            '1) Briefly state your 1-2 sentence plan, then immediately call tools to inspect the relevant files. '
+            '2) Apply edits with writeFile/editFile and verify with diagnostics or commands if needed. '
+            '3) Finish with a clean summary of what you actually changed and verified. '
+            'IMPORTANT: NEVER say you cannot access files or run commands, and NEVER claim you edited a file unless you actually called writeFile/editFile. '
+            'Respond in the user\'s language.'
         : 'You are a helpful coding assistant inside QuantumIDE. '
             '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'
             'Respond concisely in the user\'s language.';
@@ -497,8 +523,25 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     ];
 
     final startedAt = DateTime.now();
+    var currentStep = 0;
     final turnEditedPaths = <String>{};
+    final stepEditIds = <String, String>{};
     final pendingCopy = Map<String, RoxumPendingEdit>.from(state.pendingEdits);
+
+    List<RoxumTimelineItem> upsertTimeline(
+      List<RoxumTimelineItem> current,
+      RoxumTimelineItem item,
+    ) {
+      final list = List<RoxumTimelineItem>.from(current);
+      final idx = list.indexWhere((e) => e.id == item.id);
+      if (idx >= 0) {
+        list[idx] = item;
+      } else {
+        list.add(item);
+      }
+      return list;
+    }
+
     final toolsRunner = state.chatMode == RoxumChatMode.agent
         ? RoxumAgenticTools(
             ref,
@@ -506,13 +549,35 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             onPendingEditsChanged: (updated) {
               state = state.copyWith(pendingEdits: updated);
               for (final k in updated.keys) {
-                turnEditedPaths.add(k);
+                if (pendingCopy[k]?.updatedContent != updated[k]?.updatedContent ||
+                    !turnEditedPaths.contains(k)) {
+                  turnEditedPaths.add(k);
+                  stepEditIds['$currentStep::$k'] ??= 'edit_${currentStep}_$k';
+                }
               }
               final editsForTurn = turnEditedPaths
                   .map((p) => updated[p])
                   .whereType<RoxumPendingEdit>()
                   .toList();
-              _updateTurn(turnId, (t) => t.copyWith(fileEdits: editsForTurn));
+              _updateTurn(turnId, (t) {
+                var tl = t.timeline;
+                for (final entry in stepEditIds.entries) {
+                  final parts = entry.key.split('::');
+                  if (parts.length == 2 &&
+                      parts[0] == '$currentStep' &&
+                      updated[parts[1]] != null) {
+                    tl = upsertTimeline(
+                      tl,
+                      RoxumTimelineItem(
+                        id: entry.value,
+                        kind: RoxumTimelineKind.fileEdit,
+                        fileEdit: updated[parts[1]],
+                      ),
+                    );
+                  }
+                }
+                return t.copyWith(fileEdits: editsForTurn, timeline: tl);
+              });
             },
           )
         : null;
@@ -540,6 +605,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         tools: toolsSchema,
         agenticTools: toolsRunner,
         isCancelled: () => _cancelled,
+        onStepStart: (step) {
+          currentStep = step;
+        },
         onToolEvent: (record) {
           _updateTurn(turnId, (turn) {
             final list = List<RoxumToolCallRecord>.from(turn.toolCalls);
@@ -549,20 +617,53 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
             } else {
               list.add(record);
             }
-            return turn.copyWith(toolCalls: list);
+            final tl = upsertTimeline(
+              turn.timeline,
+              RoxumTimelineItem(
+                id: 'tool_${record.id}',
+                kind: RoxumTimelineKind.toolCall,
+                toolCall: record,
+              ),
+            );
+            return turn.copyWith(toolCalls: list, timeline: tl);
           });
         },
         onAssistantText: (text) {
-          _updateTurn(turnId, (turn) => turn.copyWith(aiResponse: text));
+          _updateTurn(turnId, (turn) {
+            final tl = text.trim().isEmpty
+                ? turn.timeline
+                : upsertTimeline(
+                    turn.timeline,
+                    RoxumTimelineItem(
+                      id: 'step_${currentStep}_text',
+                      kind: RoxumTimelineKind.text,
+                      text: text,
+                    ),
+                  );
+            return turn.copyWith(aiResponse: text, timeline: tl);
+          });
         },
         onReasoningText: (reasoning) {
           final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
           _updateTurn(
             turnId,
-            (turn) => turn.copyWith(
-              reasoningText: reasoning,
-              thinkingDurationMs: elapsed,
-            ),
+            (turn) {
+              final tl = reasoning.trim().isEmpty
+                  ? turn.timeline
+                  : upsertTimeline(
+                      turn.timeline,
+                      RoxumTimelineItem(
+                        id: 'step_${currentStep}_reasoning',
+                        kind: RoxumTimelineKind.reasoning,
+                        text: reasoning,
+                      ),
+                    );
+              return turn.copyWith(
+                reasoningText: reasoning,
+                thinkingDurationMs: elapsed,
+                timeline: tl,
+              );
+            },
           );
         },
         onUsage: (usage) {
@@ -579,7 +680,20 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       }
 
       if (!_cancelled && finalAnswer.isNotEmpty) {
-        _updateTurn(turnId, (turn) => turn.copyWith(aiResponse: finalAnswer));
+        _updateTurn(
+          turnId,
+          (turn) => turn.copyWith(
+            aiResponse: finalAnswer,
+            timeline: upsertTimeline(
+              turn.timeline,
+              RoxumTimelineItem(
+                id: 'step_${currentStep}_text',
+                kind: RoxumTimelineKind.text,
+                text: finalAnswer,
+              ),
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (!_cancelled) {

@@ -688,6 +688,7 @@ class RoxumAiClient {
     required void Function(RoxumToolCallRecord record) onToolEvent,
     required void Function(String partialText) onAssistantText,
     void Function(String reasoningText)? onReasoningText,
+    void Function(int step)? onStepStart,
     void Function(RoxumUsageStats usage)? onUsage,
     required bool Function() isCancelled,
   }) async {
@@ -701,6 +702,7 @@ class RoxumAiClient {
     try {
       for (int step = 0; step < maxIterations; step++) {
         if (isCancelled()) return '';
+        onStepStart?.call(step);
 
         final payload = _buildPayload(
           model: model,
@@ -709,8 +711,7 @@ class RoxumAiClient {
         );
 
         final _ParsedTurn turn;
-        if (model.method == RoxumToolCallingMethod.openAiCompatible &&
-            tools.isEmpty) {
+        if (model.method == RoxumToolCallingMethod.openAiCompatible) {
           turn = await _sendOpenAiStreaming(
             client: client,
             model: model,
@@ -820,11 +821,22 @@ class RoxumAiClient {
     void Function(String reasoningText)? onReasoningText,
     required bool Function() isCancelled,
   }) async {
+    final uri = Uri.parse(model.url);
+    final isLocalEndpoint = uri.host == 'localhost' ||
+        uri.host == '127.0.0.1' ||
+        uri.host.startsWith('192.168.') ||
+        uri.host.startsWith('10.');
     final streamPayload = Map<String, dynamic>.from(payload)
       ..['stream'] = true
-      ..['stream_options'] = {'include_usage': true};
+      ..addAll(
+        isLocalEndpoint
+            ? const <String, dynamic>{}
+            : const {
+                'stream_options': {'include_usage': true},
+              },
+      );
 
-    final req = http.Request('POST', Uri.parse(model.url));
+    final req = http.Request('POST', uri);
     req.headers.addAll(model.headers);
     req.body = jsonEncode(streamPayload);
 
@@ -923,7 +935,24 @@ class RoxumAiClient {
           if (tcList is List) {
             for (final item in tcList) {
               if (item is! Map) continue;
-              final idx = (item['index'] as num?)?.toInt() ?? 0;
+              final rawId = item['id']?.toString() ?? '';
+              int idx;
+              if (item['index'] is num) {
+                idx = (item['index'] as num).toInt();
+              } else if (rawId.isNotEmpty) {
+                final existingIdx = toolBuffers.entries
+                    .where((e) => e.value.id.toString() == rawId)
+                    .map((e) => e.key)
+                    .firstOrNull;
+                idx = existingIdx ??
+                    (toolBuffers.isEmpty
+                        ? 0
+                        : (toolBuffers.keys.reduce((a, b) => a > b ? a : b) + 1));
+              } else {
+                idx = toolBuffers.isEmpty
+                    ? 0
+                    : toolBuffers.keys.reduce((a, b) => a > b ? a : b);
+              }
               final entry = toolBuffers.putIfAbsent(
                 idx,
                 () => (
@@ -932,12 +961,15 @@ class RoxumAiClient {
                   args: StringBuffer(),
                 ),
               );
-              if (item['id'] != null) entry.id.write(item['id'].toString());
+              if (rawId.isNotEmpty && entry.id.isEmpty) entry.id.write(rawId);
               final fn = item['function'] as Map?;
               if (fn != null) {
                 if (fn['name'] != null) entry.name.write(fn['name'].toString());
-                if (fn['arguments'] != null) {
-                  entry.args.write(fn['arguments'].toString());
+                final rawArgChunk = fn['arguments'];
+                if (rawArgChunk is Map) {
+                  entry.args.write(jsonEncode(rawArgChunk));
+                } else if (rawArgChunk != null) {
+                  entry.args.write(rawArgChunk.toString());
                 }
               }
             }
@@ -975,7 +1007,9 @@ class RoxumAiClient {
       toolCalls: calls,
       rawAssistantMessage: {
         'role': 'assistant',
-        'content': finalSplit.answer,
+        'content': (finalSplit.answer.isEmpty && rawCalls.isNotEmpty)
+            ? null
+            : finalSplit.answer,
         if (rawCalls.isNotEmpty) 'tool_calls': rawCalls,
       },
       usage: usage,
