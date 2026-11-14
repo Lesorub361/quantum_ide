@@ -116,8 +116,8 @@ class RuntimeService extends ChangeNotifier {
     try {
       final rootfsHome = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root'));
       final backupHome = Directory(p.join(_filesDir, 'tmp', 'preserved_home'));
-      if (await backupHome.exists()) {
-        await backupHome.delete(recursive: true);
+      if (FileSystemEntity.typeSync(backupHome.path, followLinks: false) != FileSystemEntityType.notFound) {
+        await _forceDeleteDirectory(backupHome);
       }
       await backupHome.create(recursive: true);
 
@@ -139,18 +139,179 @@ class RuntimeService extends ChangeNotifier {
       notifyListeners();
 
       final rootfsDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu'));
-      if (await rootfsDir.exists()) {
-        await rootfsDir.delete(recursive: true);
+      if (FileSystemEntity.typeSync(rootfsDir.path, followLinks: false) != FileSystemEntityType.notFound) {
+        await _forceDeleteDirectory(rootfsDir);
       }
 
       _isInitialized = false;
       _isInitializing = false;
       await init();
+      if (!_isInitialized) {
+        throw Exception(_status.isNotEmpty ? _status : 'Не удалось инициализировать Ubuntu 24.04');
+      }
     } catch (e) {
       _isInitializing = false;
       _status = 'Ошибка миграции: $e';
       notifyListeners();
       rethrow;
+    }
+  }
+
+  /// Forcefully removes [dir] even when contained directories/files lack write bits
+  /// (e.g. mode 0555/0444 in extracted Linux rootfs triggering errno 13 in Dart).
+  Future<void> _forceDeleteDirectory(Directory dir) async {
+    final rootType = FileSystemEntity.typeSync(dir.path, followLinks: false);
+    if (rootType == FileSystemEntityType.notFound) return;
+
+    if (rootType == FileSystemEntityType.link) {
+      await Link(dir.path).delete();
+      return;
+    }
+
+    if (!Platform.isWindows) {
+      try {
+        await Process.run('chmod', ['-R', 'u+rwX', dir.path]);
+        await Process.run('rm', ['-rf', dir.path]);
+        if (FileSystemEntity.typeSync(dir.path, followLinks: false) == FileSystemEntityType.notFound) {
+          return;
+        }
+      } catch (e) {
+        debugPrint('RuntimeService: Native cleanup fallback for ${dir.path}: $e');
+      }
+    }
+
+    Future<void> deleteEntity(FileSystemEntity entity) async {
+      final type = FileSystemEntity.typeSync(entity.path, followLinks: false);
+      if (type == FileSystemEntityType.notFound) return;
+
+      if (type == FileSystemEntityType.link) {
+        Link(entity.path).deleteSync();
+        return;
+      }
+
+      if (type == FileSystemEntityType.directory) {
+        final subDir = Directory(entity.path);
+        if (!Platform.isWindows) {
+          await Process.run('chmod', ['u+rwx', subDir.path]);
+        }
+        for (final child in subDir.listSync(followLinks: false)) {
+          await deleteEntity(child);
+        }
+        try {
+          subDir.deleteSync();
+        } catch (_) {
+          if (!Platform.isWindows) {
+            await Process.run('chmod', ['u+rwx', subDir.parent.path, subDir.path]);
+          }
+          subDir.deleteSync();
+        }
+        return;
+      }
+
+      try {
+        entity.deleteSync();
+      } catch (_) {
+        if (!Platform.isWindows) {
+          await Process.run('chmod', ['u+rw', entity.path]);
+        }
+        entity.deleteSync();
+      }
+    }
+
+    await deleteEntity(dir);
+  }
+
+  /// Ensures `$ROOTFS/etc/ssl/certs/ca-certificates.crt` is populated with both
+  /// guest Mozilla CAs and Android host system CAs (e.g. APEX Conscrypt cacerts)
+  /// so Go, curl, Node.js, Python, and Git verify HTTPS certificates reliably.
+  Future<void> _repairCaCertificatesIfNeeded() async {
+    try {
+      final rootfsDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu'));
+      if (!await rootfsDir.exists()) return;
+
+      final caDir = Directory(p.join(rootfsDir.path, 'etc', 'ssl', 'certs'));
+      final caBundleFile = File(p.join(caDir.path, 'ca-certificates.crt'));
+      final syncMarker = File(p.join(rootfsDir.path, 'etc', 'ssl', '.quantum_ca_synced_v1'));
+
+      var needsRepair = !await caBundleFile.exists() || !await syncMarker.exists();
+      if (!needsRepair) {
+        final len = await caBundleFile.length();
+        if (len < 30 * 1024) {
+          needsRepair = true;
+        }
+      }
+      if (!needsRepair) return;
+
+      final pemRegex = RegExp(
+        r'-----BEGIN CERTIFICATE-----[\r\n]+[\s\S]*?-----END CERTIFICATE-----',
+      );
+      final uniqueCerts = <String>{};
+      final androidOnlyCerts = <String>{};
+
+      Future<void> collectFromFile(File file, {bool isAndroidHost = false}) async {
+        try {
+          final content = await file.readAsString();
+          for (final match in pemRegex.allMatches(content)) {
+            final block = match.group(0)?.trim();
+            if (block != null && block.isNotEmpty) {
+              uniqueCerts.add(block);
+              if (isAndroidHost) {
+                androidOnlyCerts.add(block);
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (await caBundleFile.exists()) {
+        await collectFromFile(caBundleFile);
+      }
+
+      for (final guestRelDir in [
+        p.join('usr', 'share', 'ca-certificates'),
+        p.join('usr', 'local', 'share', 'ca-certificates'),
+      ]) {
+        final dir = Directory(p.join(rootfsDir.path, guestRelDir));
+        if (!await dir.exists()) continue;
+        await for (final entity in dir.list(recursive: true, followLinks: false)) {
+          if (entity is File && entity.path.endsWith('.crt')) {
+            await collectFromFile(entity);
+          }
+        }
+      }
+
+      for (final androidCaPath in const [
+        '/apex/com.android.conscrypt/cacerts',
+        '/system/etc/security/cacerts',
+        '/data/misc/user/0/cacerts-added',
+      ]) {
+        final dir = Directory(androidCaPath);
+        if (!await dir.exists()) continue;
+        await for (final entity in dir.list(followLinks: false)) {
+          if (entity is File) {
+            await collectFromFile(entity, isAndroidHost: true);
+          }
+        }
+      }
+
+      if (uniqueCerts.isEmpty) return;
+
+      await caDir.create(recursive: true);
+      await caBundleFile.writeAsString('${uniqueCerts.join('\n')}\n');
+
+      if (androidOnlyCerts.isNotEmpty) {
+        final localCaDir = Directory(
+          p.join(rootfsDir.path, 'usr', 'local', 'share', 'ca-certificates'),
+        );
+        await localCaDir.create(recursive: true);
+        final androidCaFile = File(p.join(localCaDir.path, 'android-system.crt'));
+        await androidCaFile.writeAsString('${androidOnlyCerts.join('\n')}\n');
+      }
+
+      await syncMarker.writeAsString('v1\n');
+      debugPrint('RuntimeService: Synced ${uniqueCerts.length} CA certificates to ${caBundleFile.path}');
+    } catch (e) {
+      debugPrint('RuntimeService: CA certificate repair skipped: $e');
     }
   }
 
@@ -193,6 +354,9 @@ class RuntimeService extends ChangeNotifier {
         // 4. Ensure terminfo databases are valid and symlinked before any terminal session starts
         await _repairTerminfoIfNeeded();
 
+        // 5. Ensure CA certificate bundle includes Mozilla + Android system roots
+        await _repairCaCertificatesIfNeeded();
+
         final bool complete = await _channel.invokeMethod('isBootstrapComplete');
         if (complete) {
           _isInitialized = true;
@@ -209,6 +373,7 @@ class RuntimeService extends ChangeNotifier {
         await _prepareFileSystem();
         await _ensureBinaries();
         await _repairTerminfoIfNeeded();
+        await _repairCaCertificatesIfNeeded();
       } else {
         // Desktop platform — use a persistent directory in user home
         final desktopDataDir = Directory(PlatformUtils.desktopDataDir);
@@ -771,7 +936,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '31';
+    const bashrcVersion = '32';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -805,7 +970,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=31
+# BASHRC_VERSION=32
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -850,6 +1015,18 @@ fi
 export COLORTERM=truecolor
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
+if [ -s /etc/ssl/certs/ca-certificates.crt ]; then
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+elif [ -s /etc/pki/tls/certs/ca-bundle.crt ]; then
+    export SSL_CERT_FILE=/etc/pki/tls/certs/ca-bundle.crt
+else
+    export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+fi
+export SSL_CERT_DIR=/etc/ssl/certs
+export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
+export CURL_CA_BUNDLE="$SSL_CERT_FILE"
+export NODE_EXTRA_CA_CERTS="$SSL_CERT_FILE"
+export GIT_SSL_CAINFO="$SSL_CERT_FILE"
 export HISTSIZE=5000
 export HISTFILESIZE=10000
 export HISTCONTROL=ignoredups:erasedups
@@ -2204,6 +2381,12 @@ if [ \$# -gt 2 ]; then
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
+            export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+            export SSL_CERT_DIR=/etc/ssl/certs
+            export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+            export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+            export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+            export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
             stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
             shift 4
             if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
@@ -2255,6 +2438,12 @@ else
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
+            export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+            export SSL_CERT_DIR=/etc/ssl/certs
+            export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+            export CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+            export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt
+            export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
             stty sane onlcr icrnl opost erase ^? 2>/dev/null || true
             exec /bin/bash --rcfile /root/.bashrc -i
         ' dummy "\$PATH" "\$JAVA_HOME" "\$ANDROID_HOME" "\$ANDROID_SDK_ROOT"
@@ -2320,17 +2509,25 @@ fi
       try {
         final restoredHome = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root'));
         if (await restoredHome.exists()) {
-          final entries = backupHomeDir.listSync(recursive: true);
+          final entries = backupHomeDir.listSync(recursive: true, followLinks: false);
           for (final entry in entries) {
-            if (entry is File) {
-              final rel = p.relative(entry.path, from: backupHomeDir.path);
-              final targetFile = File(p.join(restoredHome.path, rel));
+            final rel = p.relative(entry.path, from: backupHomeDir.path);
+            final targetPath = p.join(restoredHome.path, rel);
+            if (entry is Link) {
+              final target = entry.targetSync();
+              final destLink = Link(targetPath);
+              await destLink.parent.create(recursive: true);
+              if (FileSystemEntity.typeSync(targetPath, followLinks: false) == FileSystemEntityType.notFound) {
+                await destLink.create(target);
+              }
+            } else if (entry is File) {
+              final targetFile = File(targetPath);
               await targetFile.parent.create(recursive: true);
               await entry.copy(targetFile.path);
             }
           }
           debugPrint('RuntimeService: Successfully restored preserved user files to /root');
-          await backupHomeDir.delete(recursive: true);
+          await _forceDeleteDirectory(backupHomeDir);
         }
       } catch (e) {
         debugPrint('RuntimeService: Error restoring preserved home: $e');
@@ -2431,6 +2628,12 @@ fi
       'USER': 'root',
       'LANG': 'C.UTF-8',
       'LC_ALL': 'C.UTF-8',
+      'SSL_CERT_FILE': '/etc/ssl/certs/ca-certificates.crt',
+      'SSL_CERT_DIR': '/etc/ssl/certs',
+      'REQUESTS_CA_BUNDLE': '/etc/ssl/certs/ca-certificates.crt',
+      'CURL_CA_BUNDLE': '/etc/ssl/certs/ca-certificates.crt',
+      'NODE_EXTRA_CA_CERTS': '/etc/ssl/certs/ca-certificates.crt',
+      'GIT_SSL_CAINFO': '/etc/ssl/certs/ca-certificates.crt',
       'FLUTTER_ALLOW_SU_ROOT': 'true',
       // Force IPv4 only (never put -Xmx in _JAVA_OPTIONS, otherwise every child Java process reserves a huge heap)
       '_JAVA_OPTIONS': '-Djava.net.preferIPv4Stack=true',
@@ -2452,9 +2655,11 @@ fi
       // RootfsRepair (Mobile-Harness): Preserve user's home files (.bashrc, .ssh, .gitconfig, tools)
       if (preserveHome && await homeDir.exists()) {
         try {
-          if (await backupHomeDir.exists()) await backupHomeDir.delete(recursive: true);
+          if (FileSystemEntity.typeSync(backupHomeDir.path, followLinks: false) != FileSystemEntityType.notFound) {
+            await _forceDeleteDirectory(backupHomeDir);
+          }
           await backupHomeDir.create(recursive: true);
-          final entries = homeDir.listSync(recursive: true);
+          final entries = homeDir.listSync(recursive: true, followLinks: false);
           for (final entry in entries) {
             if (entry is File) {
               final rel = p.relative(entry.path, from: homeDir.path);
@@ -2474,7 +2679,9 @@ fi
       }
 
       final rootfs = Directory(p.join(_filesDir, 'rootfs'));
-      if (await rootfs.exists()) await rootfs.delete(recursive: true);
+      if (FileSystemEntity.typeSync(rootfs.path, followLinks: false) != FileSystemEntityType.notFound) {
+        await _forceDeleteDirectory(rootfs);
+      }
 
       _status = 'Cleaned. Ready for init.';
       notifyListeners();
@@ -3472,11 +3679,16 @@ fi
 if [ ! -f "/etc/ssl/certs/ca-certificates.crt" ] || [ ! -s "/etc/ssl/certs/ca-certificates.crt" ] || [ ! -f "/etc/ca-certificates.conf" ]; then
   echo "Healing SSL ca-certificates..."
   mkdir -p "/etc/ssl/certs"
-  update-ca-certificates -f >/dev/null 2>&1 || true
-  if [ ! -f "/etc/ssl/certs/ca-certificates.crt" ] || [ ! -f "/etc/ca-certificates.conf" ]; then
+  if [ -f "/etc/ca-certificates.conf" ]; then
+    update-ca-certificates -f >/dev/null 2>&1 || true
+  fi
+  if [ ! -f "/etc/ssl/certs/ca-certificates.crt" ] || [ ! -s "/etc/ssl/certs/ca-certificates.crt" ] || [ ! -f "/etc/ca-certificates.conf" ]; then
     apt-get update >/dev/null 2>&1 || true
     apt-get install -y --reinstall ca-certificates >/dev/null 2>&1 || true
     update-ca-certificates -f >/dev/null 2>&1 || true
+  fi
+  if [ ! -s "/etc/ssl/certs/ca-certificates.crt" ]; then
+    find /usr/share/ca-certificates /usr/local/share/ca-certificates -type f -name '*.crt' -exec cat {} + > /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
   fi
 fi
 

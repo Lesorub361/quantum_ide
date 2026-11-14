@@ -30,7 +30,7 @@ class _GutterState extends State<Gutter> {
   double? _gutterWidth;
   int prevLineOffset = -1;
 
-  void _updateLineStatesAndFolds() {
+  void _updateLineStatesAndFolds({bool notify = true}) {
     _textPainter = TextPainter(
       textDirection: TextDirection.ltr,
       text: TextSpan(text: _controller.text),
@@ -61,11 +61,14 @@ class _GutterState extends State<Gutter> {
     )..layout();
     _gutterWidth = widget.gutterStyle.gutterWidth ?? gutterPainter.width * 2.1;
     Shared().gutterWidth = _gutterWidth ?? 65;
-    setState(() {});
+    if (notify && mounted) {
+      setState(() {});
+    }
   }
 
   bool _foldAt(int index) {
     if (!mounted) return false;
+    if (index - 1 < 0 || index - 1 >= _lineStates.value.length) return false;
     final line = _lineStates.value[index - 1];
     if (line.foldRange == null) return false;
 
@@ -78,6 +81,7 @@ class _GutterState extends State<Gutter> {
 
   @override
   void initState() {
+    super.initState();
     final lineMetrics = TextPainter(
       textDirection: TextDirection.ltr,
       text: TextSpan(text: _controller.text),
@@ -88,12 +92,11 @@ class _GutterState extends State<Gutter> {
       List.generate(lineNumber, (index) => LineState(lineNumber: index + 1)),
     );
 
-    _listenerFunction = _updateLineStatesAndFolds;
+    _listenerFunction = () => _updateLineStatesAndFolds();
     _controller.addListener(_listenerFunction);
     _controller.setFoldAtCallback(_foldAt);
 
-    _updateLineStatesAndFolds();
-    super.initState();
+    _updateLineStatesAndFolds(notify: false);
   }
 
   @override
@@ -134,6 +137,7 @@ class _GutterState extends State<Gutter> {
                 lineNumberStyle: widget.gutterStyle.lineNumberStyle,
                 onTap: () {
                   final index = line.lineNumber - 1;
+                  if (index < 0 || index >= _lineStates.value.length) return;
                   final updated = List<LineState>.from(_lineStates.value);
                   updated[index] = LineState(
                     lineNumber: updated[index].lineNumber,
@@ -145,6 +149,9 @@ class _GutterState extends State<Gutter> {
                     ? GestureDetector(
                         onTap: () {
                           final index = line.lineNumber - 1;
+                          if (index < 0 || index >= _lineStates.value.length) {
+                            return;
+                          }
                           final updated = List<LineState>.from(
                             _lineStates.value,
                           );

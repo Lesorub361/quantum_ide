@@ -277,7 +277,30 @@ class BootstrapManager(
     }
 
     private fun deleteRecursively(file: File) {
-        if (file.isDirectory) file.listFiles()?.forEach { deleteRecursively(it) }
+        val isSymlink = try {
+            android.system.OsConstants.S_ISLNK(Os.lstat(file.path).st_mode)
+        } catch (_: Throwable) {
+            false
+        }
+        if (isSymlink) {
+            file.delete()
+            return
+        }
+        if (file.isDirectory) {
+            try {
+                Os.chmod(file.path, 0x1C0) // u+rwx
+            } catch (_: Throwable) {
+                file.setWritable(true, true)
+                file.setExecutable(true, true)
+            }
+            file.listFiles()?.forEach { deleteRecursively(it) }
+        } else {
+            try {
+                Os.chmod(file.path, 0x180) // u+rw
+            } catch (_: Throwable) {
+                file.setWritable(true, true)
+            }
+        }
         file.delete()
     }
 }

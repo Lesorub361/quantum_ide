@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import '../LSP/lsp.dart';
 import '../utils/utils.dart';
 import '../utils/shared.dart';
@@ -176,54 +177,98 @@ class _CodeCrafterState extends State<CodeCrafter> {
   bool _lspReady = false;
   String? content;
   DateTime? _aiCompletionCooldownUntil;
+  StreamSubscription<Map<String, dynamic>>? _lspSubscription;
+  late final VoidCallback _controllerListener;
+  bool _ownsCodeFocus = false;
+
+  void _attachLspConfig() {
+    _lspSubscription?.cancel();
+    _lspSubscription = null;
+    _lspReady = false;
+    _diagnostics.clear();
+    Shared().diagnostics.clear();
+    _hoverDetails = '';
+
+    final lsp = widget.lspConfig;
+    if (lsp == null) return;
+
+    if ((lsp.filePath != widget.filePath) || widget.filePath == null) {
+      throw Exception(
+        'File path in LspConfig does not match the provided filePath in CodeCrafter.',
+      );
+    }
+
+    _lspSubscription = lsp.responses.listen((data) {
+      if (data['method'] == 'textDocument/publishDiagnostics') {
+        final diagnostics = data['params']?['diagnostics'] as List? ?? const [];
+        _diagnostics.clear();
+        Shared().diagnostics.clear();
+        if (diagnostics.isNotEmpty) {
+          final List<LspErrors> errors = [];
+          for (final (item as Map<String, dynamic>) in diagnostics) {
+            errors.add(
+              LspErrors(
+                severity: (() {
+                  if (item['severity'] == 1 && lsp.disableError) {
+                    return 0;
+                  }
+                  if (item['severity'] == 2 && lsp.disableWarning) {
+                    return 0;
+                  }
+                  return item['severity'];
+                })(),
+                range: item['range'],
+                message: item['message'],
+              ),
+            );
+          }
+          _diagnostics = List.from(errors);
+          Shared().diagnostics = _diagnostics;
+        }
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    });
+
+    (() async {
+      try {
+        if (lsp is LspSocketConfig) {
+          await lsp.connect();
+        }
+        await lsp.initialize();
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (!mounted || widget.lspConfig != lsp) return;
+        await lsp.openDocument();
+        if (!mounted || widget.lspConfig != lsp) return;
+        setState(() {
+          _lspReady = true;
+        });
+      } catch (e) {
+        debugPrint('Error initializing LSP: $e');
+      }
+    })();
+  }
 
   @override
   void initState() {
+    super.initState();
     _keyboardFocus = FocusNode();
     _suggestionFocus = FocusNode();
-    _codeFocus = widget.focusNode ?? FocusNode();
+    if (widget.focusNode != null) {
+      _codeFocus = widget.focusNode!;
+      _ownsCodeFocus = false;
+    } else {
+      _codeFocus = FocusNode();
+      _ownsCodeFocus = true;
+    }
     _hoverHorizontalScroll = ScrollController();
     _hoverVerticalSCroll = ScrollController();
     if (widget.initialText != null) {
       widget.controller.text = widget.initialText!;
     }
     widget.controller.manualAiCompletion = getManualAiSuggestion;
-    if (widget.lspConfig != null) {
-      widget.lspConfig!.responses.listen((data) {
-        if (data['method'] == 'textDocument/publishDiagnostics') {
-          final diagnostics = data['params']['diagnostics'] as List;
-          _diagnostics.clear();
-          Shared().diagnostics.clear();
-          if (diagnostics.isNotEmpty) {
-            final List<LspErrors> errors = [];
-            for (final (item as Map<String, dynamic>) in diagnostics) {
-              errors.add(
-                LspErrors(
-                  severity: (() {
-                    if (item['severity'] == 1 &&
-                        widget.lspConfig!.disableError) {
-                      return 0;
-                    }
-                    if (item['severity'] == 2 &&
-                        widget.lspConfig!.disableWarning) {
-                      return 0;
-                    }
-                    return item['severity'];
-                  })(),
-                  range: item['range'],
-                  message: item['message'],
-                ),
-              );
-            }
-            _diagnostics = List.from(errors);
-            Shared().diagnostics = _diagnostics;
-          }
-          if (mounted) {
-            setState(() {});
-          }
-        }
-      });
-    }
+
     if (kIsWeb) {
       if (widget.filePath != null) {
         throw PlatformException(
@@ -243,6 +288,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
     if (widget.filePath != null && widget.initialText == null) {
       (() async {
         content = await File(widget.filePath!).readAsString();
+        if (!mounted) return;
         widget.controller.value = TextEditingValue(
           text: content ?? '',
           selection: TextSelection.collapsed(offset: content?.length ?? 0),
@@ -256,29 +302,8 @@ class _CodeCrafterState extends State<CodeCrafter> {
         'Initial text and file path cannot be both provided. Please provide either initialText or filePath.',
       );
     }
-    if (widget.lspConfig != null) {
-      if ((widget.lspConfig!.filePath != widget.filePath) ||
-          widget.filePath == null) {
-        throw Exception(
-          'File path in LspConfig does not match the provided filePath in CodeCrafter.',
-        );
-      }
-      (() async {
-        try {
-          if (widget.lspConfig is LspSocketConfig) {
-            await (widget.lspConfig as LspSocketConfig).connect();
-          }
-          await widget.lspConfig!.initialize();
-          await Future.delayed(const Duration(milliseconds: 300));
-          await widget.lspConfig!.openDocument();
-          setState(() {
-            _lspReady = true;
-          });
-        } catch (e) {
-          debugPrint('Error initializing LSP: $e');
-        }
-      })();
-    }
+
+    _attachLspConfig();
 
     Shared().theme = widget.editorTheme ?? {};
     Shared().textStyle = widget.textStyle;
@@ -287,10 +312,12 @@ class _CodeCrafterState extends State<CodeCrafter> {
     Shared().tabSize = widget.tabSize;
     Shared().enableRulerLines = widget.enableRulerLines;
     _value = widget.controller.text;
-    widget.controller.addListener(() {
-      final cursorOffset = widget.controller.selection.baseOffset;
-      if (cursorOffset < 0) return;
+
+    _controllerListener = () {
+      if (!mounted) return;
       final currentText = widget.controller.text;
+      final cursorOffset = widget.controller.selection.baseOffset;
+      if (cursorOffset < 0 || cursorOffset > currentText.length) return;
       final lines = currentText.substring(0, cursorOffset).split('\n');
       final line = lines.length - 1;
       final prefix = _getCurrentWordPrefix(currentText, cursorOffset);
@@ -300,7 +327,9 @@ class _CodeCrafterState extends State<CodeCrafter> {
       bool isTyping = false;
       if (currentValue.text.length == prevValue.text.length + 1 &&
           currentValue.selection.baseOffset ==
-              prevValue.selection.baseOffset + 1) {
+              prevValue.selection.baseOffset + 1 &&
+          prevValue.selection.baseOffset >= 0 &&
+          currentValue.selection.baseOffset <= currentValue.text.length) {
         final insertedChar = currentValue.text.substring(
           prevValue.selection.baseOffset,
           currentValue.selection.baseOffset,
@@ -356,7 +385,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
         }
       }
       if (widget.lspConfig != null &&
-          widget.controller.selection.baseOffset > 0 &&
+          cursorOffset > 0 &&
           widget.enableSuggestions &&
           _lspReady) {
         (() async {
@@ -364,12 +393,14 @@ class _CodeCrafterState extends State<CodeCrafter> {
           final List<LspCompletion> suggestion = await widget.lspConfig!
               .getCompletions(line, character);
           _hoverDetails = await widget.lspConfig!.getHover(line, character);
+          if (!mounted) return;
           final List<dynamic> effectiveSuggestions = suggestion.isNotEmpty
               ? suggestion
               : buildWordSuggestions();
           if (isTyping &&
               effectiveSuggestions.isNotEmpty &&
               cursorOffset > 0 &&
+              cursorOffset <= currentText.length &&
               prefix.isNotEmpty) {
             _suggestions = effectiveSuggestions;
             _selected = 0;
@@ -394,43 +425,46 @@ class _CodeCrafterState extends State<CodeCrafter> {
           (widget.aiCompletion?.enableCompletion ?? false)) {
         final String text = widget.controller.text;
         final int cursorPosition = widget.controller.selection.baseOffset;
-        final String codeToSend =
-            "${text.substring(0, cursorPosition)}<|CURSOR|>${text.substring(cursorPosition)}";
+        if (cursorPosition >= 0 && cursorPosition <= text.length) {
+          final String codeToSend =
+              "${text.substring(0, cursorPosition)}<|CURSOR|>${text.substring(cursorPosition)}";
 
-        _debounceTimer?.cancel();
+          _debounceTimer?.cancel();
 
-        if ((widget.aiCompletion?.completionType == CompletionType.auto ||
-                widget.aiCompletion?.completionType == CompletionType.mixed) &&
-            (_aiCompletionCooldownUntil == null ||
-                DateTime.now().isAfter(_aiCompletionCooldownUntil!))) {
-          _debounceTimer = Timer(
-            Duration(milliseconds: widget.aiCompletion!.debounceTime),
-            () async {
-              try {
-                final suggestion = await _getCachedResponse(codeToSend);
-                if (!mounted || suggestion.isEmpty) return;
-                Shared().aiResponse = suggestion;
-                Shared().lastCursorPosition =
-                    widget.controller.selection.baseOffset;
-                setState(() => _aiSuggestion = true);
-              } catch (e) {
-                final msg = e.toString();
-                if (msg.contains('402') ||
-                    msg.contains('401') ||
-                    msg.contains('Insufficient credits')) {
-                  _aiCompletionCooldownUntil = DateTime.now().add(
-                    const Duration(minutes: 5),
-                  );
+          if ((widget.aiCompletion?.completionType == CompletionType.auto ||
+                  widget.aiCompletion?.completionType ==
+                      CompletionType.mixed) &&
+              (_aiCompletionCooldownUntil == null ||
+                  DateTime.now().isAfter(_aiCompletionCooldownUntil!))) {
+            _debounceTimer = Timer(
+              Duration(milliseconds: widget.aiCompletion!.debounceTime),
+              () async {
+                try {
+                  final suggestion = await _getCachedResponse(codeToSend);
+                  if (!mounted || suggestion.isEmpty) return;
+                  Shared().aiResponse = suggestion;
+                  Shared().lastCursorPosition =
+                      widget.controller.selection.baseOffset;
+                  setState(() => _aiSuggestion = true);
+                } catch (e) {
+                  final msg = e.toString();
+                  if (msg.contains('402') ||
+                      msg.contains('401') ||
+                      msg.contains('Insufficient credits')) {
+                    _aiCompletionCooldownUntil = DateTime.now().add(
+                      const Duration(minutes: 5),
+                    );
+                  }
+                  debugPrint('AI inline completion skipped: $e');
                 }
-                debugPrint('AI inline completion skipped: $e');
-              }
-            },
-          );
+              },
+            );
+          }
         }
         _value = widget.controller.text;
       }
-    });
-    super.initState();
+    };
+    widget.controller.addListener(_controllerListener);
   }
 
   @override
@@ -444,13 +478,41 @@ class _CodeCrafterState extends State<CodeCrafter> {
     if (widget.editorTheme != oldWidget.editorTheme) {
       Shared().theme = widget.editorTheme ?? {};
     }
+
+    if (widget.tabSize != oldWidget.tabSize) {
+      Shared().tabSize = widget.tabSize;
+    }
+
+    if (widget.enableRulerLines != oldWidget.enableRulerLines) {
+      Shared().enableRulerLines = widget.enableRulerLines;
+    }
+
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller.removeListener(_controllerListener);
+      widget.controller.addListener(_controllerListener);
+      Shared().controller = widget.controller;
+      _value = widget.controller.text;
+    }
+
+    if (widget.lspConfig != oldWidget.lspConfig ||
+        widget.filePath != oldWidget.filePath) {
+      _hideSuggestionOverlay();
+      _hideDetailsOverlay();
+      _attachLspConfig();
+    }
   }
 
   @override
   void dispose() {
+    _hideSuggestionOverlay();
+    _hideDetailsOverlay();
+    _lspSubscription?.cancel();
+    widget.controller.removeListener(_controllerListener);
     _keyboardFocus.dispose();
     _suggestionFocus.dispose();
-    _codeFocus.dispose();
+    if (_ownsCodeFocus) {
+      _codeFocus.dispose();
+    }
     _hoverHorizontalScroll.dispose();
     _hoverVerticalSCroll.dispose();
     _debounceTimer?.cancel();
@@ -460,6 +522,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
   }
 
   String _getCurrentWordPrefix(String text, int offset) {
+    if (offset < 0 || offset > text.length) return '';
     final beforeCursor = text.substring(0, offset);
     final match = RegExp(r'([a-zA-Z_][a-zA-Z0-9_]*)$').firstMatch(beforeCursor);
     return match?.group(0) ?? '';
@@ -482,7 +545,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
 
   void _insertAiSuggestion(String suggestion) {
     final text = widget.controller.text;
-    final cursorPos = widget.controller.selection.baseOffset;
+    final cursorPos = widget.controller.selection.baseOffset.clamp(0, text.length);
     final newText = text.replaceRange(cursorPos, cursorPos, suggestion);
     widget.controller.value = TextEditingValue(
       text: newText,
@@ -493,6 +556,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
   void _insertSuggestion(String suggestion) {
     final text = widget.controller.text;
     final cursorPos = widget.controller.selection.baseOffset;
+    if (cursorPos < 0 || cursorPos > text.length) return;
     int start = cursorPos - 1;
     while (start >= 0 && !_isWordBoundary(text[start])) {
       start--;
@@ -559,8 +623,12 @@ class _CodeCrafterState extends State<CodeCrafter> {
       return Rect.zero;
     }
 
+    final safeOffset = widget.controller.selection.baseOffset.clamp(
+      0,
+      widget.controller.text.length,
+    );
     final Rect caret = renderEditable.getLocalRectForCaret(
-      TextPosition(offset: widget.controller.selection.baseOffset),
+      TextPosition(offset: safeOffset),
     );
 
     if (global) {
@@ -711,7 +779,14 @@ class _CodeCrafterState extends State<CodeCrafter> {
 
   void _showDetailsOverlay() {
     _hideDetailsOverlay();
-    if (_hoverDetails.isEmpty && _codeFocus.hasFocus) return;
+    final Map<String, int> cursorInfo = widget.controller
+        .getCursorLineAndChar();
+    final int cursorLine = cursorInfo['line']!;
+    final int cursorChar = cursorInfo['character']!;
+
+    final error = _getErrorAtPosition(cursorLine, cursorChar);
+    if (_hoverDetails.isEmpty && error == null) return;
+
     final OverlayState overlay = Overlay.of(context);
     final Rect caretGlobal = _globalCaretRect(global: true);
     final double screenHeight = MediaQuery.of(context).size.height;
@@ -721,13 +796,6 @@ class _CodeCrafterState extends State<CodeCrafter> {
     final bool showAbove =
         caretGlobal.bottom + gap + maxOverlayHeight > screenHeight;
     final bool showLeft = caretGlobal.left + overlayWidth > screenWidth;
-
-    final Map<String, int> cursorInfo = widget.controller
-        .getCursorLineAndChar();
-    final int cursorLine = cursorInfo['line']!;
-    final int cursorChar = cursorInfo['character']!;
-
-    final error = _getErrorAtPosition(cursorLine, cursorChar);
 
     final double top = showAbove
         ? caretGlobal.top - gap - maxOverlayHeight
@@ -799,10 +867,17 @@ class _CodeCrafterState extends State<CodeCrafter> {
     for (final error in _diagnostics) {
       final start = error.range['start'];
       final end = error.range['end'];
-      final startLine = start['line'] as int;
-      final startChar = start['character'] as int;
-      final endLine = end['line'] as int;
-      final endChar = end['character'] as int;
+      if (start is! Map || end is! Map) continue;
+      final startLine = start['line'];
+      final startChar = start['character'];
+      final endLine = end['line'];
+      final endChar = end['character'];
+      if (startLine is! int ||
+          startChar is! int ||
+          endLine is! int ||
+          endChar is! int) {
+        continue;
+      }
 
       final inRange =
           (line > startLine || (line == startLine && character >= startChar)) &&
@@ -812,6 +887,30 @@ class _CodeCrafterState extends State<CodeCrafter> {
       }
     }
     return null;
+  }
+
+  double _computeEditorWidth(double maxWidth) {
+    final double dividerOffset = widget.enableGutterDivider ? 4.0 : 0.0;
+    final double viewportWidth = math.max(
+      1.0,
+      maxWidth - gutterWidth - dividerOffset - widget.innerPadding.horizontal,
+    );
+    if (widget.wrapLines) return viewportWidth;
+    final String text = widget.controller.text;
+    int maxLineLen = 0;
+    int curLen = 0;
+    for (int i = 0; i < text.length; i++) {
+      if (text.codeUnitAt(i) == 10) {
+        if (curLen > maxLineLen) maxLineLen = curLen;
+        curLen = 0;
+      } else {
+        curLen++;
+      }
+    }
+    if (curLen > maxLineLen) maxLineLen = curLen;
+    final double fontSize = widget.textStyle?.fontSize ?? 14.0;
+    final double contentWidth = maxLineLen * (fontSize * 0.68) + 120.0;
+    return math.max(viewportWidth, contentWidth);
   }
 
   Future<String> _getCachedResponse(String codeToSend) async {
@@ -857,6 +956,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
     return LayoutBuilder(
       builder: (context, constraints) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
           final rect = _globalCaretRect();
           if (rect != _caretRect) setState(() => _caretRect = rect);
         });
@@ -908,7 +1008,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
                               ),
                             ),
                           )
-                        : SizedBox.shrink(),
+                        : const SizedBox.shrink(),
                     Expanded(
                       child: KeyboardListener(
                         focusNode: _keyboardFocus,
@@ -924,16 +1024,26 @@ class _CodeCrafterState extends State<CodeCrafter> {
 
                             if (value.logicalKey ==
                                 LogicalKeyboardKey.arrowUp) {
-                              if (_suggestionShown) {
-                                setState(() => _selected--);
+                              if (_suggestionShown && _suggestions.isNotEmpty) {
+                                setState(() {
+                                  _selected = (_selected - 1).clamp(
+                                    0,
+                                    _suggestions.length - 1,
+                                  );
+                                });
                                 _suggestionFocus.requestFocus();
                               }
                             }
 
                             if (value.logicalKey ==
                                 LogicalKeyboardKey.arrowDown) {
-                              if (_suggestionShown) {
-                                setState(() => _selected++);
+                              if (_suggestionShown && _suggestions.isNotEmpty) {
+                                setState(() {
+                                  _selected = (_selected + 1).clamp(
+                                    0,
+                                    _suggestions.length - 1,
+                                  );
+                                });
                                 _suggestionFocus.requestFocus();
                               }
                             }
@@ -949,9 +1059,13 @@ class _CodeCrafterState extends State<CodeCrafter> {
                                 _codeFocus.requestFocus();
                                 return;
                               }
-                              int cursorPosition =
+                              final int cursorPosition =
                                   widget.controller.selection.baseOffset;
-                              String currText = widget.controller.text;
+                              final String currText = widget.controller.text;
+                              if (cursorPosition < 0 ||
+                                  cursorPosition > currText.length) {
+                                return;
+                              }
                               _keyboardFocus.previousFocus();
                               widget.controller.value = TextEditingValue(
                                 text: currText.replaceRange(
@@ -968,7 +1082,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
                           }
                         },
                         child: Theme(
-                          data: ThemeData(
+                          data: Theme.of(context).copyWith(
                             textSelectionTheme: TextSelectionThemeData(
                               selectionColor: widget.selectionColor,
                               selectionHandleColor: widget.selectionHandleColor,
@@ -977,9 +1091,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             child: SizedBox(
-                              width: widget.wrapLines
-                                  ? constraints.maxWidth - gutterWidth
-                                  : double.maxFinite,
+                              width: _computeEditorWidth(constraints.maxWidth),
                               child:
                                   editorField?.build(
                                     controller: widget.controller,

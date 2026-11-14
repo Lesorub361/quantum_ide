@@ -197,27 +197,37 @@ class _CodeCrafterEditorWrapperState
   }
 
   dynamic _resolveLanguage(String filePath) {
+    final baseName = p.basename(filePath).toLowerCase();
     final ext = p.extension(filePath).toLowerCase();
-    final key = switch (ext) {
-      '.dart' => 'dart',
-      '.js' || '.mjs' || '.cjs' => 'javascript',
-      '.ts' || '.tsx' || '.jsx' => 'typescript',
-      '.py' => 'python',
-      '.json' => 'json',
-      '.yaml' || '.yml' => 'yaml',
-      '.html' || '.htm' => 'xml',
-      '.xml' || '.svg' => 'xml',
-      '.css' || '.scss' => 'css',
-      '.md' || '.markdown' => 'markdown',
-      '.sh' || '.bash' || '.zsh' => 'bash',
-      '.c' || '.h' => 'cpp',
-      '.cpp' || '.hpp' || '.cc' => 'cpp',
-      '.rs' => 'rust',
-      '.go' => 'go',
-      '.java' => 'java',
-      '.kt' || '.kts' => 'kotlin',
-      '.sql' => 'sql',
-      _ => null,
+    final key = switch (baseName) {
+      'pubspec.lock' || 'podfile.lock' => 'yaml',
+      'dockerfile' || 'containerfile' => 'dockerfile',
+      'makefile' => 'makefile',
+      _ => switch (ext) {
+        '.dart' => 'dart',
+        '.js' || '.mjs' || '.cjs' => 'javascript',
+        '.ts' || '.tsx' || '.jsx' => 'typescript',
+        '.py' => 'python',
+        '.json' || '.arb' => 'json',
+        '.yaml' || '.yml' => 'yaml',
+        '.html' || '.htm' => 'xml',
+        '.xml' || '.svg' || '.plist' => 'xml',
+        '.css' || '.scss' => 'css',
+        '.md' || '.markdown' => 'markdown',
+        '.sh' || '.bash' || '.zsh' => 'bash',
+        '.c' || '.h' => 'cpp',
+        '.cpp' || '.hpp' || '.cc' => 'cpp',
+        '.rs' => 'rust',
+        '.go' => 'go',
+        '.java' => 'java',
+        '.kt' || '.kts' => 'kotlin',
+        '.sql' => 'sql',
+        '.properties' => 'properties',
+        '.ini' || '.cfg' || '.conf' || '.toml' || '.env' => 'ini',
+        '.gradle' || '.groovy' => 'groovy',
+        '.dockerfile' => 'dockerfile',
+        _ => null,
+      },
     };
     return key != null ? allLanguages[key] : null;
   }

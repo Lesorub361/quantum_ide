@@ -11,7 +11,7 @@
 [![Build iOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml)
 [![Build Web](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml)
 
-**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.230`](https://github.com/Lesorub361/quantum_ide/releases/latest)
+**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.231`](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
 </div>
 
@@ -23,12 +23,12 @@ QuantumIDE собирается автоматически через GitHub Act
 
 | Платформа | Архитектура / Формат | Статус | Примечание |
 | :--- | :--- | :---: | :--- |
-| **Android** | `arm64-v8a`, `armeabi-v7a`, `x86_64` (`.apk` / `.aab`) | ✅ Полная поддержка | Встроенный Ubuntu 24.04 PRoot, сборка Flutter/APK прямо на телефоне |
+| **Android** | `arm64-v8a`, `armeabi-v7a`, `x86_64`, Universal (`.apk` / `.aab`) | ✅ Полная поддержка | Встроенный Ubuntu 24.04 PRoot, сборка Flutter/APK прямо на телефоне |
 | **Linux Desktop** | `x64`, `arm64` (`.tar.gz`) | ✅ Поддерживается | Нативный терминал + системный toolchain |
-| **Windows Desktop** | `x64` (`.zip`) | ✅ Поддерживается | Десктопный редактор, AI-агент и Git |
+| **Windows Desktop** | `x64`, `arm64` (`.zip`) | ✅ Поддерживается | Десктопный редактор, AI-агент и Git |
 | **macOS** | Universal / Apple Silicon (`.zip`) | ✅ Поддерживается | Десктопный редактор, AI-агент и Git |
 | **iOS** | Unsigned `.ipa` | 🧪 Экспериментально | Доступна сборка без подписи через CI |
-| **Web** | PWA / Static Web Bundle | ✅ Поддерживается | Веб-версия редактора и AI-ассистента |
+| **Web** | PWA / Static Web Bundle (`.tar.gz` / `.zip`) | ✅ Поддерживается | Веб-версия редактора и AI-ассистента |
 
 > 📥 **Скачать готовые сборки для всех устройств:** [GitHub Releases](https://github.com/Lesorub361/quantum_ide/releases/latest)
 

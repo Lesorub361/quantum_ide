@@ -1,16 +1,16 @@
 {
-  "versionCode": 232,
-  "versionName": "1.2.215",
-  "notes": "QuantumIDE v1.2.215:\n• Автоматическое предложение обновления до Ubuntu 24.04 (GLIBC 2.39) + Flutter 3.50.0 при запуске для всех пользователей с сохранением проектов, .ssh, .gitconfig и .gemini.\n• Встроенная «Очистка системы» в разделе пакетов: сканирование и удаление кэшей Gradle, Gradle Wrapper, .dartServer, npm, APT, /tmp и артефактов build/.\n• Обновлённый терминальный fetch в стиле Ubuntu (логотип слева и информация об устройстве справа, без лишнего шума).\n• Исправлена панель «Проблемы» (Problems): кнопка обновления и кнопка «Проверить проект» теперь запускают полный анализ `dart analyze` на Android/iOS.\n• Выбор JDK 17/21, Go, Rust и бейджи предустановленных пакетов.",
+  "versionCode": 248,
+  "versionName": "1.2.231",
+  "notes": "## 🚀 QuantumIDE v1.2.231\n\n### Что исправлено и улучшено\n- **Миграция на Ubuntu 24.04 без `Permission denied (errno = 13)`**: удаление старого `rootfs` теперь сбрасывает read-only права (`chmod -R u+rwX` / `Os.chmod`) и безопасно обрабатывает симлинки без разыменования в `RuntimeService` и `BootstrapManager`.\n- **Редактор кода (`CodeCrafter`)**: исправлен серый/пустой экран редактора при открытии `pubspec.lock`, `gradle.properties` и файлов без подсветки; добавлена подсветка для `.properties`, `.ini/.toml/.conf`, `.gradle`, `pubspec.lock`, `Dockerfile` и `Makefile`, а также защита от невалидных размеров, тем и смещений курсора.\n- **TLS / HTTPS сертификаты в терминале (`x509`)**: добавлена автоматическая синхронизация системных и пользовательских корневых CA Android + Mozilla CA в `/etc/ssl/certs/ca-certificates.crt` и экспорт `SSL_CERT_FILE`, `SSL_CERT_DIR`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO` во всех PRoot-сессиях.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.215/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.231/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.215",
-  "buildNumber": 232,
-  "tag_name": "v1.2.215",
-  "releaseNotes": "Auto Ubuntu 24.04 upgrade prompt, System Cleaner, Ubuntu-style term-fetch, and Problems panel dart analyze fix."
+  "version": "1.2.231",
+  "buildNumber": 248,
+  "tag_name": "v1.2.231",
+  "releaseNotes": "Исправлены миграция Ubuntu 24.04 (errno 13), серый экран редактора на .lock/.properties и проверка TLS x509 сертификатов в терминале."
 }

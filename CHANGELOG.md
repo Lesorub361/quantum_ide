@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.231
+- **Ubuntu 24.04 Migration & Rootfs Cleanup (`EACCES` / `errno = 13` Fix)**:
+  - Added [`_forceDeleteDirectory`](lib/core/services/runtime_service.dart) (`chmod -R u+rwX` + `rm -rf` with non-symlink-following Dart fallback) for `migrateToUbuntu2404()`, `reset()`, and `preserved_home` cleanup.
+  - Updated Android [`BootstrapManager.deleteRecursively`](android/app/src/main/kotlin/com/example/quantum_ide/BootstrapManager.kt) to avoid following symlinks (`Os.lstat` / `S_ISLNK`) and restore owner permissions (`Os.chmod`) prior to deletion.
+  - Preserved symlinks and avoided `followLinks: true` when backing up/restoring `/root` files during migration.
+- **CodeCrafter Editor Blank/Gray Screen Fix**:
+  - Fixed `CodeCrafterController` throwing on `null` language IDs (`pubspec.lock`, `gradle.properties`, plain-text files) which triggered release `RenderErrorBox(0xF0C0C0C0)` while keeping only the line-number gutter visible.
+  - Cleared stale `_langId` on switching to plain-text files, added parser/bounds guards across `buildTextSpan`, `Gutter`, and `CodeArea`, replaced `double.maxFinite` / negative widths and empty `ThemeData()`, and wired proper `didUpdateWidget` / `dispose` cleanup.
+  - Extended `CodeCrafterEditorWrapper._resolveLanguage` for `pubspec.lock`, `podfile.lock`, `Dockerfile`, `Makefile`, `.properties`, `.gradle`/`.groovy`, `.ini`/`.cfg`/`.conf`/`.toml`/`.env`, `.arb`, and `.plist`.
+- **PRoot Terminal TLS / `x509` Certificate Verification Fix**:
+  - Added `_repairCaCertificatesIfNeeded()` in `RuntimeService.init()` to merge guest Mozilla CAs with Android host system/user CA certificates (`/apex/com.android.conscrypt/cacerts`, `/system/etc/security/cacerts`, `/data/misc/user/0/cacerts-added`) into `/etc/ssl/certs/ca-certificates.crt`.
+  - Exported `SSL_CERT_FILE`, `SSL_CERT_DIR`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, and `GIT_SSL_CAINFO` across `.bashrc` (`BASHRC_VERSION=32`), `init-host`, `RuntimeService.env`, and Android `ProcessManager`.
+
 ## 1.2.230
 - **CodeCrafter LSP Bridge (`LspBridgeConfig`)**: connected QuantumIDE's shared `LspService` to `CodeCrafter` for live red/yellow error underlines (`publishDiagnostics`), LSP autocomplete with symbol icons, and hover documentation popups without spawning duplicate LSP processes.
 - **Word Autocomplete Fallback**: improved word-based suggestions when LSP is not ready or unavailable (case-insensitive matching, proper cursor prefix filtering).

@@ -29,6 +29,8 @@ class CodeCrafterController extends TextEditingController {
     if (language != null) {
       _langId = language.hashCode.toString();
       highlight.registerLanguage(_langId!, language);
+    } else {
+      _langId = null;
     }
     _language = language;
     notifyListeners();
@@ -45,7 +47,8 @@ class CodeCrafterController extends TextEditingController {
     final closers = pairs.values.toSet();
 
     if (newValue.text.length == oldValue.text.length + 1 &&
-        newValue.selection.baseOffset > 0) {
+        newValue.selection.baseOffset > 0 &&
+        newValue.selection.baseOffset <= newValue.text.length) {
       final cursorPos = newValue.selection.baseOffset;
       final inserted = newValue.text[cursorPos - 1];
 
@@ -63,7 +66,7 @@ class CodeCrafterController extends TextEditingController {
 
       if (closers.contains(inserted)) {
         final oldCursorPos = oldValue.selection.baseOffset;
-        if (oldCursorPos < oldValue.text.length) {
+        if (oldCursorPos >= 0 && oldCursorPos < oldValue.text.length) {
           final charAfterCursor = oldValue.text[oldCursorPos];
           if (charAfterCursor == inserted) {
             super.value = TextEditingValue(
@@ -232,7 +235,9 @@ class CodeCrafterController extends TextEditingController {
 
     if (Shared().aiResponse != null &&
         text.isNotEmpty &&
-        Shared().aiResponse!.isNotEmpty) {
+        Shared().aiResponse!.isNotEmpty &&
+        cursorPosition >= 0 &&
+        cursorPosition <= text.length) {
       final String textBeforeCursor = text.substring(0, cursorPosition);
       final String textAfterCursor = text.substring(cursorPosition);
 
@@ -247,9 +252,6 @@ class CodeCrafterController extends TextEditingController {
       final String lastTypedChar = textBeforeCursor.isNotEmpty
           ? textBeforeCursor[textBeforeCursor.length - 1].replaceAll("\n", '')
           : '';
-      final List<Node>? beforeCursorNodes = highlight
-          .parse(textBeforeCursor, language: _langId)
-          .nodes;
 
       if (Shared().lastCursorPosition != null &&
           cursorPosition != Shared().lastCursorPosition) {
@@ -273,29 +275,46 @@ class CodeCrafterController extends TextEditingController {
 
       Shared().lastCursorPosition = cursorPosition;
 
-      TextSpan aiOverlay = TextSpan(
+      final TextSpan aiOverlay = TextSpan(
         text: Shared().aiResponse,
         style:
             Shared().aiOverlayStyle ??
-            TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+            const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
       );
-      final List<Node>? afterCursorNodes = highlight
-          .parse(textAfterCursor, language: _langId)
-          .nodes;
 
-      if (beforeCursorNodes != null) {
-        if (cursorPosition != selection.baseOffset) {
-          Shared().aiResponse = null;
-        }
-        return TextSpan(
-          style: baseStyle,
-          children: [
-            ..._convert(beforeCursorNodes),
-            aiOverlay,
-            ..._convert(afterCursorNodes ?? <Node>[]),
-          ],
-        );
+      if (_langId != null) {
+        try {
+          final List<Node>? beforeCursorNodes = highlight
+              .parse(textBeforeCursor, language: _langId)
+              .nodes;
+          final List<Node>? afterCursorNodes = highlight
+              .parse(textAfterCursor, language: _langId)
+              .nodes;
+
+          if (beforeCursorNodes != null) {
+            if (cursorPosition != selection.baseOffset) {
+              Shared().aiResponse = null;
+            }
+            return TextSpan(
+              style: baseStyle,
+              children: [
+                ..._convert(beforeCursorNodes),
+                aiOverlay,
+                ..._convert(afterCursorNodes ?? <Node>[]),
+              ],
+            );
+          }
+        } catch (_) {}
       }
+
+      return TextSpan(
+        style: baseStyle,
+        children: [
+          TextSpan(text: textBeforeCursor),
+          aiOverlay,
+          TextSpan(text: textAfterCursor),
+        ],
+      );
     }
 
     final List<String> lines = text.isNotEmpty ? text.split("\n") : [];
@@ -343,24 +362,33 @@ class CodeCrafterController extends TextEditingController {
       int start = fold.startLine - 1;
       int end = fold.endLine;
       if (start >= 0 && end <= lines.length && start < end) {
+        final hiddenLen = lines.sublist(start + 1, end).join('\n').length - 2;
         lines[start] =
-            "${lines[start]}...${'\u200D' * ((lines.sublist(start + 1, end).join('\n').length) - 2)}";
+            "${lines[start]}...${'\u200D' * (hiddenLen > 0 ? hiddenLen : 0)}";
         lines.removeRange(start + 1, end);
       }
     }
 
     final newText = lines.join('\n');
 
-    final List<Node>? nodes = highlight.parse(newText, language: _langId).nodes;
-    final Set<int> unmatchedBrackets = _findUnmatchedBrackets(text);
-    if (nodes != null && editorTheme.isNotEmpty) {
-      return TextSpan(
-        style: baseStyle,
-        children: _convert(nodes, 0, bracket1, bracket2, unmatchedBrackets),
-      );
-    } else {
-      return TextSpan(text: newText, style: textStyle);
+    if (_langId == null || editorTheme.isEmpty) {
+      return TextSpan(text: newText, style: baseStyle);
     }
+
+    try {
+      final List<Node>? nodes = highlight
+          .parse(newText, language: _langId)
+          .nodes;
+      final Set<int> unmatchedBrackets = _findUnmatchedBrackets(text);
+      if (nodes != null) {
+        return TextSpan(
+          style: baseStyle,
+          children: _convert(nodes, 0, bracket1, bracket2, unmatchedBrackets),
+        );
+      }
+    } catch (_) {}
+
+    return TextSpan(text: newText, style: baseStyle);
   }
 
   List<TextSpan> _convert(
@@ -372,6 +400,7 @@ class CodeCrafterController extends TextEditingController {
   ]) {
     List<TextSpan> spans = [];
     int offset = startOffset;
+    final int safeTabSize = Shared().tabSize > 0 ? Shared().tabSize : 2;
 
     for (final node in nodes) {
       if (node.value != null) {
@@ -386,9 +415,9 @@ class CodeCrafterController extends TextEditingController {
           final match = RegExp(r'^(\s*)').firstMatch(line);
           final leading = match?.group(0) ?? '';
           final indentLen = leading.length;
-          final indentLvl = indentLen ~/ Shared().tabSize;
+          final indentLvl = indentLen ~/ safeTabSize;
           final Set<int> guideCols = {
-            for (int k = 0; k < indentLvl; k++) k * Shared().tabSize,
+            for (int k = 0; k < indentLvl; k++) k * safeTabSize,
           };
 
           String accumulatedText = '';
@@ -415,29 +444,32 @@ class CodeCrafterController extends TextEditingController {
 
             if (Shared().diagnostics.isNotEmpty) {
               for (final item in Shared().diagnostics) {
-                if (lineIdx == item.range['start']['line']) {
-                  final int start = item.range['start']['character'] as int;
-                  final int end = item.range['end']['character'] as int;
-                  if (col >= start && col < end) {
-                    charStyle = TextStyle(
-                      decoration: TextDecoration.underline,
-                      decorationStyle: TextDecorationStyle.wavy,
-                      decorationThickness: 2,
-                      decorationColor: (() {
-                        switch (item.severity) {
-                          case 1:
-                            return Colors.red;
-                          case 2:
-                            return Colors.amber;
-                          case 3:
-                            return Colors.blueAccent;
-                          default:
-                            return editorTheme['root']?.backgroundColor ??
-                                Colors.black;
-                        }
-                      })(),
-                    ).merge(Shared().textStyle);
-                  }
+                final startMap = item.range['start'];
+                final endMap = item.range['end'];
+                if (startMap is! Map || endMap is! Map) continue;
+                final diagLine = startMap['line'];
+                final start = startMap['character'];
+                final end = endMap['character'];
+                if (diagLine is! int || start is! int || end is! int) continue;
+                if (lineIdx == diagLine && col >= start && col < end) {
+                  charStyle = TextStyle(
+                    decoration: TextDecoration.underline,
+                    decorationStyle: TextDecorationStyle.wavy,
+                    decorationThickness: 2,
+                    decorationColor: (() {
+                      switch (item.severity) {
+                        case 1:
+                          return Colors.red;
+                        case 2:
+                          return Colors.amber;
+                        case 3:
+                          return Colors.blueAccent;
+                        default:
+                          return editorTheme['root']?.backgroundColor ??
+                              Colors.black;
+                      }
+                    })(),
+                  ).merge(Shared().textStyle);
                 }
               }
             }
