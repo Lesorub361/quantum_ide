@@ -32,7 +32,8 @@ class _CodeCrafterEditorWrapperState
   void initState() {
     super.initState();
     _crafterController = CodeCrafterController()
-      ..text = widget.file.controller.text;
+      ..text = widget.file.controller.text
+      ..language = _resolveLanguage(widget.file.path);
     _crafterController.addListener(_onCrafterChanged);
     widget.file.controller.addListener(_onReEditorChanged);
   }
@@ -45,6 +46,7 @@ class _CodeCrafterEditorWrapperState
       oldWidget.file.controller.removeListener(_onReEditorChanged);
       widget.file.controller.addListener(_onReEditorChanged);
       _isSyncingFromReEditor = true;
+      _crafterController.language = _resolveLanguage(widget.file.path);
       _crafterController.text = widget.file.controller.text;
       _isSyncingFromReEditor = false;
     }
@@ -76,6 +78,107 @@ class _CodeCrafterEditorWrapperState
       _crafterController.text = nextText;
       _isSyncingFromReEditor = false;
     }
+  }
+
+  dynamic _resolveLanguage(String filePath) {
+    final ext = p.extension(filePath).toLowerCase();
+    final key = switch (ext) {
+      '.dart' => 'dart',
+      '.js' || '.mjs' || '.cjs' => 'javascript',
+      '.ts' || '.tsx' || '.jsx' => 'typescript',
+      '.py' => 'python',
+      '.json' => 'json',
+      '.yaml' || '.yml' => 'yaml',
+      '.html' || '.htm' => 'xml',
+      '.xml' || '.svg' => 'xml',
+      '.css' || '.scss' => 'css',
+      '.md' || '.markdown' => 'markdown',
+      '.sh' || '.bash' || '.zsh' => 'bash',
+      '.c' || '.h' => 'cpp',
+      '.cpp' || '.hpp' || '.cc' => 'cpp',
+      '.rs' => 'rust',
+      '.go' => 'go',
+      '.java' => 'java',
+      '.kt' || '.kts' => 'kotlin',
+      '.sql' => 'sql',
+      _ => null,
+    };
+    return key != null ? allLanguages[key] : null;
+  }
+
+  Map<String, TextStyle> _buildEditorTheme({
+    required Color bgColor,
+    required Color fgColor,
+    required Color accentColor,
+    required Color mutedColor,
+  }) {
+    final isDark =
+        ThemeData.estimateBrightnessForColor(bgColor) == Brightness.dark;
+    return {
+      'root': TextStyle(backgroundColor: bgColor, color: fgColor),
+      'comment': TextStyle(
+        color: mutedColor.withValues(alpha: 0.78),
+        fontStyle: FontStyle.italic,
+      ),
+      'quote': TextStyle(
+        color: mutedColor.withValues(alpha: 0.78),
+        fontStyle: FontStyle.italic,
+      ),
+      'keyword': TextStyle(
+        color: isDark ? const Color(0xFFC678DD) : const Color(0xFF9333EA),
+        fontWeight: FontWeight.w600,
+      ),
+      'selector-tag': TextStyle(
+        color: isDark ? const Color(0xFFC678DD) : const Color(0xFF9333EA),
+      ),
+      'string': TextStyle(
+        color: isDark ? const Color(0xFF98C379) : const Color(0xFF15803D),
+      ),
+      'title': TextStyle(
+        color: accentColor,
+        fontWeight: FontWeight.w600,
+      ),
+      'section': TextStyle(
+        color: accentColor,
+        fontWeight: FontWeight.w600,
+      ),
+      'type': TextStyle(
+        color: isDark ? const Color(0xFFE5C07B) : const Color(0xFFB45309),
+      ),
+      'built_in': TextStyle(
+        color: isDark ? const Color(0xFF56B6C2) : const Color(0xFF0284C7),
+      ),
+      'literal': TextStyle(
+        color: isDark ? const Color(0xFFD19A66) : const Color(0xFFC2410C),
+      ),
+      'number': TextStyle(
+        color: isDark ? const Color(0xFFD19A66) : const Color(0xFFC2410C),
+      ),
+      'attr': TextStyle(
+        color: isDark ? const Color(0xFFD19A66) : const Color(0xFFB45309),
+      ),
+      'attribute': TextStyle(
+        color: isDark ? const Color(0xFFD19A66) : const Color(0xFFB45309),
+      ),
+      'variable': TextStyle(
+        color: isDark ? const Color(0xFFE06C75) : const Color(0xFFDC2626),
+      ),
+      'params': TextStyle(color: fgColor),
+      'meta': TextStyle(color: accentColor),
+      'tag': TextStyle(
+        color: isDark ? const Color(0xFFE06C75) : const Color(0xFFDC2626),
+      ),
+      'name': TextStyle(
+        color: isDark ? const Color(0xFFE06C75) : const Color(0xFFDC2626),
+      ),
+      'symbol': TextStyle(color: accentColor),
+      'addition': TextStyle(
+        color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF15803D),
+      ),
+      'deletion': TextStyle(
+        color: isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C),
+      ),
+    };
   }
 
   AiCompletion? _buildAiCompletion(SettingsState settings) =>
@@ -120,12 +223,19 @@ class _CodeCrafterEditorWrapperState
       height: 1.4,
       color: fgColor,
     );
+    final editorTheme = _buildEditorTheme(
+      bgColor: bgColor,
+      fgColor: fgColor,
+      accentColor: accentColor,
+      mutedColor: mutedColor,
+    );
 
     return Container(
       color: bgColor,
       child: CodeCrafter(
         controller: _crafterController,
         initialText: widget.file.controller.text,
+        editorTheme: editorTheme,
         wrapLines: settings.wordWrap,
         enableBreakPoints: isCode,
         enableFolding: isCode,

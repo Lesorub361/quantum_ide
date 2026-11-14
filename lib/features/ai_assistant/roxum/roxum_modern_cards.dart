@@ -713,8 +713,13 @@ class RoxumCodeBlockCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bg = surfaceColor ??
+    final baseBg = surfaceColor ??
         (isDark ? const Color(0xFF0A0D14) : const Color(0xFFF1F5F9));
+    final bg = surfaceColor != null
+        ? (isDark
+            ? Color.lerp(baseBg, Colors.black, 0.30)!
+            : Color.lerp(baseBg, Colors.black, 0.05)!)
+        : baseBg;
     final fg = textColor ?? (isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A));
     final accent = isDark ? const Color(0xFF38BDF8) : const Color(0xFF0284C7);
     final muted = fg.withValues(alpha: 0.65);

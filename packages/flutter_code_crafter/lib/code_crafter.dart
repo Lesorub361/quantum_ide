@@ -7,3 +7,4 @@ export 'gutter/gutter.dart';
 export 'gutter/gutter_style.dart';
 export 'utils/shared.dart';
 export 'utils/utils.dart';
+export 'package:highlight/languages/all.dart' show allLanguages;
