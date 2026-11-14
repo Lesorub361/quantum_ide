@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:xterm/xterm.dart' as xt;
+import 'package:conduit_vt/conduit_vt.dart' as xt;
 import 'package:open_filex/open_filex.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
@@ -909,18 +909,16 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       debugPrint('Failed to start workspace watcher: $e');
     }
 
-    // Gentle 45-second background sync fallback with /storage/emulated/0/QuantumIDE/<project>
-    // Immediate sync occurs on app resume (didChangeAppLifecycleState: resumed)
-    _externalSyncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
-      if (_diffTimer == null || !_diffTimer!.isActive) {
-        syncExternalNow();
-      }
-    });
+    // External /storage/emulated/0/QuantumIDE 45s background sync disabled for fast internal-only I/O.
+  }
+
+  Future<List<String>> syncExternalNow({bool reloadAllTabs = false}) async {
+    return const [];
   }
 
   bool _isSyncingExternal = false;
 
-  Future<List<String>> syncExternalNow({bool reloadAllTabs = false}) async {
+  Future<List<String>> _disabledSyncExternalNow({bool reloadAllTabs = false}) async {
     if (_isSyncingExternal) return const [];
     // Protect active typing session: never run external sync while the user is actively typing
     if (!reloadAllTabs && _diffTimer != null && _diffTimer!.isActive) return const [];

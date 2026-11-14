@@ -7,7 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/services/pty/pty_facade.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
-import 'package:xterm/xterm.dart' as xt;
+import 'package:conduit_vt/conduit_vt.dart' as xt;
+import 'package:quantum_ide/features/terminal/conduit/conduit_keyboard_controller.dart';
 
 import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';
@@ -24,6 +25,7 @@ class TerminalSession {
 
   final xt.Terminal xtermTerminal;
   final xt.TerminalController xtermViewController;
+  final ConduitKeyboardController keyboardController;
 
   StreamSubscription<dynamic>? ptyOutSubscription;
   final Utf8Decoder utf8decoder = const Utf8Decoder(allowMalformed: true);
@@ -36,8 +38,11 @@ class TerminalSession {
     this.isExited = false,
     required this.xtermTerminal,
     required this.xtermViewController,
+    ConduitKeyboardController? keyboardController,
     this.ptyOutSubscription,
-  });
+  }) : keyboardController =
+            keyboardController ??
+            ConduitKeyboardController(xt.defaultInputHandler);
 }
 
 class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
@@ -182,9 +187,11 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       Timer? resizeDebounceTimer;
       bool hadUserCommandRecently = false;
 
+      final keyboardCtrl = ConduitKeyboardController(xt.defaultInputHandler);
       final inputGuard = TerminalInputGuard();
       final xtermTerm = xt.Terminal(
         maxLines: 2500,
+        inputHandler: keyboardCtrl,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : (Platform.isIOS
@@ -234,6 +241,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
         workingDir: dir,
         xtermTerminal: xtermTerm,
         xtermViewController: xtermVc,
+        keyboardController: keyboardCtrl,
       );
 
       Timer? gitRefreshDebounceTimer;

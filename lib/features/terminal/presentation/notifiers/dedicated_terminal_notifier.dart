@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/services/pty/pty_facade.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path/path.dart' as p;
-import 'package:xterm/xterm.dart' as xt;
+import 'package:conduit_vt/conduit_vt.dart' as xt;
 
 import '../../../../core/services/runtime_service.dart';
 import '../../../../core/services/workspace_service.dart';

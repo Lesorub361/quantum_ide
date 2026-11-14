@@ -536,7 +536,16 @@ class ProjectService extends StateNotifier<List<Project>> {
   }
 
   Future<void> mirrorEntity(String internalPath) async {
-    // Skip mirroring on desktop platforms - only needed for Android external storage
+    // External /storage/emulated/0/QuantumIDE auto-mirroring disabled for faster editor I/O.
+    return;
+  }
+
+  /// Fast bidirectional sync disabled — projects stay in fast internal storage.
+  Future<List<String>> syncExternalIntoWorkspace(String internalWorkspacePath) async {
+    return const [];
+  }
+
+  Future<void> _unusedDisabledMirror(String internalPath) async {
     if (!Platform.isAndroid) return;
     
     final runtime = _ref.read(runtimeServiceProvider);
@@ -601,7 +610,7 @@ class ProjectService extends StateNotifier<List<Project>> {
   /// Fast bidirectional sync for the active workspace:
   /// Pulls any newer or non-empty files from /storage/emulated/0/QuantumIDE/<project>
   /// into the internal workspace and returns the list of updated internal file paths.
-  Future<List<String>> syncExternalIntoWorkspace(String internalWorkspacePath) async {
+  Future<List<String>> _unusedDisabledSyncExternal(String internalWorkspacePath) async {
     if (!Platform.isAndroid) return const [];
     final runtime = _ref.read(runtimeServiceProvider);
     final projectsPath = p.join(runtime.appDirectory, 'projects');

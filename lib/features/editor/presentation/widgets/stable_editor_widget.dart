@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/code_crafter_ai_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/editor/presentation/handlers/autocomplete_handler.dart'
     hide CodeKeywordPrompt;
@@ -227,6 +229,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   final Map<int, Offset> _pinchPointers = {};
   double _pinchInitialDistance = 0.0;
   double _pinchInitialFontSize = 14.0;
+  Timer? _aiCompletionTimer;
+  String? _aiSuggestion;
+  String _lastAiText = '';
 
   static final Map<String, String> _fontCache = {};
   static const int _autoCloseMaxLines = 500;
@@ -346,6 +351,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     _previousValue = currentValue;
 
     if (previousValue == null) return;
+    if (currentValue.codeLines != previousValue.codeLines) {
+      _scheduleAiCompletion();
+    }
 
     final currentSelection = currentValue.selection;
     final previousSelection = previousValue.selection;
@@ -551,6 +559,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
 
   @override
   void dispose() {
+    _aiCompletionTimer?.cancel();
     QuantumSelectionToolbarController.dismissAll();
     _removeControllerListener();
     if (ref.read(activeFindControllerProvider) == _findController) {
@@ -566,6 +575,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     super.didUpdateWidget(oldWidget);
     if (widget.file.path != oldWidget.file.path) {
       QuantumSelectionToolbarController.dismissAll();
+      _aiCompletionTimer?.cancel();
+      if (_aiSuggestion != null) {
+        setState(() => _aiSuggestion = null);
+      }
     }
     // Обновляем только диагностику и маркеры — не пересоздаём CodeEditor
     if (widget.file.diagnostics != oldWidget.file.diagnostics ||
@@ -575,6 +588,50 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         _diffMarkers = widget.file.diffMarkers;
       });
     }
+  }
+
+  void _scheduleAiCompletion() {
+    _aiCompletionTimer?.cancel();
+    if (_aiSuggestion != null) {
+      setState(() => _aiSuggestion = null);
+    }
+    if (!widget.settings.aiAutoCompletion) return;
+
+    final controller = widget.file.controller;
+    final text = controller.text;
+    if (text.trim().length < 8 || text == _lastAiText) return;
+
+    _aiCompletionTimer = Timer(const Duration(milliseconds: 1100), () async {
+      if (!mounted) return;
+      final latestText = controller.text;
+      if (latestText != text) return;
+      _lastAiText = latestText;
+
+      final sel = controller.selection;
+      int offset = 0;
+      for (int i = 0; i < sel.extentIndex && i < controller.codeLines.length; i++) {
+        offset += controller.codeLines[i].text.length + 1;
+      }
+      offset += sel.extentOffset;
+
+      final suggestion = await CodeCrafterAiService.completeAtCursor(
+        text: latestText,
+        cursorOffset: offset,
+        settings: widget.settings,
+        filePath: widget.file.path,
+      );
+      if (!mounted) return;
+      if (suggestion != null && suggestion.isNotEmpty && controller.text == latestText) {
+        setState(() => _aiSuggestion = suggestion);
+      }
+    });
+  }
+
+  void _acceptAiSuggestion() {
+    final suggestion = _aiSuggestion;
+    if (suggestion == null || suggestion.isEmpty) return;
+    widget.file.controller.replaceSelection(suggestion);
+    setState(() => _aiSuggestion = null);
   }
 
   String _getSelectedText() {
@@ -1238,11 +1295,113 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
           ref.read(settingsProvider.notifier).setFontSize(newSize);
         }
       },
-      child: GestureDetector(
-        onSecondaryTapDown: (details) {
-          _showDesktopContextMenu(context, details.globalPosition);
-        },
-        child: editorWidget,
+      child: Stack(
+        children: [
+          GestureDetector(
+            onSecondaryTapDown: (details) {
+              _showDesktopContextMenu(context, details.globalPosition);
+            },
+            child: editorWidget,
+          ),
+          if (_aiSuggestion != null)
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 340, maxHeight: 160),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.96),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.45),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            LucideIcons.sparkles,
+                            size: 13,
+                            color: Color(0xFF38BDF8),
+                          ),
+                          const SizedBox(width: 6),
+                          const Expanded(
+                            child: Text(
+                              'CodeCrafter AI',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF38BDF8),
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: _acceptAiSuggestion,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF38BDF8).withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Вставить',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF38BDF8),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            onTap: () => setState(() => _aiSuggestion = null),
+                            child: const Icon(
+                              LucideIcons.x,
+                              size: 14,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Text(
+                            _aiSuggestion!,
+                            style: TextStyle(
+                              fontFamily: _getFontFamily(
+                                widget.settings.editorFontFamily,
+                              ),
+                              fontSize: 11.5,
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

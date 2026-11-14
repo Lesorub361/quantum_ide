@@ -686,16 +686,6 @@ class RuntimeService extends ChangeNotifier {
 
   Future<void> _ensureBinaries() async {
     try {
-      // Ensure external project directory exists
-      final externalDir = Directory('/storage/emulated/0/QuantumIDE');
-      if (Platform.isAndroid && !await externalDir.exists()) {
-        await externalDir.create(recursive: true);
-      }
-    } catch (e) {
-      debugPrint('Warning: Failed to create external QuantumIDE dir: $e');
-    }
-
-    try {
       // Ensure resolv.conf exists in tmp (most reliable location — used by init-host bind mount)
       // Always rewrite it to handle the broken-symlink case on every cold start.
       final tmpDir = Directory(p.join(_filesDir, 'tmp'));

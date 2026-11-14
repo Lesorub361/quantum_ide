@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
-import 'package:xterm/xterm.dart' as xt;
+import 'package:conduit_vt/conduit_vt.dart' as xt;
 
 /// Intelligent terminal scroll controller that prevents mobile virtual keyboards
 /// and empty buffer trailing lines from pushing the active cursor off-screen.

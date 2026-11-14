@@ -1,4 +1,4 @@
-import 'package:xterm/xterm.dart' as xt;
+import 'package:conduit_vt/conduit_vt.dart' as xt;
 import 'package:flutter/material.dart';
 
 xt.TerminalTheme getTerminalTheme(String themeName) {

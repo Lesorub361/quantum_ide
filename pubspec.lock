@@ -209,6 +209,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.19.1"
+  conduit_vt:
+    dependency: "direct main"
+    description:
+      path: "packages/conduit_vt"
+      relative: true
+    source: path
+    version: "0.1.1"
   connectivity_plus:
     dependency: "direct main"
     description:
@@ -510,6 +517,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.4.6"
+  flutter_code_crafter:
+    dependency: "direct main"
+    description:
+      path: "packages/flutter_code_crafter"
+      relative: true
+    source: path
+    version: "0.3.0"
   flutter_colorpicker:
     dependency: "direct main"
     description:
@@ -838,7 +852,7 @@ packages:
     source: hosted
     version: "2.0.2"
   http:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: http
       sha256: "87721a4a50b19c7f1d49001e51409bddc46303966ce89a65af4f4e6004896412"
@@ -2010,6 +2024,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.1"
+  web_socket_channel:
+    dependency: transitive
+    description:
+      name: web_socket_channel
+      sha256: d645757fb0f4773d602444000a8131ff5d48c9e47adfe9772652dd1a4f2d45c8
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.3"
   win32:
     dependency: transitive
     description:
@@ -2050,14 +2072,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.6.1"
-  xterm:
-    dependency: "direct main"
-    description:
-      name: xterm
-      sha256: "168dfedca77cba33fdb6f52e2cd001e9fde216e398e89335c19b524bb22da3a2"
-      url: "https://pub.dev"
-    source: hosted
-    version: "4.0.0"
   yaml:
     dependency: "direct main"
     description:

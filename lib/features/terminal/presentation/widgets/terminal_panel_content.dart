@@ -13,7 +13,12 @@ import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
 
-import 'package:xterm/xterm.dart' as xt;
+import 'package:conduit_vt/conduit_vt.dart' as xt;
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_keyboard_bar.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_terminal_surface.dart';
+import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import '../../engine/terminal_output_pipe.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/virtual_keys.dart';
@@ -32,12 +37,8 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
-import 'package:quantum_ide/features/terminal/presentation/widgets/quantum_terminal_scroll_controller.dart';
-import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_text_selection_modal.dart';
-import 'package:quantum_ide/features/terminal/presentation/widgets/terminal_selection_overlay.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/quantum_terminal_tools_modal.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart';
-import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
@@ -148,26 +149,11 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     );
   }
 
-  final Map<String, GlobalKey<xt.TerminalViewState>> _terminalKeys = {};
+  final Map<String, GlobalKey> _terminalKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
-  final Map<String, QuantumTerminalScrollController>
-  _terminalScrollControllers = {};
 
-  GlobalKey<xt.TerminalViewState> _getTerminalKey(String id) {
-    return _terminalKeys.putIfAbsent(
-      id,
-      () => GlobalKey<xt.TerminalViewState>(),
-    );
-  }
-
-  QuantumTerminalScrollController _getScrollController(
-    String id,
-    xt.Terminal terminal,
-  ) {
-    return _terminalScrollControllers.putIfAbsent(
-      id,
-      () => QuantumTerminalScrollController(terminal: terminal),
-    );
+  GlobalKey _getTerminalKey(String id) {
+    return _terminalKeys.putIfAbsent(id, () => GlobalKey());
   }
 
   TerminalFocusNode _getFocusNode(String id) {
@@ -208,7 +194,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       if (!focusNode.hasFocus) {
         focusNode.requestFocus();
       }
-      _getTerminalKey(keyId).currentState?.requestKeyboard();
       SystemChannels.textInput.invokeMethod('TextInput.show');
     }
 
@@ -229,7 +214,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     final keyId = isSecondary ? '${session.id}_sec' : session.id;
     final focusNode = _getFocusNode(keyId);
     focusNode.allowAutoKeyboard = !(Platform.isAndroid || Platform.isIOS);
-    _getTerminalKey(keyId).currentState?.closeKeyboard();
     focusNode.unfocus();
     SystemChannels.textInput.invokeMethod('TextInput.hide');
     if (mounted) setState(() {});
@@ -329,10 +313,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
 
   @override
   void dispose() {
-    for (final controller in _terminalScrollControllers.values) {
-      controller.dispose();
-    }
-    _terminalScrollControllers.clear();
     for (final node in _terminalFocusNodes.values) {
       node.dispose();
     }
@@ -857,11 +837,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       return;
     }
     if (value == 'selection_mode') {
-      TerminalTextSelectionModal.show(
-        context,
-        session.xtermTerminal,
-        session.title,
-      );
+      _selectAllInTerminal(session);
       return;
     }
     if (value == 'copy_all_output') {
@@ -3159,89 +3135,56 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                             _pasteToTerminal(session);
                           }
                         },
-                        child: LayoutBuilder(
-                          builder: (context, viewConstraints) {
-                            return xt.TerminalView(
-                              key: _getTerminalKey(keyId),
-                              session.xtermTerminal,
-                              controller: session.xtermViewController,
-                              scrollController: _getScrollController(
-                                keyId,
-                                session.xtermTerminal,
-                              ),
-                              focusNode: _getFocusNode(keyId),
-                              autofocus: !isMobile,
-                              deleteDetection: Platform.isAndroid || Platform.isIOS,
-                              keyboardType: TextInputType.emailAddress,
-                              autoResize: true,
-                              hardwareKeyboardOnly: false,
-                              onKeyEvent: (focusNode, event) {
-                                if (event is! KeyUpEvent &&
-                                    event.logicalKey ==
-                                        LogicalKeyboardKey.backspace) {
-                                  session.pty.write(Uint8List.fromList([127]));
-                                  _handleInputForAutocomplete(session, '\x7f');
-                                  return KeyEventResult.handled;
-                                }
-                                return KeyEventResult.ignored;
-                              },
-                              onTapUp: (details, offset) {
-                                if (session.xtermViewController.selection !=
-                                    null) {
-                                  session.xtermViewController.clearSelection();
-                                  return;
-                                }
+                        child: ConduitTerminalSurface(
+                          key: _getTerminalKey(keyId),
+                          terminal: session.xtermTerminal,
+                          controller: session.xtermViewController,
+                          focusNode: _getFocusNode(keyId),
+                          autofocus: !isMobile,
+                          palette: resolveConduitPalette(
+                            ref.watch(settingsProvider).terminalTheme,
+                          ),
+                          brightness: Brightness.dark,
+                          customTheme: theme,
+                          fontFamily: _getFontFamily(
+                            ref.watch(settingsProvider).terminalFontFamily,
+                          ),
+                          fontSize: terminalFontSize,
+                          onFontSizeChanged: (newSize) {
+                            ref
+                                .read(settingsProvider.notifier)
+                                .setTerminalFontSize(newSize.clamp(8.0, 26.0));
+                          },
+                          onTapUp: (details, offset) {
+                            if (session.xtermViewController.selection != null) {
+                              session.xtermViewController.clearSelection();
+                              return;
+                            }
 
-                                final lineIndex = offset.y;
-                                final colIndex = offset.x;
-                                final buffer = session.xtermTerminal.buffer;
-                                if (lineIndex >= 0 &&
-                                    lineIndex < buffer.lines.length) {
-                                  final lineText = buffer.lines[lineIndex]
-                                      .toString();
-                                  final link = QuantumLinkDetector.findLinkAt(
-                                    lineText,
-                                    colIndex,
-                                  );
-                                  if (link != null) {
-                                    QuantumLinkDetector.handleLinkTap(
-                                      context,
-                                      ref,
-                                      link,
-                                    );
-                                    return;
-                                  }
-                                }
-
-                                _openTerminalKeyboard(
-                                  session,
-                                  isSecondary: isSecondary,
+                            final lineIndex = offset.y;
+                            final colIndex = offset.x;
+                            final buffer = session.xtermTerminal.buffer;
+                            if (lineIndex >= 0 &&
+                                lineIndex < buffer.lines.length) {
+                              final lineText = buffer.lines[lineIndex]
+                                  .toString();
+                              final link = QuantumLinkDetector.findLinkAt(
+                                lineText,
+                                colIndex,
+                              );
+                              if (link != null) {
+                                QuantumLinkDetector.handleLinkTap(
+                                  context,
+                                  ref,
+                                  link,
                                 );
-                              },
-                              padding: const EdgeInsets.all(10),
-                              theme: theme,
-                              backgroundOpacity: 0,
-                              textStyle: xt.TerminalStyle(
-                                fontSize: terminalFontSize,
-                                fontFamily: _getFontFamily(
-                                  ref
-                                      .watch(settingsProvider)
-                                      .terminalFontFamily,
-                                ),
-                                fontFamilyFallback: const [
-                                  'SymbolsNerdFont',
-                                  'Symbols Nerd Font',
-                                  'jetBrainsMono',
-                                  'firaCode',
-                                  'cascadia',
-                                  'dejaVuSansMono',
-                                  'inconsolata',
-                                  'sourceCodePro',
-                                  'Noto Sans Mono',
-                                  'DejaVu Sans Mono',
-                                  'monospace',
-                                ],
-                              ),
+                                return;
+                              }
+                            }
+
+                            _openTerminalKeyboard(
+                              session,
+                              isSecondary: isSecondary,
                             );
                           },
                         ),
@@ -3254,13 +3197,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           ],
         ),
         _buildSuggestionBox(session),
-        TerminalSelectionOverlay(
-          session: session,
-          getViewState: () => _getTerminalKey(keyId).currentState!,
-          scrollController: _getScrollController(keyId, session.xtermTerminal),
-          onSelectAll: () => _selectAllInTerminal(session),
-          onPaste: () => _pasteToTerminal(session),
-        ),
       ],
     );
   }
@@ -3285,73 +3221,15 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   }
 
   xt.TerminalTheme _getTerminalTheme(String themeName) {
-    Color bg;
-    Color fg = Colors.white;
-    switch (themeName) {
-      case 'dracula':
-        bg = const Color(0xFF282A36);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'monokai':
-        bg = const Color(0xFF272822);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'dark':
-        bg = const Color(0xFF0D0F14);
-        fg = const Color(0xFFE0E0E0);
-        break;
-      case 'catppuccin':
-        bg = const Color(0xFF1E1E2E);
-        fg = const Color(0xFFCDD6F4);
-        break;
-      case 'nord':
-        bg = const Color(0xFF2E3440);
-        fg = const Color(0xFFECEFF4);
-        break;
-      case 'oneDark':
-        bg = const Color(0xFF282C34);
-        fg = const Color(0xFFABB2BF);
-        break;
-      case 'tokyoNight':
-        bg = const Color(0xFF1A1B26);
-        fg = const Color(0xFFA9B1D6);
-        break;
-      case 'matrix':
-        bg = const Color(0xFF0D1117);
-        fg = const Color(0xFF00FF66);
-        break;
-      case 'ubuntu':
-      default:
-        bg = const Color(0xFF300A24);
-        fg = Colors.white;
-        break;
+    for (final p in AppPalette.values) {
+      if (p.name == themeName) {
+        return p.terminalTheme;
+      }
     }
-
-    return xt.TerminalTheme(
-      cursor: fg,
-      selection: const Color(0xFF264F78).withValues(alpha: 0.6),
-      foreground: fg,
-      background: bg,
-      black: Colors.black,
-      red: const Color(0xFFCC0000),
-      green: const Color(0xFF4E9A06),
-      yellow: const Color(0xFFC4A000),
-      blue: const Color(0xFF3465A4),
-      magenta: const Color(0xFF75507B),
-      cyan: const Color(0xFF06989A),
-      white: const Color(0xFFD3D7CF),
-      brightBlack: const Color(0xFF555753),
-      brightRed: const Color(0xFFEF2929),
-      brightGreen: const Color(0xFF8AE234),
-      brightYellow: const Color(0xFFFCE94F),
-      brightBlue: const Color(0xFF729FCF),
-      brightMagenta: const Color(0xFFAD7FA8),
-      brightCyan: const Color(0xFF34E2E2),
-      brightWhite: const Color(0xFFEEEEEC),
-      searchHitBackground: Colors.yellow,
-      searchHitBackgroundCurrent: Colors.orange,
-      searchHitForeground: Colors.black,
-    );
+    if (themeName == 'ubuntu' || themeName == 'matrix' || themeName == 'dark') {
+      return resolveConduitPalette(themeName).terminalTheme;
+    }
+    return resolveConduitPalette(themeName).terminalTheme;
   }
 
   Widget _buildProblemsView(EditorState state) {
@@ -3922,11 +3800,7 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     if (result == 'inline_selection') {
       _toggleInlineSelectionMode(session);
     } else if (result == 'selection_mode') {
-      TerminalTextSelectionModal.show(
-        context,
-        session.xtermTerminal,
-        session.title,
-      );
+      _selectAllInTerminal(session);
     } else if (result == 'copy') {
       final selectedText = session.xtermViewController.selection != null
           ? session.xtermTerminal.buffer.getText(
@@ -4286,23 +4160,28 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
     List<TerminalSession> sessions,
     TerminalTabsNotifier notifier,
   ) {
-    if (sessions.isEmpty || notifier.currentIndex >= sessions.length)
+    if (sessions.isEmpty || notifier.currentIndex >= sessions.length) {
       return const SizedBox();
+    }
     final currentSession = sessions[notifier.currentIndex];
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final isKeyboardOpen = (bottomInset > 20) || _isMobileKeyboardActive;
-    return VirtualKeysView(
-      isCompact: bottomInset > 20,
-      activeKeys: {
-        ..._activeModifiers,
-        if (isKeyboardOpen) 'KEYB',
-        if (isKeyboardOpen) 'toggle_keyboard',
-        if (isKeyboardOpen) 'Клава',
-        if (isKeyboardOpen) 'KB',
-        if (_inlineSelectionMode) 'SEL',
-        if (_inlineSelectionMode) 'inline_selection_mode',
+    final themeName = ref.watch(settingsProvider).terminalTheme;
+    final palette = resolveConduitPalette(themeName);
+    final keyId = currentSession.id;
+
+    return ConduitKeyboardBar(
+      terminal: currentSession.xtermTerminal,
+      keyboardController: currentSession.keyboardController,
+      focusNode: _getFocusNode(keyId),
+      palette: palette,
+      brightness: Brightness.dark,
+      fullscreen: ref.watch(panelProvider).isMaximized,
+      onToggleFullscreen: () {
+        ref.read(panelProvider.notifier).toggleMaximized();
       },
-      onKeyTap: (value) => _onKeyTap(value, currentSession),
+      onOpenAppearance: () {
+        showConduitAppearanceSheet(context, ref);
+      },
+      onPaste: () => _pasteToTerminal(currentSession),
     );
   }
 

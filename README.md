@@ -1,151 +1,124 @@
-# 🚀 QuantumIDE
+<div align="center">
 
-QuantumIDE is a next-generation, AI-powered mobile Integrated Development Environment (IDE) built specifically for web development, running natively on Android using Flutter. It provides a complete development environment including a code editor, local terminal sandbox, Git, and advanced AI assistance.
+# ⚡ QuantumIDE
 
----
+**Next-Gen AI-Powered Mobile & Desktop Studio built with Flutter**
 
-## 🛠️ Technology Stack
+[![Build APK](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-apk.yml)
+[![Build Linux](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-linux.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-linux.yml)
+[![Build Windows](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-windows.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-windows.yml)
+[![Build macOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-macos.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-macos.yml)
+[![Build iOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml)
+[![Build Web](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml)
 
-- **Framework**: [Flutter](https://flutter.dev) (Material 3, customized layout)
-- **State Management**: [Riverpod](https://riverpod.dev)
-- **Navigation**: [GoRouter](https://pub.dev/packages/go_router)
-- **Code Editor**: `re_editor` + `re_highlight`
-- **Terminal & Shell**: `xterm.dart` + `flutter_pty`
-- **AI Engine**: `google_generative_ai` (Gemini) + custom connectors for DeepSeek, Groq, OpenRouter, and Local AI (Ollama/LM Studio)
-- **Design & Themes**: `flex_color_scheme` + glassmorphic visual effects
-- **Typography**: *Outfit* (for UI) & *JetBrains Mono* (for Code)
+**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.216`](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
----
-
-## 📂 Project Structure
-
-Below is the directory structure of the application source code (`lib/`):
-
-*   **`lib/main.dart`**: Application entrypoint.
-*   **`lib/app.dart`**: Main configuration of `MaterialApp`, themes, and router.
-*   **`lib/core/`**: Core services and system-wide state:
-    *   `models/`: Core models like code diagnostics and AI configurations.
-    *   `providers/`: App-level providers (e.g. localization).
-    *   `router/`: Navigation and routing rules via GoRouter.
-    *   `theme/`: Dynamic theme configuration (FlexColorScheme, glassmorphism styles).
-    *   `utils/`: Conversion utilities, path mappings (host <-> sandbox).
-    *   `services/`: Background processing and platform services:
-        *   `ai_service.dart`, `ai_autocomplete_service.dart`, `ai_context_compressor.dart`: AI integration.
-        *   `lsp_service.dart`, `lsp_autocomplete_service.dart`, `analysis_service.dart`: Code intelligence, diagnostics, and LSP.
-        *   `git_service.dart`, `diff_service.dart`: Git operations and gutter diff markers.
-        *   `runtime_service.dart`, `native_terminal.dart`: Android PRoot setup and shell process bridge.
-        *   `package_service.dart`, `pub_package_service.dart`: APT packages, Android build toolchain, and pub.dev API.
-        *   `workspace_service.dart`, `project_service.dart`: Workspaces, build orchestrator, and templates.
-        *   *New services in progress*: `ai_agent_orchestrator.dart`, `crdt_sync_service.dart`, `microvm_service.dart`, `wasm_plugin_runner.dart`.
-*   **`lib/features/`**: Feature-driven modules:
-    *   `ai_assistant/`: Real-time AI chat panel, settings, and MCP (Model Context Protocol) configs.
-    *   `editor/`: Code editor, tabs manager, autocomplete, code diagnostics panel, outline, and accessory bar.
-    *   `file_explorer/`: Bookmarks, tree view, search panel, and disk analyzer widget.
-    *   `git/`: Version control panel, diff viewer, and merge conflicts solver page.
-    *   `home/`: Home/launch screen, project templates, local servers launcher, and IDE settings.
-    *   `preview/`: Browser preview, console logging, and debugging controls.
-    *   `terminal/`: Multi-tab terminal interface, virtual keys panel, and Gradle/APK signing widgets.
-    *   *New modules in progress*: `collaboration/` (Live Share), `plugins/` (WASM plugin manager).
-*   **`lib/models/`**: Shared data models (e.g., chat sessions, package models).
-*   **`lib/shared/`**: Global widgets:
-    *   `layout/`: Dynamic screen split manager (`foldable_split_manager.dart`).
-    *   `widgets/`: Glass containers, breadcrumbs, status bars, and layout scaffolding.
-*   **`lib/l10n/`**: Localization resources (RU/EN/ES/FR/ZH).
+</div>
 
 ---
 
-## 🟢 Implemented Features
+## 📱 Поддерживаемые устройства и платформы
 
-- **Workspace Management**: Android Storage Access Framework (SAF) folder picker, project templates, bookmarks, recent workspaces.
-- **Quantum Editor**: Virtualized text rendering, real-time syntax highlighting for multiple languages, autosave, tabs, visual diff indicators, diagnostics, customizable keyboard accessory keys.
-- **Embedded Sandbox Terminal**: Native terminal PTY integration running an Ubuntu 24.04 PRoot environment. Automounts android storages, supports auto-recovery, customized `.bashrc`, dynamic tools configuration.
-- **Language Server Protocol (LSP)**: Complete support for HTML, CSS, JavaScript, and TypeScript within the PRoot sandbox. Offers smart autocomplete, documentation hovers, usages lookup, rename refactoring, and code formatting.
-- **Live Share (Real-time Collaboration)**: Host or join shared coding sessions over local networks. Synchronizes document text changes instantly using diff-match-patch alongside remote cursor caret lines, selections, and floating developer name flags. Includes a built-in session developer chat.
-- **Multi-backend AI Assistant**: Built-in chat panel supporting Google Gemini (Flash & Pro), Groq, DeepSeek, OpenRouter, and on-device offline AI models (llama.cpp server & Ollama). Smart debounced code autocompletion.
-- **On-Device Local AI & Ollama Hub (Offline Edge AI)**:
-  - Run state-of-the-art open-source LLMs offline directly on mobile ARM64 hardware without cloud dependencies (Qwen 2.5 Coder, Meta Llama 3.2, DeepSeek R1, Phi-4, MiniCPM-V).
-  - **Hugging Face Hub Explorer**: Search and download GGUF models directly within the IDE, with capability badges (Vision, Context size, Reasoning, Code).
-  - **Ollama Library Hub**: 1-click model installation and direct API pull streaming with live progress.
-  - **Memory Guard & Safe Mode Toggle (Анти-краш)**: Real-time Android RAM diagnostics (`MemAvailable` vs `MemTotal`), pre-flight safety checks, and an interactive **Safe Mode switch** allowing users to choose between crash protection or unrestricted hardware limits (up to 99 GPU layers and custom context lengths).
-  - **Synchronized Context Length**: Choose from 512 up to 32K context tokens, strictly propagated to the inference server flags.
-  - **Diagnostics & Live Log Export**: Real-time log monitor with a 1-click copy button for instant debugging.
-- **Built-in Git Client**: Diff tool, status tracker, visual conflict solver, and commit flow integration.
-- **Mobile Build Tools & Diagnostics**: Automated ARM64 Linux toolchain setup (NDK, SDK symlinking, AAPT2 patcher), Java JDK 17 setup, background `dart analyze` processing, project-wide problems panel, APK building and signing.
-- **Web Preview**: Built-in chromium-based WebView previewing, console log forwarder, local server listener.
-- **Premium Design System**: Glassmorphism (blur filters), smooth micro-animations, customizable project accent colors, Outfit and JetBrains Mono typography, custom Lucide icons.
-- **Localization**: Multi-language support including English, Russian, Spanish, French, and Chinese, with an in-app language selection dialog.
+QuantumIDE собирается автоматически через GitHub Actions для всех основных мобильных, десктопных и веб-платформ:
+
+| Платформа | Архитектура / Формат | Статус | Примечание |
+| :--- | :--- | :---: | :--- |
+| **Android** | `arm64-v8a`, `armeabi-v7a`, `x86_64` (`.apk` / `.aab`) | ✅ Полная поддержка | Встроенный Ubuntu 24.04 PRoot, сборка Flutter/APK прямо на телефоне |
+| **Linux Desktop** | `x64`, `arm64` (`.tar.gz`) | ✅ Поддерживается | Нативный терминал + системный toolchain |
+| **Windows Desktop** | `x64` (`.zip`) | ✅ Поддерживается | Десктопный редактор, AI-агент и Git |
+| **macOS** | Universal / Apple Silicon (`.zip`) | ✅ Поддерживается | Десктопный редактор, AI-агент и Git |
+| **iOS** | Unsigned `.ipa` | 🧪 Экспериментально | Доступна сборка без подписи через CI |
+| **Web** | PWA / Static Web Bundle | ✅ Поддерживается | Веб-версия редактора и AI-ассистента |
+
+> 📥 **Скачать готовые сборки для всех устройств:** [GitHub Releases](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
 ---
 
-## 🔮 Roadmap / Future Tasks
+## ✨ Что уже реализовано в проекте
 
-Here are the features currently in development or planned:
+### 🤖 AI-агент и умное автодополнение (Roxum Agent + CodeCrafter)
+- **Roxum AI Agent & Chat UI**: полноценный чат-ассистент в режимах **Ask** и **Agent** с историей сессий, переключателем моделей и настройкой прав для каждого инструмента.
+- **20 агентских инструментов**: чтение/поиск/правка файлов, диагностика ошибок, Git (`status`, `diff`, `log`), выполнение команд в Ubuntu PRoot, а также **Keep / Undo Diff** — просмотр и подтверждение или откат каждого изменения, сделанного агентом.
+- **CodeCrafter Inline AI**: встроенное дебаунс-автодополнение кода на базе [`flutter_code_crafter`](packages/flutter_code_crafter) прямо в редакторе.
+- **Мультипровайдерность**: Google Gemini, DeepSeek, OpenAI, Anthropic Claude, OpenRouter, Groq, xAI Grok, Mistral, а также локальные модели (Ollama / `llama.cpp` / Custom OpenAI-compatible API).
 
-- [x] **LSP Integration**: Add language server support for HTML, CSS, JavaScript, and TypeScript inside the sandbox for full auto-complete, go-to-definition, and complex linting. (Completed)
-- [x] **Live Collaboration (Live Share)**: Add real-time multiplayer editing using CRDT/diff-match-patch synchronization with cursor sharing and voice/chat options. (Completed)
-- [x] **WASM Plugin System**: Add support for running WebAssembly-based custom plugins compiled from Rust, Go, or C++ to extend the editor's capabilities. (Completed)
-- [x] **Local AI Hub (llama.cpp & Ollama)**: Run GGUF & Ollama models on device with Hugging Face hub integration, Safe Mode toggle, and memory diagnostics. (Completed)
-- [ ] **KVM MicroVM Integration**: Support hardware-accelerated Linux kernels inside lightweight micro-VMs on Android 15+ to bypass PRoot constraints.
-- [ ] **Foldable Layout Support**: Auto-splitting panels (terminal/editor/preview) across physical screen folds on foldable smartphones and tablets.
-- [ ] **Docker & Container Support**: Enable lightweight containers inside the development sandbox.
-- [ ] **Remote SSH Development**: Connect to and edit files on remote servers directly from the IDE.
-- [ ] **Themes & Plugins Marketplace**: Discover and install community-developed themes and extension plugins.
+### 💻 Терминал нового поколения (Conduit Terminal Engine)
+- **Движок [`conduit_vt`](packages/conduit_vt)**: быстрый рендеринг VT-последовательностей, точное выделение текста и **встроенная экранная лупа (magnifier)** при выделении текста на мобильных экранах.
+- **16 цветовых палитр и кастомизация**: гибкая настройка фона, прозрачности, шрифта `AtkynsonMonoNerdFontMono` и раскладки виртуальной клавиатуры (`ConduitKeyboardBar`).
+- **Ubuntu 24.04 PRoot Sandbox**: полноценная Linux-среда на Android с автоматическим предложением обновления rootfs и красивым Neofetch-приветствием (`term-fetch`).
 
----
-
-## 📥 Download QuantumIDE (Pre-built APKs)
-
-Pre-built Release APKs for Android devices are available on the **[Releases](https://github.com/Lesorub361/quantum_ide/releases)** page:
-* 📱 **[Download Latest APK (v1.2.108)](https://github.com/Lesorub361/quantum_ide/releases/latest)**
-* For modern smartphones and tablets (ARM64): download **`app-arm64-v8a-release.apk`**
-* For all other architectures or universal installation: download **`app-universal-release.apk`**
+### 📝 Редактор, LSP и быстрое хранилище
+- **Быстрая работа с проектами**: проекты хранятся напрямую во внутреннем окружении `/root/projects` без фоновой синхронизации с медленным `/storage/emulated/0/QuantumIDE` — мгновенный отклик редактора без задержек FUSE. Импорт и экспорт проектов доступны вручную через интерфейс или проводник.
+- **Quantum Editor**: подсветка синтаксиса (`re_editor` + `re_highlight`), мультикурсор, minimap, diff-маркеры на полях, горячие клавиши и панель проблем (`ProblemsPanel` на базе `dart analyze` + LSP).
+- **LSP (Language Server Protocol)**: автодополнение, переходы к определениям и диагностика для Dart, HTML, CSS, JavaScript и TypeScript.
+- **Системный очиститель (System Cleaner)**: очистка временных кешей, логов, `pub`/Gradle-артефактов и освобождение памяти прямо из интерфейса IDE.
+- **Git, Live Share и WebView Preview**: визуальный diff и решение конфликтов слияния, совместное редактирование в реальном времени и встроенный предпросмотр веб-приложений.
 
 ---
 
-## 🚀 Setup & Build Guide for Contributors
+## 🛠️ Технологический стек
 
-The project is completely **Open Source under the MIT License**. Anyone is welcome to clone, run, modify, and improve QuantumIDE!
+- **Framework**: Flutter 3.47+ / Dart 3.11+ (Material 3, `flex_color_scheme`, `flutter_lucide`)
+- **State Management**: `flutter_riverpod`
+- **Routing**: `go_router`
+- **Code Editor & AI Completion**: `re_editor`, `re_highlight`, `flutter_code_crafter`
+- **Terminal & PTY**: `conduit_vt`, `flutter_pty`, Ubuntu 24.04 PRoot
+- **AI & Markdown**: `roxum` Agentic Engine (`http`), `gpt_markdown`
+- **Diagnostics & Logging**: `talker_flutter`, `dart analyze`
+- **Localization**: `flutter_localizations` (RU / EN / ES / FR / ZH)
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/Lesorub361/quantum_ide.git
-cd quantum_ide
+---
+
+## 📂 Актуальная структура проекта
+
+```text
+quantum_ide/
+├── lib/
+│   ├── main.dart                     # Точка входа приложения
+│   ├── app.dart                      # Конфигурация MaterialApp, тем и GoRouter
+│   ├── core/
+│   │   ├── models/                   # Модели диагностики и AI-конфигураций
+│   │   ├── providers/                # Глобальные провайдеры (тема, локаль)
+│   │   ├── router/                   # Маршрутизация GoRouter
+│   │   ├── services/                 # Runtime/PRoot, LSP, Git, CodeCrafter AI, Talker, Settings
+│   │   ├── theme/                    # FlexColorScheme, палитры, glassmorphism
+│   │   └── utils/                    # Конвертация путей (host <-> PRoot)
+│   ├── features/
+│   │   ├── ai_assistant/             # Roxum AI Agent (roxum/), чат-панель и MCP
+│   │   ├── collaboration/            # Live Share (совместная работа)
+│   │   ├── editor/                   # Редактор кода, вкладки, ProblemsPanel, диффы
+│   │   ├── file_explorer/            # Дерево проекта, поиск, закладки
+│   │   ├── git/ & github/            # Git-клиент, граф коммитов, интеграция с GitHub
+│   │   ├── home/                     # Дашборд, шаблоны, менеджер пакетов, System Cleaner
+│   │   ├── plugins/                  # Система расширений
+│   │   ├── preview/                  # Встроенный WebView-просмотр и консоль
+│   │   ├── rest_client/              # Встроенный HTTP/REST-клиент
+│   │   └── terminal/                 # Conduit-терминал, палитры, виртуальная клавиатура
+│   ├── l10n/                         # Файлы локализации (RU/EN/ES/FR/ZH)
+│   └── shared/                       # Общие виджеты и адаптивный split-screen
+└── packages/
+    ├── conduit_vt/                   # Vendored терминальный VT-движок + лупа выделения
+    └── flutter_code_crafter/         # Vendored пакет AI-автодополнения и LSP-утилит
 ```
 
-### 2. Install dependencies
-```bash
-flutter pub get
-```
+---
 
-### 3. Build the app
-* **Build Android Debug APK**:
-  ```bash
-  flutter build apk --debug
-  ```
-* **Build Android Release APK**:
-  ```bash
-  flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons
-  ```
-* **Build Linux Desktop**:
-  ```bash
-  flutter build linux --release
-  ```
+## 🔮 Планы на будущее (Roadmap)
+
+- [x] **Conduit Terminal & Selection Loupe**: полная замена движка терминала, 16 тем оформления и экранная лупа выделения.
+- [x] **Roxum AI Agent & CodeCrafter**: интеграция агентского чата с diff-ревью и inline-автодополнением кода.
+- [x] **System Cleaner & Auto Rootfs Upgrade**: встроенная очистка системы и автообновление Ubuntu 24.04 PRoot.
+- [ ] **KVM MicroVM (Android 15+)**: аппаратная виртуализация Linux-ядра без ограничений PRoot.
+- [ ] **Адаптация под складные экраны (Foldables)**: автоматическое разделение редактора, терминала и превью по линии сгиба.
+- [ ] **Контейнеры и Docker**: запуск изолированных сервисов и баз данных внутри рабочего окружения.
+- [ ] **Remote SSH**: полноценная разработка на удалённых серверах прямо из QuantumIDE.
+- [ ] **Маркетплейс тем и плагинов**: установка пользовательских тем оформления и расширений в 1 клик.
 
 ---
 
-## 🤝 Join the Development! (How to Contribute)
+## 🤝 Благодарности и лицензии
 
-We warmly welcome all contributions from the community:
-
-1. **Fork** the repository on GitHub.
-2. Create your feature branch: `git checkout -b feature/amazing-feature`.
-3. Make your changes and test them: `flutter test` or `flutter analyze`.
-4. Commit your changes: `git commit -m 'feat: add amazing feature'`.
-5. Push to the branch: `git push origin feature/amazing-feature`.
-6. Open a **Pull Request** — we will review and merge it!
-
----
-
-## 📜 License
-
-This project is licensed under the **MIT License** - see the `LICENSE` file for details. Free for personal, educational, and commercial use.
+В проекте используются и адаптированы компоненты с открытым исходным кодом (MIT License):
+- [Conduit](https://github.com/gwitko/Conduit) — терминальный движок `conduit_vt`
+- [flutter_code_crafter](https://github.com/heckmon/flutter_code_crafter) — AI-автодополнение кода и LSP-утилиты
+- [roxum-ide](https://github.com/heckmon/roxum-ide) — логика AI-агента, каталог инструментов и UI чата

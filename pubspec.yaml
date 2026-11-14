@@ -1,7 +1,7 @@
 name: quantum_ide
 description: "QuantumIDE - A next-generation AI-powered mobile IDE for web development built with Flutter."
 publish_to: 'none'
-version: 1.2.215+232
+version: 1.2.216+233
 
 environment:
   sdk: ^3.11.4
@@ -21,7 +21,11 @@ dependencies:
   flutter_lucide: 1.9.0
   flex_color_scheme: ^8.4.0
   flutter_inappwebview: ^6.1.5
-  xterm: ^4.0.0
+  conduit_vt:
+    path: packages/conduit_vt
+  flutter_code_crafter:
+    path: packages/flutter_code_crafter
+  http: ^1.4.0
   flutter_pty: ^0.4.2
   google_fonts: ^6.3.3
   shared_preferences: ^2.5.5
@@ -147,3 +151,6 @@ flutter:
     - family: Seti
       fonts:
         - asset: assets/fonts/Seti.ttf
+    - family: AtkynsonMonoNerdFontMono
+      fonts:
+        - asset: assets/fonts/AtkynsonMonoNerdFontMono-Regular.otf

@@ -8,6 +8,8 @@ import 'package:quantum_ide/shared/widgets/glass_container.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 
 class TerminalPage extends ConsumerWidget {
@@ -29,37 +31,7 @@ class TerminalPage extends ConsumerWidget {
     final workspacePath = ref.watch(workspaceProvider).currentPath;
 
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
-    Color bg;
-    switch (terminalThemeName) {
-      case 'dracula':
-        bg = const Color(0xFF282A36);
-        break;
-      case 'monokai':
-        bg = const Color(0xFF272822);
-        break;
-      case 'dark':
-        bg = const Color(0xFF0D0F14);
-        break;
-      case 'catppuccin':
-        bg = const Color(0xFF1E1E2E);
-        break;
-      case 'nord':
-        bg = const Color(0xFF2E3440);
-        break;
-      case 'oneDark':
-        bg = const Color(0xFF282C34);
-        break;
-      case 'tokyoNight':
-        bg = const Color(0xFF1A1B26);
-        break;
-      case 'matrix':
-        bg = const Color(0xFF0D1117);
-        break;
-      case 'ubuntu':
-      default:
-        bg = const Color(0xFF300A24);
-        break;
-    }
+    final bg = resolveConduitPalette(terminalThemeName).canvas;
 
     return PopScope(
       canPop: false,

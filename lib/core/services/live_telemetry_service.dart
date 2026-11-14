@@ -42,17 +42,10 @@ class LiveTelemetryService {
 
   Future<void> init() async {
     try {
-      final dir = Directory(_sharedDir);
-      if (!await dir.exists()) {
-        await dir.create(recursive: true);
-      }
-      _statusFile = File(p.join(_sharedDir, 'live_status.json'));
-      _buildOutputFile = File(p.join(_sharedDir, 'build_output.log'));
-      _globalLogFile = File(p.join(_sharedDir, 'quantum_live.log'));
-
+      // External /storage/emulated/0/QuantumIDE telemetry disabled for faster I/O.
       _startTimer();
       _startLocalServer();
-      logEvent('LiveTelemetryService initialized successfully.');
+      logEvent('LiveTelemetryService initialized (in-memory only).');
     } catch (e) {
       debugPrint('[Telemetry] Init error: $e');
     }
