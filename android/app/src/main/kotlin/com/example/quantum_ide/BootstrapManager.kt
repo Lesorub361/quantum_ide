@@ -257,6 +257,14 @@ class BootstrapManager(
         val configDir = File(this.configDir)
         configDir.mkdirs()
         File("$configDir/resolv.conf").writeText("nameserver 8.8.8.8\nnameserver 8.8.4.4\n")
+        File("$configDir/hosts").writeText(
+            "127.0.0.1 localhost localhost.localdomain quantum-ide\n" +
+                "::1 localhost ip6-localhost ip6-loopback\n",
+        )
+        File("$configDir/nsswitch.conf").writeText(
+            "passwd: files\ngroup: files\nshadow: files\nhosts: files dns\n" +
+                "networks: files\nprotocols: files\nservices: files\nethers: files\nrpc: files\n",
+        )
     }
 
     fun setupFakeSysdata() {

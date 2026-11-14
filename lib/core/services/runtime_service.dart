@@ -940,6 +940,18 @@ class RuntimeService extends ChangeNotifier {
       final tmpResolvPath = p.join(_filesDir, 'tmp', 'resolv.conf');
       await _writeResolvConf(tmpResolvPath);
 
+      // 3b. Ensure /etc/hosts and /etc/nsswitch.conf provide localhost resolution
+      //     (required by Go binaries like `agy` so they don't query `localhost` on 8.8.8.8:53).
+      await _writeHostsFile(p.join(configDirPath, 'hosts'));
+      await _writeHostsFile(p.join(_filesDir, 'tmp', 'hosts'));
+      await _writeNsswitchConf(p.join(configDirPath, 'nsswitch.conf'));
+      await _writeNsswitchConf(p.join(_filesDir, 'tmp', 'nsswitch.conf'));
+      final guestEtcDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'etc'));
+      if (await guestEtcDir.exists()) {
+        await _writeHostsFile(p.join(guestEtcDir.path, 'hosts'), onlyIfMissingLocalhost: true);
+        await _writeNsswitchConf(p.join(guestEtcDir.path, 'nsswitch.conf'), onlyIfMissingFiles: true);
+      }
+
       // 4. Set permissions for tmp
       final tmpPath = p.join(_filesDir, 'tmp');
       if (await Directory(tmpPath).exists()) {
@@ -950,6 +962,67 @@ class RuntimeService extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('FileSystem Preparation error: $e');
+    }
+  }
+
+  /// Writes a valid hosts file with `127.0.0.1 localhost`, replacing broken symlinks first.
+  Future<void> _writeHostsFile(String path, {bool onlyIfMissingLocalhost = false}) async {
+    try {
+      final dir = Directory(p.dirname(path));
+      if (!await dir.exists()) await dir.create(recursive: true);
+
+      final isLink = FileSystemEntity.typeSync(path, followLinks: false) == FileSystemEntityType.link;
+      if (isLink) {
+        await Link(path).delete();
+      } else if (onlyIfMissingLocalhost && await File(path).exists()) {
+        final existing = await File(path).readAsString().catchError((_) => '');
+        if (RegExp(r'127\.0\.0\.1\s+localhost').hasMatch(existing)) {
+          return;
+        }
+      }
+
+      await File(path).writeAsString(
+        '127.0.0.1 localhost localhost.localdomain quantum-ide\n'
+        '::1 localhost ip6-localhost ip6-loopback\n',
+        flush: true,
+      );
+      await Process.run('chmod', ['644', path]).catchError((_) => ProcessResult(0, 0, '', ''));
+    } catch (e) {
+      debugPrint('Warning: Failed to write hosts at $path: $e');
+    }
+  }
+
+  /// Writes an nsswitch.conf that prefers `files` before `dns` so `localhost` resolves locally.
+  Future<void> _writeNsswitchConf(String path, {bool onlyIfMissingFiles = false}) async {
+    try {
+      final dir = Directory(p.dirname(path));
+      if (!await dir.exists()) await dir.create(recursive: true);
+
+      final isLink = FileSystemEntity.typeSync(path, followLinks: false) == FileSystemEntityType.link;
+      if (isLink) {
+        await Link(path).delete();
+      } else if (onlyIfMissingFiles && await File(path).exists()) {
+        final existing = await File(path).readAsString().catchError((_) => '');
+        if (RegExp(r'^\s*hosts:\s*files\b', multiLine: true).hasMatch(existing)) {
+          return;
+        }
+      }
+
+      await File(path).writeAsString(
+        'passwd: files\n'
+        'group: files\n'
+        'shadow: files\n'
+        'hosts: files dns\n'
+        'networks: files\n'
+        'protocols: files\n'
+        'services: files\n'
+        'ethers: files\n'
+        'rpc: files\n',
+        flush: true,
+      );
+      await Process.run('chmod', ['644', path]).catchError((_) => ProcessResult(0, 0, '', ''));
+    } catch (e) {
+      debugPrint('Warning: Failed to write nsswitch.conf at $path: $e');
     }
   }
 
@@ -981,13 +1054,15 @@ class RuntimeService extends ChangeNotifier {
 
   Future<void> _ensureBinaries() async {
     try {
-      // Ensure resolv.conf exists in tmp (most reliable location — used by init-host bind mount)
-      // Always rewrite it to handle the broken-symlink case on every cold start.
+      // Ensure resolv.conf, hosts, and nsswitch.conf exist in tmp (used by init-host bind mounts)
+      // Always rewrite on cold start to heal broken symlinks or missing localhost mappings.
       final tmpDir = Directory(p.join(_filesDir, 'tmp'));
       if (!await tmpDir.exists()) await tmpDir.create(recursive: true);
       await _writeResolvConf(p.join(tmpDir.path, 'resolv.conf'));
+      await _writeHostsFile(p.join(tmpDir.path, 'hosts'));
+      await _writeNsswitchConf(p.join(tmpDir.path, 'nsswitch.conf'));
     } catch (e) {
-      debugPrint('Warning: Failed to ensure resolv.conf in tmp: $e');
+      debugPrint('Warning: Failed to ensure resolv/hosts in tmp: $e');
     }
 
     try {
@@ -2401,6 +2476,25 @@ if [ -L "\$TMPDIR/resolv.conf" ] || [ ! -f "\$TMPDIR/resolv.conf" ]; then
     printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "\$TMPDIR/resolv.conf"
 fi
 
+# Auto-fix hosts & nsswitch.conf so `localhost` resolves locally (required by Go CLI binaries like `agy`)
+if [ -L "\$TMPDIR/hosts" ] || [ ! -f "\$TMPDIR/hosts" ] || ! grep -qE '127\.0\.0\.1[[:space:]]+localhost' "\$TMPDIR/hosts" 2>/dev/null; then
+    rm -f "\$TMPDIR/hosts"
+    printf '127.0.0.1 localhost localhost.localdomain quantum-ide\n::1 localhost ip6-localhost ip6-loopback\n' > "\$TMPDIR/hosts"
+fi
+if [ -L "\$TMPDIR/nsswitch.conf" ] || [ ! -f "\$TMPDIR/nsswitch.conf" ] || ! grep -qE '^[[:space:]]*hosts:[[:space:]]*files' "\$TMPDIR/nsswitch.conf" 2>/dev/null; then
+    rm -f "\$TMPDIR/nsswitch.conf"
+    printf 'passwd: files\ngroup: files\nshadow: files\nhosts: files dns\nnetworks: files\nprotocols: files\nservices: files\nethers: files\nrpc: files\n' > "\$TMPDIR/nsswitch.conf"
+fi
+mkdir -p "\$ROOTFS/etc" 2>/dev/null || true
+for etc_f in hosts nsswitch.conf; do
+    if [ -L "\$ROOTFS/etc/\$etc_f" ]; then
+        rm -f "\$ROOTFS/etc/\$etc_f" 2>/dev/null || true
+    fi
+    if [ ! -f "\$ROOTFS/etc/\$etc_f" ]; then
+        cp -f "\$TMPDIR/\$etc_f" "\$ROOTFS/etc/\$etc_f" 2>/dev/null || touch "\$ROOTFS/etc/\$etc_f" 2>/dev/null || true
+    fi
+done
+
 # Android system & APEX mounts (required for Bionic linker64, aapt2, NDK, and devices running Android 10+)
 SYS_BINDS=""
 for sys_dir in /system /apex /vendor /product; do
@@ -2458,6 +2552,8 @@ if [ \$# -gt 2 ]; then
         --bind=/dev/urandom:/dev/random \\
         \$FD_BINDS \$SYS_BINDS \\
         --bind="\$TMPDIR/resolv.conf:/etc/resolv.conf" \\
+        --bind="\$TMPDIR/hosts:/etc/hosts" \\
+        --bind="\$TMPDIR/nsswitch.conf:/etc/nsswitch.conf" \\
         --bind="\$CONFIG/proc_fakes/loadavg:/proc/loadavg" \\
         --bind="\$CONFIG/proc_fakes/stat:/proc/stat" \\
         --bind="\$CONFIG/proc_fakes/uptime:/proc/uptime" \\
@@ -2515,6 +2611,8 @@ else
         --bind=/dev/urandom:/dev/random \\
         \$FD_BINDS \$SYS_BINDS \\
         --bind="\$TMPDIR/resolv.conf:/etc/resolv.conf" \\
+        --bind="\$TMPDIR/hosts:/etc/hosts" \\
+        --bind="\$TMPDIR/nsswitch.conf:/etc/nsswitch.conf" \\
         --bind="\$CONFIG/proc_fakes/loadavg:/proc/loadavg" \\
         --bind="\$CONFIG/proc_fakes/stat:/proc/stat" \\
         --bind="\$CONFIG/proc_fakes/uptime:/proc/uptime" \\

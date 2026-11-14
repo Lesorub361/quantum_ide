@@ -1,16 +1,16 @@
 {
-  "versionCode": 249,
-  "versionName": "1.2.232",
-  "notes": "## 🚀 QuantumIDE v1.2.232\n\n### Что исправлено и улучшено\n- **Автолечение `/lib -> usr/lib` и восстановление после `GLIBC_2.38 not found`**: устранены критические ошибки Ubuntu 24.04 PRoot (`proot error: execve(\"/usr/bin/bash\"): Function not implemented`, `basename: required file not found` и `/bin/bash: libc.so.6: version 'GLIBC_2.38' not found`), возникавшие после установки пакетов `flutter-release-engine`, `flutter-release-fix` и `build-fix` и последующего отката `/lib` на glibc 2.31. При запуске IDE автоматически очищает `2.31` из `/lib`, восстанавливает симлинк `/lib -> usr/lib` и линкер `ld-linux-aarch64.so.1` оффлайн без переустановки Ubuntu, а `quantum-heal-x64` теперь распаковывает `libc6:amd64` во временный каталог.\n- **Очистка вывода `flutter` от ошибок `.gradle`**: обёртка `flutter()` в `.bashrc` и `.zshrc` (`BASHRC_VERSION=33`) теперь создаёт `/root/.gradle` и проверяет доступность записи в `gradle.properties` перед записью, полностью убирая 15 строк `No such file or directory`.\n- **Совместимость с Antigravity CLI (`agy`)**: удалена устаревшая инъекция флага `--settings '{\"enableTerminalSandbox\":false}'` из shell-обёрток и `CliAuthService`, вызывавшая ошибку `flags provided but not defined: -settings`.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 250,
+  "versionName": "1.2.233",
+  "notes": "## 🚀 QuantumIDE v1.2.233\n\n### Что исправлено и улучшено\n- **Запуск `agy` и локальный резолвинг `localhost` в PRoot**: устранена ошибка `Failed to start: listen tcp: lookup localhost on 8.8.8.8:53: no such host` — добавлены генерация и проброс `/etc/hosts` (`127.0.0.1 localhost`, `::1 localhost`) и `/etc/nsswitch.conf` (`hosts: files dns`) в `RuntimeService`, `init-host`, `BootstrapManager` и `ProcessManager`.\n- **Единый стиль панели редактора (`KeyboardAccessoryBar`)**: панель быстрых кнопок над терминалом/клавиатурой (отмена/повтор, стрелки, копирование, поиск, `Стр X:Y`, символы, диалог перехода к строке и сниппеты) больше не имеет жёсткого чёрного фона `#0D0F14` и автоматически подстраивается под активную палитру `ConduitPalette` и тему приложения.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.232/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.233/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.232",
-  "buildNumber": 249,
-  "tag_name": "v1.2.232",
-  "releaseNotes": "Исправлены падение bash/flutter в Ubuntu 24.04 (автолечение /lib -> usr/lib и восстановление после GLIBC_2.38 not found), спам /root/.gradle/gradle.properties и флаг agy --settings."
+  "version": "1.2.233",
+  "buildNumber": 250,
+  "tag_name": "v1.2.233",
+  "releaseNotes": "Исправлен запуск agy (lookup localhost on 8.8.8.8:53 via /etc/hosts и nsswitch.conf) и синхронизирована тема панели кнопок редактора с палитрой приложения."
 }

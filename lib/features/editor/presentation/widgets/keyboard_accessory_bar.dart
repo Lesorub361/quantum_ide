@@ -11,6 +11,8 @@ import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/color_picker_dialog.dart';
 import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/code_find_panel.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 
 class KeyboardAccessoryBar extends ConsumerWidget {
   final CodeLineEditingController controller;
@@ -136,7 +138,18 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     KeyboardSoundService.playClick();
   }
 
-  void _showSnippetPicker(BuildContext context) {
+  void _showSnippetPicker(BuildContext context, AppPalette? palette) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final brightness = theme.brightness;
+    final sheetBg = palette?.panelFor(brightness) ?? colorScheme.surfaceContainer;
+    final accent = palette?.accent ?? colorScheme.primary;
+    final fg = palette?.foregroundFor(brightness) ?? colorScheme.onSurface;
+    final mutedFg =
+        palette?.mutedForegroundFor(brightness) ?? colorScheme.onSurfaceVariant;
+    final dividerColor =
+        palette?.hairlineFor(brightness) ?? theme.dividerColor.withValues(alpha: 0.2);
+
     final snippets = [
       (
         title: 'HTML5 Boilerplate',
@@ -183,7 +196,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF161927),
+      backgroundColor: sheetBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -195,26 +208,26 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   LucideIcons.code_xml,
-                  color: Color(0xFF00E5FF),
+                  color: accent,
                   size: 18,
                 ),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Быстрые сниппеты кода',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: fg,
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     LucideIcons.x,
                     size: 16,
-                    color: Colors.white54,
+                    color: mutedFg,
                   ),
                   onPressed: () => Navigator.pop(ctx),
                 ),
@@ -226,7 +239,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                 shrinkWrap: true,
                 itemCount: snippets.length,
                 separatorBuilder: (_, _) =>
-                    const Divider(color: Colors.white10, height: 1),
+                    Divider(color: dividerColor, height: 1),
                 itemBuilder: (context, index) {
                   final s = snippets[index];
                   return ListTile(
@@ -236,22 +249,22 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                     ),
                     title: Text(
                       s.title,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: fg,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     subtitle: Text(
                       s.desc,
-                      style: const TextStyle(
-                        color: Colors.white54,
+                      style: TextStyle(
+                        color: mutedFg,
                         fontSize: 11,
                       ),
                     ),
-                    trailing: const Icon(
+                    trailing: Icon(
                       LucideIcons.corner_down_left,
-                      color: Color(0xFF00E5FF),
+                      color: accent,
                       size: 16,
                     ),
                     onTap: () {
@@ -268,23 +281,38 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     );
   }
 
-  void _showGoToLineDialog(BuildContext context) {
+  void _showGoToLineDialog(BuildContext context, AppPalette? palette) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final brightness = theme.brightness;
+    final dialogBg =
+        palette?.panelElevatedFor(brightness) ?? colorScheme.surfaceContainerHigh;
+    final inputBg = palette?.canvasFor(brightness) ?? colorScheme.surface;
+    final accent = palette?.accent ?? colorScheme.primary;
+    final fg = palette?.foregroundFor(brightness) ?? colorScheme.onSurface;
+    final mutedFg =
+        palette?.mutedForegroundFor(brightness) ?? colorScheme.onSurfaceVariant;
+    final accentText =
+        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+            ? Colors.white
+            : Colors.black;
+
     final textCtrl = TextEditingController();
     final totalLines = controller.codeLines.length;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF131722),
+        backgroundColor: dialogBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Row(
           children: [
-            const Icon(LucideIcons.navigation, color: Color(0xFF38BDF8), size: 16),
+            Icon(LucideIcons.navigation, color: accent, size: 16),
             const SizedBox(width: 8),
             Text(
               'Перейти к строке (1–$totalLines)',
               style: GoogleFonts.inter(
                 fontSize: 14,
-                color: Colors.white,
+                color: fg,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -294,12 +322,12 @@ class KeyboardAccessoryBar extends ConsumerWidget {
           controller: textCtrl,
           keyboardType: TextInputType.number,
           autofocus: true,
-          style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 14),
+          style: GoogleFonts.jetBrainsMono(color: fg, fontSize: 14),
           decoration: InputDecoration(
             hintText: 'Номер строки...',
-            hintStyle: const TextStyle(color: Colors.white38),
+            hintStyle: TextStyle(color: mutedFg),
             filled: true,
-            fillColor: const Color(0xFF090B10),
+            fillColor: inputBg,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
@@ -317,12 +345,12 @@ class KeyboardAccessoryBar extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+            child: Text('Отмена', style: TextStyle(color: mutedFg)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF38BDF8),
-              foregroundColor: Colors.black,
+              backgroundColor: accent,
+              foregroundColor: accentText,
             ),
             onPressed: () {
               final target = int.tryParse(textCtrl.text.trim());
@@ -345,6 +373,29 @@ class KeyboardAccessoryBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final brightness = theme.brightness;
+    final palette = settings.syncAppWithTerminalPalette
+        ? resolveConduitPalette(settings.terminalTheme)
+        : null;
+
+    final barBg = palette?.panelFor(brightness) ??
+        (brightness == Brightness.dark
+            ? colorScheme.surfaceContainerLow
+            : colorScheme.surfaceContainer);
+    final elevatedBg =
+        palette?.panelElevatedFor(brightness) ?? colorScheme.surfaceContainerHigh;
+    final topBorderColor =
+        palette?.borderFor(brightness) ?? theme.dividerColor.withValues(alpha: 0.25);
+    final hairlineColor =
+        palette?.hairlineFor(brightness) ?? theme.dividerColor.withValues(alpha: 0.2);
+    final accentColor = palette?.accent ?? colorScheme.primary;
+    final tabColor = palette?.accentSecondary ?? palette?.accent ?? colorScheme.secondary;
+    final fgColor = palette?.foregroundFor(brightness) ?? colorScheme.onSurface;
+    final iconColor =
+        palette?.mutedForegroundFor(brightness) ?? colorScheme.onSurfaceVariant;
+
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final isKeyboardOpen = bottomInset > 0;
     final screenWidth = MediaQuery.sizeOf(context).width;
@@ -416,7 +467,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               child: Icon(
                 icon,
                 size: 14,
-                color: color ?? const Color(0xFF94A3B8),
+                color: color ?? iconColor,
               ),
             ),
           ),
@@ -425,8 +476,8 @@ class KeyboardAccessoryBar extends ConsumerWidget {
     }
 
     Color getSymbolColor(String sym) {
-      if (sym == 'TAB') return const Color(0xFFA78BFA);
-      return const Color(0xFFE2E8F0);
+      if (sym == 'TAB') return tabColor;
+      return fgColor;
     }
 
     if (!isKeyboardOpen) {
@@ -435,10 +486,10 @@ class KeyboardAccessoryBar extends ConsumerWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFF0D0F14),
+          color: barBg,
           border: Border(
             top: BorderSide(
-              color: Colors.white.withValues(alpha: 0.06),
+              color: topBorderColor,
               width: 0.8,
             ),
           ),
@@ -512,20 +563,20 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                     final line = val.selection.extentIndex + 1;
                     final col = val.selection.extentOffset + 1;
                     return InkWell(
-                      onTap: () => _showGoToLineDialog(context),
+                      onTap: () => _showGoToLineDialog(context, palette),
                       borderRadius: BorderRadius.circular(4),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF131722),
+                          color: elevatedBg,
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                          border: Border.all(color: accentColor.withValues(alpha: 0.35)),
                         ),
                         child: Text(
                           'Стр $line:$col • ${settings.fontSize.toInt()} px',
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
-                            color: const Color(0xFF38BDF8),
+                            color: accentColor,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -554,10 +605,10 @@ class KeyboardAccessoryBar extends ConsumerWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D0F14),
+        color: barBg,
         border: Border(
           top: BorderSide(
-            color: Colors.white.withValues(alpha: 0.08),
+            color: topBorderColor,
             width: 0.6,
           ),
         ),
@@ -634,7 +685,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             tooltip: 'Быстрые сниппеты кода',
             onPressed: () {
               _triggerHaptic(ref);
-              _showSnippetPicker(context);
+              _showSnippetPicker(context, palette);
             },
           ),
           buildBtn(
@@ -650,21 +701,21 @@ class KeyboardAccessoryBar extends ConsumerWidget {
               final line = val.selection.extentIndex + 1;
               final col = val.selection.extentOffset + 1;
               return InkWell(
-                onTap: () => _showGoToLineDialog(context),
+                onTap: () => _showGoToLineDialog(context, palette),
                 borderRadius: BorderRadius.circular(4),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                   margin: const EdgeInsets.symmetric(horizontal: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF141720),
+                    color: elevatedBg,
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                    border: Border.all(color: accentColor.withValues(alpha: 0.35)),
                   ),
                   child: Text(
                     '$line:$col',
                     style: GoogleFonts.jetBrainsMono(
                       fontSize: 10,
-                      color: const Color(0xFF38BDF8),
+                      color: accentColor,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -676,7 +727,7 @@ class KeyboardAccessoryBar extends ConsumerWidget {
             width: 1,
             height: 14,
             margin: const EdgeInsets.symmetric(horizontal: 3),
-            color: Colors.white.withValues(alpha: 0.08),
+            color: hairlineColor,
           ),
           Expanded(
             child: ListView.builder(
@@ -700,14 +751,14 @@ class KeyboardAccessoryBar extends ConsumerWidget {
                     style: TextButton.styleFrom(
                       minimumSize: Size(isTab ? 38 : 26, 26),
                       padding: EdgeInsets.zero,
-                      backgroundColor: const Color(0xFF141720),
+                      backgroundColor: elevatedBg,
                       foregroundColor: symColor,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(5),
                         side: BorderSide(
                           color: isTab
-                              ? const Color(0xFF8B5CF6).withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.06),
+                              ? tabColor.withValues(alpha: 0.4)
+                              : hairlineColor,
                           width: 0.6,
                         ),
                       ),

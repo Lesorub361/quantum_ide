@@ -1,6 +1,7 @@
 package com.example.quantum_ide
 
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 
 class ProcessManager(
@@ -28,7 +29,27 @@ class ProcessManager(
         "LD_LIBRARY_PATH" to "$libDir:$nativeLibDir",
     )
 
+    private fun ensureHostsAndNsswitch() {
+        val cfgDir = File(configDir)
+        cfgDir.mkdirs()
+        val hostsFile = File(cfgDir, "hosts")
+        if (!hostsFile.exists() || !hostsFile.readText().contains("localhost")) {
+            hostsFile.writeText(
+                "127.0.0.1 localhost localhost.localdomain quantum-ide\n" +
+                    "::1 localhost ip6-localhost ip6-loopback\n",
+            )
+        }
+        val nssFile = File(cfgDir, "nsswitch.conf")
+        if (!nssFile.exists() || !nssFile.readText().contains("files")) {
+            nssFile.writeText(
+                "passwd: files\ngroup: files\nshadow: files\nhosts: files dns\n" +
+                    "networks: files\nprotocols: files\nservices: files\nethers: files\nrpc: files\n",
+            )
+        }
+    }
+
     private fun commonProotFlags(): List<String> {
+        ensureHostsAndNsswitch()
         val prootPath = getProotPath()
         val procFakes = "$configDir/proc_fakes"
         val sysFakes = "$configDir/sys_fakes"
@@ -59,6 +80,8 @@ class ProcessManager(
             "--bind=$rootfsDir/tmp:/dev/shm",
             "--bind=$sysFakes/empty:/sys/fs/selinux",
             "--bind=$configDir/resolv.conf:/etc/resolv.conf",
+            "--bind=$configDir/hosts:/etc/hosts",
+            "--bind=$configDir/nsswitch.conf:/etc/nsswitch.conf",
             "--bind=$homeDir:/root/home",
             "--bind=$filesDir/projects:/root/projects",
             "--bind=/storage/emulated/0:/sdcard",

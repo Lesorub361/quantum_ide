@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.233
+- **PRoot `localhost` DNS Fix for `agy` & Go Binaries (`/etc/hosts` + `/etc/nsswitch.conf`)**:
+  - Fixed `Failed to start: listen tcp: lookup localhost on 8.8.8.8:53: no such host` when running `agy` in PRoot.
+  - Added [`_writeHostsFile`](lib/core/services/runtime_service.dart) (`127.0.0.1 localhost ...` / `::1 localhost`) and [`_writeNsswitchConf`](lib/core/services/runtime_service.dart) (`hosts: files dns`), bind-mounted them in `init-host` and Android [`ProcessManager`](android/app/src/main/kotlin/com/example/quantum_ide/ProcessManager.kt), and generated them in [`BootstrapManager.writeResolvConf`](android/app/src/main/kotlin/com/example/quantum_ide/BootstrapManager.kt).
+- **Editor Accessory Bar Theme Consistency (`KeyboardAccessoryBar`)**:
+  - Replaced hardcoded black/slate backgrounds (`#0D0F14`, `#131722`, `#141720`, `#161927`) in [`KeyboardAccessoryBar`](lib/features/editor/presentation/widgets/keyboard_accessory_bar.dart) (toolbar with Undo/Redo/Arrows/Copy/Search, symbol keys, line/col pill, snippet sheet, and go-to-line dialog) with active `ConduitPalette` (`resolveConduitPalette`) and `Theme.of(context).colorScheme` colors.
+
 ## 1.2.232
 - **Ubuntu 24.04 `/lib -> usr/lib` Auto-Repair & `GLIBC_2.38` Mismatch Recovery**:
   - Updated [`isGuestLibcBroken`](lib/core/services/runtime_service.dart) and [`_repairGuestLibcIfBroken`](lib/core/services/runtime_service.dart) to detect BOTH missing `/lib` (`execve("/usr/bin/bash"): Function not implemented`, `basename: required file not found`) AND broken `/lib` directories downgraded to Ubuntu 20.04 `glibc 2.31` on Ubuntu 24.04 (`libc.so.6: version 'GLIBC_2.38' not found`). Restores `/lib -> usr/lib` + `usr/lib/ld-linux-aarch64.so.1` purely in Dart (without shelling out to `cp`), strips `2.31` leftovers, and blocks downloading `libc6_2.31` onto Ubuntu 24.04.
