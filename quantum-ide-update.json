@@ -1,16 +1,16 @@
 {
-  "versionCode": 231,
-  "versionName": "1.2.214",
-  "notes": "QuantumIDE v1.2.214:\n• Переход на Ubuntu 24.04 (GLIBC 2.39) + Flutter 3.50.0 (Dart 3.14) с сохранением проектов, .ssh, .gitconfig и .gemini.\n• Исправлен запуск agy в Android PRoot (отключён Linux user-namespace sandbox).\n• Добавлены бейджи «В образе», выбор JDK 17/21, Go, Rust и пропуск уже установленных пакетов.",
+  "versionCode": 232,
+  "versionName": "1.2.215",
+  "notes": "QuantumIDE v1.2.215:\n• Автоматическое предложение обновления до Ubuntu 24.04 (GLIBC 2.39) + Flutter 3.50.0 при запуске для всех пользователей с сохранением проектов, .ssh, .gitconfig и .gemini.\n• Встроенная «Очистка системы» в разделе пакетов: сканирование и удаление кэшей Gradle, Gradle Wrapper, .dartServer, npm, APT, /tmp и артефактов build/.\n• Обновлённый терминальный fetch в стиле Ubuntu (логотип слева и информация об устройстве справа, без лишнего шума).\n• Исправлена панель «Проблемы» (Problems): кнопка обновления и кнопка «Проверить проект» теперь запускают полный анализ `dart analyze` на Android/iOS.\n• Выбор JDK 17/21, Go, Rust и бейджи предустановленных пакетов.",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.214/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.215/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.214",
-  "buildNumber": 231,
-  "tag_name": "v1.2.214",
-  "releaseNotes": "Ubuntu 24.04 + Flutter 3.50 migration UI, agy PRoot fix, preinstalled package badges."
+  "version": "1.2.215",
+  "buildNumber": 232,
+  "tag_name": "v1.2.215",
+  "releaseNotes": "Auto Ubuntu 24.04 upgrade prompt, System Cleaner, Ubuntu-style term-fetch, and Problems panel dart analyze fix."
 }

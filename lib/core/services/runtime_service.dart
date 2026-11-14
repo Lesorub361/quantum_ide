@@ -781,7 +781,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '30';
+    const bashrcVersion = '31';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -815,7 +815,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=30
+# BASHRC_VERSION=31
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -1202,152 +1202,22 @@ if ! command -v which > /dev/null 2>&1; then
     chmod 755 /usr/bin/which
 fi
 
-# Modern Responsive System Fetch
+# Modern Responsive System Fetch (delegates to /usr/local/bin/term-fetch)
 term_fetch() {
-    local COLS=$(stty size 2>/dev/null | awk '{print $2}')
-    [ -z "$COLS" ] && COLS=$(tput cols 2>/dev/null)
-    [ -z "$COLS" ] && COLS="${COLUMNS}"
-    [ -z "$COLS" ] || [ "$COLS" -le 0 ] 2>/dev/null && COLS=50
-
-    local C_RESET="\033[0m"
-    local C_BOLD="\033[1m"
-    local C_DIM="\033[2m"
-    local C_CYAN="\033[38;5;51m"
-    local C_BLUE="\033[38;5;39m"
-    local C_PURPLE="\033[38;5;141m"
-    local C_MAGENTA="\033[38;5;201m"
-    local C_PINK="\033[38;5;213m"
-    local C_GREEN="\033[38;5;48m"
-    local C_YELLOW="\033[38;5;220m"
-    local C_ORANGE="\033[38;5;208m"
-    local C_RED="\033[38;5;196m"
-    local C_WHITE="\033[38;5;255m"
-    local C_GRAY="\033[38;5;245m"
-    local C_DARK="\033[38;5;238m"
-
-    local OS_NAME=$(grep -oP '(?<=PRETTY_NAME=")[^"]*' /etc/os-release 2>/dev/null)
-    [ -z "$OS_NAME" ] && OS_NAME="$(uname -s)"
-    local ARCH=$(uname -m)
-    local KERNEL=$(uname -r | cut -d'-' -f1-2)
-
-    local HOST_MODEL=""
-    if command -v getprop >/dev/null 2>&1; then
-        local BRAND=$(getprop ro.product.brand 2>/dev/null)
-        local MODEL=$(getprop ro.product.model 2>/dev/null)
-        [ -n "$MODEL" ] && HOST_MODEL="$BRAND $MODEL"
+    if [ -x /usr/local/bin/term-fetch ]; then
+        /usr/local/bin/term-fetch
+    elif [ -x /usr/bin/term-fetch ]; then
+        /usr/bin/term-fetch
     fi
-    if [ -z "$HOST_MODEL" ] && [ -f /sys/devices/virtual/dmi/id/product_name ]; then
-        HOST_MODEL=$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)
-    fi
-    [ -z "$HOST_MODEL" ] && HOST_MODEL="$(hostname 2>/dev/null || echo 'localhost')"
-
-    local UPTIME_STR="unknown"
-    if [ -s /proc/uptime ]; then
-        local UP_SECS=$(cut -d. -f1 /proc/uptime 2>/dev/null)
-        if [ -n "$UP_SECS" ] && [ "$UP_SECS" -eq "$UP_SECS" ] 2>/dev/null; then
-            local DAYS=$((UP_SECS / 86400))
-            local HOURS=$(( (UP_SECS % 86400) / 3600 ))
-            local MINS=$(( (UP_SECS % 3600) / 60 ))
-            UPTIME_STR=""
-            [ $DAYS -gt 0 ] && UPTIME_STR="${DAYS}d "
-            [ $HOURS -gt 0 ] && UPTIME_STR="${UPTIME_STR}${HOURS}h "
-            UPTIME_STR="${UPTIME_STR}${MINS}m"
-        fi
-    fi
-
-    local CPU_CORES=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "1")
-    local CPU_NAME=$(grep -m1 -E 'Hardware|model name|Processor' /proc/cpuinfo 2>/dev/null | cut -d: -f2 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-    [ -z "$CPU_NAME" ] && CPU_NAME="ARM64 Processor"
-
-    local MEM_USED_MB=0 MEM_TOTAL_MB=0 MEM_PERCENT=0
-    if [ -f /proc/meminfo ]; then
-        local MEM_TOTAL_KB=$(grep 'MemTotal:' /proc/meminfo | awk '{print $2}')
-        local MEM_AVAIL_KB=$(grep 'MemAvailable:' /proc/meminfo | awk '{print $2}')
-        [ -z "$MEM_AVAIL_KB" ] && MEM_AVAIL_KB=$(grep 'MemFree:' /proc/meminfo | awk '{print $2}')
-        local MEM_USED_KB=$((MEM_TOTAL_KB - MEM_AVAIL_KB))
-        MEM_USED_MB=$((MEM_USED_KB / 1024))
-        MEM_TOTAL_MB=$((MEM_TOTAL_KB / 1024))
-        [ $MEM_TOTAL_KB -gt 0 ] && MEM_PERCENT=$((MEM_USED_KB * 100 / MEM_TOTAL_KB)) || MEM_PERCENT=0
-    fi
-
-    local DISK_INFO=$(df -h / 2>/dev/null | tail -1)
-    local DISK_USED=$(echo "$DISK_INFO" | awk '{print $3}')
-    local DISK_TOTAL=$(echo "$DISK_INFO" | awk '{print $2}')
-    local DISK_PERCENT=$(echo "$DISK_INFO" | awk '{print $5}' | tr -d '%')
-    [ -z "$DISK_PERCENT" ] && DISK_PERCENT=0
-
-    _q_bar() {
-        local pct=$1 width=$2 bar=""
-        [ -z "$width" ] && width=10
-        local filled=$((pct * width / 100))
-        local empty=$((width - filled))
-        for ((i=0; i<filled; i++)); do bar="${bar}█"; done
-        for ((i=0; i<empty; i++)); do bar="${bar}░"; done
-        echo "$bar"
-    }
-
-    local RUNTIMES=""
-    command -v flutter >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Flutter "
-    command -v node >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Node.js "
-    command -v python3 >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Python "
-    command -v rustc >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Rust "
-    command -v clang >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Clang "
-    [ -z "$RUNTIMES" ] && RUNTIMES="Linux Core"
-
-    if [ "$COLS" -ge 72 ]; then
-        local RAM_BAR=$(_q_bar $MEM_PERCENT 10)
-        local DISK_BAR=$(_q_bar $DISK_PERCENT 10)
-        echo -e "${C_CYAN}  ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗   ██╗███╗   ███╗${C_RESET}"
-        echo -e "${C_BLUE} ██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██║   ██║████╗ ████║${C_RESET}"
-        echo -e "${C_PURPLE} ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ██║   ██║██╔████╔██║${C_RESET}"
-        echo -e "${C_MAGENTA} ╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ╚██████╔╝██║ ╚═╝ ██║${C_RESET}"
-        echo -e "${C_MAGENTA}  ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝${C_RESET}"
-        echo -e "         ${C_BOLD}${C_CYAN}Q U A N T U M   I D E${C_RESET} ${C_DARK}│${C_RESET} ${C_PURPLE}Next-Gen Mobile & Desktop Studio${C_RESET}"
-        echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_CYAN}◆ OS      ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
-        echo -e "  ${C_BLUE}◆ Host    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${HOST_MODEL}${C_RESET} ${C_DIM}[Kernel: ${KERNEL}]${C_RESET}"
-        echo -e "  ${C_YELLOW}◆ CPU     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${CPU_NAME}${C_RESET} ${C_CYAN}(${CPU_CORES} cores)${C_RESET}"
-        echo -e "  ${C_GREEN}◆ RAM     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}MB / ${MEM_TOTAL_MB}MB${C_RESET} ${C_DIM}(${MEM_PERCENT}%)${C_RESET}"
-        echo -e "  ${C_PURPLE}◆ Disk    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED} / ${DISK_TOTAL}${C_RESET} ${C_DIM}(${DISK_PERCENT}%)${C_RESET}"
-        echo -e "  ${C_PINK}◆ Uptime  ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
-        echo -e "  ${C_MAGENTA}◆ Stack   ${C_RESET} ${C_GRAY}::${C_RESET} ${C_CYAN}${RUNTIMES}${C_RESET}"
-        echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_DIM}Colors  :${C_RESET} ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
-    else
-        local RAM_BAR=$(_q_bar $MEM_PERCENT 7)
-        local DISK_BAR=$(_q_bar $DISK_PERCENT 7)
-        echo -e "  ${C_CYAN}╭───────╮${C_RESET}  ${C_BOLD}${C_CYAN}QUANTUM IDE${C_RESET} ${C_DARK}::${C_RESET} ${C_PURPLE}Dev Studio${C_RESET}"
-        echo -e "  ${C_BLUE}│ ◈   ◈ │${C_RESET}  ${C_DARK}────────────────────────────────${C_RESET}"
-        echo -e "  ${C_PURPLE}│   ◆   │${C_RESET}  ${C_CYAN}OS  :${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
-        echo -e "  ${C_MAGENTA}│ ◈   ◈ │${C_RESET}  ${C_YELLOW}CPU :${C_RESET} ${C_WHITE}${CPU_CORES} cores${C_RESET} ${C_DIM}[${CPU_NAME:0:15}]${C_RESET}"
-        echo -e "  ${C_PINK}╰───────╯${C_RESET}  ${C_GREEN}RAM :${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}M/${MEM_TOTAL_MB}M${C_RESET}"
-        echo -e "             ${C_PURPLE}Disk:${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED}/${DISK_TOTAL}${C_RESET}"
-        echo -e "             ${C_PINK}Up  :${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
-        echo -e "  ${C_DARK}────────────────────────────────────────${C_RESET}"
-        echo -e "  ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
-    fi
-    echo
 }
 
-# Ubuntu Greeting & Cyberpunk Banner (shown cleanly once per session)
+# Ubuntu Greeting & System Fetch (shown cleanly once per session)
 if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
     export _QUANTUM_GREETING_SHOWN=1
     printf '\033[2J\033[H'
     term_fetch 2>/dev/null || true
-    echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
-    echo -e '    \e[38;5;141mll\e[0m             → ls -la'
-    echo -e '    \e[38;5;141mbuild-arm64\e[0m    → flutter build apk (release ARM64 64-bit, быстрый)'
-    echo -e '    \e[38;5;141mbuild-arm32\e[0m    → flutter build apk (release ARMv7 32-bit)'
-    echo -e '    \e[38;5;141mbuild-x64\e[0m      → flutter build apk (release x86_64)'
-    echo -e '    \e[38;5;141mbuild-aab\e[0m      → flutter build appbundle (Google Play AAB)'
-    echo -e '    \e[38;5;141mbuild-apk\e[0m      → flutter build apk (release arm64 safe)'
-    echo -e '    \e[38;5;141mbuild-bundle\e[0m   → flutter build appbundle (release safe)'
-    echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
-    echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
-    echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
-    echo
     if [ -f /tmp/setup_daemon.lock ]; then
-        echo -e '  \e[1;33m⏳ Фоновая установка пакетов терминала и инструментов прошивки (лог: cat /tmp/setup_arm64.log)\e[0m\n'
+        echo -e '  \e[1;33m⏳ Фоновая установка пакетов... (cat /tmp/setup_arm64.log)\e[0m\n'
     fi
 fi
 
@@ -1704,20 +1574,8 @@ if [ -z "$VTE_VERSION" ] && [ -z "$_QUANTUM_GREETING_SHOWN" ]; then
     export _QUANTUM_GREETING_SHOWN=1
     clear
     [ -x /usr/local/bin/term-fetch ] && /usr/local/bin/term-fetch
-    echo -e '  \e[1;36m⚡ Quick Commands:\e[0m'
-    echo -e '    \e[38;5;141mll\e[0m             → ls -la'
-    echo -e '    \e[38;5;141mbuild-arm64\e[0m    → flutter build apk (release ARM64 64-bit, быстрый)'
-    echo -e '    \e[38;5;141mbuild-arm32\e[0m    → flutter build apk (release ARMv7 32-bit)'
-    echo -e '    \e[38;5;141mbuild-x64\e[0m      → flutter build apk (release x86_64)'
-    echo -e '    \e[38;5;141mbuild-aab\e[0m      → flutter build appbundle (Google Play AAB)'
-    echo -e '    \e[38;5;141mbuild-apk\e[0m      → flutter build apk (release arm64 safe)'
-    echo -e '    \e[38;5;141mbuild-bundle\e[0m   → flutter build appbundle (release safe)'
-    echo -e '    \e[38;5;141mfb-apk\e[0m         → flutter build apk (debug)'
-    echo -e '    \e[38;5;141mf-clean\e[0m        → flutter clean && pub get'
-    echo -e '    \e[38;5;141mfetch\e[0m          → show system stats'
-    echo
     if [ -f /tmp/setup_daemon.lock ]; then
-        echo -e '  \e[1;33m⏳ Фоновая установка пакетов терминала и инструментов прошивки (лог: cat /tmp/setup_arm64.log)\e[0m\n'
+        echo -e '  \e[1;33m⏳ Фоновая установка пакетов... (cat /tmp/setup_arm64.log)\e[0m\n'
     fi
 fi
 ''';
@@ -2040,40 +1898,42 @@ command -v rustc >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Rust "
 command -v clang >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Clang "
 [ -z "$RUNTIMES" ] && RUNTIMES="Linux Core"
 
-# RENDER
-if [ "$COLS" -ge 72 ]; then
-    RAM_BAR=$(make_bar $MEM_PERCENT 10)
-    DISK_BAR=$(make_bar $DISK_PERCENT 10)
+# RENDER (Authentic Ubuntu Neofetch style: Ubuntu logo left, device info right)
+echo
+if [ "$COLS" -ge 58 ]; then
+    RAM_BAR=$(make_bar $MEM_PERCENT 8)
+    DISK_BAR=$(make_bar $DISK_PERCENT 8)
+    USER_HOST="${USER:-root}@quantum-ide"
+    C_UBU="\033[38;5;202m"
+    C_UBU2="\033[38;5;208m"
 
-    echo -e "${C_CYAN}  ██████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗██╗   ██╗███╗   ███╗${C_RESET}"
-    echo -e "${C_BLUE} ██╔═══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝██║   ██║████╗ ████║${C_RESET}"
-    echo -e "${C_PURPLE} ██║   ██║██║   ██║███████║██╔██╗ ██║   ██║   ██║   ██║██╔████╔██║${C_RESET}"
-    echo -e "${C_MAGENTA} ╚██████╔╝╚██████╔╝██║  ██║██║ ╚████║   ██║   ╚██████╔╝██║ ╚═╝ ██║${C_RESET}"
-    echo -e "${C_MAGENTA}  ╚══▀▀═╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝${C_RESET}"
-    echo -e "         ${C_BOLD}${C_CYAN}Q U A N T U M   I D E${C_RESET} ${C_DARK}│${C_RESET} ${C_PURPLE}Next-Gen Mobile & Desktop Studio${C_RESET}"
-    echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_CYAN}◆ OS      ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
-    echo -e "  ${C_BLUE}◆ Host    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${HOST_MODEL}${C_RESET} ${C_DIM}[Kernel: ${KERNEL}]${C_RESET}"
-    echo -e "  ${C_YELLOW}◆ CPU     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${CPU_NAME}${C_RESET} ${C_CYAN}(${CPU_CORES} cores)${C_RESET}"
-    echo -e "  ${C_GREEN}◆ RAM     ${C_RESET} ${C_GRAY}::${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}MB / ${MEM_TOTAL_MB}MB${C_RESET} ${C_DIM}(${MEM_PERCENT}%)${C_RESET}"
-    echo -e "  ${C_PURPLE}◆ Disk    ${C_RESET} ${C_GRAY}::${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED} / ${DISK_TOTAL}${C_RESET} ${C_DIM}(${DISK_PERCENT}%)${C_RESET}"
-    echo -e "  ${C_PINK}◆ Uptime  ${C_RESET} ${C_GRAY}::${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
-    echo -e "  ${C_MAGENTA}◆ Stack   ${C_RESET} ${C_GRAY}::${C_RESET} ${C_CYAN}${RUNTIMES}${C_RESET}"
-    echo -e " ${C_DARK}────────────────────────────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_DIM}Colors  :${C_RESET} ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
+    echo -e "        ${C_UBU}.-/+oooo+/-.${C_RESET}          ${C_BOLD}${C_UBU2}${USER_HOST}${C_RESET}"
+    echo -e "     ${C_UBU}\`:+ssssssssssss+:\`${C_RESET}       ${C_DARK}──────────────────────────────${C_RESET}"
+    echo -e "   ${C_UBU}.+ssssssss${C_WHITE}yy${C_UBU}ssssssss+.${C_RESET}     ${C_BOLD}${C_UBU2}OS${C_RESET}      ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
+    echo -e "  ${C_UBU}/sssssssss${C_WHITE}dMMN${C_UBU}sssssssss/${C_RESET}    ${C_BOLD}${C_UBU2}Host${C_RESET}    ${C_WHITE}${HOST_MODEL}${C_RESET}"
+    echo -e " ${C_UBU}/sssssssh${C_WHITE}NmyNMMMh${C_UBU}ssssssss/${C_RESET}   ${C_BOLD}${C_UBU2}Kernel${C_RESET}  ${C_WHITE}${KERNEL}${C_RESET}"
+    echo -e "${C_UBU}.sssssssd${C_WHITE}MNhsymMMMd${C_UBU}ssssssss.${C_RESET}  ${C_BOLD}${C_UBU2}CPU${C_RESET}     ${C_WHITE}${CPU_NAME}${C_RESET} ${C_DIM}(${CPU_CORES}c)${C_RESET}"
+    echo -e "${C_UBU}+sssshhyd${C_WHITE}MNssssNMMMy${C_UBU}sssssss+${C_RESET}  ${C_BOLD}${C_UBU2}RAM${C_RESET}     ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}M / ${MEM_TOTAL_MB}M${C_RESET} ${C_DIM}(${MEM_PERCENT}%)${C_RESET}"
+    echo -e "${C_UBU}+sssshhyd${C_WHITE}MNssssNMMMy${C_UBU}sssssss+${C_RESET}  ${C_BOLD}${C_UBU2}Disk${C_RESET}    ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED} / ${DISK_TOTAL}${C_RESET} ${C_DIM}(${DISK_PERCENT}%)${C_RESET}"
+    echo -e "${C_UBU}.sssssssd${C_WHITE}MNhsymMMMd${C_UBU}ssssssss.${C_RESET}  ${C_BOLD}${C_UBU2}Uptime${C_RESET}  ${C_WHITE}${UPTIME_STR}${C_RESET}"
+    echo -e " ${C_UBU}/sssssssh${C_WHITE}NmyNMMMh${C_UBU}ssssssss/${C_RESET}   ${C_BOLD}${C_UBU2}Stack${C_RESET}   ${C_CYAN}${RUNTIMES}${C_RESET}"
+    echo -e "  ${C_UBU}/sssssssss${C_WHITE}dMMN${C_UBU}sssssssss/${C_RESET}    ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
+    echo -e "   ${C_UBU}.+ssssssss${C_WHITE}yy${C_UBU}ssssssss+.${C_RESET}"
+    echo -e "     ${C_UBU}\`:+ssssssssssss+:\`${C_RESET}"
+    echo -e "        ${C_UBU}.-/+oooo+/-.${C_RESET}"
 else
-    RAM_BAR=$(make_bar $MEM_PERCENT 7)
-    DISK_BAR=$(make_bar $DISK_PERCENT 7)
+    RAM_BAR=$(make_bar $MEM_PERCENT 6)
+    DISK_BAR=$(make_bar $DISK_PERCENT 6)
+    C_UBU="\033[38;5;202m"
+    C_UBU2="\033[38;5;208m"
 
-    echo -e "  ${C_CYAN}╭───────╮${C_RESET}  ${C_BOLD}${C_CYAN}QUANTUM IDE${C_RESET} ${C_DARK}::${C_RESET} ${C_PURPLE}Dev Studio${C_RESET}"
-    echo -e "  ${C_BLUE}│ ◈   ◈ │${C_RESET}  ${C_DARK}────────────────────────────────${C_RESET}"
-    echo -e "  ${C_PURPLE}│   ◆   │${C_RESET}  ${C_CYAN}OS  :${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET} ${C_DIM}(${ARCH})${C_RESET}"
-    echo -e "  ${C_MAGENTA}│ ◈   ◈ │${C_RESET}  ${C_YELLOW}CPU :${C_RESET} ${C_WHITE}${CPU_CORES} cores${C_RESET} ${C_DIM}[${CPU_NAME:0:15}]${C_RESET}"
-    echo -e "  ${C_PINK}╰───────╯${C_RESET}  ${C_GREEN}RAM :${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}M/${MEM_TOTAL_MB}M${C_RESET}"
-    echo -e "             ${C_PURPLE}Disk:${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED}/${DISK_TOTAL}${C_RESET}"
-    echo -e "             ${C_PINK}Up  :${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
-    echo -e "  ${C_DARK}────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}● ${C_MAGENTA}●${C_RESET}"
+    echo -e "    ${C_UBU}.-/oooo\\-.${C_RESET}    ${C_BOLD}${C_UBU2}root@quantum-ide${C_RESET}"
+    echo -e "  ${C_UBU}.+ssss${C_WHITE}yy${C_UBU}ssss+.${C_RESET}  ${C_UBU2}OS:${C_RESET} ${C_WHITE}${OS_NAME}${C_RESET}"
+    echo -e " ${C_UBU}/ssss${C_WHITE}dMMNd${C_UBU}ssss/${C_RESET}  ${C_UBU2}CPU:${C_RESET} ${C_WHITE}${CPU_CORES} cores${C_RESET}"
+    echo -e "${C_UBU}.sssy${C_WHITE}MNssNM${C_UBU}ysss.${C_RESET}  ${C_UBU2}RAM:${C_RESET} ${C_GREEN}${RAM_BAR}${C_RESET} ${C_WHITE}${MEM_USED_MB}M/${MEM_TOTAL_MB}M${C_RESET}"
+    echo -e " ${C_UBU}\\ssss${C_WHITE}dMMNd${C_UBU}ssss\\${C_RESET}  ${C_UBU2}Disk:${C_RESET} ${C_PURPLE}${DISK_BAR}${C_RESET} ${C_WHITE}${DISK_USED}/${DISK_TOTAL}${C_RESET}"
+    echo -e "  ${C_UBU}\`+ssss${C_WHITE}yy${C_UBU}ssss+'${C_RESET}  ${C_UBU2}Up:${C_RESET} ${C_WHITE}${UPTIME_STR}${C_RESET}"
+    echo -e "    ${C_UBU}\`-\\oooo/-'${C_RESET}    ${C_RED}● ${C_ORANGE}● ${C_YELLOW}● ${C_GREEN}● ${C_CYAN}● ${C_BLUE}● ${C_PURPLE}●${C_RESET}"
 fi
 echo
 ''';
@@ -3752,6 +3612,169 @@ echo "=== QuantumIDE ARM64 Environment Configuration Finished ==="
     } catch (e) {
       debugPrint('Wakelock disable error: $e');
     }
+  }
+
+  /// Scans common cache and temporary directories inside the Linux environment
+  /// and returns categories with their sizes in kilobytes.
+  Future<List<CleanupCategory>> scanSystemJunk({String? activeProjectGuestPath}) async {
+    final categories = <CleanupCategory>[
+      const CleanupCategory(
+        id: 'gradle_caches',
+        title: 'Кэш сборок Gradle',
+        subtitle: '~/.gradle/caches, ~/.gradle/.tmp (перекачается при сборке)',
+        paths: ['/root/.gradle/caches', '/root/.gradle/.tmp', '/root/.gradle/daemon'],
+        defaultSelected: true,
+      ),
+      const CleanupCategory(
+        id: 'gradle_wrapper',
+        title: 'Дистрибутивы Gradle Wrapper',
+        subtitle: '~/.gradle/wrapper (старые версии Gradle)',
+        paths: ['/root/.gradle/wrapper'],
+        defaultSelected: true,
+      ),
+      const CleanupCategory(
+        id: 'dart_server',
+        title: 'Кэш анализатора Dart',
+        subtitle: '~/.dartServer (пересоздаётся автоматически)',
+        paths: ['/root/.dartServer'],
+        defaultSelected: true,
+      ),
+      const CleanupCategory(
+        id: 'npm_cache',
+        title: 'Кэш npm / Node.js',
+        subtitle: '~/.npm',
+        paths: ['/root/.npm'],
+        defaultSelected: true,
+      ),
+      const CleanupCategory(
+        id: 'apt_cache',
+        title: 'Архивы пакетов APT',
+        subtitle: '/var/cache/apt/archives (*.deb)',
+        paths: ['/var/cache/apt/archives'],
+        isAptClean: true,
+        defaultSelected: true,
+      ),
+      const CleanupCategory(
+        id: 'tmp_junk',
+        title: 'Временные файлы и остатки сборок',
+        subtitle: '/tmp/*, ~/rootfs-build, ~/.cache',
+        paths: ['/root/rootfs-build', '/root/.cache'],
+        isTmpClean: true,
+        defaultSelected: true,
+      ),
+      if (activeProjectGuestPath != null && activeProjectGuestPath.isNotEmpty)
+        CleanupCategory(
+          id: 'project_build',
+          title: 'Артефакты сборки проекта (build/)',
+          subtitle: '$activeProjectGuestPath/build',
+          paths: ['$activeProjectGuestPath/build'],
+          defaultSelected: true,
+        ),
+      const CleanupCategory(
+        id: 'pub_cache',
+        title: 'Кэш пакетов Dart / Flutter (.pub-cache)',
+        subtitle: '~/.pub-cache (потребуется flutter pub get)',
+        paths: ['/root/.pub-cache'],
+        defaultSelected: false,
+      ),
+    ];
+
+    final scriptLines = <String>[];
+    for (final cat in categories) {
+      if (cat.isTmpClean) {
+        scriptLines.add(
+          'KB_${cat.id}=\$(du -sk /tmp /root/rootfs-build /root/.cache 2>/dev/null | awk \'{s+=\$1} END {print s+0}\'); '
+          'echo "${cat.id}=\$KB_${cat.id}"',
+        );
+      } else {
+        final quoted = cat.paths.map((p) => '"$p"').join(' ');
+        scriptLines.add(
+          'KB_${cat.id}=\$(du -sk $quoted 2>/dev/null | awk \'{s+=\$1} END {print s+0}\'); '
+          'echo "${cat.id}=\$KB_${cat.id}"',
+        );
+      }
+    }
+
+    final out = await runCommand(scriptLines.join('; '));
+    final sizes = <String, int>{};
+    for (final line in out.split('\n')) {
+      final parts = line.trim().split('=');
+      if (parts.length == 2) {
+        sizes[parts[0]] = int.tryParse(parts[1]) ?? 0;
+      }
+    }
+
+    return categories
+        .map((c) => c.copyWith(sizeKb: sizes[c.id] ?? 0))
+        .toList();
+  }
+
+  /// Deletes the selected [CleanupCategory] items and returns total freed KB.
+  Future<int> cleanSystemJunk(List<CleanupCategory> selected) async {
+    int freedKb = 0;
+    final cmds = <String>[];
+
+    for (final cat in selected) {
+      if (cat.sizeKb <= 0) continue;
+      freedKb += cat.sizeKb;
+      if (cat.isAptClean) {
+        cmds.add('apt-get clean 2>/dev/null || rm -rf /var/cache/apt/archives/*.deb');
+      } else if (cat.isTmpClean) {
+        cmds.add(
+          'rm -rf /root/rootfs-build /root/.cache '
+          '/tmp/box64 /tmp/llama.cpp /tmp/yandex_* /tmp/.bun-* '
+          '/tmp/flutter_tools.* /tmp/kotlin-daemon.* /tmp/kotlin-compiler-* '
+          '/tmp/dsh-spill-* /tmp/preserved_home /tmp/pubspec*.bak '
+          '/tmp/dart_analyze_output*.txt /tmp/analyze.txt /tmp/q_frame_*.png '
+          '/tmp/tmp.* /tmp/aapt2 /tmp/gradle_shadow /tmp/opencode /tmp/kilo '
+          '/tmp/node-compile-cache /tmp/v8-compile-cache-0 2>/dev/null || true',
+        );
+      } else {
+        final quoted = cat.paths.map((p) => '"$p"').join(' ');
+        cmds.add('rm -rf $quoted 2>/dev/null || true');
+      }
+    }
+
+    if (cmds.isNotEmpty) {
+      await runCommand(cmds.join(' && '));
+    }
+    return freedKb;
+  }
+}
+
+/// Represents a cleanable cache/temp category in the Linux environment.
+class CleanupCategory {
+  final String id;
+  final String title;
+  final String subtitle;
+  final List<String> paths;
+  final int sizeKb;
+  final bool defaultSelected;
+  final bool isAptClean;
+  final bool isTmpClean;
+
+  const CleanupCategory({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.paths,
+    this.sizeKb = 0,
+    this.defaultSelected = true,
+    this.isAptClean = false,
+    this.isTmpClean = false,
+  });
+
+  CleanupCategory copyWith({int? sizeKb}) {
+    return CleanupCategory(
+      id: id,
+      title: title,
+      subtitle: subtitle,
+      paths: paths,
+      sizeKb: sizeKb ?? this.sizeKb,
+      defaultSelected: defaultSelected,
+      isAptClean: isAptClean,
+      isTmpClean: isTmpClean,
+    );
   }
 }
 

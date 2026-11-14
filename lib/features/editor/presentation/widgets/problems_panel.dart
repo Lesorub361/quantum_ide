@@ -10,7 +10,6 @@ import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/analysis_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
-import 'package:quantum_ide/core/services/lsp_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/core/utils/file_icon_helper.dart';
@@ -289,27 +288,32 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
                   ),
                 ),
               const Spacer(),
-              Tooltip(
-                message: 'Обновить диагностики (LSP)',
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () async {
-                    HapticFeedback.lightImpact();
-                    final lsp = ref.read(lspServiceProvider);
-                    final openFiles = ref.read(editorProvider).openFiles;
-                    for (final f in openFiles) {
-                      try {
-                        final diags = await lsp.getDiagnostics(f.path);
-                        ref.read(editorProvider.notifier).updateDiagnostics(f.path, diags);
-                      } catch (_) {}
-                    }
-                    ref.read(analysisServiceProvider).triggerAnalysis(immediate: true);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(4.0),
-                    child: Icon(LucideIcons.refresh_cw, size: 12, color: Colors.white.withValues(alpha: 0.55)),
-                  ),
-                ),
+              ValueListenableBuilder<bool>(
+                valueListenable: ref.read(analysisServiceProvider).isAnalyzingNotifier,
+                builder: (context, isAnalyzing, _) {
+                  return Tooltip(
+                    message: isAnalyzing ? 'Анализ проекта...' : 'Анализ всего проекта (dart analyze)',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: isAnalyzing
+                          ? null
+                          : () async {
+                              HapticFeedback.lightImpact();
+                              await ref.read(analysisServiceProvider).runAnalysis();
+                            },
+                      child: Padding(
+                        padding: const EdgeInsets.all(4.0),
+                        child: isAnalyzing
+                            ? const SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(strokeWidth: 1.6),
+                              )
+                            : Icon(LucideIcons.refresh_cw, size: 12, color: Colors.white.withValues(alpha: 0.55)),
+                      ),
+                    ),
+                  );
+                },
               ),
               if (total > 0) ...[
                 const SizedBox(width: 2),
@@ -402,6 +406,28 @@ class _ProblemsPanelState extends ConsumerState<ProblemsPanel> {
                       Text(
                         l10n.noProblemsFound,
                         style: GoogleFonts.inter(color: Colors.white38, fontSize: 11.5),
+                      ),
+                      const SizedBox(height: 10),
+                      ValueListenableBuilder<bool>(
+                        valueListenable: ref.read(analysisServiceProvider).isAnalyzingNotifier,
+                        builder: (context, isAnalyzing, _) {
+                          return TextButton.icon(
+                            onPressed: isAnalyzing
+                                ? null
+                                : () => ref.read(analysisServiceProvider).runAnalysis(),
+                            icon: isAnalyzing
+                                ? const SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(strokeWidth: 1.6),
+                                  )
+                                : const Icon(LucideIcons.scan_search, size: 13),
+                            label: Text(
+                              isAnalyzing ? 'Анализ...' : 'Проверить проект',
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),

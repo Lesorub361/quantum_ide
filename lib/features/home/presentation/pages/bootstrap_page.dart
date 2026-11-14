@@ -83,9 +83,12 @@ class BootstrapPage extends ConsumerStatefulWidget {
 }
 
 class _BootstrapPageState extends ConsumerState<BootstrapPage> {
-  int _currentStep = 0; // 0: welcome & stacks, 1: agent choice, 2: installing
+  int _currentStep = 0; // 0: welcome & stacks, 1: installing, 2: Ubuntu 24.04 upgrade
   final Set<DevStack> _selectedStacks = {DevStack.web, DevStack.python};
   bool _isChecking = true;
+  bool _isMigrating = false;
+  String? _migrationError;
+  Map<String, String>? _upgradeEnv;
   final List<String> _logLines = [];
   final ScrollController _logScroll = ScrollController();
 
@@ -116,6 +119,17 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     final isComplete = await runtime.isBootstrapComplete();
     if (isComplete) {
       await runtime.init();
+      if (Platform.isAndroid || Platform.isIOS) {
+        final env = await runtime.inspectEnvironment();
+        if (env['needsUpgrade'] == 'true' && mounted) {
+          setState(() {
+            _upgradeEnv = env;
+            _currentStep = 2;
+            _isChecking = false;
+          });
+          return;
+        }
+      }
       if (mounted) {
         _finishBootstrap();
       }
@@ -284,10 +298,156 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
     switch (_currentStep) {
       case 0:
         return _buildStackSelectionStep(context, theme);
+      case 2:
+        return _buildUpgradeStep(context, theme, runtime);
       case 1:
       default:
         return _buildInstallingStep(context, theme, runtime);
     }
+  }
+
+  Widget _buildUpgradeStep(BuildContext context, ThemeData theme, RuntimeService runtime) {
+    final currentOs = _upgradeEnv?['os'] ?? 'Ubuntu 20.04';
+    final currentGlibc = _upgradeEnv?['glibc'] ?? '2.31';
+    final currentFlutter = _upgradeEnv?['flutter'] ?? '3.47.8';
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amberAccent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(LucideIcons.sparkles, color: Colors.amberAccent, size: 28),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Доступно обновление Linux-среды',
+                      style: GoogleFonts.outfit(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Новый образ Ubuntu 24.04 LTS + Flutter 3.50.0',
+                      style: GoogleFonts.inter(fontSize: 13, color: Colors.amberAccent),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: theme.colorScheme.outlineVariant.withValues(alpha: 0.35)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Текущая среда: $currentOs · GLIBC $currentGlibc · Flutter $currentFlutter',
+                  style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: theme.colorScheme.onSurfaceVariant),
+                ),
+                const SizedBox(height: 12),
+                const Text('• Ubuntu 20.04 → Ubuntu 24.04 LTS (Noble)', style: TextStyle(fontSize: 13)),
+                const SizedBox(height: 4),
+                const Text('• GLIBC 2.31 → GLIBC 2.39 (нужно для Dart 3.14 / Flutter 3.50+)', style: TextStyle(fontSize: 13)),
+                const SizedBox(height: 4),
+                const Text('• Включены: Git, Node.js, Python 3, Clang/CMake, JDK 17, Flutter 3.50', style: TextStyle(fontSize: 13)),
+                const SizedBox(height: 12),
+                Text(
+                  'Ваши проекты (/root/projects), .ssh, .gitconfig, .gemini и настройки сохранятся автоматически.',
+                  style: GoogleFonts.inter(fontSize: 12.5, color: Colors.greenAccent, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_isMigrating) ...[
+            LinearProgressIndicator(
+              value: runtime.progress > 0 ? runtime.progress : null,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              runtime.status,
+              style: GoogleFonts.jetBrainsMono(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+            ),
+            if (_migrationError != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _migrationError!,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 16),
+          ],
+          if (!_isMigrating || _migrationError != null)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _finishBootstrap,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Позже'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      setState(() {
+                        _isMigrating = true;
+                        _migrationError = null;
+                      });
+                      try {
+                        await ref.read(runtimeServiceProvider).migrateToUbuntu2404();
+                        if (mounted) {
+                          _finishBootstrap();
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          setState(() {
+                            _migrationError = '$e';
+                          });
+                        }
+                      }
+                    },
+                    icon: const Icon(LucideIcons.download, size: 18),
+                    label: const Text('Обновить до Ubuntu 24.04'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amberAccent,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 
   /// Step 1: Hardware overview & Toolchain selection (Mobile-Harness style)

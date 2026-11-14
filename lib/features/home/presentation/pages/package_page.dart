@@ -101,6 +101,7 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
     final List<Widget> headers = [];
     if (tabType == 'all' && _searchQuery.isEmpty) {
       headers.add(_buildEnvironmentHeroCard(context, ref));
+      headers.add(_buildSystemCleanerCard(context, ref));
     }
     if (showReleaseEngineHero) {
       headers.add(_buildReleaseEngineHeroCard(context, ref));
@@ -573,6 +574,238 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                     }
                   },
                   child: const Text('Скачать и обновить'),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  String _formatKb(int kb) {
+    if (kb >= 1024 * 1024) {
+      return '${(kb / (1024 * 1024)).toStringAsFixed(2)} ГБ';
+    }
+    if (kb >= 1024) {
+      return '${(kb / 1024).toStringAsFixed(1)} МБ';
+    }
+    return '$kb КБ';
+  }
+
+  Widget _buildSystemCleanerCard(BuildContext context, WidgetRef ref) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.cyanAccent.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.cyanAccent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(LucideIcons.sparkles, color: Colors.cyanAccent, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Очистка системы от мусора',
+                  style: GoogleFonts.outfit(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Кэши Gradle, Dart, npm, APT и временные файлы',
+                  style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white60),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: () => _showSystemCleanerDialog(context, ref),
+            icon: const Icon(LucideIcons.trash_2, size: 15),
+            label: const Text('Очистить'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.cyanAccent.withValues(alpha: 0.18),
+              foregroundColor: Colors.cyanAccent,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showSystemCleanerDialog(BuildContext context, WidgetRef ref) async {
+    final runtime = ref.read(runtimeServiceProvider);
+    final activeHostPath = ref.read(workspaceProvider).currentPath;
+    String? activeGuestPath;
+    if (activeHostPath != null && activeHostPath.isNotEmpty) {
+      activeGuestPath = PathMapper.mapToGuest(activeHostPath, runtime.appDirectory);
+    }
+
+    List<CleanupCategory>? categories;
+    final Set<String> selectedIds = {};
+    bool scanStarted = false;
+    bool isCleaning = false;
+    String? errorMsg;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          if (!scanStarted) {
+            scanStarted = true;
+            runtime.scanSystemJunk(activeProjectGuestPath: activeGuestPath).then((res) {
+              if (!ctx.mounted) return;
+              setDialogState(() {
+                categories = res;
+                for (final c in res) {
+                  if (c.defaultSelected && c.sizeKb > 0) {
+                    selectedIds.add(c.id);
+                  }
+                }
+              });
+            }).catchError((e) {
+              if (!ctx.mounted) return;
+              setDialogState(() => errorMsg = '$e');
+            });
+          }
+
+          final list = categories ?? const <CleanupCategory>[];
+          final totalSelectedKb = list
+              .where((c) => selectedIds.contains(c.id))
+              .fold<int>(0, (sum, c) => sum + c.sizeKb);
+
+          return AlertDialog(
+            title: Row(
+              children: [
+                const Icon(LucideIcons.trash_2, size: 20, color: Colors.cyanAccent),
+                const SizedBox(width: 8),
+                Text(
+                  'Очистка системы',
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 420,
+              child: categories == null && errorMsg == null
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 28),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(strokeWidth: 2.5),
+                          SizedBox(height: 14),
+                          Text('Сканирование кэшей и временных файлов...', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    )
+                  : errorMsg != null
+                      ? Text('Ошибка сканирования: $errorMsg', style: const TextStyle(color: Colors.redAccent, fontSize: 12.5))
+                      : SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final cat in list)
+                                CheckboxListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  value: selectedIds.contains(cat.id),
+                                  enabled: !isCleaning && cat.sizeKb > 0,
+                                  onChanged: (val) {
+                                    setDialogState(() {
+                                      if (val == true) {
+                                        selectedIds.add(cat.id);
+                                      } else {
+                                        selectedIds.remove(cat.id);
+                                      }
+                                    });
+                                  },
+                                  title: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          cat.title,
+                                          style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatKb(cat.sizeKb),
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11.5,
+                                          color: cat.sizeKb > 0 ? Colors.cyanAccent : Colors.white38,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  subtitle: Text(
+                                    cat.subtitle,
+                                    style: GoogleFonts.inter(fontSize: 11, color: Colors.white54),
+                                  ),
+                                ),
+                              if (isCleaning) ...[
+                                const SizedBox(height: 10),
+                                const LinearProgressIndicator(),
+                              ],
+                            ],
+                          ),
+                        ),
+            ),
+            actions: [
+              if (!isCleaning)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Закрыть'),
+                ),
+              if (categories != null && !isCleaning)
+                FilledButton.icon(
+                  onPressed: totalSelectedKb <= 0
+                      ? null
+                      : () async {
+                          setDialogState(() => isCleaning = true);
+                          try {
+                            final chosen = list.where((c) => selectedIds.contains(c.id)).toList();
+                            final freedKb = await runtime.cleanSystemJunk(chosen);
+                            if (ctx.mounted) Navigator.pop(ctx);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Освобождено ${_formatKb(freedKb)}'),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setDialogState(() {
+                              isCleaning = false;
+                              errorMsg = '$e';
+                            });
+                          }
+                        },
+                  icon: const Icon(LucideIcons.trash_2, size: 15),
+                  label: Text(
+                    totalSelectedKb > 0
+                        ? 'Удалить (${_formatKb(totalSelectedKb)})'
+                        : 'Нечего удалять',
+                  ),
                 ),
             ],
           );

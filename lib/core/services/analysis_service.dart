@@ -17,6 +17,7 @@ class AnalysisService {
   Timer? _debounceTimer;
   bool _isAnalyzing = false;
   bool _pendingAnalysis = false;
+  final ValueNotifier<bool> isAnalyzingNotifier = ValueNotifier<bool>(false);
 
   AnalysisService(this.ref);
 
@@ -25,17 +26,18 @@ class AnalysisService {
     return PathMapper.mapToGuest(hostPath, runtime.appDirectory);
   }
 
-  void triggerAnalysis({bool immediate = false}) {
+  void triggerAnalysis({bool immediate = false, bool force = false}) {
     // On mobile/tablet (Android/iOS), LspService (dart language-server) already provides
-    // real-time diagnostics over stdio. Spawning a separate `dart analyze .` VM on every edit
-    // consumes an extra 600+ MB of RAM and saturates CPU in PRoot.
-    if (defaultTargetPlatform == TargetPlatform.android ||
-        defaultTargetPlatform == TargetPlatform.iOS) {
+    // real-time diagnostics for open files. Spawning a separate `dart analyze .` VM on every edit
+    // consumes an extra 600+ MB of RAM and saturates CPU in PRoot — unless explicitly requested (`force: true`).
+    if (!force &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
       return;
     }
     _debounceTimer?.cancel();
     if (immediate) {
-      _debounceTimer = Timer(const Duration(seconds: 5), () {
+      _debounceTimer = Timer(const Duration(milliseconds: 250), () {
         runAnalysis();
       });
     } else {
@@ -67,6 +69,7 @@ class AnalysisService {
 
     _isAnalyzing = true;
     _pendingAnalysis = false;
+    isAnalyzingNotifier.value = true;
     
     try {
       debugPrint('AnalysisService: Starting full project analysis in PRoot...');
@@ -134,6 +137,7 @@ class AnalysisService {
       debugPrint('Analysis failed: $e');
     } finally {
       _isAnalyzing = false;
+      isAnalyzingNotifier.value = false;
       if (_pendingAnalysis) {
         runAnalysis();
       }
@@ -151,6 +155,7 @@ class AnalysisService {
 
   void dispose() {
     _debounceTimer?.cancel();
+    isAnalyzingNotifier.dispose();
   }
 }
 
