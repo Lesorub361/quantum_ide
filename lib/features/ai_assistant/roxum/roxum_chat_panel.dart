@@ -1467,6 +1467,10 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     required Color surfaceColor,
     required Color textColor,
   }) {
+    final isDark =
+        ThemeData.estimateBrightnessForColor(surfaceColor) == Brightness.dark;
+    final inlineAccent =
+        isDark ? const Color(0xFF7DD3FC) : const Color(0xFF0284C7);
     return Container(
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
@@ -1486,6 +1490,40 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           color: isError ? Colors.redAccent : textColor,
           fontSize: 13,
           height: 1.45,
+        ),
+        styleSheet: GptMarkdownStyleSheet(
+          heading: HeadingStyle(
+            textStyle: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.w700,
+            ),
+            dividerColor: textColor.withValues(alpha: 0.14),
+          ),
+          inlineCode: InlineCodeStyle(
+            color: inlineAccent,
+            backgroundColor: inlineAccent.withValues(alpha: 0.14),
+            borderColor: inlineAccent.withValues(alpha: 0.28),
+          ),
+          table: TableStyle(
+            headerBackground: isDark
+                ? Colors.white.withValues(alpha: 0.09)
+                : Colors.black.withValues(alpha: 0.06),
+            headerTextStyle: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+            ),
+            borderColor: textColor.withValues(alpha: 0.18),
+            rowStripeColor: textColor.withValues(alpha: 0.03),
+            overflow: TableOverflow.wrap,
+          ),
+          hr: HrStyle(
+            color: textColor.withValues(alpha: 0.14),
+            thickness: 1,
+          ),
+          link: LinkStyle(
+            color: inlineAccent,
+          ),
         ),
         codeBuilder: (ctx, name, code, closed) {
           final isShell = _isShellCommandBlock(name, code);
