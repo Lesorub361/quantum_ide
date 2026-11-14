@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.234
+- **Redesigned Professional Git UI & Workflow (`GitPanel`, `GitGraphPage`)**:
+  - Replaced cluttered stacked toolbars and clipped horizontal buttons with a clean compact header, full-width segmented quick-action bar (`Sync`, `Fetch`, `Pull`, `Push`, `Stash`), overflow menu, and streamlined tabs (`Изменения`, `История`, `Ветки`, `Релизы`).
+  - Upgraded **Changes** composer & file rows with clearer staging state, diff summary stats (`+N / -M`), clean working tree summary card with latest commit preview, and context actions.
+  - Upgraded **Branches & Stash** manager with search bar, active `HEAD` tracking card (upstream / ahead-behind / push & graph shortcuts), expandable local & remote branch lists with one-tap Switch / Merge / Rename / Delete / Fetch / Checkout, and Stash cards (`Diff`, `Apply`, `Pop`, `Drop`).
+- **Unified Git Theme & `ConduitPalette` Synchronization (`GitThemeColors`)**:
+  - Added [`GitThemeColors`](lib/features/git/presentation/widgets/git_theme.dart) resolving active `ConduitPalette` when `syncAppWithTerminalPalette` is enabled and falling back to Material 3 `ColorScheme`.
+  - Applied dynamic theme/background/accent colors across all Git screens and dialogs: [`GitPanel`](lib/features/git/presentation/widgets/git_panel.dart), [`GitGraphPage`](lib/features/git/presentation/pages/git_graph_page.dart), [`GitDownloadDialog`](lib/features/git/presentation/widgets/git_download_dialog.dart), [`GitDiffPage`](lib/features/git/presentation/pages/git_diff_page.dart), [`DiffViewerPage`](lib/features/git/presentation/pages/diff_viewer_page.dart), and [`GitMergeConflictPage`](lib/features/git/presentation/pages/git_merge_conflict_page.dart).
+
 ## 1.2.233
 - **PRoot `localhost` DNS Fix for `agy` & Go Binaries (`/etc/hosts` + `/etc/nsswitch.conf`)**:
   - Fixed `Failed to start: listen tcp: lookup localhost on 8.8.8.8:53: no such host` when running `agy` in PRoot.

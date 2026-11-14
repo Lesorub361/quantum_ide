@@ -3,6 +3,7 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:diff_match_patch/diff_match_patch.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_theme.dart';
 
 enum DiffViewMode { unified, sideBySide }
 
@@ -196,12 +197,13 @@ class _DiffViewerPageState extends State<DiffViewerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = GitThemeColors.resolve(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF080A10),
+      backgroundColor: c.canvas,
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(),
+            _buildHeader(c),
             _buildToolbar(),
             Expanded(child: _buildDiffContent()),
           ],
@@ -210,23 +212,22 @@ class _DiffViewerPageState extends State<DiffViewerPage> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(GitThemeColors c) {
     return GlassContainer(
       blur: 20,
       opacity: 0.05,
       borderRadius: BorderRadius.zero,
-      border:
-          Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      border: Border(bottom: BorderSide(color: c.border)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             IconButton(
-              icon: const Icon(LucideIcons.arrow_left, color: Colors.white70),
+              icon: Icon(LucideIcons.arrow_left, color: c.mutedForeground),
               onPressed: () => Navigator.of(context).pop(),
             ),
             const SizedBox(width: 8),
-            const Icon(LucideIcons.git_compare, size: 16, color: Colors.cyanAccent),
+            Icon(LucideIcons.git_compare, size: 16, color: c.accent),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -235,7 +236,7 @@ class _DiffViewerPageState extends State<DiffViewerPage> {
                   Text(
                     widget.fileName.split('/').last,
                     style: GoogleFonts.inter(
-                      color: Colors.white,
+                      color: c.foreground,
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
@@ -243,7 +244,7 @@ class _DiffViewerPageState extends State<DiffViewerPage> {
                   Text(
                     '${_diffLines.where((l) => l.type == DiffLineType.deletion).length} deletions · '
                     '${_diffLines.where((l) => l.type == DiffLineType.addition).length} additions',
-                    style: GoogleFonts.inter(color: Colors.white38, fontSize: 10),
+                    style: GoogleFonts.inter(color: c.subtleForeground, fontSize: 10),
                   ),
                 ],
               ),

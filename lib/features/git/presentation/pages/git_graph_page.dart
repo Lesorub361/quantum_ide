@@ -7,6 +7,7 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_theme.dart';
 
 class GitCommitItem {
   final String hash;
@@ -183,9 +184,10 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
     String diffStat = 'Загрузка изменений...';
 
     if (!mounted) return;
+    final c = GitThemeColors.resolve(context, ref);
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF131722),
+      backgroundColor: c.panel,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -228,13 +230,13 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: _laneColors[commit.laneIndex].withValues(alpha: 0.15),
+                                color: _laneColors[commit.laneIndex % _laneColors.length].withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 commit.hash,
                                 style: GoogleFonts.jetBrainsMono(
-                                  color: _laneColors[commit.laneIndex],
+                                  color: _laneColors[commit.laneIndex % _laneColors.length],
                                   fontWeight: FontWeight.bold,
                                   fontSize: 13,
                                 ),
@@ -244,19 +246,19 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: Colors.amberAccent.withValues(alpha: 0.12),
+                                  color: c.warning.withValues(alpha: 0.14),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   commit.refs,
-                                  style: const TextStyle(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: TextStyle(color: c.warning, fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
                               ),
                           ],
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(LucideIcons.copy, size: 16, color: Colors.white70),
+                        icon: Icon(LucideIcons.copy, size: 16, color: c.mutedForeground),
                         tooltip: 'Скопировать SHA',
                         onPressed: () {
                           Clipboard.setData(ClipboardData(text: commit.hash));
@@ -270,12 +272,12 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                   const SizedBox(height: 10),
                   Text(
                     commit.message,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: c.foreground, fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Автор: ${commit.author} • ${commit.relativeDate}',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                    style: TextStyle(color: c.mutedForeground, fontSize: 12),
                   ),
                   const SizedBox(height: 12),
                   // Quick Commit Actions
@@ -286,7 +288,7 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                       _buildActionChip(
                         icon: LucideIcons.git_pull_request_create,
                         label: 'Cherry-pick',
-                        color: const Color(0xFF8B5CF6),
+                        color: c.accentSecondary,
                         onTap: () async {
                           Navigator.pop(modalCtx);
                           await ref.read(gitProvider.notifier).cherryPickCommit(commit.hash);
@@ -296,7 +298,7 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                       _buildActionChip(
                         icon: LucideIcons.undo_2,
                         label: 'Revert',
-                        color: Colors.amberAccent,
+                        color: c.warning,
                         onTap: () async {
                           Navigator.pop(modalCtx);
                           await ref.read(gitProvider.notifier).revertCommit(commit.hash);
@@ -306,7 +308,7 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                       _buildActionChip(
                         icon: LucideIcons.git_branch_plus,
                         label: 'Ветка отсюда',
-                        color: const Color(0xFF00F2FE),
+                        color: c.accent,
                         onTap: () async {
                           Navigator.pop(modalCtx);
                           final branchName = 'branch-${commit.hash}';
@@ -317,7 +319,7 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                       _buildActionChip(
                         icon: LucideIcons.rotate_ccw,
                         label: 'Reset --mixed',
-                        color: Colors.redAccent,
+                        color: c.danger,
                         onTap: () async {
                           Navigator.pop(modalCtx);
                           await ref.read(gitProvider.notifier).resetToCommit(commit.hash, mode: 'mixed');
@@ -326,22 +328,22 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                       ),
                     ],
                   ),
-                  const Divider(color: Colors.white10, height: 22),
-                  const Text('DIFF И ИЗМЕНЕНИЯ В ФАЙЛАХ:', style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+                  Divider(color: c.hairline, height: 22),
+                  Text('DIFF И ИЗМЕНЕНИЯ В ФАЙЛАХ:', style: TextStyle(color: c.subtleForeground, fontSize: 11, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
                     constraints: const BoxConstraints(maxHeight: 260),
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.black38,
+                      color: c.inputFill,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                      border: Border.all(color: c.border),
                     ),
                     child: SingleChildScrollView(
                       child: SelectableText(
                         diffStat,
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 11, height: 1.4),
+                        style: GoogleFonts.jetBrainsMono(color: c.mutedForeground, fontSize: 11, height: 1.4),
                       ),
                     ),
                   ),
@@ -384,25 +386,28 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = GitThemeColors.resolve(context, ref);
     return Scaffold(
-      backgroundColor: const Color(0xFF0F111A),
+      backgroundColor: c.canvas,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF141724),
+        backgroundColor: c.panel,
+        foregroundColor: c.foreground,
+        elevation: 0,
         title: Row(
           children: [
-            const Icon(LucideIcons.git_graph, color: Color(0xFF00F2FE), size: 20),
+            Icon(LucideIcons.git_graph, color: c.accent, size: 20),
             const SizedBox(width: 10),
-            Text('Git Graph (Все ветки)', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text('Git Graph (Все ветки)', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15, color: c.foreground)),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
               decoration: BoxDecoration(
-                color: const Color(0xFF00F2FE).withValues(alpha: 0.15),
+                color: c.accent.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 _currentBranch,
-                style: GoogleFonts.jetBrainsMono(color: const Color(0xFF00F2FE), fontSize: 11, fontWeight: FontWeight.bold),
+                style: GoogleFonts.jetBrainsMono(color: c.accent, fontSize: 11, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -410,7 +415,7 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
         actions: [
           IconButton(
             tooltip: 'Обновить дерево Git',
-            icon: const Icon(LucideIcons.rotate_cw, size: 18),
+            icon: Icon(LucideIcons.rotate_cw, size: 18, color: c.mutedForeground),
             onPressed: _loadGitLog,
           ),
         ],
@@ -421,25 +426,32 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
             child: TextField(
               controller: _searchController,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: c.foreground, fontSize: 13),
               decoration: InputDecoration(
                 hintText: 'Поиск по сообщениям, автору, SHA или веткам...',
-                hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
-                prefixIcon: const Icon(LucideIcons.search, color: Colors.white38, size: 16),
+                hintStyle: TextStyle(color: c.subtleForeground, fontSize: 12),
+                prefixIcon: Icon(LucideIcons.search, color: c.subtleForeground, size: 16),
                 filled: true,
-                fillColor: const Color(0xFF171B2B),
+                fillColor: c.inputFill,
                 contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: c.border),
+                ),
               ),
             ),
           ),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F2FE)))
+                ? Center(child: CircularProgressIndicator(color: c.accent))
                 : _errorMessage != null
-                    ? Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent))))
+                    ? Center(child: Padding(padding: const EdgeInsets.all(16), child: Text(_errorMessage!, style: TextStyle(color: c.danger))))
                     : _filteredCommits.isEmpty
-                        ? const Center(child: Text('Коммиты не найдены', style: TextStyle(color: Colors.white54)))
+                        ? Center(child: Text('Коммиты не найдены', style: TextStyle(color: c.mutedForeground)))
                         : ListView.builder(
                             itemCount: _filteredCommits.length,
                             itemBuilder: (context, index) {
@@ -452,7 +464,7 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                   decoration: BoxDecoration(
-                                    border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.04))),
+                                    border: Border(bottom: BorderSide(color: c.hairline)),
                                   ),
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,8 +491,8 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                                                 Expanded(
                                                   child: Text(
                                                     commit.message,
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
+                                                    style: TextStyle(
+                                                      color: c.foreground,
                                                       fontSize: 13,
                                                       fontWeight: FontWeight.w600,
                                                     ),
@@ -505,20 +517,20 @@ class _GitGraphPageState extends ConsumerState<GitGraphPage> {
                                               children: [
                                                 Text(
                                                   '${commit.author} • ${commit.relativeDate}',
-                                                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                                  style: TextStyle(color: c.subtleForeground, fontSize: 11),
                                                 ),
                                                 if (commit.refs.isNotEmpty)
                                                   Flexible(
                                                     child: Container(
                                                       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                                                       decoration: BoxDecoration(
-                                                        color: Colors.amberAccent.withValues(alpha: 0.12),
+                                                        color: c.warning.withValues(alpha: 0.14),
                                                         borderRadius: BorderRadius.circular(4),
                                                       ),
                                                       child: Text(
                                                         commit.refs,
-                                                        style: const TextStyle(
-                                                          color: Colors.amberAccent,
+                                                        style: TextStyle(
+                                                          color: c.warning,
                                                           fontSize: 10,
                                                           fontWeight: FontWeight.bold,
                                                         ),

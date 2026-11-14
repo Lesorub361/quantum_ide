@@ -10,6 +10,7 @@ import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dar
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_theme.dart';
 
 enum LineType { added, removed, normal }
 
@@ -211,10 +212,11 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
       }
       if (mounted) {
         final l10n = AppLocalizations.of(context)!;
+        final c = GitThemeColors.resolve(context, ref);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(_isStaged ? l10n.stagedMessage : l10n.unstagedMessage),
-            backgroundColor: const Color(0xFF0F172A),
+            content: Text(_isStaged ? l10n.stagedMessage : l10n.unstagedMessage, style: TextStyle(color: c.foreground)),
+            backgroundColor: c.card,
             duration: const Duration(seconds: 1),
           ),
         );
@@ -235,30 +237,31 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
 
   Future<void> _confirmDiscardChanges() async {
     final l10n = AppLocalizations.of(context)!;
+    final c = GitThemeColors.resolve(context, ref);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: c.card,
         title: Row(
           children: [
-            const Icon(LucideIcons.triangle_alert, color: Colors.orangeAccent),
+            Icon(LucideIcons.triangle_alert, color: c.warning),
             const SizedBox(width: 8),
-            Text(l10n.resetChangesTitle, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Text(l10n.resetChangesTitle, style: TextStyle(color: c.foreground, fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
         content: Text(
           l10n.resetChangesConfirmation,
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
+          style: TextStyle(color: c.mutedForeground, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.cancel, style: const TextStyle(color: Colors.white38)),
+            child: Text(l10n.cancel, style: TextStyle(color: c.subtleForeground)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: Text(l10n.resetAction, style: const TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: c.danger, foregroundColor: GitThemeColors.contrastOn(c.danger)),
+            child: Text(l10n.resetAction),
           ),
         ],
       ),
@@ -298,12 +301,13 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final c = GitThemeColors.resolve(context, ref);
     return Scaffold(
-      backgroundColor: const Color(0xFF080A10),
+      backgroundColor: c.canvas,
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(l10n),
+            _buildHeader(l10n, c),
             Expanded(child: _buildBody(l10n)),
           ],
         ),
@@ -311,18 +315,18 @@ class _GitDiffPageState extends ConsumerState<GitDiffPage> {
     );
   }
 
-  Widget _buildHeader(AppLocalizations l10n) {
+  Widget _buildHeader(AppLocalizations l10n, GitThemeColors c) {
     return GlassContainer(
       blur: 20,
       opacity: 0.05,
       borderRadius: BorderRadius.zero,
-      border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      border: Border(bottom: BorderSide(color: c.border)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
           children: [
             IconButton(
-              icon: const Icon(LucideIcons.arrow_left, color: Colors.white70),
+              icon: Icon(LucideIcons.arrow_left, color: c.mutedForeground),
               onPressed: () {
                 if (widget.onClose != null) {
                   widget.onClose!();

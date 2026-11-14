@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/github_service.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_theme.dart';
 
 class GitDownloadDialog extends StatefulWidget {
   final String workspacePath;
@@ -233,28 +234,32 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final c = GitThemeColors.resolve(context);
     return AlertDialog(
-      backgroundColor: const Color(0xFF141824),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      backgroundColor: c.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: c.border),
+      ),
       title: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+              color: c.success.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
-            child: const Icon(LucideIcons.cloud_download, color: Color(0xFF10B981), size: 18),
+            child: Icon(LucideIcons.cloud_download, color: c.success, size: 18),
           ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
               'Загрузить из Git (файл или папка)',
-              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+              style: TextStyle(color: c.foreground, fontSize: 15, fontWeight: FontWeight.bold),
             ),
           ),
           IconButton(
-            icon: const Icon(LucideIcons.x, size: 18, color: Colors.white54),
+            icon: Icon(LucideIcons.x, size: 18, color: c.mutedForeground),
             onPressed: () => Navigator.pop(context),
             visualDensity: VisualDensity.compact,
           ),
@@ -274,22 +279,23 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Репозиторий (owner/repo):',
-                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                        style: TextStyle(color: c.mutedForeground, fontSize: 11),
                       ),
                       const SizedBox(height: 4),
                       TextField(
                         controller: _repoController,
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 11),
+                        style: GoogleFonts.jetBrainsMono(color: c.foreground, fontSize: 11),
                         decoration: InputDecoration(
                           hintText: 'например: flutter/flutter или user/repo',
-                          hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+                          hintStyle: TextStyle(color: c.subtleForeground, fontSize: 11),
                           filled: true,
-                          fillColor: Colors.black26,
+                          fillColor: c.inputFill,
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: c.border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: c.border)),
                         ),
                       ),
                     ],
@@ -301,22 +307,23 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Ветка:',
-                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                        style: TextStyle(color: c.mutedForeground, fontSize: 11),
                       ),
                       const SizedBox(height: 4),
                       TextField(
                         controller: _branchController,
-                        style: GoogleFonts.jetBrainsMono(color: Colors.cyanAccent, fontSize: 11),
+                        style: GoogleFonts.jetBrainsMono(color: c.accent, fontSize: 11),
                         decoration: InputDecoration(
                           hintText: 'main',
-                          hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+                          hintStyle: TextStyle(color: c.subtleForeground, fontSize: 11),
                           filled: true,
-                          fillColor: Colors.black26,
+                          fillColor: c.inputFill,
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: c.border)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: c.border)),
                         ),
                       ),
                     ],
@@ -328,13 +335,20 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                   child: ElevatedButton(
                     onPressed: _isExploring ? null : () => _fetchContents(''),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.black,
+                      backgroundColor: c.success,
+                      foregroundColor: GitThemeColors.contrastOn(c.success),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                     ),
                     child: _isExploring
-                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                        ? SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: GitThemeColors.contrastOn(c.success),
+                            ),
+                          )
                         : const Text('Открыть', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   ),
                 ),
@@ -347,15 +361,15 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    const Text('Мои репозитории: ', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                    Text('Мои репозитории: ', style: TextStyle(color: c.subtleForeground, fontSize: 10)),
                     ..._userRepos.take(5).map((r) {
                       final fn = r['full_name']?.toString() ?? '';
                       return Padding(
                         padding: const EdgeInsets.only(right: 6),
                         child: ActionChip(
-                          label: Text(fn, style: const TextStyle(fontSize: 10, color: Color(0xFF00F2FE))),
-                          backgroundColor: Colors.white.withValues(alpha: 0.05),
-                          side: BorderSide.none,
+                          label: Text(fn, style: TextStyle(fontSize: 10, color: c.accent)),
+                          backgroundColor: c.inputFill,
+                          side: BorderSide(color: c.border),
                           visualDensity: VisualDensity.compact,
                           onPressed: () {
                             _repoController.text = fn;
@@ -377,22 +391,22 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
+                color: c.inputFill,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: c.border),
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.folder_input, size: 14, color: Colors.cyanAccent),
+                  Icon(LucideIcons.folder_input, size: 14, color: c.accent),
                   const SizedBox(width: 6),
-                  const Text('Сохранять в папку проекта: ', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                  Text('Сохранять в папку проекта: ', style: TextStyle(color: c.mutedForeground, fontSize: 10)),
                   Expanded(
                     child: TextField(
                       controller: _targetFolderController,
-                      style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 11),
-                      decoration: const InputDecoration(
+                      style: GoogleFonts.jetBrainsMono(color: c.foreground, fontSize: 11),
+                      decoration: InputDecoration(
                         hintText: 'корень проекта (или введите подпапку, напр. lib/models)',
-                        hintStyle: TextStyle(color: Colors.white24, fontSize: 10),
+                        hintStyle: TextStyle(color: c.subtleForeground, fontSize: 10),
                         isDense: true,
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
@@ -409,8 +423,9 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F121C),
+                color: c.panel,
                 borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: c.hairline),
               ),
               child: Row(
                 children: [
@@ -421,25 +436,25 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                         _fetchContents(parent == '.' ? '' : parent);
                       },
                       borderRadius: BorderRadius.circular(4),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(LucideIcons.arrow_left, size: 12, color: Colors.cyanAccent),
-                            SizedBox(width: 4),
-                            Text('Назад', style: TextStyle(fontSize: 10, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+                            Icon(LucideIcons.arrow_left, size: 12, color: c.accent),
+                            const SizedBox(width: 4),
+                            Text('Назад', style: TextStyle(fontSize: 10, color: c.accent, fontWeight: FontWeight.bold)),
                           ],
                         ),
                       ),
                     ),
                   if (_currentPath.isNotEmpty) const SizedBox(width: 8),
-                  const Icon(LucideIcons.folder_git_2, size: 12, color: Colors.white54),
+                  Icon(LucideIcons.folder_git_2, size: 12, color: c.mutedForeground),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       _currentPath.isEmpty ? '/' : '/$_currentPath',
-                      style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white70),
+                      style: GoogleFonts.jetBrainsMono(fontSize: 11, color: c.mutedForeground),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -453,18 +468,18 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0D1017),
+                  color: c.canvas,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white10),
+                  border: Border.all(color: c.border),
                 ),
                 child: _isExploring
-                    ? const Center(
+                    ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
-                            SizedBox(height: 10),
-                            Text('Загрузка файлов из GitHub...', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                            CircularProgressIndicator(strokeWidth: 2, color: c.success),
+                            const SizedBox(height: 10),
+                            Text('Загрузка файлов из GitHub...', style: TextStyle(color: c.mutedForeground, fontSize: 11)),
                           ],
                         ),
                       )
@@ -475,12 +490,12 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(LucideIcons.circle_alert, color: Colors.redAccent, size: 24),
+                                  Icon(LucideIcons.circle_alert, color: c.danger, size: 24),
                                   const SizedBox(height: 8),
                                   Text(
                                     _exploreError!,
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                                    style: TextStyle(color: c.danger, fontSize: 11),
                                   ),
                                 ],
                               ),
@@ -492,12 +507,12 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                                   _repoController.text.isEmpty
                                       ? 'Введите репозиторий и нажмите «Открыть»'
                                       : 'Папка пуста или файлы ещё не загружены',
-                                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                  style: TextStyle(color: c.subtleForeground, fontSize: 11),
                                 ),
                               )
                             : ListView.separated(
                                 itemCount: _currentContents.length,
-                                separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+                                separatorBuilder: (_, __) => Divider(color: c.hairline, height: 1),
                                 itemBuilder: (ctx, i) {
                                   final item = _currentContents[i];
                                   if (item is! Map) return const SizedBox.shrink();
@@ -512,23 +527,23 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                                     leading: Icon(
                                       isDir ? LucideIcons.folder : LucideIcons.file_code,
                                       size: 16,
-                                      color: isDir ? const Color(0xFFFBBF24) : const Color(0xFF00F2FE),
+                                      color: isDir ? c.warning : c.accent,
                                     ),
                                     title: Text(
                                       name,
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: isDir ? FontWeight.bold : FontWeight.normal,
-                                        color: Colors.white,
+                                        color: c.foreground,
                                       ),
                                     ),
                                     subtitle: isDir
-                                        ? const Text('Папка', style: TextStyle(fontSize: 10, color: Colors.white38))
+                                        ? Text('Папка', style: TextStyle(fontSize: 10, color: c.subtleForeground))
                                         : Text(
                                             size > 1024 * 1024
                                                 ? '${(size / (1024 * 1024)).toStringAsFixed(1)} МБ'
                                                 : '${(size / 1024).toStringAsFixed(1)} КБ',
-                                            style: const TextStyle(fontSize: 10, color: Colors.white38),
+                                            style: TextStyle(fontSize: 10, color: c.subtleForeground),
                                           ),
                                     onTap: isDir ? () => _fetchContents(itemPath) : null,
                                     trailing: isDir
@@ -539,8 +554,8 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                                             icon: const Icon(LucideIcons.download, size: 12),
                                             label: const Text('Папку', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFFFBBF24),
-                                              foregroundColor: Colors.black,
+                                              backgroundColor: c.warning,
+                                              foregroundColor: GitThemeColors.contrastOn(c.warning),
                                               visualDensity: VisualDensity.compact,
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -553,8 +568,8 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
                                             icon: const Icon(LucideIcons.download, size: 12),
                                             label: const Text('Файл', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                                             style: ElevatedButton.styleFrom(
-                                              backgroundColor: const Color(0xFF10B981),
-                                              foregroundColor: Colors.black,
+                                              backgroundColor: c.success,
+                                              foregroundColor: GitThemeColors.contrastOn(c.success),
                                               visualDensity: VisualDensity.compact,
                                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -571,22 +586,22 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  color: c.success.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                  border: Border.all(color: c.success.withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: c.success),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         _downloadStatus,
-                        style: const TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: 11, color: c.success, fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -600,7 +615,7 @@ class _GitDownloadDialogState extends State<GitDownloadDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Закрыть', style: TextStyle(color: Colors.white70)),
+          child: Text('Закрыть', style: TextStyle(color: c.mutedForeground)),
         ),
       ],
     );

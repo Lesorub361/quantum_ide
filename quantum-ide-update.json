@@ -1,16 +1,16 @@
 {
-  "versionCode": 250,
-  "versionName": "1.2.233",
-  "notes": "## 🚀 QuantumIDE v1.2.233\n\n### Что исправлено и улучшено\n- **Запуск `agy` и локальный резолвинг `localhost` в PRoot**: устранена ошибка `Failed to start: listen tcp: lookup localhost on 8.8.8.8:53: no such host` — добавлены генерация и проброс `/etc/hosts` (`127.0.0.1 localhost`, `::1 localhost`) и `/etc/nsswitch.conf` (`hosts: files dns`) в `RuntimeService`, `init-host`, `BootstrapManager` и `ProcessManager`.\n- **Единый стиль панели редактора (`KeyboardAccessoryBar`)**: панель быстрых кнопок над терминалом/клавиатурой (отмена/повтор, стрелки, копирование, поиск, `Стр X:Y`, символы, диалог перехода к строке и сниппеты) больше не имеет жёсткого чёрного фона `#0D0F14` и автоматически подстраивается под активную палитру `ConduitPalette` и тему приложения.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 251,
+  "versionName": "1.2.234",
+  "notes": "## 🚀 QuantumIDE v1.2.234\n\n### Что нового\n- **Профессиональный Git UI и удобная работа с ветками (`GitPanel`, `GitGraphPage`)**:\n  - Компактная панель инструментов без обрезанных кнопок: сегментированная полоса быстрых операций (`Sync`, `Fetch`, `Pull`, `Push`, `Stash`), меню настроек/справки и вкладки `Изменения`, `История`, `Ветки`, `Релизы`.\n  - Улучшенный **Commit Composer** и список изменений, понятный экран чистого рабочего дерева с последним коммитом, поиск и инспектор коммитов в **Истории**.\n  - Обновлённая вкладка **Ветки и Stash**: карточка активной ветки `HEAD` со статусом upstream и быстрыми действиями, поиск веток, удобное переключение/слияние/удаление/переименование локальных и remote-веток, а также карточки Stash (`Diff`, `Apply`, `Pop`, `Drop`).\n- **Полная синхронизация фона и темы Git (`GitThemeColors`)**:\n  - Панель Git, модальные диалоги, граф коммитов, загрузчик файлов из GitHub, просмотр diff и редактор merge-конфликтов теперь автоматически используют вашу активную палитру (`ConduitPalette`) и тему приложения вместо жёсткого тёмного фона.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.233/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.234/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.233",
-  "buildNumber": 250,
-  "tag_name": "v1.2.233",
-  "releaseNotes": "Исправлен запуск agy (lookup localhost on 8.8.8.8:53 via /etc/hosts и nsswitch.conf) и синхронизирована тема панели кнопок редактора с палитрой приложения."
+  "version": "1.2.234",
+  "buildNumber": 251,
+  "tag_name": "v1.2.234",
+  "releaseNotes": "Полный редизайн Git-панели с удобным управлением ветками/Stash и единой синхронизацией фона и палитры приложения во всех окнах Git."
 }

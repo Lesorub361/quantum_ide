@@ -6,15 +6,16 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/models/git_status.dart';
 import 'package:quantum_ide/core/services/github_service.dart';
+import 'package:quantum_ide/core/services/secure_storage_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_diff_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_graph_page.dart';
 import 'package:quantum_ide/features/git/presentation/pages/git_merge_conflict_page.dart';
-import 'package:quantum_ide/features/github/presentation/pages/github_page.dart';
 import 'package:quantum_ide/features/git/presentation/widgets/git_download_dialog.dart';
-import 'package:quantum_ide/core/services/secure_storage_service.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_theme.dart';
+import 'package:quantum_ide/features/github/presentation/pages/github_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SidebarGitPanel extends GitPanel {
@@ -29,10 +30,12 @@ class GitPanel extends ConsumerStatefulWidget {
   ConsumerState<GitPanel> createState() => _GitPanelState();
 }
 
-class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderStateMixin {
+class _GitPanelState extends ConsumerState<GitPanel>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _commitController = TextEditingController();
   final TextEditingController _fileFilterController = TextEditingController();
   final TextEditingController _commitSearchController = TextEditingController();
+  final TextEditingController _branchFilterController = TextEditingController();
   late TabController _tabController;
 
   bool _isGeneratingCommitMessage = false;
@@ -40,8 +43,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   bool _stagedExpanded = true;
   bool _workingExpanded = true;
   bool _conflictsExpanded = true;
+  bool _localBranchesExpanded = true;
+  bool _remoteBranchesExpanded = true;
   String _fileFilter = '';
   String _commitFilter = '';
+  String _branchFilter = '';
 
   static const List<String> _conventionalPrefixes = [
     'feat: ',
@@ -57,10 +63,19 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _fileFilterController.addListener(() {
-      setState(() => _fileFilter = _fileFilterController.text.trim().toLowerCase());
+      setState(() {
+        _fileFilter = _fileFilterController.text.trim().toLowerCase();
+      });
     });
     _commitSearchController.addListener(() {
-      setState(() => _commitFilter = _commitSearchController.text.trim().toLowerCase());
+      setState(() {
+        _commitFilter = _commitSearchController.text.trim().toLowerCase();
+      });
+    });
+    _branchFilterController.addListener(() {
+      setState(() {
+        _branchFilter = _branchFilterController.text.trim().toLowerCase();
+      });
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(gitProvider.notifier).refreshStatus();
@@ -72,6 +87,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     _commitController.dispose();
     _fileFilterController.dispose();
     _commitSearchController.dispose();
+    _branchFilterController.dispose();
     _tabController.dispose();
     super.dispose();
   }
@@ -117,13 +133,18 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
 
     try {
       final names = allChanged.map((f) => p.basename(f)).take(3).join(', ');
-      final suffix = allChanged.length > 3 ? ' (+${allChanged.length - 3})' : '';
+      final suffix =
+          allChanged.length > 3 ? ' (+${allChanged.length - 3})' : '';
       String prefix = 'chore';
       if (status.untrackedFiles.isNotEmpty && status.modifiedFiles.isEmpty) {
         prefix = 'feat';
-      } else if (allChanged.any((f) => f.contains('fix') || f.contains('bug') || f.contains('service'))) {
+      } else if (allChanged.any(
+        (f) => f.contains('fix') || f.contains('bug') || f.contains('service'),
+      )) {
         prefix = 'fix';
-      } else if (allChanged.any((f) => f.contains('widget') || f.contains('page') || f.contains('ui'))) {
+      } else if (allChanged.any(
+        (f) => f.contains('widget') || f.contains('page') || f.contains('ui'),
+      )) {
         prefix = 'feat';
       }
       _commitController.text = '$prefix: update $names$suffix';
@@ -156,26 +177,26 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   Widget build(BuildContext context) {
     final gitState = ref.watch(gitProvider);
     final notifier = ref.read(gitProvider.notifier);
-    final isLight = Theme.of(context).brightness == Brightness.light;
+    final c = GitThemeColors.resolve(context, ref);
 
-    return Container(
-      color: isLight ? const Color(0xFFF8FAFC) : const Color(0xFF0B0E14),
+    return ColoredBox(
+      color: c.canvas,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildTopToolbar(gitState, notifier, isLight),
+          _buildTopToolbar(gitState, notifier, c),
           if (gitState.isLoading) ...[
-            const LinearProgressIndicator(
+            LinearProgressIndicator(
               minHeight: 2,
               backgroundColor: Colors.transparent,
-              color: Color(0xFF00F2FE),
+              color: c.accent,
             ),
-            _buildOperationProgressBanner(gitState.currentOperation),
+            _buildOperationProgressBanner(gitState.currentOperation, c),
           ],
           if (gitState.error != null)
             _buildBanner(
               message: gitState.error!,
-              color: Colors.redAccent,
+              color: c.danger,
               icon: LucideIcons.circle_alert,
               onClose: () => notifier.refreshStatus(silent: true),
               action: (gitState.status != null &&
@@ -186,23 +207,37 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           gitState.error!.contains('denied') ||
                           gitState.error!.contains('failed to push')))
                   ? InkWell(
-                      onTap: () => _showGitSettingsDialog(gitState.status!, notifier),
-                      borderRadius: BorderRadius.circular(4),
+                      onTap: () =>
+                          _showGitSettingsDialog(gitState.status!, notifier),
+                      borderRadius: BorderRadius.circular(6),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
                         ),
-                        child: const Row(
+                        decoration: BoxDecoration(
+                          color: c.danger.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: c.danger.withValues(alpha: 0.45),
+                          ),
+                        ),
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(LucideIcons.key_round, size: 10, color: Colors.white),
-                            SizedBox(width: 3),
+                            Icon(
+                              LucideIcons.key_round,
+                              size: 10,
+                              color: c.foreground,
+                            ),
+                            const SizedBox(width: 4),
                             Text(
-                              'Настроить токен/Remote',
-                              style: TextStyle(fontSize: 9.5, color: Colors.white, fontWeight: FontWeight.bold),
+                              'Токен / Remote',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: c.foreground,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -213,23 +248,36 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
           if (gitState.lastActionMessage != null && gitState.error == null)
             _buildBanner(
               message: gitState.lastActionMessage!,
-              color: Colors.greenAccent,
+              color: c.success,
               icon: LucideIcons.circle_check,
               onClose: () => notifier.refreshStatus(silent: true),
             ),
-          if (gitState.status != null) _buildTabBar(gitState.status!, isLight),
+          if (gitState.status != null) _buildTabBar(gitState.status!, c),
           Expanded(
             child: gitState.status == null && !gitState.isLoading
-                ? _buildNoRepoView(notifier, isLight)
+                ? _buildNoRepoView(notifier, c)
                 : gitState.status == null
-                    ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F2FE)))
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          color: c.accent,
+                          strokeWidth: 2.2,
+                        ),
+                      )
                     : TabBarView(
                         controller: _tabController,
                         children: [
-                          _buildChangesTab(gitState.status!, notifier, isLight),
-                          _buildHistoryTab(gitState.status!, notifier, isLight),
-                          _buildBranchesAndStashTab(gitState.status!, notifier, isLight),
-                          _buildReleasesAndRemoteTab(gitState.status!, notifier, isLight),
+                          _buildChangesTab(gitState.status!, notifier, c),
+                          _buildHistoryTab(gitState.status!, notifier, c),
+                          _buildBranchesAndStashTab(
+                            gitState.status!,
+                            notifier,
+                            c,
+                          ),
+                          _buildReleasesAndRemoteTab(
+                            gitState.status!,
+                            notifier,
+                            c,
+                          ),
                         ],
                       ),
           ),
@@ -238,28 +286,37 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildOperationProgressBanner(String? operationText) {
+  Widget _buildOperationProgressBanner(
+    String? operationText,
+    GitThemeColors c,
+  ) {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 6, 10, 2),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFF00F2FE).withValues(alpha: 0.12),
+        color: c.accent.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF00F2FE).withValues(alpha: 0.4), width: 0.8),
+        border: Border.all(
+          color: c.accent.withValues(alpha: 0.35),
+          width: 0.8,
+        ),
       ),
       child: Row(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 13,
             height: 13,
-            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF00F2FE)),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: c.accent,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               operationText ?? 'Выполняется операция Git...',
-              style: const TextStyle(
-                color: Color(0xFF00F2FE),
+              style: TextStyle(
+                color: c.accent,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -293,7 +350,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
           Expanded(
             child: Text(
               message,
-              style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w500),
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -305,253 +366,500 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
           const SizedBox(width: 6),
           InkWell(
             onTap: onClose,
-            child: Icon(LucideIcons.x, size: 13, color: color.withValues(alpha: 0.7)),
+            borderRadius: BorderRadius.circular(4),
+            child: Icon(
+              LucideIcons.x,
+              size: 13,
+              color: color.withValues(alpha: 0.75),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTopToolbar(GitState gitState, GitNotifier notifier, bool isLight) {
+  Widget _buildTopToolbar(
+    GitState gitState,
+    GitNotifier notifier,
+    GitThemeColors c,
+  ) {
     final status = gitState.status;
-    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
-    final subColor = isLight ? Colors.black54 : Colors.white54;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: isLight ? Colors.white : const Color(0xFF111520),
-        border: Border(
-          bottom: BorderSide(color: isLight ? Colors.black12 : Colors.white10),
-        ),
+        color: c.panel,
+        border: Border(bottom: BorderSide(color: c.hairline)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Row 1: Title + Branch Selector + Sync Badges
+          // Row 1: Active Branch Selector + Sync Badge / Remote + Compact Actions
           Row(
             children: [
-              const Icon(LucideIcons.git_branch, size: 15, color: Color(0xFF00F2FE)),
-              const SizedBox(width: 6),
               if (status != null)
                 Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        InkWell(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: InkWell(
                           onTap: () => _showBranchPickerModal(status, notifier),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(8),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF00F2FE).withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFF00F2FE).withValues(alpha: 0.35)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  status.currentBranch,
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11,
-                                    color: const Color(0xFF00F2FE),
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                const Icon(LucideIcons.chevron_down, size: 11, color: Color(0xFF00F2FE)),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        if (status.ahead > 0 || status.behind > 0)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: Colors.amberAccent.withValues(alpha: 0.14),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
-                            ),
-                            child: Text(
-                              '↑${status.ahead} ↓${status.behind}',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                color: Colors.amberAccent,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        if (status.ahead > 0 || status.behind > 0) const SizedBox(width: 6),
-                        InkWell(
-                          onTap: () => _showGitSettingsDialog(status, notifier),
-                          borderRadius: BorderRadius.circular(6),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                            decoration: BoxDecoration(
-                              gradient: status.remoteUrl == null
-                                  ? const LinearGradient(
-                                      colors: [Color(0xFF8B5CF6), Color(0xFF00F2FE)],
-                                    )
-                                  : null,
-                              color: status.remoteUrl != null
-                                  ? Colors.greenAccent.withValues(alpha: 0.14)
-                                  : null,
-                              borderRadius: BorderRadius.circular(6),
+                              color: c.accent.withValues(alpha: 0.13),
+                              borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: status.remoteUrl != null
-                                    ? Colors.greenAccent.withValues(alpha: 0.4)
-                                    : Colors.transparent,
-                                width: 0.6,
+                                color: c.accent.withValues(alpha: 0.35),
                               ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  status.remoteUrl != null ? LucideIcons.cloud : LucideIcons.cloud_upload,
-                                  size: 11,
-                                  color: status.remoteUrl != null ? Colors.greenAccent : Colors.white,
+                                  LucideIcons.git_branch,
+                                  size: 12,
+                                  color: c.accent,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    status.currentBranch,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11.5,
+                                      color: c.accent,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                                 const SizedBox(width: 4),
-                                Text(
+                                Icon(
+                                  LucideIcons.chevron_down,
+                                  size: 12,
+                                  color: c.accent,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      if (status.ahead > 0 || status.behind > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.warning.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(7),
+                            border: Border.all(
+                              color: c.warning.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Text(
+                            [
+                              if (status.behind > 0) '↓${status.behind}',
+                              if (status.ahead > 0) '↑${status.ahead}',
+                            ].join(' '),
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10.5,
+                              color: c.warning,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      Flexible(
+                        child: InkWell(
+                          onTap: () => _showGitSettingsDialog(status, notifier),
+                          borderRadius: BorderRadius.circular(7),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 4.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: status.remoteUrl != null
+                                  ? c.card
+                                  : c.accent.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(
+                                color: status.remoteUrl != null
+                                    ? c.hairline
+                                    : c.accent.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
                                   status.remoteUrl != null
-                                      ? _shortRemoteName(status.remoteUrl!)
-                                      : '🚀 Опубликовать на GitHub',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: status.remoteUrl != null ? Colors.greenAccent : Colors.white,
-                                    fontWeight: FontWeight.bold,
+                                      ? LucideIcons.cloud
+                                      : LucideIcons.cloud_upload,
+                                  size: 11,
+                                  color: status.remoteUrl != null
+                                      ? c.success
+                                      : c.accent,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    status.remoteUrl != null
+                                        ? _shortRemoteName(status.remoteUrl!)
+                                        : 'Подключить GitHub',
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      color: status.remoteUrl != null
+                                          ? c.mutedForeground
+                                          : c.accent,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 )
               else
                 Expanded(
                   child: Text(
-                    'УПРАВЛЕНИЕ ВЕРСИЯМИ (GIT)',
+                    'GIT И КОНТРОЛЬ ВЕРСИЙ',
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
-                      letterSpacing: 0.8,
+                      fontWeight: FontWeight.w700,
+                      color: c.foreground,
+                      letterSpacing: 0.7,
                     ),
                   ),
                 ),
-              IconButton(
-                icon: Icon(LucideIcons.info, size: 14, color: subColor),
-                tooltip: 'Шпаргалка по Git',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                onPressed: _showGitGuideModal,
-              ),
-              IconButton(
-                icon: Icon(LucideIcons.refresh_cw, size: 14, color: subColor),
+              const SizedBox(width: 4),
+              if (status != null)
+                _buildToolbarIconButton(
+                  icon: LucideIcons.git_branch_plus,
+                  tooltip: 'Создать новую ветку',
+                  color: c.mutedForeground,
+                  onTap: () => _showCreateBranchDialog(notifier),
+                ),
+              if (status != null)
+                _buildToolbarIconButton(
+                  icon: LucideIcons.git_graph,
+                  tooltip: 'Открыть граф коммитов и веток',
+                  color: c.accent,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const GitGraphPage()),
+                    );
+                  },
+                ),
+              _buildToolbarIconButton(
+                icon: LucideIcons.refresh_cw,
                 tooltip: 'Обновить статус Git',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                onPressed: () => notifier.refreshStatus(force: true),
+                color: c.mutedForeground,
+                onTap: () => notifier.refreshStatus(force: true),
               ),
+              if (status != null)
+                PopupMenuButton<String>(
+                  tooltip: 'Дополнительные команды Git',
+                  color: c.card,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    side: BorderSide(color: c.border),
+                  ),
+                  icon: Icon(
+                    LucideIcons.ellipsis_vertical,
+                    size: 16,
+                    color: c.mutedForeground,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'stash':
+                        _showQuickStashDialog(status, notifier);
+                      case 'download':
+                        final wsPath = ref.read(workspaceProvider).currentPath;
+                        if (wsPath != null) {
+                          GitDownloadDialog.show(
+                            context,
+                            workspacePath: wsPath,
+                            gitNotifier: notifier,
+                          );
+                        }
+                      case 'pull_rebase':
+                        notifier.pull(rebase: true);
+                      case 'force_push':
+                        _confirmForcePush(notifier);
+                      case 'settings':
+                        _showGitSettingsDialog(status, notifier);
+                      case 'guide':
+                        _showGitGuideModal();
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    _buildMenuEntry(
+                      'stash',
+                      LucideIcons.archive,
+                      'Спрятать в Stash',
+                      c,
+                    ),
+                    _buildMenuEntry(
+                      'download',
+                      LucideIcons.cloud_download,
+                      'Скачать из GitHub',
+                      c,
+                    ),
+                    const PopupMenuDivider(height: 8),
+                    _buildMenuEntry(
+                      'pull_rebase',
+                      LucideIcons.git_pull_request_arrow,
+                      'Pull --rebase',
+                      c,
+                    ),
+                    _buildMenuEntry(
+                      'force_push',
+                      LucideIcons.shield_alert,
+                      'Force Push (--force-with-lease)',
+                      c,
+                      color: c.warning,
+                    ),
+                    const PopupMenuDivider(height: 8),
+                    _buildMenuEntry(
+                      'settings',
+                      LucideIcons.sliders_horizontal,
+                      'Настройки Git / Токен',
+                      c,
+                    ),
+                    _buildMenuEntry(
+                      'guide',
+                      LucideIcons.book_open,
+                      'Шпаргалка по Git',
+                      c,
+                    ),
+                  ],
+                ),
             ],
           ),
           if (status != null) ...[
-            const SizedBox(height: 6),
-            // Row 2: Quick Professional Git Operations Bar in Russian
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            const SizedBox(height: 8),
+            // Row 2: Crisp, full-width segmented remote sync strip (never overflows)
+            Container(
+              padding: const EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                color: c.inputFill,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: c.hairline),
+              ),
               child: Row(
                 children: [
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.refresh_cw,
-                    label: (status.ahead > 0 || status.behind > 0)
-                        ? 'Синхр (↓${status.behind} ↑${status.ahead})'
-                        : 'Синхронизация',
-                    tooltip: 'Синхронизировать код с сервером (Pull & Push в одно действие)',
-                    color: (status.ahead > 0 || status.behind > 0) ? const Color(0xFF00F2FE) : Colors.cyanAccent,
-                    onTap: () => notifier.sync(),
+                  Expanded(
+                    child: _buildActionStripButton(
+                      c: c,
+                      icon: LucideIcons.refresh_cw,
+                      label: 'Sync',
+                      tooltip: 'Pull + Push в одно действие',
+                      highlight: status.ahead > 0 || status.behind > 0,
+                      onTap: () => notifier.sync(),
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.refresh_ccw_dot,
-                    label: 'Проверить (Fetch)',
-                    tooltip: 'git fetch --all --prune (проверить наличие свежих коммитов на сервере)',
-                    color: Colors.cyanAccent,
-                    onTap: () => notifier.fetch(),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: _buildActionStripButton(
+                      c: c,
+                      icon: LucideIcons.refresh_ccw_dot,
+                      label: 'Fetch',
+                      tooltip: 'Проверить обновления на сервере (git fetch)',
+                      onTap: () => notifier.fetch(),
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.arrow_down_to_line,
-                    label: status.behind > 0 ? 'Подтянуть (↓${status.behind})' : 'Подтянуть (Pull)',
-                    tooltip: 'git pull (скачать свежие изменения с сервера, долгое нажатие — Pull --rebase)',
-                    color: status.behind > 0 ? Colors.amberAccent : Colors.white70,
-                    onTap: () => notifier.pull(),
-                    onLongPress: () => notifier.pull(rebase: true),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: _buildActionStripButton(
+                      c: c,
+                      icon: LucideIcons.arrow_down_to_line,
+                      label:
+                          status.behind > 0 ? 'Pull (${status.behind})' : 'Pull',
+                      tooltip:
+                          'Скачать изменения (долгое нажатие — Pull --rebase)',
+                      accentColor: status.behind > 0 ? c.warning : null,
+                      highlight: status.behind > 0,
+                      onTap: () => notifier.pull(),
+                      onLongPress: () => notifier.pull(rebase: true),
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.arrow_up_from_line,
-                    label: status.ahead > 0 ? 'Отправить (↑${status.ahead})' : 'Отправить (Push)',
-                    tooltip: 'git push (отправить локальные коммиты на сервер, долгое нажатие — Force Push)',
-                    color: status.ahead > 0 ? const Color(0xFF00F2FE) : Colors.white70,
-                    onTap: () => notifier.push(),
-                    onLongPress: () => _confirmForcePush(notifier),
+                  const SizedBox(width: 3),
+                  Expanded(
+                    child: _buildActionStripButton(
+                      c: c,
+                      icon: LucideIcons.arrow_up_from_line,
+                      label:
+                          status.ahead > 0 ? 'Push (${status.ahead})' : 'Push',
+                      tooltip:
+                          'Отправить коммиты (долгое нажатие — Force Push)',
+                      highlight: status.ahead > 0,
+                      onTap: () => notifier.push(),
+                      onLongPress: () => _confirmForcePush(notifier),
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.git_graph,
-                    label: 'Граф коммитов',
-                    tooltip: 'Открыть визуальное интерактивное дерево веток и истории коммитов',
-                    color: const Color(0xFF8B5CF6),
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const GitGraphPage()),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.archive,
-                    label: status.stashes.isNotEmpty ? 'Stash (${status.stashes.length})' : 'Спрятать (Stash)',
-                    tooltip: 'Временно спрятать незавершённые изменения рабочей копии в тайник',
-                    color: Colors.orangeAccent,
-                    onTap: () => _showQuickStashDialog(status, notifier),
-                  ),
-                  const SizedBox(width: 6),
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.cloud_download,
-                    label: 'Загрузить из Git',
-                    tooltip: 'Выбрать и скачать файл или папку из любого репозитория GitHub в проект',
-                    color: const Color(0xFF10B981),
-                    onTap: () {
-                      final wsPath = ref.read(workspaceProvider).currentPath;
-                      if (wsPath != null) {
-                        GitDownloadDialog.show(context, workspacePath: wsPath, gitNotifier: notifier);
-                      }
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  _buildQuickToolBtn(
-                    icon: LucideIcons.key_round,
-                    label: 'GitHub / Remote',
-                    tooltip: 'Настроить токен GitHub (PAT), URL репозитория (origin) и автора',
-                    color: Colors.white70,
-                    onTap: () => _showGitSettingsDialog(status, notifier),
+                  const SizedBox(width: 3),
+                  Tooltip(
+                    message: 'Спрятать изменения в Stash',
+                    child: InkWell(
+                      onTap: () => _showQuickStashDialog(status, notifier),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        height: 28,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: BoxDecoration(
+                          color: status.stashes.isNotEmpty
+                              ? c.warning.withValues(alpha: 0.14)
+                              : c.card.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              LucideIcons.archive,
+                              size: 12,
+                              color: status.stashes.isNotEmpty
+                                  ? c.warning
+                                  : c.mutedForeground,
+                            ),
+                            if (status.stashes.isNotEmpty) ...[
+                              const SizedBox(width: 3),
+                              Text(
+                                '${status.stashes.length}',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: c.warning,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildToolbarIconButton({
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 15, color: color),
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildMenuEntry(
+    String value,
+    IconData icon,
+    String title,
+    GitThemeColors c, {
+    Color? color,
+  }) {
+    final fg = color ?? c.foreground;
+    return PopupMenuItem<String>(
+      value: value,
+      height: 36,
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: TextStyle(fontSize: 12, color: fg),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionStripButton({
+    required GitThemeColors c,
+    required IconData icon,
+    required String label,
+    required String tooltip,
+    required VoidCallback onTap,
+    VoidCallback? onLongPress,
+    bool highlight = false,
+    Color? accentColor,
+  }) {
+    final tint = accentColor ?? c.accent;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          decoration: BoxDecoration(
+            color: highlight
+                ? tint.withValues(alpha: 0.16)
+                : c.card.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(6),
+            border: highlight
+                ? Border.all(color: tint.withValues(alpha: 0.4), width: 0.8)
+                : null,
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 12,
+                  color: highlight ? tint : c.mutedForeground,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
+                    color: highlight ? tint : c.foreground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -572,113 +880,90 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     return clean;
   }
 
-  Widget _buildQuickToolBtn({
-    required IconData icon,
-    required String label,
-    required String tooltip,
-    required Color color,
-    required VoidCallback onTap,
-    VoidCallback? onLongPress,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 12, color: color),
-              const SizedBox(width: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabBar(GitStatus status, bool isLight) {
+  Widget _buildTabBar(GitStatus status, GitThemeColors c) {
     final changesCount = status.totalChangesCount;
     final commitsCount = status.recentCommits.length;
-    final branchesAndStashesCount = status.branches.length + status.stashes.length;
+    final branchesCount = status.branches.length;
 
     return Container(
       decoration: BoxDecoration(
-        color: isLight ? const Color(0xFFF1F5F9) : const Color(0xFF0E121B),
-        border: Border(bottom: BorderSide(color: isLight ? Colors.black12 : Colors.white10)),
+        color: c.panel,
+        border: Border(bottom: BorderSide(color: c.hairline)),
       ),
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
         tabAlignment: TabAlignment.start,
-        indicatorColor: const Color(0xFF00F2FE),
-        indicatorWeight: 2,
-        labelColor: const Color(0xFF00F2FE),
-        unselectedLabelColor: isLight ? Colors.black54 : Colors.white54,
-        labelPadding: const EdgeInsets.symmetric(horizontal: 10),
-        labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+        dividerColor: Colors.transparent,
+        indicatorColor: c.accent,
+        indicatorWeight: 2.5,
+        labelColor: c.accent,
+        unselectedLabelColor: c.mutedForeground,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+        labelStyle: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 11.5,
+          fontWeight: FontWeight.w500,
+        ),
         tabs: [
           Tab(
-            height: 34,
+            height: 36,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(LucideIcons.file_diff, size: 12),
+                const Icon(LucideIcons.file_diff, size: 13),
                 const SizedBox(width: 5),
                 const Text('Изменения'),
                 if (changesCount > 0) ...[
-                  const SizedBox(width: 4),
-                  _buildCountPill(changesCount.toString(), const Color(0xFF00F2FE)),
+                  const SizedBox(width: 5),
+                  _buildCountPill(changesCount.toString(), c.accent),
                 ],
               ],
             ),
           ),
           Tab(
-            height: 34,
+            height: 36,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(LucideIcons.history, size: 12),
+                const Icon(LucideIcons.history, size: 13),
                 const SizedBox(width: 5),
-                Text('История ($commitsCount)'),
+                const Text('История'),
+                if (commitsCount > 0) ...[
+                  const SizedBox(width: 5),
+                  _buildCountPill(commitsCount.toString(), c.mutedForeground),
+                ],
               ],
             ),
           ),
           Tab(
-            height: 34,
+            height: 36,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(LucideIcons.git_branch, size: 12),
+                const Icon(LucideIcons.git_branch, size: 13),
                 const SizedBox(width: 5),
-                Text('Ветки / Stash ($branchesAndStashesCount)'),
+                const Text('Ветки'),
+                const SizedBox(width: 5),
+                _buildCountPill(branchesCount.toString(), c.mutedForeground),
               ],
             ),
           ),
           Tab(
-            height: 34,
+            height: 36,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(LucideIcons.rocket, size: 12),
+                const Icon(LucideIcons.rocket, size: 13),
                 const SizedBox(width: 5),
-                Text('Релизы (${status.tags.length})'),
+                const Text('Релизы'),
+                if (status.tags.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  _buildCountPill(
+                    status.tags.length.toString(),
+                    c.mutedForeground,
+                  ),
+                ],
               ],
             ),
           ),
@@ -689,14 +974,18 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
 
   Widget _buildCountPill(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.2),
+        color: color.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          fontSize: 9.5,
+          color: color,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -705,10 +994,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   // TAB 1: ИЗМЕНЕНИЯ (STAGING, WORKING TREE & COMMIT COMPOSER)
   // ===========================================================================
 
-  Widget _buildChangesTab(GitStatus status, GitNotifier notifier, bool isLight) {
-    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
-    final subColor = isLight ? Colors.black54 : Colors.white54;
-
+  Widget _buildChangesTab(
+    GitStatus status,
+    GitNotifier notifier,
+    GitThemeColors c,
+  ) {
     final filteredConflicts = status.conflictedFiles
         .where((f) => _fileFilter.isEmpty || f.toLowerCase().contains(_fileFilter))
         .toList();
@@ -724,47 +1014,52 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
 
     return Column(
       children: [
-        // Commit Composer Box
+        // Commit Composer Card
         Container(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+          margin: const EdgeInsets.fromLTRB(10, 10, 10, 6),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: isLight ? Colors.white : const Color(0xFF121622),
-            border: Border(bottom: BorderSide(color: isLight ? Colors.black12 : Colors.white10)),
+            color: c.card,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: c.hairline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Conventional Commit Quick Chips + AI + Amend
+              // Conventional Commit Quick Chips
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
                     for (final prefix in _conventionalPrefixes)
                       Padding(
-                        padding: const EdgeInsets.only(right: 4),
+                        padding: const EdgeInsets.only(right: 5),
                         child: InkWell(
                           onTap: () => _applyPrefix(prefix),
-                          borderRadius: BorderRadius.circular(5),
+                          borderRadius: BorderRadius.circular(6),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: _commitController.text.startsWith(prefix)
-                                  ? const Color(0xFF00F2FE).withValues(alpha: 0.2)
-                                  : Colors.white.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(5),
+                                  ? c.accent.withValues(alpha: 0.16)
+                                  : c.inputFill,
+                              borderRadius: BorderRadius.circular(6),
                               border: Border.all(
                                 color: _commitController.text.startsWith(prefix)
-                                    ? const Color(0xFF00F2FE)
-                                    : Colors.white12,
+                                    ? c.accent.withValues(alpha: 0.65)
+                                    : c.hairline,
                               ),
                             ),
                             child: Text(
                               prefix.trim(),
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 color: _commitController.text.startsWith(prefix)
-                                    ? const Color(0xFF00F2FE)
-                                    : subColor,
+                                    ? c.accent
+                                    : c.mutedForeground,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -774,76 +1069,99 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   ],
                 ),
               ),
-              const SizedBox(height: 6),
-              // Commit Message Input + AI Button
+              const SizedBox(height: 8),
+              // Commit Message Input + Integrated AI Button
               Stack(
                 alignment: Alignment.topRight,
                 children: [
                   TextField(
                     controller: _commitController,
-                    maxLines: 2,
+                    maxLines: 3,
                     minLines: 1,
-                    style: TextStyle(fontSize: 12, color: textColor),
+                    style: TextStyle(fontSize: 12.5, color: c.foreground),
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       hintText: status.stagedFiles.isNotEmpty
                           ? 'Сообщение коммита (${status.stagedFiles.length} в индексе)...'
-                          : 'Сообщение коммита (все изменения будут добавлены)...',
-                      hintStyle: TextStyle(color: subColor, fontSize: 11),
+                          : 'Сообщение коммита (или оставьте автоописание)...',
+                      hintStyle: TextStyle(
+                        color: c.subtleForeground,
+                        fontSize: 11.5,
+                      ),
                       filled: true,
-                      fillColor: isLight ? const Color(0xFFF1F5F9) : Colors.black26,
+                      fillColor: c.inputFill,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: isLight ? Colors.black12 : Colors.white12),
+                        borderSide: BorderSide(color: c.hairline),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: isLight ? Colors.black12 : Colors.white12),
+                        borderSide: BorderSide(color: c.hairline),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF00F2FE)),
+                        borderSide: BorderSide(color: c.accent, width: 1.2),
                       ),
-                      contentPadding: const EdgeInsets.fromLTRB(10, 8, 56, 8),
+                      contentPadding: const EdgeInsets.fromLTRB(10, 9, 54, 9),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 4, right: 4),
-                    child: InkWell(
-                      onTap: _isGeneratingCommitMessage ? null : _generateSmartCommitMessage,
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF8B5CF6), Color(0xFF00F2FE)],
+                    padding: const EdgeInsets.only(top: 5, right: 5),
+                    child: Tooltip(
+                      message: 'Сгенерировать сообщение коммита по изменениям',
+                      child: InkWell(
+                        onTap: _isGeneratingCommitMessage
+                            ? null
+                            : _generateSmartCommitMessage,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 4,
                           ),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: _isGeneratingCommitMessage
-                            ? const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
-                              )
-                            : const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(LucideIcons.sparkles, size: 11, color: Colors.white),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'AI',
-                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                          decoration: BoxDecoration(
+                            color: c.accent.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: c.accent.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: _isGeneratingCommitMessage
+                              ? SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    color: c.accent,
                                   ),
-                                ],
-                              ),
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      LucideIcons.sparkles,
+                                      size: 11,
+                                      color: c.accent,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'AI',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: c.accent,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              // Amend toggle + Commit / Commit & Push Buttons
+              const SizedBox(height: 8),
+              // Amend toggle + Balanced Primary Commit & Tonal Push Buttons
               Row(
                 children: [
                   InkWell(
@@ -853,28 +1171,48 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                         if (_amendCommit &&
                             _commitController.text.trim().isEmpty &&
                             status.recentCommits.isNotEmpty) {
-                          _commitController.text = status.recentCommits.first.message;
+                          _commitController.text =
+                              status.recentCommits.first.message;
                         }
                       });
                     },
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _amendCommit
+                            ? c.accent.withValues(alpha: 0.14)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: _amendCommit
+                              ? c.accent.withValues(alpha: 0.45)
+                              : c.hairline,
+                        ),
+                      ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            _amendCommit ? LucideIcons.square_check : LucideIcons.square,
-                            size: 13,
-                            color: _amendCommit ? const Color(0xFF00F2FE) : subColor,
+                            _amendCommit
+                                ? LucideIcons.square_check
+                                : LucideIcons.square,
+                            size: 12.5,
+                            color: _amendCommit ? c.accent : c.mutedForeground,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             'Amend',
                             style: TextStyle(
-                              fontSize: 10,
-                              color: _amendCommit ? const Color(0xFF00F2FE) : subColor,
-                              fontWeight: _amendCommit ? FontWeight.bold : FontWeight.normal,
+                              fontSize: 10.5,
+                              color:
+                                  _amendCommit ? c.accent : c.mutedForeground,
+                              fontWeight: _amendCommit
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
                             ),
                           ),
                         ],
@@ -884,33 +1222,46 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   const SizedBox(width: 8),
                   Expanded(
                     child: SizedBox(
-                      height: 32,
+                      height: 33,
                       child: ElevatedButton.icon(
                         onPressed: (status.hasChanges || _amendCommit)
                             ? () async {
-                                final msg = _commitController.text.trim().isNotEmpty
+                                final msg = _commitController.text
+                                        .trim()
+                                        .isNotEmpty
                                     ? _commitController.text.trim()
                                     : 'chore: update (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})';
-                                final ok = await notifier.commit(msg, amend: _amendCommit);
+                                final ok = await notifier.commit(
+                                  msg,
+                                  amend: _amendCommit,
+                                );
                                 if (ok && mounted) {
                                   _commitController.clear();
                                   setState(() => _amendCommit = false);
                                 }
                               }
                             : null,
-                        icon: const Icon(LucideIcons.check, size: 13),
+                        icon: const Icon(LucideIcons.check, size: 13.5),
                         label: Text(
                           status.stagedFiles.isNotEmpty
                               ? 'Коммит (${status.stagedFiles.length})'
                               : 'Коммит все (${status.totalChangesCount})',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00F2FE),
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                          backgroundColor: c.accent,
+                          foregroundColor: c.accentForeground,
+                          disabledBackgroundColor: c.inputFill,
+                          disabledForegroundColor: c.subtleForeground,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ),
@@ -918,15 +1269,20 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   const SizedBox(width: 6),
                   Expanded(
                     child: SizedBox(
-                      height: 32,
-                      child: ElevatedButton.icon(
+                      height: 33,
+                      child: OutlinedButton.icon(
                         onPressed: (status.hasChanges || status.ahead > 0)
                             ? () async {
                                 if (status.hasChanges) {
-                                  final msg = _commitController.text.trim().isNotEmpty
+                                  final msg = _commitController.text
+                                          .trim()
+                                          .isNotEmpty
                                       ? _commitController.text.trim()
                                       : 'chore: sync (${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')})';
-                                  final ok = await notifier.commitAndPush(msg, amend: _amendCommit);
+                                  final ok = await notifier.commitAndPush(
+                                    msg,
+                                    amend: _amendCommit,
+                                  );
                                   if (ok && mounted) {
                                     _commitController.clear();
                                     setState(() => _amendCommit = false);
@@ -936,17 +1292,30 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                 }
                               }
                             : null,
-                        icon: const Icon(LucideIcons.cloud_upload, size: 13),
+                        icon: const Icon(LucideIcons.cloud_upload, size: 13.5),
                         label: Text(
-                          status.ahead > 0 ? 'Push (${status.ahead})' : 'Коммит и Push',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          status.ahead > 0
+                              ? 'Push (${status.ahead})'
+                              : 'Коммит + Push',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF8B5CF6),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: c.accent,
+                          backgroundColor: c.accent.withValues(alpha: 0.12),
+                          disabledForegroundColor: c.subtleForeground,
+                          side: BorderSide(
+                            color: (status.hasChanges || status.ahead > 0)
+                                ? c.accent.withValues(alpha: 0.45)
+                                : c.hairline,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
                       ),
                     ),
@@ -960,28 +1329,43 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         // File Filter Bar (if > 4 files)
         if (status.totalChangesCount > 4)
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 6, 10, 2),
+            padding: const EdgeInsets.fromLTRB(10, 2, 10, 6),
             child: SizedBox(
-              height: 28,
+              height: 32,
               child: TextField(
                 controller: _fileFilterController,
-                style: TextStyle(fontSize: 11, color: textColor),
+                style: TextStyle(fontSize: 11.5, color: c.foreground),
                 decoration: InputDecoration(
                   hintText: 'Фильтр изменённых файлов...',
-                  hintStyle: TextStyle(fontSize: 11, color: subColor),
-                  prefixIcon: Icon(LucideIcons.search, size: 13, color: subColor),
+                  hintStyle: TextStyle(
+                    fontSize: 11.5,
+                    color: c.subtleForeground,
+                  ),
+                  prefixIcon: Icon(
+                    LucideIcons.search,
+                    size: 13.5,
+                    color: c.mutedForeground,
+                  ),
                   suffixIcon: _fileFilter.isNotEmpty
                       ? InkWell(
                           onTap: () => _fileFilterController.clear(),
-                          child: Icon(LucideIcons.x, size: 12, color: subColor),
+                          child: Icon(
+                            LucideIcons.x,
+                            size: 13,
+                            color: c.mutedForeground,
+                          ),
                         )
                       : null,
                   filled: true,
-                  fillColor: isLight ? Colors.white : const Color(0xFF141824),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                  fillColor: c.card,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: c.hairline),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: c.hairline),
                   ),
                 ),
               ),
@@ -991,26 +1375,29 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         // Changed Files Sections
         Expanded(
           child: !status.hasChanges
-              ? _buildCleanWorkingTreeView(status, notifier, isLight)
+              ? _buildCleanWorkingTreeView(status, notifier, c)
               : ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.only(bottom: 12),
                   children: [
                     // 1. CONFLICTS SECTION
                     if (filteredConflicts.isNotEmpty) ...[
                       _buildCollapsibleHeader(
+                        c: c,
                         title: 'КОНФЛИКТЫ СЛИЯНИЯ (${filteredConflicts.length})',
-                        color: Colors.redAccent,
+                        color: c.danger,
                         expanded: _conflictsExpanded,
-                        onToggle: () => setState(() => _conflictsExpanded = !_conflictsExpanded),
+                        onToggle: () => setState(
+                          () => _conflictsExpanded = !_conflictsExpanded,
+                        ),
                       ),
                       if (_conflictsExpanded)
                         ...filteredConflicts.map(
                           (f) => _buildFileRow(
+                            c: c,
                             file: f,
                             statusCode: 'U',
-                            badgeColor: Colors.redAccent,
+                            badgeColor: c.danger,
                             stats: status.diffStats[f],
-                            isLight: isLight,
                             onTap: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -1023,7 +1410,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                             actions: [
                               _buildMiniIconBtn(
                                 icon: LucideIcons.wrench,
-                                color: Colors.amberAccent,
+                                color: c.warning,
                                 tooltip: 'Разрешить конфликт',
                                 onTap: () {
                                   Navigator.of(context).push(
@@ -1037,7 +1424,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                               ),
                               _buildMiniIconBtn(
                                 icon: LucideIcons.check,
-                                color: Colors.greenAccent,
+                                color: c.success,
                                 tooltip: 'Отметить решённым (git add)',
                                 onTap: () => notifier.stageFile(f),
                               ),
@@ -1046,26 +1433,40 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                         ),
                     ],
 
-                    // 2. STAGED CHANGES (ИНДЕКС)
+                    // 2. STAGED CHANGES
                     _buildCollapsibleHeader(
-                      title: 'В ИНДЕКСЕ ДЛЯ КОММИТА (${filteredStaged.length})',
-                      color: Colors.greenAccent,
+                      c: c,
+                      title: 'В ИНДЕКСЕ (${filteredStaged.length})',
+                      color: c.success,
                       expanded: _stagedExpanded,
-                      onToggle: () => setState(() => _stagedExpanded = !_stagedExpanded),
+                      onToggle: () => setState(
+                        () => _stagedExpanded = !_stagedExpanded,
+                      ),
                       trailing: filteredStaged.isNotEmpty
                           ? InkWell(
                               onTap: () => notifier.unstageAll(),
-                              borderRadius: BorderRadius.circular(4),
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              borderRadius: BorderRadius.circular(5),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(LucideIcons.minus, size: 11, color: Colors.orangeAccent),
-                                    SizedBox(width: 3),
+                                    Icon(
+                                      LucideIcons.minus,
+                                      size: 11,
+                                      color: c.warning,
+                                    ),
+                                    const SizedBox(width: 3),
                                     Text(
                                       'Снять все',
-                                      style: TextStyle(fontSize: 10, color: Colors.orangeAccent, fontWeight: FontWeight.w600),
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: c.warning,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1076,20 +1477,23 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     if (_stagedExpanded)
                       if (filteredStaged.isEmpty)
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                          padding: const EdgeInsets.fromLTRB(14, 5, 14, 8),
                           child: Text(
-                            'Индекс пуст. Нажмите «+» у нужных файлов или «В индекс все», чтобы подготовить коммит.',
-                            style: TextStyle(fontSize: 10, color: subColor),
+                            'Индекс пуст — отметьте файлы «+» ниже или нажмите «Коммит все».',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: c.subtleForeground,
+                            ),
                           ),
                         )
                       else
                         ...filteredStaged.map(
                           (f) => _buildFileRow(
+                            c: c,
                             file: f,
                             statusCode: status.fileStatusCodes[f] ?? 'A',
-                            badgeColor: Colors.greenAccent,
+                            badgeColor: c.success,
                             stats: status.diffStats[f],
-                            isLight: isLight,
                             onTap: () => _openFileDiff(f, isStaged: true),
                             onLongPress: () => _showFileContextMenu(
                               file: f,
@@ -1100,13 +1504,13 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                             actions: [
                               _buildMiniIconBtn(
                                 icon: LucideIcons.file_code,
-                                color: Colors.white54,
+                                color: c.mutedForeground,
                                 tooltip: 'Открыть файл в редакторе',
                                 onTap: () => _openFileInEditor(f),
                               ),
                               _buildMiniIconBtn(
                                 icon: LucideIcons.minus,
-                                color: Colors.orangeAccent,
+                                color: c.warning,
                                 tooltip: 'Убрать из индекса (Unstage)',
                                 onTap: () => notifier.unstageFile(f),
                               ),
@@ -1114,38 +1518,62 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           ),
                         ),
 
-                    // 3. WORKING TREE (РАБОЧАЯ КОПИЯ)
+                    // 3. WORKING TREE CHANGES
                     _buildCollapsibleHeader(
-                      title: 'ИЗМЕНЕНИЯ РАБОЧЕЙ КОПИИ (${workingFiles.length})',
-                      color: Colors.amberAccent,
+                      c: c,
+                      title: 'ИЗМЕНЕНИЯ (${workingFiles.length})',
+                      color: c.warning,
                       expanded: _workingExpanded,
-                      onToggle: () => setState(() => _workingExpanded = !_workingExpanded),
+                      onToggle: () => setState(
+                        () => _workingExpanded = !_workingExpanded,
+                      ),
                       trailing: workingFiles.isNotEmpty
                           ? Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                InkWell(
-                                  onTap: () => _confirmDiscardAll(notifier),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                    child: Icon(LucideIcons.trash_2, size: 12, color: Colors.redAccent),
+                                Tooltip(
+                                  message: 'Откатить все изменения',
+                                  child: InkWell(
+                                    onTap: () => _confirmDiscardAll(notifier),
+                                    borderRadius: BorderRadius.circular(5),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 5,
+                                        vertical: 2,
+                                      ),
+                                      child: Icon(
+                                        LucideIcons.trash_2,
+                                        size: 12.5,
+                                        color: c.danger,
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 4),
                                 InkWell(
                                   onTap: () => notifier.stageAll(),
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: const Padding(
-                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  borderRadius: BorderRadius.circular(5),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(LucideIcons.plus, size: 11, color: Color(0xFF00F2FE)),
-                                        SizedBox(width: 3),
+                                        Icon(
+                                          LucideIcons.plus,
+                                          size: 11.5,
+                                          color: c.accent,
+                                        ),
+                                        const SizedBox(width: 3),
                                         Text(
                                           'В индекс все',
-                                          style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE), fontWeight: FontWeight.w600),
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: c.accent,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -1158,14 +1586,16 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     if (_workingExpanded) ...[
                       ...workingFiles.take(150).map((f) {
                         final isUntracked = untrackedSet.contains(f);
-                        final code = isUntracked ? 'U' : (status.fileStatusCodes[f] ?? 'M');
-                        final color = isUntracked ? Colors.lightBlueAccent : Colors.amberAccent;
+                        final code = isUntracked
+                            ? 'U'
+                            : (status.fileStatusCodes[f] ?? 'M');
+                        final color = isUntracked ? c.accent : c.warning;
                         return _buildFileRow(
+                          c: c,
                           file: f,
                           statusCode: code,
                           badgeColor: color,
                           stats: status.diffStats[f],
-                          isLight: isLight,
                           onTap: () => _openFileDiff(f, isStaged: false),
                           onLongPress: () => _showFileContextMenu(
                             file: f,
@@ -1176,19 +1606,19 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           actions: [
                             _buildMiniIconBtn(
                               icon: LucideIcons.eye_off,
-                              color: Colors.white38,
+                              color: c.subtleForeground,
                               tooltip: 'Добавить в .gitignore',
                               onTap: () => notifier.addToGitignore(f),
                             ),
                             _buildMiniIconBtn(
                               icon: LucideIcons.undo_2,
-                              color: Colors.redAccent.withValues(alpha: 0.8),
+                              color: c.danger.withValues(alpha: 0.85),
                               tooltip: 'Откатить изменения в файле (Discard)',
                               onTap: () => _confirmDiscardFile(f, notifier),
                             ),
                             _buildMiniIconBtn(
                               icon: LucideIcons.plus,
-                              color: const Color(0xFF00F2FE),
+                              color: c.accent,
                               tooltip: 'Добавить в индекс (Stage)',
                               onTap: () => notifier.stageFile(f),
                             ),
@@ -1197,10 +1627,13 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                       }),
                       if (workingFiles.length > 150)
                         Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 12,
+                          ),
                           child: Text(
                             'Показано 150 из ${workingFiles.length} файлов. Добавьте build/ и .dart_tool/ в .gitignore',
-                            style: const TextStyle(fontSize: 11, color: Colors.orangeAccent),
+                            style: TextStyle(fontSize: 11, color: c.warning),
                           ),
                         ),
                     ],
@@ -1211,81 +1644,173 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildCleanWorkingTreeView(GitStatus status, GitNotifier notifier, bool isLight) {
-    final subColor = isLight ? Colors.black54 : Colors.white54;
+  Widget _buildCleanWorkingTreeView(
+    GitStatus status,
+    GitNotifier notifier,
+    GitThemeColors c,
+  ) {
+    final latestCommit =
+        status.recentCommits.isNotEmpty ? status.recentCommits.first : null;
+
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.greenAccent.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: c.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c.hairline),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: c.success.withValues(alpha: 0.14),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  LucideIcons.check_check,
+                  size: 26,
+                  color: c.success,
+                ),
               ),
-              child: const Icon(LucideIcons.check_check, size: 28, color: Colors.greenAccent),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Рабочая копия чиста',
-              style: TextStyle(
-                color: isLight ? Colors.black87 : Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
+              const SizedBox(height: 12),
+              Text(
+                'Рабочая копия чиста',
+                style: TextStyle(
+                  color: c.foreground,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Все изменения на ветке «${status.currentBranch}» сохранены в Git.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: subColor, fontSize: 11),
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.center,
-              children: [
-                if (status.ahead > 0)
-                  ElevatedButton.icon(
-                    onPressed: () => notifier.push(),
-                    icon: const Icon(LucideIcons.cloud_upload, size: 14),
-                    label: Text('Отправить ${status.ahead} коммит(ов) в Remote'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00F2FE),
-                      foregroundColor: Colors.black,
-                    ),
+              const SizedBox(height: 4),
+              Text(
+                'На ветке «${status.currentBranch}» нет незакоммиченных правок.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.mutedForeground, fontSize: 11.5),
+              ),
+              if (latestCommit != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
                   ),
-                if (status.behind > 0)
-                  ElevatedButton.icon(
-                    onPressed: () => notifier.pull(),
-                    icon: const Icon(LucideIcons.cloud_download, size: 14),
-                    label: Text('Скачать ${status.behind} коммит(ов) (Pull)'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.amberAccent,
-                      foregroundColor: Colors.black,
-                    ),
+                  decoration: BoxDecoration(
+                    color: c.inputFill,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: c.hairline),
                   ),
-                if (status.stashes.isNotEmpty)
-                  OutlinedButton.icon(
-                    onPressed: () => notifier.stashPop(),
-                    icon: const Icon(LucideIcons.archive_restore, size: 14, color: Colors.orangeAccent),
-                    label: Text(
-                      'Восстановить Stash (${status.stashes.length})',
-                      style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
-                    ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.accent.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          latestCommit.shortHash,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: c.accent,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          latestCommit.message,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: c.foreground,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
               ],
-            ),
-          ],
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  if (status.ahead > 0)
+                    ElevatedButton.icon(
+                      onPressed: () => notifier.push(),
+                      icon: const Icon(LucideIcons.cloud_upload, size: 14),
+                      label: Text('Отправить ${status.ahead} коммит(ов)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: c.accent,
+                        foregroundColor: c.accentForeground,
+                        elevation: 0,
+                      ),
+                    ),
+                  if (status.behind > 0)
+                    ElevatedButton.icon(
+                      onPressed: () => notifier.pull(),
+                      icon: const Icon(LucideIcons.cloud_download, size: 14),
+                      label: Text('Скачать ${status.behind} коммит(ов)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: c.warning,
+                        foregroundColor: GitThemeColors.contrastOn(c.warning),
+                        elevation: 0,
+                      ),
+                    ),
+                  if (status.stashes.isNotEmpty)
+                    OutlinedButton.icon(
+                      onPressed: () => notifier.stashPop(),
+                      icon: Icon(
+                        LucideIcons.archive_restore,
+                        size: 14,
+                        color: c.warning,
+                      ),
+                      label: Text(
+                        'Вернуть Stash (${status.stashes.length})',
+                        style: TextStyle(color: c.warning, fontSize: 11.5),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: c.warning.withValues(alpha: 0.45)),
+                      ),
+                    ),
+                  OutlinedButton.icon(
+                    onPressed: () => _showCreateBranchDialog(notifier),
+                    icon: Icon(
+                      LucideIcons.git_branch_plus,
+                      size: 13.5,
+                      color: c.accent,
+                    ),
+                    label: Text(
+                      'Новая ветка',
+                      style: TextStyle(color: c.accent, fontSize: 11.5),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: c.border),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildCollapsibleHeader({
+    required GitThemeColors c,
     required String title,
     required Color color,
     required bool expanded,
@@ -1295,8 +1820,14 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     return InkWell(
       onTap: onToggle,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        color: Colors.white.withValues(alpha: 0.02),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: c.panel.withValues(alpha: 0.72),
+          border: Border(
+            top: BorderSide(color: c.hairline, width: 0.6),
+            bottom: BorderSide(color: c.hairline, width: 0.6),
+          ),
+        ),
         child: Row(
           children: [
             Icon(
@@ -1304,15 +1835,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               size: 13,
               color: color,
             ),
-            const SizedBox(width: 5),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 title,
                 style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                  letterSpacing: 0.6,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: c.mutedForeground,
+                  letterSpacing: 0.55,
                 ),
               ),
             ),
@@ -1329,11 +1860,12 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     required GitNotifier notifier,
     required GitStatus status,
   }) {
+    final c = GitThemeColors.resolve(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF141824),
+      backgroundColor: c.card,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -1342,10 +1874,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
                   children: [
-                    const Icon(LucideIcons.file_code, size: 16, color: Color(0xFF00F2FE)),
+                    Icon(LucideIcons.file_code, size: 16, color: c.accent),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1353,7 +1886,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: c.foreground,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1361,11 +1894,14 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   ],
                 ),
               ),
-              const Divider(color: Colors.white10, height: 1),
+              Divider(color: c.hairline, height: 1),
               ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.eye, color: Color(0xFF00F2FE), size: 18),
-                title: const Text('Просмотреть изменения (Diff)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                leading: Icon(LucideIcons.eye, color: c.accent, size: 18),
+                title: Text(
+                  'Просмотреть изменения (Diff)',
+                  style: TextStyle(color: c.foreground, fontSize: 13),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _openFileDiff(file, isStaged: isStaged);
@@ -1373,8 +1909,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               ),
               ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.pencil, color: Colors.white70, size: 18),
-                title: const Text('Открыть в редакторе кода', style: TextStyle(color: Colors.white, fontSize: 13)),
+                leading: Icon(
+                  LucideIcons.pencil,
+                  color: c.mutedForeground,
+                  size: 18,
+                ),
+                title: Text(
+                  'Открыть в редакторе кода',
+                  style: TextStyle(color: c.foreground, fontSize: 13),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _openFileInEditor(file);
@@ -1383,8 +1926,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               if (isStaged)
                 ListTile(
                   dense: true,
-                  leading: const Icon(LucideIcons.circle_minus, color: Colors.orangeAccent, size: 18),
-                  title: const Text('Убрать из индекса (Unstage)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  leading: Icon(
+                    LucideIcons.circle_minus,
+                    color: c.warning,
+                    size: 18,
+                  ),
+                  title: Text(
+                    'Убрать из индекса (Unstage)',
+                    style: TextStyle(color: c.foreground, fontSize: 13),
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     notifier.unstageFile(file);
@@ -1393,8 +1943,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               else
                 ListTile(
                   dense: true,
-                  leading: const Icon(LucideIcons.circle_plus, color: Color(0xFF00F2FE), size: 18),
-                  title: const Text('Добавить в индекс (Stage)', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  leading: Icon(
+                    LucideIcons.circle_plus,
+                    color: c.accent,
+                    size: 18,
+                  ),
+                  title: Text(
+                    'Добавить в индекс (Stage)',
+                    style: TextStyle(color: c.foreground, fontSize: 13),
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     notifier.stageFile(file);
@@ -1402,9 +1959,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                 ),
               ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.undo_2, color: Colors.redAccent, size: 18),
-                title: const Text('Откатить изменения (Discard)', style: TextStyle(color: Colors.redAccent, fontSize: 13)),
-                subtitle: const Text('Сбросить файл к состоянию последнего коммита', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                leading: Icon(LucideIcons.undo_2, color: c.danger, size: 18),
+                title: Text(
+                  'Откатить изменения (Discard)',
+                  style: TextStyle(color: c.danger, fontSize: 13),
+                ),
+                subtitle: Text(
+                  'Сбросить файл к состоянию последнего коммита',
+                  style: TextStyle(color: c.subtleForeground, fontSize: 10.5),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   _confirmDiscardFile(file, notifier);
@@ -1412,8 +1975,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               ),
               ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.eye_off, color: Colors.white54, size: 18),
-                title: const Text('Добавить в .gitignore', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                leading: Icon(
+                  LucideIcons.eye_off,
+                  color: c.mutedForeground,
+                  size: 18,
+                ),
+                title: Text(
+                  'Добавить в .gitignore',
+                  style: TextStyle(color: c.mutedForeground, fontSize: 13),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   notifier.addToGitignore(file);
@@ -1421,8 +1991,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               ),
               ListTile(
                 dense: true,
-                leading: const Icon(LucideIcons.copy, color: Colors.white54, size: 18),
-                title: const Text('Скопировать относительный путь', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                leading: Icon(
+                  LucideIcons.copy,
+                  color: c.mutedForeground,
+                  size: 18,
+                ),
+                title: Text(
+                  'Скопировать относительный путь',
+                  style: TextStyle(color: c.mutedForeground, fontSize: 13),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   Clipboard.setData(ClipboardData(text: file));
@@ -1442,11 +2019,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   Widget _buildFileRow({
+    required GitThemeColors c,
     required String file,
     required String statusCode,
     required Color badgeColor,
     required GitFileDiffStats? stats,
-    required bool isLight,
     required VoidCallback onTap,
     VoidCallback? onLongPress,
     required List<Widget> actions,
@@ -1457,29 +2034,34 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: c.hairline.withValues(alpha: 0.45)),
+          ),
+        ),
         child: Row(
           children: [
             Container(
-              width: 18,
-              height: 18,
+              width: 20,
+              height: 20,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: badgeColor.withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: badgeColor.withValues(alpha: 0.4)),
+                color: badgeColor.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: badgeColor.withValues(alpha: 0.35)),
               ),
               child: Text(
                 statusCode,
                 style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
                   color: badgeColor,
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 9),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1487,8 +2069,8 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   Text(
                     fileName,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: isLight ? Colors.black87 : Colors.white,
+                      fontSize: 12.5,
+                      color: c.foreground,
                       fontWeight: FontWeight.w500,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -1498,31 +2080,33 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                       dirName,
                       style: TextStyle(
                         fontSize: 10,
-                        color: isLight ? Colors.black45 : Colors.white38,
+                        color: c.subtleForeground,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                 ],
               ),
             ),
-            if (stats != null && (stats.additions > 0 || stats.deletions > 0)) ...[
+            if (stats != null &&
+                (stats.additions > 0 || stats.deletions > 0)) ...[
               if (stats.additions > 0)
                 Text(
                   '+${stats.additions}',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
-                    color: Colors.greenAccent,
-                    fontWeight: FontWeight.bold,
+                    color: c.success,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              if (stats.additions > 0 && stats.deletions > 0) const SizedBox(width: 4),
+              if (stats.additions > 0 && stats.deletions > 0)
+                const SizedBox(width: 4),
               if (stats.deletions > 0)
                 Text(
                   '-${stats.deletions}',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.bold,
+                    color: c.danger,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               const SizedBox(width: 6),
@@ -1544,10 +2128,10 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(5),
         child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(icon, size: 13, color: color),
+          padding: const EdgeInsets.all(4.5),
+          child: Icon(icon, size: 13.5, color: color),
         ),
       ),
     );
@@ -1557,66 +2141,98 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   // TAB 2: ИСТОРИЯ КОММИТОВ (COMMIT LOG & INTERACTIVE INSPECTOR)
   // ===========================================================================
 
-  Widget _buildHistoryTab(GitStatus status, GitNotifier notifier, bool isLight) {
-    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
-    final subColor = isLight ? Colors.black54 : Colors.white54;
-
-    final commits = status.recentCommits.where((c) {
+  Widget _buildHistoryTab(
+    GitStatus status,
+    GitNotifier notifier,
+    GitThemeColors c,
+  ) {
+    final commits = status.recentCommits.where((item) {
       if (_commitFilter.isEmpty) return true;
-      return c.message.toLowerCase().contains(_commitFilter) ||
-          c.shortHash.toLowerCase().contains(_commitFilter) ||
-          c.author.toLowerCase().contains(_commitFilter) ||
-          c.refs.toLowerCase().contains(_commitFilter);
+      return item.message.toLowerCase().contains(_commitFilter) ||
+          item.shortHash.toLowerCase().contains(_commitFilter) ||
+          item.author.toLowerCase().contains(_commitFilter) ||
+          item.refs.toLowerCase().contains(_commitFilter);
     }).toList();
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 6),
           child: Row(
             children: [
               Expanded(
                 child: SizedBox(
-                  height: 30,
+                  height: 32,
                   child: TextField(
                     controller: _commitSearchController,
-                    style: TextStyle(fontSize: 11, color: textColor),
+                    style: TextStyle(fontSize: 11.5, color: c.foreground),
                     decoration: InputDecoration(
                       hintText: 'Поиск по коммитам, SHA, автору, тегам...',
-                      hintStyle: TextStyle(fontSize: 11, color: subColor),
-                      prefixIcon: Icon(LucideIcons.search, size: 13, color: subColor),
+                      hintStyle: TextStyle(
+                        fontSize: 11.5,
+                        color: c.subtleForeground,
+                      ),
+                      prefixIcon: Icon(
+                        LucideIcons.search,
+                        size: 13.5,
+                        color: c.mutedForeground,
+                      ),
                       suffixIcon: _commitFilter.isNotEmpty
                           ? InkWell(
                               onTap: () => _commitSearchController.clear(),
-                              child: Icon(LucideIcons.x, size: 12, color: subColor),
+                              child: Icon(
+                                LucideIcons.x,
+                                size: 13,
+                                color: c.mutedForeground,
+                              ),
                             )
                           : null,
                       filled: true,
-                      fillColor: isLight ? Colors.white : const Color(0xFF141824),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      fillColor: c.card,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                      ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: BorderSide.none,
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: c.hairline),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: c.hairline),
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               SizedBox(
-                height: 30,
+                height: 32,
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const GitGraphPage()),
                     );
                   },
-                  icon: const Icon(LucideIcons.git_graph, size: 13, color: Color(0xFF00F2FE)),
-                  label: const Text('Graph', style: TextStyle(fontSize: 11, color: Color(0xFF00F2FE))),
+                  icon: Icon(
+                    LucideIcons.git_graph,
+                    size: 13.5,
+                    color: c.accent,
+                  ),
+                  label: Text(
+                    'Граф',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: c.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF00F2FE)),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    backgroundColor: c.accent.withValues(alpha: 0.1),
+                    side: BorderSide(color: c.accent.withValues(alpha: 0.4)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
@@ -1628,40 +2244,51 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               ? Center(
                   child: Text(
                     'Коммиты не найдены',
-                    style: TextStyle(color: subColor, fontSize: 12),
+                    style: TextStyle(color: c.mutedForeground, fontSize: 12),
                   ),
                 )
               : ListView.builder(
+                  padding: const EdgeInsets.only(bottom: 12),
                   itemCount: commits.length,
                   itemBuilder: (context, index) {
-                    final c = commits[index];
+                    final entry = commits[index];
                     final isHead = index == 0 && _commitFilter.isEmpty;
+                    final nodeColor =
+                        isHead ? c.accent : c.accentSecondary;
+
                     return InkWell(
-                      onTap: () => _showCommitInspectorSheet(c, notifier),
+                      onTap: () => _showCommitInspectorSheet(entry, notifier),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
                         decoration: BoxDecoration(
                           border: Border(
                             bottom: BorderSide(
-                              color: isLight ? Colors.black12 : Colors.white.withValues(alpha: 0.05),
+                              color: c.hairline.withValues(alpha: 0.5),
                             ),
                           ),
                         ),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              children: [
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  margin: const EdgeInsets.only(top: 4),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isHead ? const Color(0xFF00F2FE) : Colors.purpleAccent,
-                                  ),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: nodeColor,
+                                  border: isHead
+                                      ? Border.all(
+                                          color: c.accent.withValues(alpha: 0.35),
+                                          width: 3,
+                                        )
+                                      : null,
                                 ),
-                              ],
+                              ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -1671,35 +2298,49 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                   Row(
                                     children: [
                                       Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF00F2FE).withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(4),
+                                          color:
+                                              c.accent.withValues(alpha: 0.14),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
                                         ),
                                         child: Text(
-                                          c.shortHash,
+                                          entry.shortHash,
                                           style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10,
-                                            color: const Color(0xFF00F2FE),
-                                            fontWeight: FontWeight.bold,
+                                            fontSize: 10.5,
+                                            color: c.accent,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
                                       ),
-                                      if (c.refs.isNotEmpty) ...[
+                                      if (entry.refs.isNotEmpty) ...[
                                         const SizedBox(width: 6),
                                         Flexible(
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 1.5,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: Colors.amberAccent.withValues(alpha: 0.15),
-                                              borderRadius: BorderRadius.circular(4),
+                                              color: c.warning
+                                                  .withValues(alpha: 0.14),
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: c.warning
+                                                    .withValues(alpha: 0.35),
+                                              ),
                                             ),
                                             child: Text(
-                                              c.refs,
-                                              style: const TextStyle(
-                                                fontSize: 9,
-                                                color: Colors.amberAccent,
-                                                fontWeight: FontWeight.bold,
+                                              entry.refs,
+                                              style: TextStyle(
+                                                fontSize: 9.5,
+                                                color: c.warning,
+                                                fontWeight: FontWeight.w700,
                                               ),
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -1708,17 +2349,20 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                       ],
                                       const Spacer(),
                                       Text(
-                                        c.relativeTime,
-                                        style: TextStyle(fontSize: 10, color: subColor),
+                                        entry.relativeTime,
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          color: c.subtleForeground,
+                                        ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 5),
                                   Text(
-                                    c.message,
+                                    entry.message,
                                     style: TextStyle(
-                                      fontSize: 12,
-                                      color: textColor,
+                                      fontSize: 12.5,
+                                      color: c.foreground,
                                       fontWeight: FontWeight.w500,
                                     ),
                                     maxLines: 2,
@@ -1726,8 +2370,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    c.author,
-                                    style: TextStyle(fontSize: 10, color: subColor),
+                                    entry.author,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      color: c.mutedForeground,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1744,13 +2391,14 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showCommitInspectorSheet(GitCommitEntry commit, GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     List<GitCommitFileEntry>? changedFiles;
     String? patchDiff;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF121622),
+      backgroundColor: c.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -1781,15 +2429,18 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF00F2FE).withValues(alpha: 0.15),
+                              color: c.accent.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
                               commit.shortHash,
                               style: GoogleFonts.jetBrainsMono(
-                                color: const Color(0xFF00F2FE),
+                                color: c.accent,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
                               ),
@@ -1799,22 +2450,37 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           Expanded(
                             child: Text(
                               '${commit.author} • ${commit.relativeTime}',
-                              style: const TextStyle(color: Colors.white54, fontSize: 11),
+                              style: TextStyle(
+                                color: c.mutedForeground,
+                                fontSize: 11.5,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(LucideIcons.copy, size: 15, color: Colors.white70),
+                            icon: Icon(
+                              LucideIcons.copy,
+                              size: 15,
+                              color: c.mutedForeground,
+                            ),
                             tooltip: 'Скопировать полный SHA',
                             onPressed: () {
-                              Clipboard.setData(ClipboardData(text: commit.hash));
+                              Clipboard.setData(
+                                ClipboardData(text: commit.hash),
+                              );
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('SHA скопирован в буфер обмена')),
+                                const SnackBar(
+                                  content: Text('SHA скопирован в буфер обмена'),
+                                ),
                               );
                             },
                           ),
                           IconButton(
-                            icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                            icon: Icon(
+                              LucideIcons.x,
+                              size: 16,
+                              color: c.mutedForeground,
+                            ),
                             onPressed: () => Navigator.pop(modalCtx),
                           ),
                         ],
@@ -1822,7 +2488,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                       const SizedBox(height: 6),
                       Text(
                         commit.message,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: c.foreground,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 12),
 
@@ -1834,7 +2504,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           _buildModalActionBtn(
                             icon: LucideIcons.git_pull_request_create,
                             label: 'Cherry-pick',
-                            color: const Color(0xFF8B5CF6),
+                            color: c.accentSecondary,
                             onTap: () {
                               Navigator.pop(modalCtx);
                               notifier.cherryPickCommit(commit.hash);
@@ -1843,7 +2513,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           _buildModalActionBtn(
                             icon: LucideIcons.undo_2,
                             label: 'Revert (обратить)',
-                            color: Colors.amberAccent,
+                            color: c.warning,
                             onTap: () {
                               Navigator.pop(modalCtx);
                               notifier.revertCommit(commit.hash);
@@ -1852,25 +2522,31 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           _buildModalActionBtn(
                             icon: LucideIcons.git_branch_plus,
                             label: 'Ветка отсюда',
-                            color: const Color(0xFF00F2FE),
+                            color: c.accent,
                             onTap: () {
                               Navigator.pop(modalCtx);
-                              _showCreateBranchDialog(notifier, fromRef: commit.shortHash);
+                              _showCreateBranchDialog(
+                                notifier,
+                                fromRef: commit.shortHash,
+                              );
                             },
                           ),
                           _buildModalActionBtn(
                             icon: LucideIcons.tag,
                             label: 'Тег на коммит',
-                            color: Colors.greenAccent,
+                            color: c.success,
                             onTap: () {
                               Navigator.pop(modalCtx);
-                              _showCreateTagDialog(notifier, commitHash: commit.hash);
+                              _showCreateTagDialog(
+                                notifier,
+                                commitHash: commit.hash,
+                              );
                             },
                           ),
                           _buildModalActionBtn(
                             icon: LucideIcons.rotate_ccw,
                             label: 'Reset к коммиту...',
-                            color: Colors.redAccent,
+                            color: c.danger,
                             onTap: () {
                               Navigator.pop(modalCtx);
                               _showResetCommitDialog(commit, notifier);
@@ -1878,7 +2554,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           ),
                         ],
                       ),
-                      const Divider(color: Colors.white12, height: 20),
+                      Divider(color: c.hairline, height: 20),
 
                       // Changed files list & patch
                       Expanded(
@@ -1887,32 +2563,35 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           children: [
                             Text(
                               'ЗАТРОНУТЫЕ ФАЙЛЫ (${changedFiles?.length ?? 0})',
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                              style: TextStyle(
+                                color: c.subtleForeground,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
                                 letterSpacing: 0.7,
                               ),
                             ),
                             const SizedBox(height: 6),
                             if (changedFiles == null)
-                              const Padding(
-                                padding: EdgeInsets.all(8.0),
-                                child: LinearProgressIndicator(color: Color(0xFF00F2FE)),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: LinearProgressIndicator(color: c.accent),
                               )
                             else
                               ...changedFiles!.map(
                                 (f) => Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 3),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 3),
                                   child: Row(
                                     children: [
                                       Container(
-                                        width: 18,
-                                        height: 18,
+                                        width: 19,
+                                        height: 19,
                                         alignment: Alignment.center,
                                         decoration: BoxDecoration(
-                                          color: Colors.white10,
-                                          borderRadius: BorderRadius.circular(4),
+                                          color: c.inputFill,
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(color: c.hairline),
                                         ),
                                         child: Text(
                                           f.status,
@@ -1920,10 +2599,10 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                             fontSize: 10,
                                             fontWeight: FontWeight.bold,
                                             color: f.status == 'A'
-                                                ? Colors.greenAccent
+                                                ? c.success
                                                 : f.status == 'D'
-                                                    ? Colors.redAccent
-                                                    : Colors.amberAccent,
+                                                    ? c.danger
+                                                    : c.warning,
                                           ),
                                         ),
                                       ),
@@ -1931,7 +2610,10 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                       Expanded(
                                         child: Text(
                                           f.path,
-                                          style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white),
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11,
+                                            color: c.foreground,
+                                          ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
@@ -1940,12 +2622,12 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                 ),
                               ),
                             const SizedBox(height: 14),
-                            const Text(
+                            Text(
                               'ПОЛНЫЙ DIFF КОММИТА',
                               style: TextStyle(
-                                color: Colors.white54,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                                color: c.subtleForeground,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
                                 letterSpacing: 0.7,
                               ),
                             ),
@@ -1953,16 +2635,16 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                             Container(
                               padding: const EdgeInsets.all(10),
                               decoration: BoxDecoration(
-                                color: Colors.black38,
+                                color: c.inputFill,
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.white10),
+                                border: Border.all(color: c.hairline),
                               ),
                               child: SelectableText(
                                 patchDiff ?? 'Загрузка diff...',
                                 style: GoogleFonts.jetBrainsMono(
                                   fontSize: 10.5,
-                                  color: Colors.white70,
-                                  height: 1.35,
+                                  color: c.foreground.withValues(alpha: 0.85),
+                                  height: 1.38,
                                 ),
                               ),
                             ),
@@ -1999,11 +2681,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 12, color: color),
+            Icon(icon, size: 12.5, color: color),
             const SizedBox(width: 5),
             Text(
               label,
-              style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -2015,187 +2701,508 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   // TAB 3: ВЕТКИ И STASH (BRANCHES & STASH MANAGER)
   // ===========================================================================
 
-  Widget _buildBranchesAndStashTab(GitStatus status, GitNotifier notifier, bool isLight) {
-    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
-    final subColor = isLight ? Colors.black54 : Colors.white54;
+  Widget _buildBranchesAndStashTab(
+    GitStatus status,
+    GitNotifier notifier,
+    GitThemeColors c,
+  ) {
+    final localBranches = status.branches
+        .where(
+          (b) => _branchFilter.isEmpty || b.toLowerCase().contains(_branchFilter),
+        )
+        .toList();
+    final remoteBranches = status.remoteBranches
+        .where(
+          (b) => _branchFilter.isEmpty || b.toLowerCase().contains(_branchFilter),
+        )
+        .toList();
 
     return ListView(
       padding: const EdgeInsets.all(10),
       children: [
-        // 1. LOCAL BRANCHES CARD
+        // Branch Search + Create Bar
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'ЛОКАЛЬНЫЕ ВЕТКИ (${status.branches.length})',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF00F2FE),
-                letterSpacing: 0.7,
+            Expanded(
+              child: SizedBox(
+                height: 32,
+                child: TextField(
+                  controller: _branchFilterController,
+                  style: TextStyle(fontSize: 11.5, color: c.foreground),
+                  decoration: InputDecoration(
+                    hintText: 'Поиск по веткам...',
+                    hintStyle: TextStyle(
+                      fontSize: 11.5,
+                      color: c.subtleForeground,
+                    ),
+                    prefixIcon: Icon(
+                      LucideIcons.search,
+                      size: 13.5,
+                      color: c.mutedForeground,
+                    ),
+                    suffixIcon: _branchFilter.isNotEmpty
+                        ? InkWell(
+                            onTap: () => _branchFilterController.clear(),
+                            child: Icon(
+                              LucideIcons.x,
+                              size: 13,
+                              color: c.mutedForeground,
+                            ),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: c.card,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: c.hairline),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: c.hairline),
+                    ),
+                  ),
+                ),
               ),
             ),
-            TextButton.icon(
-              onPressed: () => _showCreateBranchDialog(notifier),
-              icon: const Icon(LucideIcons.plus, size: 12, color: Color(0xFF00F2FE)),
-              label: const Text('Новая ветка', style: TextStyle(fontSize: 11, color: Color(0xFF00F2FE))),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            const SizedBox(width: 8),
+            SizedBox(
+              height: 32,
+              child: ElevatedButton.icon(
+                onPressed: () => _showCreateBranchDialog(notifier),
+                icon: const Icon(LucideIcons.git_branch_plus, size: 13.5),
+                label: const Text(
+                  'Новая',
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.accent,
+                  foregroundColor: c.accentForeground,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        ...status.branches.map((b) {
-          final isCurrent = b == status.currentBranch;
-          return Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-            decoration: BoxDecoration(
-              color: isCurrent
-                  ? const Color(0xFF00F2FE).withValues(alpha: 0.1)
-                  : (isLight ? Colors.white : const Color(0xFF141824)),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isCurrent
-                    ? const Color(0xFF00F2FE).withValues(alpha: 0.4)
-                    : (isLight ? Colors.black12 : Colors.white10),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isCurrent ? LucideIcons.circle_check : LucideIcons.git_branch,
-                  size: 14,
-                  color: isCurrent ? const Color(0xFF00F2FE) : subColor,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: isCurrent ? null : () => notifier.checkoutBranch(b),
+        const SizedBox(height: 10),
+
+        // Current Active Branch Overview Card
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: c.card,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: c.accent.withValues(alpha: 0.45)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: c.accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                    child: Icon(
+                      LucideIcons.git_branch,
+                      size: 14,
+                      color: c.accent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                status.currentBranch,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: c.foreground,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: c.accent.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'HEAD',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: c.accent,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
                         Text(
-                          b,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 12,
-                            color: isCurrent ? const Color(0xFF00F2FE) : textColor,
-                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.w500,
+                          status.remoteUrl != null
+                              ? 'origin: ${_shortRemoteName(status.remoteUrl!)}'
+                              : 'Удалённый репозиторий не подключён',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: c.mutedForeground,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  _buildMiniIconBtn(
+                    icon: LucideIcons.pencil,
+                    color: c.mutedForeground,
+                    tooltip: 'Переименовать текущую ветку',
+                    onTap: () =>
+                        _showRenameBranchDialog(status.currentBranch, notifier),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _buildModalActionBtn(
+                    icon: LucideIcons.arrow_up_from_line,
+                    label: status.ahead > 0
+                        ? 'Отправить (${status.ahead})'
+                        : 'Отправить ветку',
+                    color: c.accent,
+                    onTap: () => notifier.push(),
+                  ),
+                  _buildModalActionBtn(
+                    icon: LucideIcons.git_graph,
+                    label: 'Дерево веток',
+                    color: c.mutedForeground,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const GitGraphPage()),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // 1. LOCAL BRANCHES
+        InkWell(
+          onTap: () => setState(
+            () => _localBranchesExpanded = !_localBranchesExpanded,
+          ),
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  _localBranchesExpanded
+                      ? LucideIcons.chevron_down
+                      : LucideIcons.chevron_right,
+                  size: 13,
+                  color: c.accent,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'ЛОКАЛЬНЫЕ ВЕТКИ (${localBranches.length})',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: c.mutedForeground,
+                    letterSpacing: 0.65,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_localBranchesExpanded) ...[
+          const SizedBox(height: 4),
+          if (localBranches.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Ветки не найдены',
+                style: TextStyle(fontSize: 11, color: c.subtleForeground),
+              ),
+            )
+          else
+            ...localBranches.map((b) {
+              final isCurrent = b == status.currentBranch;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isCurrent
+                      ? c.accent.withValues(alpha: 0.1)
+                      : c.card,
+                  borderRadius: BorderRadius.circular(9),
+                  border: Border.all(
+                    color: isCurrent
+                        ? c.accent.withValues(alpha: 0.45)
+                        : c.hairline,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isCurrent
+                          ? LucideIcons.circle_check
+                          : LucideIcons.git_branch,
+                      size: 14,
+                      color: isCurrent ? c.accent : c.mutedForeground,
+                    ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: InkWell(
+                        onTap:
+                            isCurrent ? null : () => notifier.checkoutBranch(b),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              b,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12,
+                                color: isCurrent ? c.accent : c.foreground,
+                                fontWeight: isCurrent
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              isCurrent
+                                  ? 'Текущая ветка (HEAD)'
+                                  : 'Нажмите для переключения',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: c.subtleForeground,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (!isCurrent) ...[
+                      InkWell(
+                        onTap: () => notifier.checkoutBranch(b),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: c.accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Переключить',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: c.accent,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                        if (isCurrent)
-                          Text(
-                            'Активная ветка (HEAD)',
-                            style: TextStyle(fontSize: 9.5, color: subColor),
+                      ),
+                      const SizedBox(width: 4),
+                      _buildMiniIconBtn(
+                        icon: LucideIcons.git_merge,
+                        color: c.accentSecondary,
+                        tooltip:
+                            'Влить $b в текущую ветку (${status.currentBranch})',
+                        onTap: () => notifier.mergeBranch(b),
+                      ),
+                      _buildMiniIconBtn(
+                        icon: LucideIcons.trash_2,
+                        color: c.danger,
+                        tooltip: 'Удалить ветку $b',
+                        onTap: () => _confirmDeleteBranch(b, notifier),
+                      ),
+                    ] else
+                      _buildMiniIconBtn(
+                        icon: LucideIcons.pencil,
+                        color: c.mutedForeground,
+                        tooltip: 'Переименовать текущую ветку',
+                        onTap: () => _showRenameBranchDialog(b, notifier),
+                      ),
+                  ],
+                ),
+              );
+            }),
+        ],
+
+        // 2. REMOTE BRANCHES
+        if (status.remoteBranches.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(
+                    () => _remoteBranchesExpanded = !_remoteBranchesExpanded,
+                  ),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _remoteBranchesExpanded
+                              ? LucideIcons.chevron_down
+                              : LucideIcons.chevron_right,
+                          size: 13,
+                          color: c.mutedForeground,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'УДАЛЁННЫЕ ВЕТКИ (${remoteBranches.length})',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: c.mutedForeground,
+                            letterSpacing: 0.65,
                           ),
+                        ),
                       ],
                     ),
                   ),
                 ),
-                if (!isCurrent) ...[
-                  _buildMiniIconBtn(
-                    icon: LucideIcons.git_merge,
-                    color: Colors.purpleAccent,
-                    tooltip: 'Влить $b в текущую ветку (${status.currentBranch})',
-                    onTap: () => notifier.mergeBranch(b),
-                  ),
-                  _buildMiniIconBtn(
-                    icon: LucideIcons.trash_2,
-                    color: Colors.redAccent,
-                    tooltip: 'Удалить ветку $b',
-                    onTap: () => _confirmDeleteBranch(b, notifier),
-                  ),
-                ] else ...[
-                  _buildMiniIconBtn(
-                    icon: LucideIcons.pencil,
-                    color: Colors.white54,
-                    tooltip: 'Переименовать текущую ветку',
-                    onTap: () => _showRenameBranchDialog(b, notifier),
-                  ),
-                ],
-              ],
-            ),
-          );
-        }),
-
-        // 2. REMOTE BRANCHES
-        if (status.remoteBranches.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'УДАЛЁННЫЕ ВЕТКИ ORIGIN (${status.remoteBranches.length})',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: subColor,
-                  letterSpacing: 0.7,
-                ),
               ),
               InkWell(
                 onTap: () => notifier.fetch(),
-                child: const Text(
-                  'Fetch',
-                  style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE), fontWeight: FontWeight.bold),
+                borderRadius: BorderRadius.circular(5),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  child: Text(
+                    'Fetch',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: c.accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          ...status.remoteBranches.map(
-            (rb) => Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: isLight ? Colors.white : const Color(0xFF141824),
-                borderRadius: BorderRadius.circular(7),
-                border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
-              ),
-              child: Row(
-                children: [
-                  const Icon(LucideIcons.cloud, size: 13, color: Colors.white54),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      rb,
-                      style: GoogleFonts.jetBrainsMono(fontSize: 11, color: textColor),
+          if (_remoteBranchesExpanded) ...[
+            const SizedBox(height: 4),
+            ...remoteBranches.map(
+              (rb) => Container(
+                margin: const EdgeInsets.only(bottom: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: c.card,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: c.hairline),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      LucideIcons.cloud,
+                      size: 13,
+                      color: c.mutedForeground,
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () => notifier.checkoutBranch(rb),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        rb,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11.5,
+                          color: c.foreground,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    child: const Text('Checkout', style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE))),
-                  ),
-                ],
+                    InkWell(
+                      onTap: () => notifier.checkoutBranch(rb),
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: c.accent.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Checkout',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: c.accent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
         ],
 
         // 3. STASH MANAGER
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'STASH / ВРЕМЕННОЕ ХРАНИЛИЩЕ (${status.stashes.length})',
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: Colors.orangeAccent,
-                letterSpacing: 0.7,
+              'STASH / ХРАНИЛИЩЕ (${status.stashes.length})',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: c.warning,
+                letterSpacing: 0.65,
               ),
             ),
             TextButton.icon(
-              onPressed: status.hasChanges ? () => _showQuickStashDialog(status, notifier) : null,
-              icon: const Icon(LucideIcons.archive, size: 12, color: Colors.orangeAccent),
-              label: const Text('Спрятать в Stash', style: TextStyle(fontSize: 11, color: Colors.orangeAccent)),
+              onPressed: status.hasChanges
+                  ? () => _showQuickStashDialog(status, notifier)
+                  : null,
+              icon: Icon(
+                LucideIcons.archive,
+                size: 12,
+                color: status.hasChanges ? c.warning : c.subtleForeground,
+              ),
+              label: Text(
+                'Спрятать в Stash',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: status.hasChanges ? c.warning : c.subtleForeground,
+                ),
+              ),
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -2208,24 +3215,24 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isLight ? Colors.white : const Color(0xFF141824),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
+              color: c.card,
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: c.hairline),
             ),
             child: Text(
-              'Список Stash пуст. Stash позволяет временно отложить незакоммиченные правки, чтобы переключить ветку или сделать Pull.',
-              style: TextStyle(fontSize: 11, color: subColor),
+              'Список Stash пуст. Временное хранилище позволяет отложить правки перед переключением ветки.',
+              style: TextStyle(fontSize: 11, color: c.mutedForeground),
             ),
           )
         else
           ...status.stashes.map(
             (st) => Container(
-              margin: const EdgeInsets.only(bottom: 6),
+              margin: const EdgeInsets.only(bottom: 7),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isLight ? Colors.white : const Color(0xFF141824),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
+                color: c.card,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: c.warning.withValues(alpha: 0.35)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2233,17 +3240,20 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.orangeAccent.withValues(alpha: 0.15),
+                          color: c.warning.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           st.ref,
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 10,
-                            color: Colors.orangeAccent,
-                            fontWeight: FontWeight.bold,
+                            color: c.warning,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -2251,20 +3261,30 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                         const SizedBox(width: 6),
                         Text(
                           'на ${st.branch}',
-                          style: TextStyle(fontSize: 10, color: subColor),
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: c.mutedForeground,
+                          ),
                         ),
                       ],
                       const Spacer(),
                       Text(
                         st.relativeTime,
-                        style: TextStyle(fontSize: 10, color: subColor),
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          color: c.subtleForeground,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Text(
                     st.message,
-                    style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: c.foreground,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -2273,28 +3293,28 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                       _buildModalActionBtn(
                         icon: LucideIcons.eye,
                         label: 'Diff',
-                        color: Colors.white70,
+                        color: c.mutedForeground,
                         onTap: () => _showStashDiffModal(st, notifier),
                       ),
                       const SizedBox(width: 6),
                       _buildModalActionBtn(
                         icon: LucideIcons.copy_check,
                         label: 'Apply',
-                        color: const Color(0xFF00F2FE),
+                        color: c.accent,
                         onTap: () => notifier.stashApply(st.ref),
                       ),
                       const SizedBox(width: 6),
                       _buildModalActionBtn(
                         icon: LucideIcons.archive_restore,
                         label: 'Pop',
-                        color: Colors.greenAccent,
+                        color: c.success,
                         onTap: () => notifier.stashPop(st.ref),
                       ),
                       const SizedBox(width: 6),
                       _buildModalActionBtn(
                         icon: LucideIcons.trash_2,
                         label: 'Drop',
-                        color: Colors.redAccent,
+                        color: c.danger,
                         onTap: () => notifier.stashDrop(st.ref),
                       ),
                     ],
@@ -2311,9 +3331,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   // TAB 4: РЕЛИЗЫ, ТЕГИ И REMOTE ORIGIN
   // ===========================================================================
 
-  Widget _buildReleasesAndRemoteTab(GitStatus status, GitNotifier notifier, bool isLight) {
-    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
-    final subColor = isLight ? Colors.black54 : Colors.white54;
+  Widget _buildReleasesAndRemoteTab(
+    GitStatus status,
+    GitNotifier notifier,
+    GitThemeColors c,
+  ) {
     final ghService = GitHubService();
     final ghUserLogin = ghService.currentUser?['login']?.toString();
 
@@ -2324,9 +3346,9 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isLight ? Colors.white : const Color(0xFF141824),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
+            color: c.card,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: c.hairline),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2334,41 +3356,64 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(LucideIcons.globe, size: 15, color: Color(0xFF00F2FE)),
-                      SizedBox(width: 6),
+                      Icon(LucideIcons.globe, size: 15, color: c.accent),
+                      const SizedBox(width: 6),
                       Text(
-                        'Удалённый репозиторий (Remote Origin)',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF00F2FE)),
+                        'Удалённый репозиторий (Origin)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: c.foreground,
+                        ),
                       ),
                     ],
                   ),
                   TextButton.icon(
                     onPressed: () => _showGitSettingsDialog(status, notifier),
-                    icon: const Icon(LucideIcons.pencil, size: 12),
-                    label: const Text('Изменить', style: TextStyle(fontSize: 11)),
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    icon: Icon(LucideIcons.pencil, size: 12, color: c.accent),
+                    label: Text(
+                      'Изменить',
+                      style: TextStyle(fontSize: 11, color: c.accent),
+                    ),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              SelectableText(
-                status.remoteUrl ?? 'Remote origin не задан. Нажмите «Изменить», чтобы подключить GitHub URL.',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11,
-                  color: status.remoteUrl != null ? textColor : Colors.orangeAccent,
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+                decoration: BoxDecoration(
+                  color: c.inputFill,
+                  borderRadius: BorderRadius.circular(7),
+                  border: Border.all(color: c.hairline),
+                ),
+                child: SelectableText(
+                  status.remoteUrl ??
+                      'Remote origin не задан. Нажмите «Изменить», чтобы подключить GitHub.',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: status.remoteUrl != null ? c.foreground : c.warning,
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 9),
               Row(
                 children: [
-                  Icon(LucideIcons.user, size: 12, color: subColor),
+                  Icon(
+                    LucideIcons.user,
+                    size: 12.5,
+                    color: c.mutedForeground,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'Автор: ${status.userName ?? "Quantum Developer"} <${status.userEmail ?? "dev@quantum-ide.local"}>',
-                      style: TextStyle(fontSize: 11, color: subColor),
+                      style: TextStyle(fontSize: 11, color: c.mutedForeground),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -2378,19 +3423,23 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               Row(
                 children: [
                   Icon(
-                    ghService.isAuthenticated ? LucideIcons.shield_check : LucideIcons.key_round,
-                    size: 12,
-                    color: ghService.isAuthenticated ? Colors.greenAccent : Colors.amberAccent,
+                    ghService.isAuthenticated
+                        ? LucideIcons.shield_check
+                        : LucideIcons.key_round,
+                    size: 12.5,
+                    color: ghService.isAuthenticated ? c.success : c.warning,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       ghService.isAuthenticated
-                          ? 'GitHub авторизован${ghUserLogin != null ? ": @$ghUserLogin" : ""} (Push/Pull работает автоматически)'
-                          : 'GitHub токен не подключён (нажмите для входа в GitHub)',
+                          ? 'GitHub подключён${ghUserLogin != null ? " (@$ghUserLogin)" : ""}'
+                          : 'GitHub токен не подключён',
                       style: TextStyle(
                         fontSize: 11,
-                        color: ghService.isAuthenticated ? Colors.greenAccent : Colors.amberAccent,
+                        color:
+                            ghService.isAuthenticated ? c.success : c.warning,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -2403,8 +3452,13 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           ),
                         );
                       },
-                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                      child: const Text('Войти', style: TextStyle(fontSize: 11)),
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: Text(
+                        'Войти',
+                        style: TextStyle(fontSize: 11, color: c.accent),
+                      ),
                     ),
                 ],
               ),
@@ -2417,41 +3471,43 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF8B5CF6).withValues(alpha: 0.16),
-                const Color(0xFF00F2FE).withValues(alpha: 0.08),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF8B5CF6).withValues(alpha: 0.35)),
+            color: c.card,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: c.accent.withValues(alpha: 0.35)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(LucideIcons.rocket, size: 16, color: Color(0xFF00F2FE)),
+                  Icon(LucideIcons.rocket, size: 16, color: c.accent),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Выпуск релиза и облачная сборка APK',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+                      'Релиз и облачная сборка APK',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: c.foreground,
+                      ),
                     ),
                   ),
                   if (status.projectVersion != null)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00F2FE).withValues(alpha: 0.16),
+                        color: c.accent.withValues(alpha: 0.14),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
                         'v${status.projectVersion}',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10,
-                          color: const Color(0xFF00F2FE),
-                          fontWeight: FontWeight.bold,
+                          fontSize: 10.5,
+                          color: c.accent,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -2460,27 +3516,58 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               const SizedBox(height: 6),
               Text(
                 'Создаёт семантический Git-тег (vX.Y.Z) и пушит в GitHub для запуска GitHub Actions.',
-                style: TextStyle(fontSize: 11, color: subColor),
+                style: TextStyle(fontSize: 11, color: c.mutedForeground),
               ),
               const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showReleaseAndBuildModal(status, notifier),
-                      icon: const Icon(LucideIcons.cloud_lightning, size: 14),
-                      label: const Text('Выпустить релиз + APK', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF8B5CF6),
-                        foregroundColor: Colors.white,
+                    child: SizedBox(
+                      height: 33,
+                      child: ElevatedButton.icon(
+                        onPressed: () =>
+                            _showReleaseAndBuildModal(status, notifier),
+                        icon: const Icon(
+                          LucideIcons.cloud_lightning,
+                          size: 14,
+                        ),
+                        label: const Text(
+                          'Выпустить релиз + APK',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: c.accent,
+                          foregroundColor: c.accentForeground,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: () => _showCreateTagDialog(notifier, status: status),
-                    icon: const Icon(LucideIcons.tag, size: 13),
-                    label: const Text('+ Тег', style: TextStyle(fontSize: 11)),
+                  SizedBox(
+                    height: 33,
+                    child: OutlinedButton.icon(
+                      onPressed: () =>
+                          _showCreateTagDialog(notifier, status: status),
+                      icon: Icon(LucideIcons.tag, size: 13, color: c.accent),
+                      label: Text(
+                        '+ Тег',
+                        style: TextStyle(fontSize: 11, color: c.accent),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: c.border),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -2493,28 +3580,31 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         Text(
           'ТЕГИ ВЕРСИЙ (${status.tags.length})',
           style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            color: subColor,
-            letterSpacing: 0.7,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            color: c.mutedForeground,
+            letterSpacing: 0.65,
           ),
         ),
         const SizedBox(height: 6),
         if (status.tags.isEmpty)
-          Text('Теги ещё не созданы', style: TextStyle(fontSize: 11, color: subColor))
+          Text(
+            'Теги ещё не созданы',
+            style: TextStyle(fontSize: 11, color: c.subtleForeground),
+          )
         else
           ...status.tags.map(
             (t) => Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: isLight ? Colors.white : const Color(0xFF141824),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: isLight ? Colors.black12 : Colors.white10),
+                color: c.card,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: c.hairline),
               ),
               child: Row(
                 children: [
-                  const Icon(LucideIcons.tag, size: 13, color: Colors.amberAccent),
+                  Icon(LucideIcons.tag, size: 13.5, color: c.warning),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -2526,32 +3616,38 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                               t.name,
                               style: GoogleFonts.jetBrainsMono(
                                 fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.amberAccent,
+                                fontWeight: FontWeight.w700,
+                                color: c.warning,
                               ),
                             ),
                             const SizedBox(width: 6),
                             Text(
                               t.shortHash,
-                              style: GoogleFonts.jetBrainsMono(fontSize: 10, color: subColor),
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10,
+                                color: c.subtleForeground,
+                              ),
                             ),
                           ],
                         ),
                         if (t.subject.isNotEmpty)
                           Text(
                             t.subject,
-                            style: TextStyle(fontSize: 11, color: textColor),
+                            style: TextStyle(fontSize: 11, color: c.foreground),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                       ],
                     ),
                   ),
-                  Text(t.date, style: TextStyle(fontSize: 10, color: subColor)),
+                  Text(
+                    t.date,
+                    style: TextStyle(fontSize: 10, color: c.subtleForeground),
+                  ),
                   const SizedBox(width: 4),
                   _buildMiniIconBtn(
                     icon: LucideIcons.trash_2,
-                    color: Colors.redAccent,
+                    color: c.danger,
                     tooltip: 'Удалить тег ${t.name}',
                     onTap: () => notifier.deleteTag(t.name),
                   ),
@@ -2568,9 +3664,10 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   // ===========================================================================
 
   void _showBranchPickerModal(GitStatus status, GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF141824),
+      backgroundColor: c.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -2585,21 +3682,28 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Управление ветками',
-                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                    Text(
+                      'Переключение и слияние веток',
+                      style: TextStyle(
+                        color: c.foreground,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     TextButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
                         _showCreateBranchDialog(notifier);
                       },
-                      icon: const Icon(LucideIcons.plus, size: 13, color: Color(0xFF00F2FE)),
-                      label: const Text('Создать ветку', style: TextStyle(color: Color(0xFF00F2FE), fontSize: 12)),
+                      icon: Icon(LucideIcons.plus, size: 13, color: c.accent),
+                      label: Text(
+                        'Создать ветку',
+                        style: TextStyle(color: c.accent, fontSize: 12),
+                      ),
                     ),
                   ],
                 ),
-                const Divider(color: Colors.white12),
+                Divider(color: c.hairline),
                 Flexible(
                   child: ListView(
                     shrinkWrap: true,
@@ -2608,17 +3712,24 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                         final isCurrent = b == status.currentBranch;
                         return ListTile(
                           dense: true,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           leading: Icon(
-                            isCurrent ? LucideIcons.circle_check : LucideIcons.git_branch,
+                            isCurrent
+                                ? LucideIcons.circle_check
+                                : LucideIcons.git_branch,
                             size: 16,
-                            color: isCurrent ? const Color(0xFF00F2FE) : Colors.white54,
+                            color: isCurrent ? c.accent : c.mutedForeground,
                           ),
                           title: Text(
                             b,
                             style: GoogleFonts.jetBrainsMono(
-                              color: isCurrent ? const Color(0xFF00F2FE) : Colors.white,
-                              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                              fontSize: 12,
+                              color: isCurrent ? c.accent : c.foreground,
+                              fontWeight: isCurrent
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              fontSize: 12.5,
                             ),
                           ),
                           trailing: !isCurrent
@@ -2627,9 +3738,32 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                     Navigator.pop(ctx);
                                     notifier.mergeBranch(b);
                                   },
-                                  child: const Text('Merge в текущую', style: TextStyle(fontSize: 11, color: Colors.purpleAccent)),
+                                  child: Text(
+                                    'Merge в текущую',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: c.accentSecondary,
+                                    ),
+                                  ),
                                 )
-                              : const Text('HEAD', style: TextStyle(fontSize: 10, color: Color(0xFF00F2FE))),
+                              : Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: c.accent.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'HEAD',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: c.accent,
+                                    ),
+                                  ),
+                                ),
                           onTap: () {
                             Navigator.pop(ctx);
                             if (!isCurrent) notifier.checkoutBranch(b);
@@ -2648,38 +3782,61 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showCreateBranchDialog(GitNotifier notifier, {String? fromRef}) {
+    final c = GitThemeColors.resolve(context);
     final ctrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
         title: Text(
           fromRef != null ? 'Новая ветка от $fromRef' : 'Создать новую ветку',
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: TextStyle(
+            color: c.foreground,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          decoration: const InputDecoration(
+          style: TextStyle(color: c.foreground, fontSize: 13),
+          decoration: InputDecoration(
             hintText: 'Например: feat/new-ui или fix/auth',
-            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
+            hintStyle: TextStyle(color: c.subtleForeground, fontSize: 12),
+            filled: true,
+            fillColor: c.inputFill,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: c.hairline),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
           ),
           ElevatedButton(
             onPressed: () {
               final name = ctrl.text.trim().replaceAll(' ', '-');
               if (name.isNotEmpty) {
-                notifier.checkoutBranch(name, createNew: true, fromRef: fromRef);
+                notifier.checkoutBranch(
+                  name,
+                  createNew: true,
+                  fromRef: fromRef,
+                );
                 Navigator.pop(ctx);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.accent,
+              foregroundColor: c.accentForeground,
+              elevation: 0,
+            ),
             child: const Text('Создать и перейти'),
           ),
         ],
@@ -2688,19 +3845,38 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showRenameBranchDialog(String oldName, GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     final ctrl = TextEditingController(text: oldName);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: const Text('Переименовать ветку', style: TextStyle(color: Colors.white, fontSize: 15)),
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
+        title: Text(
+          'Переименовать ветку',
+          style: TextStyle(color: c.foreground, fontSize: 15),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+          style: TextStyle(color: c.foreground, fontSize: 13),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: c.inputFill,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: c.hairline),
+            ),
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+          ),
           ElevatedButton(
             onPressed: () {
               final newName = ctrl.text.trim().replaceAll(' ', '-');
@@ -2709,6 +3885,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                 Navigator.pop(ctx);
               }
             },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.accent,
+              foregroundColor: c.accentForeground,
+              elevation: 0,
+            ),
             child: const Text('Переименовать'),
           ),
         ],
@@ -2717,23 +3898,38 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _confirmDeleteBranch(String branch, GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: Text('Удалить ветку $branch?', style: const TextStyle(color: Colors.white, fontSize: 15)),
-        content: const Text(
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
+        title: Text(
+          'Удалить ветку $branch?',
+          style: TextStyle(color: c.foreground, fontSize: 15),
+        ),
+        content: Text(
           'Локальная ветка будет удалена.',
-          style: TextStyle(color: Colors.white70, fontSize: 12),
+          style: TextStyle(color: c.mutedForeground, fontSize: 12),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               notifier.deleteBranch(branch, force: true);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.danger,
+              foregroundColor: GitThemeColors.contrastOn(c.danger),
+              elevation: 0,
+            ),
             child: const Text('Удалить'),
           ),
         ],
@@ -2742,21 +3938,34 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showResetCommitDialog(GitCommitEntry commit, GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: Text('Reset к коммиту ${commit.shortHash}', style: const TextStyle(color: Colors.white, fontSize: 15)),
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
+        title: Text(
+          'Reset к коммиту ${commit.shortHash}',
+          style: TextStyle(color: c.foreground, fontSize: 15),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(commit.message, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            Text(
+              commit.message,
+              style: TextStyle(color: c.mutedForeground, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             _buildResetOptionTile(
+              c: c,
               title: 'Soft (--soft)',
-              subtitle: 'Переместить HEAD, но оставить все изменения в Индексе (Staged)',
-              color: Colors.greenAccent,
+              subtitle:
+                  'Переместить HEAD, но оставить все изменения в Индексе (Staged)',
+              color: c.success,
               onTap: () {
                 Navigator.pop(ctx);
                 notifier.resetToCommit(commit.hash, mode: 'soft');
@@ -2764,9 +3973,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
             ),
             const SizedBox(height: 6),
             _buildResetOptionTile(
+              c: c,
               title: 'Mixed (--mixed)',
-              subtitle: 'Переместить HEAD и оставить файлы изменёнными в Рабочей копии',
-              color: Colors.amberAccent,
+              subtitle:
+                  'Переместить HEAD и оставить файлы изменёнными в Рабочей копии',
+              color: c.warning,
               onTap: () {
                 Navigator.pop(ctx);
                 notifier.resetToCommit(commit.hash, mode: 'mixed');
@@ -2774,9 +3985,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
             ),
             const SizedBox(height: 6),
             _buildResetOptionTile(
+              c: c,
               title: 'Hard (--hard)',
-              subtitle: 'Полностью откатить код к этому коммиту (несохранённые правки удалятся!)',
-              color: Colors.redAccent,
+              subtitle:
+                  'Полностью откатить код к этому коммиту (несохранённые правки удалятся!)',
+              color: c.danger,
               onTap: () {
                 Navigator.pop(ctx);
                 notifier.resetToCommit(commit.hash, mode: 'hard');
@@ -2785,13 +3998,17 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildResetOptionTile({
+    required GitThemeColors c,
     required String title,
     required String subtitle,
     required Color color,
@@ -2810,9 +4027,19 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             const SizedBox(height: 2),
-            Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 10.5)),
+            Text(
+              subtitle,
+              style: TextStyle(color: c.mutedForeground, fontSize: 10.5),
+            ),
           ],
         ),
       ),
@@ -2820,29 +4047,50 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showQuickStashDialog(GitStatus status, GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     final ctrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: const Text('Спрятать изменения в Stash', style: TextStyle(color: Colors.white, fontSize: 15)),
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
+        title: Text(
+          'Спрятать изменения в Stash',
+          style: TextStyle(color: c.foreground, fontSize: 15),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          decoration: const InputDecoration(
+          style: TextStyle(color: c.foreground, fontSize: 13),
+          decoration: InputDecoration(
             hintText: 'Описание Stash (необязательно)...',
-            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
+            hintStyle: TextStyle(color: c.subtleForeground, fontSize: 12),
+            filled: true,
+            fillColor: c.inputFill,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: c.hairline),
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               notifier.stashSave(ctrl.text.trim());
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orangeAccent, foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.warning,
+              foregroundColor: GitThemeColors.contrastOn(c.warning),
+              elevation: 0,
+            ),
             child: const Text('В Stash'),
           ),
         ],
@@ -2851,12 +4099,16 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showStashDiffModal(GitStashEntry stash, GitNotifier notifier) async {
+    final c = GitThemeColors.resolve(context);
     final diff = await notifier.getStashDiff(stash.ref);
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF141824),
+      backgroundColor: c.card,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -2865,7 +4117,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
           children: [
             Text(
               '${stash.ref} — ${stash.message}',
-              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: c.foreground,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 10),
             Container(
@@ -2873,13 +4129,17 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.black38,
+                color: c.inputFill,
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: c.hairline),
               ),
               child: SingleChildScrollView(
                 child: SelectableText(
                   diff.isNotEmpty ? diff : 'Нет данных diff',
-                  style: GoogleFonts.jetBrainsMono(fontSize: 11, color: Colors.white70),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: c.foreground.withValues(alpha: 0.85),
+                  ),
                 ),
               ),
             ),
@@ -2893,26 +4153,57 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     final storage = SecureStorageService();
     final savedToken = await storage.retrieve('github_token') ?? '';
     if (!mounted) return;
+    final c = GitThemeColors.resolve(context);
 
     final tokenCtrl = TextEditingController(text: savedToken);
     final remoteCtrl = TextEditingController(text: status.remoteUrl ?? '');
-    final nameCtrl = TextEditingController(text: status.userName ?? 'Quantum Developer');
-    final emailCtrl = TextEditingController(text: status.userEmail ?? 'dev@quantum-ide.local');
+    final nameCtrl =
+        TextEditingController(text: status.userName ?? 'Quantum Developer');
+    final emailCtrl =
+        TextEditingController(text: status.userEmail ?? 'dev@quantum-ide.local');
 
     final wsPath = ref.read(workspaceProvider).currentPath;
     final defaultRepoName = wsPath != null ? p.basename(wsPath) : 'my-project';
     final newRepoNameCtrl = TextEditingController(text: defaultRepoName);
     final newRepoDescCtrl = TextEditingController(text: '');
 
-    bool isCreatingNewRepo = (status.remoteUrl == null || status.remoteUrl!.isEmpty);
-    bool isPrivateRepo = true; // Default to Private (закрытый) for user security
+    bool isCreatingNewRepo =
+        status.remoteUrl == null || status.remoteUrl!.isEmpty;
+    bool isPrivateRepo = true;
     bool isCreatingRepoNow = false;
     String? repoCreateError;
 
     bool obscureToken = true;
     bool isVerifyingToken = false;
     String? tokenVerifyStatus;
-    Color tokenVerifyColor = Colors.white70;
+    Color tokenVerifyColor = c.mutedForeground;
+
+    InputDecoration fieldDecoration({
+      String? hint,
+      Widget? suffixIcon,
+    }) =>
+        InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: c.subtleForeground, fontSize: 11),
+          filled: true,
+          fillColor: c.inputFill,
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: c.hairline),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: c.hairline),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: c.accent),
+          ),
+          suffixIcon: suffixIcon,
+        );
 
     await showDialog(
       context: context,
@@ -2920,13 +4211,23 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
         builder: (context, setDialogState) {
           final ghService = GitHubService();
           return AlertDialog(
-            backgroundColor: const Color(0xFF161922),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            title: const Row(
+            backgroundColor: c.card,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: c.hairline),
+            ),
+            title: Row(
               children: [
-                Icon(LucideIcons.git_pull_request, color: Color(0xFF00F2FE), size: 18),
-                SizedBox(width: 8),
-                Text('Настройки Git и GitHub', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                Icon(LucideIcons.git_pull_request, color: c.accent, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  'Настройки Git и GitHub',
+                  style: TextStyle(
+                    color: c.foreground,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
             content: SizedBox(
@@ -2936,41 +4237,56 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Mode Switcher: Create New Repo on GitHub vs Existing Remote URL
+                    // Mode Switcher
                     Container(
                       padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
-                        color: Colors.black38,
-                        borderRadius: BorderRadius.circular(8),
+                        color: c.inputFill,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: c.hairline),
                       ),
                       child: Row(
                         children: [
                           Expanded(
                             child: InkWell(
-                              onTap: () => setDialogState(() => isCreatingNewRepo = true),
-                              borderRadius: BorderRadius.circular(6),
+                              onTap: () =>
+                                  setDialogState(() => isCreatingNewRepo = true),
+                              borderRadius: BorderRadius.circular(7),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 7),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 7),
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: isCreatingNewRepo ? const Color(0xFF00F2FE).withValues(alpha: 0.18) : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: isCreatingNewRepo
+                                      ? c.accent.withValues(alpha: 0.16)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(7),
                                   border: Border.all(
-                                    color: isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.transparent,
+                                    color: isCreatingNewRepo
+                                        ? c.accent.withValues(alpha: 0.6)
+                                        : Colors.transparent,
                                     width: 0.8,
                                   ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(LucideIcons.circle_plus, size: 12, color: isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60),
+                                    Icon(
+                                      LucideIcons.circle_plus,
+                                      size: 12,
+                                      color: isCreatingNewRepo
+                                          ? c.accent
+                                          : c.mutedForeground,
+                                    ),
                                     const SizedBox(width: 6),
                                     Text(
                                       'Создать на GitHub',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60,
+                                        color: isCreatingNewRepo
+                                            ? c.accent
+                                            : c.mutedForeground,
                                       ),
                                     ),
                                   ],
@@ -2981,30 +4297,45 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           const SizedBox(width: 4),
                           Expanded(
                             child: InkWell(
-                              onTap: () => setDialogState(() => isCreatingNewRepo = false),
-                              borderRadius: BorderRadius.circular(6),
+                              onTap: () => setDialogState(
+                                () => isCreatingNewRepo = false,
+                              ),
+                              borderRadius: BorderRadius.circular(7),
                               child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 7),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 7),
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: !isCreatingNewRepo ? const Color(0xFF00F2FE).withValues(alpha: 0.18) : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(6),
+                                  color: !isCreatingNewRepo
+                                      ? c.accent.withValues(alpha: 0.16)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(7),
                                   border: Border.all(
-                                    color: !isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.transparent,
+                                    color: !isCreatingNewRepo
+                                        ? c.accent.withValues(alpha: 0.6)
+                                        : Colors.transparent,
                                     width: 0.8,
                                   ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(LucideIcons.link, size: 12, color: !isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60),
+                                    Icon(
+                                      LucideIcons.link,
+                                      size: 12,
+                                      color: !isCreatingNewRepo
+                                          ? c.accent
+                                          : c.mutedForeground,
+                                    ),
                                     const SizedBox(width: 6),
                                     Text(
                                       'Существующий URL',
                                       style: TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.bold,
-                                        color: !isCreatingNewRepo ? const Color(0xFF00F2FE) : Colors.white60,
+                                        color: !isCreatingNewRepo
+                                            ? c.accent
+                                            : c.mutedForeground,
                                       ),
                                     ),
                                   ],
@@ -3021,69 +4352,101 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1C2230),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white12),
+                        color: c.panel,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: c.hairline),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              const Icon(LucideIcons.key_round, size: 14, color: Color(0xFF00F2FE)),
+                              Icon(
+                                LucideIcons.key_round,
+                                size: 14,
+                                color: c.accent,
+                              ),
                               const SizedBox(width: 6),
-                              const Expanded(
+                              Expanded(
                                 child: Text(
                                   'GitHub Персональный токен (PAT):',
-                                  style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                    color: c.foreground,
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                               if (ghService.isAuthenticated)
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: Colors.greenAccent.withValues(alpha: 0.15),
+                                    color: c.success.withValues(alpha: 0.14),
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.4)),
+                                    border: Border.all(
+                                      color: c.success.withValues(alpha: 0.4),
+                                    ),
                                   ),
                                   child: Text(
                                     '@${ghService.currentUser?['login'] ?? 'ok'}',
-                                    style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      color: c.success,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                             ],
                           ),
                           const SizedBox(height: 4),
-                          const Text(
-                            'Нужен для отправки кода и создания репозиториев. Создаётся в GitHub Settings -> Developer Settings -> Personal access tokens (Classic) с правами repo и workflow.',
-                            style: TextStyle(color: Colors.white54, fontSize: 10),
+                          Text(
+                            'Нужен для отправки кода и создания репозиториев (права repo и workflow).',
+                            style: TextStyle(
+                              color: c.mutedForeground,
+                              fontSize: 10.5,
+                            ),
                           ),
                           const SizedBox(height: 6),
                           TextField(
                             controller: tokenCtrl,
                             obscureText: obscureToken,
-                            style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 11),
-                            decoration: InputDecoration(
-                              hintText: 'ghp_xxxxxxxxxxxxxxxxxxxx',
-                              hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
-                              filled: true,
-                              fillColor: Colors.black26,
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                            style: GoogleFonts.jetBrainsMono(
+                              color: c.foreground,
+                              fontSize: 11,
+                            ),
+                            decoration: fieldDecoration(
+                              hint: 'ghp_xxxxxxxxxxxxxxxxxxxx',
                               suffixIcon: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    icon: Icon(obscureToken ? LucideIcons.eye_off : LucideIcons.eye, size: 14, color: Colors.white54),
-                                    onPressed: () => setDialogState(() => obscureToken = !obscureToken),
+                                    icon: Icon(
+                                      obscureToken
+                                          ? LucideIcons.eye_off
+                                          : LucideIcons.eye,
+                                      size: 14,
+                                      color: c.mutedForeground,
+                                    ),
+                                    onPressed: () => setDialogState(
+                                      () => obscureToken = !obscureToken,
+                                    ),
                                   ),
                                   IconButton(
-                                    icon: const Icon(LucideIcons.clipboard, size: 14, color: Color(0xFF00F2FE)),
+                                    icon: Icon(
+                                      LucideIcons.clipboard,
+                                      size: 14,
+                                      color: c.accent,
+                                    ),
                                     tooltip: 'Вставить из буфера',
                                     onPressed: () async {
-                                      final data = await Clipboard.getData(Clipboard.kTextPlain);
-                                      if (data?.text != null && data!.text!.trim().isNotEmpty) {
+                                      final data = await Clipboard.getData(
+                                        Clipboard.kTextPlain,
+                                      );
+                                      if (data?.text != null &&
+                                          data!.text!.trim().isNotEmpty) {
                                         setDialogState(() {
                                           tokenCtrl.text = data.text!.trim();
                                         });
@@ -3098,7 +4461,7 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           Row(
                             children: [
                               SizedBox(
-                                height: 26,
+                                height: 28,
                                 child: OutlinedButton.icon(
                                   onPressed: isVerifyingToken
                                       ? null
@@ -3110,33 +4473,55 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                             tokenVerifyStatus = null;
                                           });
                                           try {
-                                            final ok = await GitHubService().authenticateWithToken(t);
+                                            final ok = await GitHubService()
+                                                .authenticateWithToken(t);
                                             setDialogState(() {
                                               isVerifyingToken = false;
                                               if (ok) {
-                                                tokenVerifyStatus = '✓ Токен валиден (@${GitHubService().currentUser?['login'] ?? ''})';
-                                                tokenVerifyColor = Colors.greenAccent;
+                                                tokenVerifyStatus =
+                                                    '✓ Токен валиден (@${GitHubService().currentUser?['login'] ?? ''})';
+                                                tokenVerifyColor = c.success;
                                               } else {
-                                                tokenVerifyStatus = '⚠ Ошибка проверки токена';
-                                                tokenVerifyColor = Colors.orangeAccent;
+                                                tokenVerifyStatus =
+                                                    '⚠ Ошибка проверки токена';
+                                                tokenVerifyColor = c.warning;
                                               }
                                             });
                                           } catch (e) {
                                             setDialogState(() {
                                               isVerifyingToken = false;
-                                              tokenVerifyStatus = '✗ Ошибка: $e';
-                                              tokenVerifyColor = Colors.redAccent;
+                                              tokenVerifyStatus =
+                                                  '✗ Ошибка: $e';
+                                              tokenVerifyColor = c.danger;
                                             });
                                           }
                                         },
                                   icon: isVerifyingToken
-                                      ? const SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white))
-                                      : const Icon(LucideIcons.shield_check, size: 12),
-                                  label: const Text('Проверить токен', style: TextStyle(fontSize: 10)),
+                                      ? SizedBox(
+                                          width: 10,
+                                          height: 10,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 1.5,
+                                            color: c.accent,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          LucideIcons.shield_check,
+                                          size: 12,
+                                        ),
+                                  label: const Text(
+                                    'Проверить токен',
+                                    style: TextStyle(fontSize: 10.5),
+                                  ),
                                   style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF00F2FE),
-                                    side: const BorderSide(color: Color(0xFF00F2FE), width: 0.8),
-                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                    foregroundColor: c.accent,
+                                    side: BorderSide(
+                                      color: c.accent.withValues(alpha: 0.6),
+                                      width: 0.9,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -3145,7 +4530,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                 Expanded(
                                   child: Text(
                                     tokenVerifyStatus!,
-                                    style: TextStyle(color: tokenVerifyColor, fontSize: 10, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      color: tokenVerifyColor,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -3156,58 +4545,66 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     ),
                     const SizedBox(height: 12),
 
-                    // Section 2: Either New Repo Creation or Existing Remote URL
+                    // Section 2: New Repo Creation vs Existing Remote URL
                     if (isCreatingNewRepo) ...[
-                      const Text('Название нового репозитория на GitHub:', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(
+                        'Название нового репозитория на GitHub:',
+                        style: TextStyle(
+                          color: c.mutedForeground,
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       TextField(
                         controller: newRepoNameCtrl,
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'my-project-name',
-                          hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
-                          filled: true,
-                          fillColor: Colors.black26,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                        style: GoogleFonts.jetBrainsMono(
+                          color: c.foreground,
+                          fontSize: 12,
                         ),
+                        decoration: fieldDecoration(hint: 'my-project-name'),
                       ),
                       const SizedBox(height: 8),
-                      const Text('Описание репозитория (необязательно):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(
+                        'Описание репозитория (необязательно):',
+                        style: TextStyle(
+                          color: c.mutedForeground,
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       TextField(
                         controller: newRepoDescCtrl,
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Краткое описание проекта...',
-                          hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
-                          filled: true,
-                          fillColor: Colors.black26,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
-                        ),
+                        style: TextStyle(color: c.foreground, fontSize: 12),
+                        decoration:
+                            fieldDecoration(hint: 'Краткое описание проекта...'),
                       ),
                       const SizedBox(height: 10),
-                      const Text('Доступ к репозиторию (Приватность):', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                      Text(
+                        'Доступ к репозиторию (Приватность):',
+                        style: TextStyle(
+                          color: c.mutedForeground,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 6),
-                      // Two visual cards for Private vs Public
                       Row(
                         children: [
-                          // Private Card (Закрытый)
                           Expanded(
                             child: InkWell(
-                              onTap: () => setDialogState(() => isPrivateRepo = true),
+                              onTap: () =>
+                                  setDialogState(() => isPrivateRepo = true),
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: isPrivateRepo ? Colors.amberAccent.withValues(alpha: 0.12) : Colors.black26,
+                                  color: isPrivateRepo
+                                      ? c.warning.withValues(alpha: 0.12)
+                                      : c.inputFill,
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: isPrivateRepo ? Colors.amberAccent : Colors.white12,
-                                    width: isPrivateRepo ? 1.5 : 0.8,
+                                    color: isPrivateRepo ? c.warning : c.hairline,
+                                    width: isPrivateRepo ? 1.4 : 0.8,
                                   ),
                                 ),
                                 child: Column(
@@ -3215,22 +4612,33 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                   children: [
                                     Row(
                                       children: [
-                                        Icon(LucideIcons.lock, size: 14, color: isPrivateRepo ? Colors.amberAccent : Colors.white54),
+                                        Icon(
+                                          LucideIcons.lock,
+                                          size: 14,
+                                          color: isPrivateRepo
+                                              ? c.warning
+                                              : c.mutedForeground,
+                                        ),
                                         const SizedBox(width: 6),
                                         Text(
                                           'Приватный',
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: isPrivateRepo ? Colors.amberAccent : Colors.white70,
+                                            color: isPrivateRepo
+                                                ? c.warning
+                                                : c.foreground,
                                           ),
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
-                                    const Text(
+                                    Text(
                                       'Закрыт от всех. Код виден только вам.',
-                                      style: TextStyle(fontSize: 9.5, color: Colors.white54),
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        color: c.mutedForeground,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -3238,19 +4646,21 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Public Card (Открытый)
                           Expanded(
                             child: InkWell(
-                              onTap: () => setDialogState(() => isPrivateRepo = false),
+                              onTap: () =>
+                                  setDialogState(() => isPrivateRepo = false),
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: !isPrivateRepo ? const Color(0xFF00F2FE).withValues(alpha: 0.12) : Colors.black26,
+                                  color: !isPrivateRepo
+                                      ? c.accent.withValues(alpha: 0.12)
+                                      : c.inputFill,
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                    color: !isPrivateRepo ? const Color(0xFF00F2FE) : Colors.white12,
-                                    width: !isPrivateRepo ? 1.5 : 0.8,
+                                    color: !isPrivateRepo ? c.accent : c.hairline,
+                                    width: !isPrivateRepo ? 1.4 : 0.8,
                                   ),
                                 ),
                                 child: Column(
@@ -3258,22 +4668,33 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                                   children: [
                                     Row(
                                       children: [
-                                        Icon(LucideIcons.globe, size: 14, color: !isPrivateRepo ? const Color(0xFF00F2FE) : Colors.white54),
+                                        Icon(
+                                          LucideIcons.globe,
+                                          size: 14,
+                                          color: !isPrivateRepo
+                                              ? c.accent
+                                              : c.mutedForeground,
+                                        ),
                                         const SizedBox(width: 6),
                                         Text(
                                           'Публичный',
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
-                                            color: !isPrivateRepo ? const Color(0xFF00F2FE) : Colors.white70,
+                                            color: !isPrivateRepo
+                                                ? c.accent
+                                                : c.foreground,
                                           ),
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
-                                    const Text(
-                                      'Открыт для всех в интернете (open-source).',
-                                      style: TextStyle(fontSize: 9.5, color: Colors.white54),
+                                    Text(
+                                      'Открыт для всех в интернете.',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        color: c.mutedForeground,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -3286,29 +4707,39 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                         const SizedBox(height: 8),
                         Text(
                           repoCreateError!,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                          style: TextStyle(color: c.danger, fontSize: 11),
                         ),
                       ],
                     ] else ...[
-                      const Text('Удалённый репозиторий (Remote URL origin):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      Text(
+                        'Удалённый репозиторий (Remote URL origin):',
+                        style: TextStyle(
+                          color: c.mutedForeground,
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       TextField(
                         controller: remoteCtrl,
-                        style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'https://github.com/пользователь/репозиторий.git',
-                          hintStyle: const TextStyle(color: Colors.white30, fontSize: 11),
-                          filled: true,
-                          fillColor: Colors.black26,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
+                        style: GoogleFonts.jetBrainsMono(
+                          color: c.foreground,
+                          fontSize: 12,
+                        ),
+                        decoration: fieldDecoration(
+                          hint: 'https://github.com/пользователь/репозиторий.git',
                           suffixIcon: IconButton(
-                            icon: const Icon(LucideIcons.clipboard, size: 14, color: Color(0xFF00F2FE)),
+                            icon: Icon(
+                              LucideIcons.clipboard,
+                              size: 14,
+                              color: c.accent,
+                            ),
                             tooltip: 'Вставить из буфера',
                             onPressed: () async {
-                              final data = await Clipboard.getData(Clipboard.kTextPlain);
-                              if (data?.text != null && data!.text!.trim().isNotEmpty) {
+                              final data = await Clipboard.getData(
+                                Clipboard.kTextPlain,
+                              );
+                              if (data?.text != null &&
+                                  data!.text!.trim().isNotEmpty) {
                                 remoteCtrl.text = data.text!.trim();
                               }
                             },
@@ -3319,39 +4750,37 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     const SizedBox(height: 12),
 
                     // Section 3: Author info
-                    const Text('Имя автора коммитов (user.name):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    Text(
+                      'Имя автора коммитов (user.name):',
+                      style: TextStyle(color: c.mutedForeground, fontSize: 11),
+                    ),
                     const SizedBox(height: 4),
                     TextField(
                       controller: nameCtrl,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.black26,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
-                      ),
+                      style: TextStyle(color: c.foreground, fontSize: 12),
+                      decoration: fieldDecoration(),
                     ),
                     const SizedBox(height: 8),
-                    const Text('Email автора коммитов (user.email):', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                    Text(
+                      'Email автора коммитов (user.email):',
+                      style: TextStyle(color: c.mutedForeground, fontSize: 11),
+                    ),
                     const SizedBox(height: 4),
                     TextField(
                       controller: emailCtrl,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.black26,
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Colors.white12)),
-                      ),
+                      style: TextStyle(color: c.foreground, fontSize: 12),
+                      decoration: fieldDecoration(),
                     ),
                   ],
                 ),
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child:
+                    Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+              ),
               if (isCreatingNewRepo)
                 ElevatedButton.icon(
                   onPressed: isCreatingRepoNow
@@ -3359,11 +4788,13 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                       : () async {
                           final tokenText = tokenCtrl.text.trim();
                           if (tokenText.isNotEmpty) {
-                            await GitHubService().authenticateWithToken(tokenText);
+                            await GitHubService()
+                                .authenticateWithToken(tokenText);
                           }
                           if (!GitHubService().isAuthenticated) {
                             setDialogState(() {
-                              repoCreateError = 'Для создания репозитория необходимо ввести и проверить GitHub токен (PAT)';
+                              repoCreateError =
+                                  'Для создания репозитория необходимо ввести и проверить GitHub токен (PAT)';
                             });
                             return;
                           }
@@ -3386,36 +4817,59 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           );
 
                           if (res != null) {
-                            final cloneUrl = res['clone_url']?.toString() ?? 'https://github.com/${res['full_name']}.git';
+                            final cloneUrl = res['clone_url']?.toString() ??
+                                'https://github.com/${res['full_name']}.git';
                             await notifier.setRemoteUrl(cloneUrl);
-                            if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
-                              await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                            if (nameCtrl.text.trim().isNotEmpty &&
+                                emailCtrl.text.trim().isNotEmpty) {
+                              await notifier.setUserConfig(
+                                nameCtrl.text.trim(),
+                                emailCtrl.text.trim(),
+                              );
                             }
                             if (ctx.mounted) Navigator.pop(ctx);
                             await notifier.push();
                             if (mounted && context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('✓ Репозиторий «$repoName» (${isPrivateRepo ? "Приватный" : "Публичный"}) успешно создан и отправлен на GitHub!'),
-                                  backgroundColor: Colors.green,
+                                  content: Text(
+                                    '✓ Репозиторий «$repoName» (${isPrivateRepo ? "Приватный" : "Публичный"}) создан и отправлен на GitHub!',
+                                  ),
+                                  backgroundColor: c.success,
                                 ),
                               );
                             }
                           } else {
                             setDialogState(() {
                               isCreatingRepoNow = false;
-                              repoCreateError = GitHubService().lastError ?? 'Не удалось создать репозиторий на GitHub';
+                              repoCreateError = GitHubService().lastError ??
+                                  'Не удалось создать репозиторий на GitHub';
                             });
                           }
                         },
                   icon: isCreatingRepoNow
-                      ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: c.accentForeground,
+                          ),
+                        )
                       : const Icon(LucideIcons.rocket, size: 14),
-                  label: Text(isCreatingRepoNow ? 'Создание...' : '🚀 Создать и Push (${isPrivateRepo ? "Приватный" : "Публичный"})'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
+                  label: Text(
+                    isCreatingRepoNow
+                        ? 'Создание...'
+                        : 'Создать и Push (${isPrivateRepo ? "Приватный" : "Публичный"})',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.accent,
+                    foregroundColor: c.accentForeground,
+                    elevation: 0,
+                  ),
                 )
               else ...[
-                ElevatedButton(
+                OutlinedButton(
                   onPressed: () async {
                     Navigator.pop(ctx);
                     final tokenText = tokenCtrl.text.trim();
@@ -3425,11 +4879,18 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     if (remoteCtrl.text.trim().isNotEmpty) {
                       await notifier.setRemoteUrl(remoteCtrl.text.trim());
                     }
-                    if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
-                      await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                    if (nameCtrl.text.trim().isNotEmpty &&
+                        emailCtrl.text.trim().isNotEmpty) {
+                      await notifier.setUserConfig(
+                        nameCtrl.text.trim(),
+                        emailCtrl.text.trim(),
+                      );
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00F2FE), foregroundColor: Colors.black),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: c.accent,
+                    side: BorderSide(color: c.border),
+                  ),
                   child: const Text('Сохранить'),
                 ),
                 ElevatedButton.icon(
@@ -3442,14 +4903,22 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                     if (remoteCtrl.text.trim().isNotEmpty) {
                       await notifier.setRemoteUrl(remoteCtrl.text.trim());
                     }
-                    if (nameCtrl.text.trim().isNotEmpty && emailCtrl.text.trim().isNotEmpty) {
-                      await notifier.setUserConfig(nameCtrl.text.trim(), emailCtrl.text.trim());
+                    if (nameCtrl.text.trim().isNotEmpty &&
+                        emailCtrl.text.trim().isNotEmpty) {
+                      await notifier.setUserConfig(
+                        nameCtrl.text.trim(),
+                        emailCtrl.text.trim(),
+                      );
                     }
                     await notifier.push();
                   },
                   icon: const Icon(LucideIcons.cloud_upload, size: 14),
                   label: const Text('Сохранить и Push'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8B5CF6), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: c.accent,
+                    foregroundColor: c.accentForeground,
+                    elevation: 0,
+                  ),
                 ),
               ],
             ],
@@ -3460,23 +4929,38 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _confirmForcePush(GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: const Text('Выполнить Force Push?', style: TextStyle(color: Colors.white, fontSize: 15)),
-        content: const Text(
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
+        title: Text(
+          'Выполнить Force Push?',
+          style: TextStyle(color: c.foreground, fontSize: 15),
+        ),
+        content: Text(
           'Будет выполнен безопасный git push --force-with-lease (полезно после Amend или Reset).',
-          style: TextStyle(color: Colors.white70, fontSize: 12),
+          style: TextStyle(color: c.mutedForeground, fontSize: 12),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               notifier.push(force: true);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.danger,
+              foregroundColor: GitThemeColors.contrastOn(c.danger),
+              elevation: 0,
+            ),
             child: const Text('Force Push'),
           ),
         ],
@@ -3485,23 +4969,38 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _confirmDiscardFile(String file, GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: const Text('Откатить изменения в файле?', style: TextStyle(color: Colors.white, fontSize: 15)),
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
+        title: Text(
+          'Откатить изменения в файле?',
+          style: TextStyle(color: c.foreground, fontSize: 15),
+        ),
         content: Text(
           'Все несохранённые правки в «$file» будут возвращены к последнему коммиту.',
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: TextStyle(color: c.mutedForeground, fontSize: 12),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               notifier.discardFile(file);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.danger,
+              foregroundColor: GitThemeColors.contrastOn(c.danger),
+              elevation: 0,
+            ),
             child: const Text('Откатить'),
           ),
         ],
@@ -3510,23 +5009,38 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _confirmDiscardAll(GitNotifier notifier) {
+    final c = GitThemeColors.resolve(context);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161922),
-        title: const Text('Откатить ВСЕ изменения?', style: TextStyle(color: Colors.white, fontSize: 15)),
-        content: const Text(
+        backgroundColor: c.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: c.hairline),
+        ),
+        title: Text(
+          'Откатить ВСЕ изменения?',
+          style: TextStyle(color: c.foreground, fontSize: 15),
+        ),
+        content: Text(
           'Будет выполнен git reset --hard HEAD && git clean -fd. Все незакоммиченные правки будут удалены.',
-          style: TextStyle(color: Colors.white70, fontSize: 12),
+          style: TextStyle(color: c.mutedForeground, fontSize: 12),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               notifier.discardAll();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.danger,
+              foregroundColor: GitThemeColors.contrastOn(c.danger),
+              elevation: 0,
+            ),
             child: const Text('Откатить всё'),
           ),
         ],
@@ -3534,8 +5048,14 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     );
   }
 
-  void _showCreateTagDialog(GitNotifier notifier, {GitStatus? status, String? commitHash}) {
-    final tagCtrl = TextEditingController(text: _suggestNextVersionTag(status, 'patch'));
+  void _showCreateTagDialog(
+    GitNotifier notifier, {
+    GitStatus? status,
+    String? commitHash,
+  }) {
+    final c = GitThemeColors.resolve(context);
+    final tagCtrl =
+        TextEditingController(text: _suggestNextVersionTag(status, 'patch'));
     final msgCtrl = TextEditingController(text: 'Release');
     bool pushRemote = status?.remoteUrl != null;
 
@@ -3543,33 +5063,65 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFF161922),
-          title: const Text('Создать тег версии', style: TextStyle(color: Colors.white, fontSize: 15)),
+          backgroundColor: c.card,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: c.hairline),
+          ),
+          title: Text(
+            'Создать тег версии',
+            style: TextStyle(color: c.foreground, fontSize: 15),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: tagCtrl,
-                style: GoogleFonts.jetBrainsMono(color: Colors.amberAccent, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Имя тега (например v1.0.1)'),
+                style: GoogleFonts.jetBrainsMono(color: c.warning, fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Имя тега (например v1.0.1)',
+                  labelStyle: TextStyle(color: c.mutedForeground, fontSize: 12),
+                  filled: true,
+                  fillColor: c.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: c.hairline),
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: msgCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-                decoration: const InputDecoration(labelText: 'Описание'),
+                style: TextStyle(color: c.foreground, fontSize: 12),
+                decoration: InputDecoration(
+                  labelText: 'Описание',
+                  labelStyle: TextStyle(color: c.mutedForeground, fontSize: 12),
+                  filled: true,
+                  fillColor: c.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: c.hairline),
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               CheckboxListTile(
                 value: pushRemote,
+                activeColor: c.accent,
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Отправить тег в GitHub (git push --tags)', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                title: Text(
+                  'Отправить тег в GitHub (git push --tags)',
+                  style: TextStyle(color: c.mutedForeground, fontSize: 11),
+                ),
                 onChanged: (v) => setDialogState(() => pushRemote = v ?? false),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text('Отмена', style: TextStyle(color: c.mutedForeground)),
+            ),
             ElevatedButton(
               onPressed: () {
                 if (tagCtrl.text.trim().isNotEmpty) {
@@ -3582,6 +5134,11 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                   Navigator.pop(ctx);
                 }
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: c.accent,
+                foregroundColor: c.accentForeground,
+                elevation: 0,
+              ),
               child: const Text('Создать тег'),
             ),
           ],
@@ -3594,7 +5151,8 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     String base = status?.projectVersion?.split('+').first ?? '1.0.0';
     if (status != null && status.tags.isNotEmpty) {
       final latestTag = status.tags.first.name;
-      final clean = latestTag.startsWith('v') ? latestTag.substring(1) : latestTag;
+      final clean =
+          latestTag.startsWith('v') ? latestTag.substring(1) : latestTag;
       if (RegExp(r'^\d+\.\d+\.\d+').hasMatch(clean)) {
         base = clean.split('-').first.split('+').first;
       }
@@ -3618,18 +5176,20 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showReleaseAndBuildModal(GitStatus status, GitNotifier notifier) {
-    final tagCtrl = TextEditingController(text: _suggestNextVersionTag(status, 'patch'));
+    final c = GitThemeColors.resolve(context);
+    final tagCtrl =
+        TextEditingController(text: _suggestNextVersionTag(status, 'patch'));
     final notesCtrl = TextEditingController(
       text: _commitController.text.trim().isNotEmpty
           ? _commitController.text.trim()
-          : 'Release ${ _suggestNextVersionTag(status, 'patch') }',
+          : 'Release ${_suggestNextVersionTag(status, 'patch')}',
     );
     bool isReleasing = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF141824),
+      backgroundColor: c.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -3645,21 +5205,43 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 'Выпуск релиза и сборка APK в GitHub Actions',
-                style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: c.foreground,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 10),
               TextField(
                 controller: tagCtrl,
-                style: GoogleFonts.jetBrainsMono(color: Colors.amberAccent, fontSize: 13),
-                decoration: const InputDecoration(labelText: 'Тег релиза (vX.Y.Z)'),
+                style: GoogleFonts.jetBrainsMono(color: c.warning, fontSize: 13),
+                decoration: InputDecoration(
+                  labelText: 'Тег релиза (vX.Y.Z)',
+                  labelStyle: TextStyle(color: c.mutedForeground, fontSize: 12),
+                  filled: true,
+                  fillColor: c.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: c.hairline),
+                  ),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: notesCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
-                decoration: const InputDecoration(labelText: 'Описание релиза'),
+                style: TextStyle(color: c.foreground, fontSize: 12),
+                decoration: InputDecoration(
+                  labelText: 'Описание релиза',
+                  labelStyle: TextStyle(color: c.mutedForeground, fontSize: 12),
+                  filled: true,
+                  fillColor: c.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: c.hairline),
+                  ),
+                ),
               ),
               const SizedBox(height: 14),
               ElevatedButton.icon(
@@ -3672,7 +5254,8 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                         try {
                           await notifier.releaseAndBuildApk(
                             tagName: tag,
-                            commitMessage: 'chore(release): $tag — ${notesCtrl.text.trim()}',
+                            commitMessage:
+                                'chore(release): $tag — ${notesCtrl.text.trim()}',
                             releaseNotes: notesCtrl.text.trim(),
                           );
                           if (modalCtx.mounted) Navigator.pop(modalCtx);
@@ -3680,20 +5263,35 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
                           if (remote != null && remote.contains('github.com')) {
                             var cleanUrl = remote.replaceAll('.git', '');
                             if (cleanUrl.startsWith('git@github.com:')) {
-                              cleanUrl = cleanUrl.replaceFirst('git@github.com:', 'https://github.com/');
+                              cleanUrl = cleanUrl.replaceFirst(
+                                'git@github.com:',
+                                'https://github.com/',
+                              );
                             }
                             final uri = Uri.tryParse('$cleanUrl/actions');
-                            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                            if (uri != null) {
+                              launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
+                            }
                           }
                         } catch (_) {
-                          if (modalCtx.mounted) setModalState(() => isReleasing = false);
+                          if (modalCtx.mounted) {
+                            setModalState(() => isReleasing = false);
+                          }
                         }
                       },
                 icon: const Icon(LucideIcons.rocket, size: 15),
-                label: Text(isReleasing ? 'Отправка в GitHub...' : 'Закоммитить, создать тег и запустить сборку'),
+                label: Text(
+                  isReleasing
+                      ? 'Отправка в GitHub...'
+                      : 'Закоммитить, создать тег и запустить сборку',
+                ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF8B5CF6),
-                  foregroundColor: Colors.white,
+                  backgroundColor: c.accent,
+                  foregroundColor: c.accentForeground,
+                  elevation: 0,
                 ),
               ),
             ],
@@ -3704,14 +5302,15 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
   }
 
   void _showGitGuideModal() {
+    final c = GitThemeColors.resolve(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF141824),
+      backgroundColor: c.card,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (ctx) => const Padding(
-        padding: EdgeInsets.all(16),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3719,28 +5318,37 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
             children: [
               Row(
                 children: [
-                  Icon(LucideIcons.book_open, color: Color(0xFF00F2FE), size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'Как работает профессиональный Git в Quantum IDE',
-                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                  Icon(LucideIcons.book_open, color: c.accent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Как устроен Git в Quantum IDE',
+                      style: TextStyle(
+                        color: c.foreground,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              SizedBox(height: 12),
+              const SizedBox(height: 12),
               Text(
-                '1. Рабочая копия (Working Tree) → Индекс (Staged):\n'
-                '   • Все изменённые (M) и новые (U) файлы появляются в разделе «Рабочая копия».\n'
-                '   • Нажмите на файл, чтобы открыть визуальный Diff (сравнение было/стало).\n'
-                '   • Нажмите «+» напротив нужных файлов, чтобы перенести их в «Индекс (Staged)» для точечного коммита.\n\n'
+                '1. Рабочая копия → Индекс (Staged):\n'
+                '   • Изменённые (M) и новые (U) файлы отображаются во вкладке «Изменения».\n'
+                '   • Нажмите на файл для просмотра Diff или «+» для добавления в индекс.\n\n'
                 '2. Коммит и Conventional Commits:\n'
-                '   • Используйте быстрые префиксы (feat:, fix:, refactor:) или кнопку «✨ AI» для автогенерации описания по вашим правкам.\n'
-                '   • Флажок «Amend» позволяет дополнить предыдущий коммит без создания нового.\n\n'
-                '3. История, Cherry-pick, Revert и Reset:\n'
-                '   • Во вкладке «История» нажмите на любой коммит — откроется Инспектор коммита со списком файлов, полным патчем и кнопками Cherry-pick, Revert, Reset (--soft/--mixed/--hard) и создания ветки.\n\n'
+                '   • Выберите префикс (feat:, fix:, refactor:) или нажмите «✨ AI» для автоописания.\n'
+                '   • Флаг «Amend» дополнит последний коммит без создания нового.\n\n'
+                '3. История и граф веток:\n'
+                '   • Нажмите на коммит в истории для просмотра патча, Cherry-pick, Revert или Reset.\n\n'
                 '4. Ветки и Stash:\n'
-                '   • Во вкладке «Ветки / Stash» вы можете переключать локальные и удалённые ветки, вливать (Merge) одну ветку в другую и управлять Stash-хранилищем.',
-                style: TextStyle(color: Colors.white70, fontSize: 11.5, height: 1.45),
+                '   • Во вкладке «Ветки» переключайте локальные и удалённые ветки, выполняйте Merge и управляйте Stash.',
+                style: TextStyle(
+                  color: c.mutedForeground,
+                  fontSize: 11.5,
+                  height: 1.48,
+                ),
               ),
             ],
           ),
@@ -3749,38 +5357,50 @@ class _GitPanelState extends ConsumerState<GitPanel> with SingleTickerProviderSt
     );
   }
 
-  Widget _buildNoRepoView(GitNotifier notifier, bool isLight) {
-    final textColor = isLight ? const Color(0xFF0F172A) : Colors.white;
-    final subColor = isLight ? Colors.black54 : Colors.white54;
+  Widget _buildNoRepoView(GitNotifier notifier, GitThemeColors c) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(LucideIcons.folder_git_2, size: 42, color: Color(0xFF00F2FE)),
-            const SizedBox(height: 12),
-            Text(
-              'Git-репозиторий не инициализирован',
-              style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Инициализируйте Git в текущем проекте, чтобы отслеживать изменения, управлять ветками и пушить на GitHub.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: subColor, fontSize: 11),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => notifier.init(),
-              icon: const Icon(LucideIcons.plus, size: 15),
-              label: const Text('Инициализировать Git (git init)'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00F2FE),
-                foregroundColor: Colors.black,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: c.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c.hairline),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(LucideIcons.folder_git_2, size: 42, color: c.accent),
+              const SizedBox(height: 12),
+              Text(
+                'Git-репозиторий не инициализирован',
+                style: TextStyle(
+                  color: c.foreground,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                'Инициализируйте Git в текущем проекте, чтобы отслеживать изменения, управлять ветками и пушить на GitHub.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.mutedForeground, fontSize: 11.5),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => notifier.init(),
+                icon: const Icon(LucideIcons.plus, size: 15),
+                label: const Text('Инициализировать Git (git init)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.accent,
+                  foregroundColor: c.accentForeground,
+                  elevation: 0,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

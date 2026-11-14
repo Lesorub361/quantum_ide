@@ -8,6 +8,7 @@ import 'package:quantum_ide/features/git/presentation/notifiers/git_notifier.dar
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/shared/widgets/glass_container.dart';
+import 'package:quantum_ide/features/git/presentation/widgets/git_theme.dart';
 
 // Representing the parsed file segments
 abstract class MergeChunk {}
@@ -287,8 +288,9 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final c = GitThemeColors.resolve(context, ref);
     return Scaffold(
-      backgroundColor: const Color(0xFF07090E),
+      backgroundColor: c.canvas,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
         child: _buildHeader(l10n),
@@ -298,18 +300,19 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
   }
 
   Widget _buildHeader(AppLocalizations l10n) {
+    final c = GitThemeColors.resolve(context, ref);
     return GlassContainer(
       blur: 20,
       opacity: 0.04,
       borderRadius: BorderRadius.zero,
-      border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      border: Border(bottom: BorderSide(color: c.border)),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(LucideIcons.arrow_left, color: Colors.white70, size: 20),
+                icon: Icon(LucideIcons.arrow_left, color: c.mutedForeground, size: 20),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               const SizedBox(width: 8),
@@ -495,20 +498,21 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
   }
 
   Widget _buildConflictChunk(int index, ConflictChunk chunk, AppLocalizations l10n) {
+    final c = GitThemeColors.resolve(context, ref);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF0B0F19),
+        color: c.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: chunk.isResolved
-              ? Colors.greenAccent.withValues(alpha: 0.3)
-              : Colors.amberAccent.withValues(alpha: 0.3),
+              ? c.success.withValues(alpha: 0.35)
+              : c.warning.withValues(alpha: 0.35),
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: (chunk.isResolved ? Colors.greenAccent : Colors.amberAccent).withValues(alpha: 0.04),
+            color: (chunk.isResolved ? c.success : c.warning).withValues(alpha: 0.05),
             blurRadius: 20,
             spreadRadius: 2,
           ),
@@ -710,13 +714,14 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
   }
 
   Widget _buildResolveArea(int index, ConflictChunk chunk, AppLocalizations l10n) {
-    final statusColor = chunk.isResolved ? Colors.greenAccent : Colors.amberAccent;
+    final c = GitThemeColors.resolve(context, ref);
+    final statusColor = chunk.isResolved ? c.success : c.warning;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
+        color: c.panel,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+        border: Border(top: BorderSide(color: c.hairline)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -725,13 +730,13 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
             children: [
               Text(
                 l10n.mergeResultEditable,
-                style: GoogleFonts.inter(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.bold),
+                style: GoogleFonts.inter(color: c.mutedForeground, fontSize: 12, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: 8),
               if (!chunk.isResolved)
-                const Icon(LucideIcons.pencil, size: 12, color: Colors.amberAccent)
+                Icon(LucideIcons.pencil, size: 12, color: c.warning)
               else
-                const Icon(LucideIcons.circle_check, size: 12, color: Colors.greenAccent),
+                Icon(LucideIcons.circle_check, size: 12, color: c.success),
             ],
           ),
           const SizedBox(height: 10),
@@ -741,16 +746,16 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
             keyboardType: TextInputType.multiline,
             decoration: InputDecoration(
               hintText: l10n.chooseVersionOrWriteHint,
-              hintStyle: GoogleFonts.inter(color: Colors.white24, fontSize: 12),
+              hintStyle: GoogleFonts.inter(color: c.subtleForeground, fontSize: 12),
               filled: true,
-              fillColor: const Color(0xFF0D111E),
+              fillColor: c.inputFill,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                borderSide: BorderSide(color: c.border),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+                borderSide: BorderSide(color: c.border),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -758,7 +763,7 @@ class _GitMergeConflictPageState extends ConsumerState<GitMergeConflictPage> {
               ),
               contentPadding: const EdgeInsets.all(12),
             ),
-            style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12, height: 1.4),
+            style: GoogleFonts.jetBrainsMono(color: c.foreground, fontSize: 12, height: 1.4),
             onChanged: (val) {
               if (!chunk.isResolved && val.isNotEmpty) {
                 setState(() {
