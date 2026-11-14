@@ -9,6 +9,7 @@ class OptionalPackage {
   final IconData icon;
   final String category;
   final String? version;
+  final bool isPreinstalledInImage;
   bool isInstalled;
   bool isInstalling;
 
@@ -20,6 +21,7 @@ class OptionalPackage {
     required this.icon,
     this.category = 'Tools',
     this.version,
+    this.isPreinstalledInImage = false,
     this.isInstalled = false,
     this.isInstalling = false,
   });
@@ -204,10 +206,11 @@ final defaultPackages = [
   // ==========================================
   OptionalPackage(
     id: 'flutter',
-    name: 'Flutter & Dart SDK (3.47.8 Stable)',
-    version: '3.47.8 / Dart 3.13+',
-    description: 'Google\'s UI toolkit for building natively compiled Dart and Flutter applications. Includes Dart 3.13.0+ and ARM64-optimized build tooling.',
-    command: '${_aptPrefix}apt install -y git curl unzip xz-utils libglu1-mesa debianutils ca-certificates && git config --global --add safe.directory \'*\' 2>/dev/null || true && rm -f /root/flutter/.git/*.lock 2>/dev/null || true && if [ -d /root/flutter/.git ]; then cd /root/flutter && (git fetch --depth 1 origin tag 3.47.8 2>/dev/null || git fetch --tags origin 2>/dev/null || true) && git checkout 3.47.8 -f && /root/flutter/bin/flutter precache --android; else rm -rf /root/flutter && git clone --depth 1 --branch 3.47.8 https://github.com/flutter/flutter.git /root/flutter && /root/flutter/bin/flutter precache --android; fi && ln -sf /root/flutter/bin/flutter /usr/local/bin/flutter 2>/dev/null || true && ln -sf /root/flutter/bin/dart /usr/local/bin/dart 2>/dev/null || true && (grep -q "/root/flutter/bin" /root/.bashrc 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.bashrc) && (grep -q "/root/flutter/bin" /root/.profile 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.profile) && (/bin/bash /root/setup-arm64.sh 2>/dev/null || true)',
+    name: 'Flutter & Dart SDK (3.47.8 / 3.50.0)',
+    version: '3.50.0 (Ubuntu 24.04) / 3.47.8',
+    isPreinstalledInImage: true,
+    description: 'Google\'s UI toolkit for building natively compiled Dart and Flutter applications. Automatically selects 3.50.0 on Ubuntu 24.04 (GLIBC 2.34+) or 3.47.8 on older rootfs.',
+    command: '${_aptPrefix}apt install -y git curl unzip xz-utils libglu1-mesa debianutils ca-certificates && TARGET_VER="3.47.8" && if grep -qa "GLIBC_2.34" /lib/aarch64-linux-gnu/libc.so.6 /usr/lib/aarch64-linux-gnu/libc.so.6 2>/dev/null; then TARGET_VER="3.50.0"; fi && git config --global --add safe.directory \'*\' 2>/dev/null || true && rm -f /root/flutter/.git/*.lock 2>/dev/null || true && if [ -d /root/flutter/.git ]; then cd /root/flutter && (git fetch --depth 1 origin tag \$TARGET_VER 2>/dev/null || git fetch --tags origin 2>/dev/null || true) && git checkout \$TARGET_VER -f && /root/flutter/bin/flutter precache --android; else rm -rf /root/flutter && git clone --depth 1 --branch \$TARGET_VER https://github.com/flutter/flutter.git /root/flutter && /root/flutter/bin/flutter precache --android; fi && ln -sf /root/flutter/bin/flutter /usr/local/bin/flutter 2>/dev/null || true && ln -sf /root/flutter/bin/dart /usr/local/bin/dart 2>/dev/null || true && (grep -q "/root/flutter/bin" /root/.bashrc 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.bashrc) && (grep -q "/root/flutter/bin" /root/.profile 2>/dev/null || echo "export PATH=\\\$PATH:/root/flutter/bin" >> /root/.profile) && (/bin/bash /root/setup-arm64.sh 2>/dev/null || true)',
     icon: LucideIcons.smartphone,
     category: 'Languages',
   ),
@@ -215,6 +218,7 @@ final defaultPackages = [
     id: 'nodejs',
     name: 'Node.js & npm (LTS)',
     version: '20.x LTS',
+    isPreinstalledInImage: true,
     description: 'JavaScript runtime and npm package manager for modern tools, servers and CLI',
     command: 'if which node >/dev/null 2>&1 && which npm >/dev/null 2>&1; then echo "Node.js & npm already installed: \$(node -v), npm \$(npm -v)"; else echo "Installing Node.js (found: \$(node -v 2>/dev/null || echo none))"; ${_aptPrefix}apt install -y curl ca-certificates && (curl -4 -fsSL https://deb.nodesource.com/setup_20.x || curl -fsSL https://deb.nodesource.com/setup_20.x) | bash - && apt install -y nodejs; hash -r; node -v; fi',
     icon: LucideIcons.globe,
@@ -224,6 +228,7 @@ final defaultPackages = [
     id: 'python',
     name: 'Python 3',
     version: '3.12',
+    isPreinstalledInImage: true,
     description: 'General-purpose programming language (python3, pip, venv)',
     command: '${_aptPrefix}apt install -y python3 python3-pip python3-venv python-is-python3',
     icon: LucideIcons.terminal,
@@ -307,6 +312,16 @@ final defaultPackages = [
     description: 'Complete native ARM64 Android Build-Tools suite (34.0.0, 35.0.0, 35.0.1, 36.0.0), aapt2, aapt, zipalign, aidl, and ADB',
     command: _sdkToolsArm64Command(),
     icon: LucideIcons.wrench,
+    category: 'Build Tools',
+  ),
+  OptionalPackage(
+    id: 'openjdk-17',
+    name: 'Java OpenJDK 17 (LTS)',
+    version: '17 LTS',
+    isPreinstalledInImage: true,
+    description: 'Standard Java 17 JDK for Android/Flutter Gradle builds (pre-installed in Ubuntu 24.04 image; can be switched as default)',
+    command: '${_aptPrefix}apt install -y openjdk-17-jdk-headless && update-java-alternatives -s \$(update-java-alternatives -l | grep "17" | awk \'{print \$1}\' | head -n 1) 2>/dev/null || true && java -version',
+    icon: LucideIcons.coffee,
     category: 'Build Tools',
   ),
   OptionalPackage(

@@ -11,31 +11,52 @@ enum DevStack {
   web(
     'Web (JavaScript / TypeScript)',
     'Websites and web apps with HTML, CSS, and JS frameworks.',
-    'Node.js and npm (already included)',
+    'Уже в образе: Node.js, npm, Git',
     ['node', 'npm', 'git'],
+    isPreinstalled: true,
   ),
   python(
     'Python',
     'Scripts, automation, data work, and Python backends.',
-    'python3, pip, venv, and build tools',
+    'Python 3 в образе; доустанавливается: pip, venv',
     ['python3', 'python3-pip', 'python3-venv'],
+    isPreinstalled: true,
   ),
   android(
-    'Android (Java / Kotlin / Flutter)',
-    'Build Android app projects and install them directly on device.',
-    'JDK 17, ARM64 Android SDK, Gradle, and Flutter',
-    ['openjdk-17-jdk', 'gradle', 'flutter'],
+    'Android / Flutter (JDK 17)',
+    'Build Android APK/AAB and Flutter projects directly on device.',
+    'JDK 17 и Flutter в образе; доустанавливается при необходимости',
+    ['openjdk-17-jdk-headless', 'gradle', 'flutter'],
+    isPreinstalled: true,
+  ),
+  java21(
+    'Java 21 (OpenJDK 21 LTS)',
+    'Modern Java 21 for AGP 8.5+, Gradle 8.10+, and Spring Boot.',
+    'Доустанавливается: openjdk-21-jdk-headless',
+    ['openjdk-21-jdk-headless'],
   ),
   cpp(
     'C / C++',
     'Fast compiled programs, algorithms, and systems code.',
-    'gcc, g++, make, cmake, gdb',
+    'Clang/CMake в образе; доустанавливается: gcc, g++, make, gdb',
     ['gcc', 'g++', 'make', 'cmake', 'gdb'],
+  ),
+  go(
+    'Go (Golang)',
+    'Fast CLI tools, microservices, and backend APIs.',
+    'Доустанавливается: golang-go',
+    ['golang-go'],
+  ),
+  rust(
+    'Rust (rustc + cargo)',
+    'Systems programming, CLI, and WebAssembly.',
+    'Доустанавливается: rustc, cargo',
+    ['rustc', 'cargo'],
   ),
   php(
     'PHP',
     'Websites and apps with PHP — classic sites and Laravel projects.',
-    'php-cli, common extensions, and Composer',
+    'Доустанавливается: php-cli, composer',
     ['php-cli', 'composer'],
   );
 
@@ -43,8 +64,15 @@ enum DevStack {
   final String description;
   final String installsSummary;
   final List<String> packages;
+  final bool isPreinstalled;
 
-  const DevStack(this.label, this.description, this.installsSummary, this.packages);
+  const DevStack(
+    this.label,
+    this.description,
+    this.installsSummary,
+    this.packages, {
+    this.isPreinstalled = false,
+  });
 }
 
 class BootstrapPage extends ConsumerStatefulWidget {
@@ -123,18 +151,31 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
       _addLog('Runtime core prepared successfully.');
       _addLog('Setting up packages for selected toolchains...');
 
-      final aptPackages = <String>{};
+      final candidateAptPackages = <String>{};
       for (final stack in _selectedStacks) {
         _addLog('Configuring stack: ${stack.label} (${stack.packages.join(', ')})');
         for (final pkg in stack.packages) {
           if (pkg != 'node' && pkg != 'npm' && pkg != 'git' && pkg != 'flutter' && pkg != 'gradle') {
+            candidateAptPackages.add(pkg);
+          }
+        }
+      }
+
+      final aptPackages = <String>[];
+      if (candidateAptPackages.isNotEmpty) {
+        _addLog('Checking packages already present in rootfs image...');
+        for (final pkg in candidateAptPackages) {
+          final checkRes = await runtime.runCommand('dpkg -s $pkg >/dev/null 2>&1 && echo INSTALLED || echo MISSING');
+          if (checkRes.contains('INSTALLED')) {
+            _addLog('✓ $pkg already pre-installed in image — skipped');
+          } else {
             aptPackages.add(pkg);
           }
         }
       }
 
       if (aptPackages.isNotEmpty) {
-        _addLog('Installing toolchain packages: ${aptPackages.join(' ')}...');
+        _addLog('Installing missing toolchain packages: ${aptPackages.join(' ')}...');
         final cmd = 'export DEBIAN_FRONTEND=noninteractive; apt-get update && apt-get install -y --no-install-recommends ${aptPackages.join(' ')}';
         _addLog('\$ $cmd');
         final job = runtime.runCommandStream(
@@ -150,6 +191,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
         } else {
           _addLog('⚠ apt exited with code $code (packages can be installed later from Packages)');
         }
+      } else {
+        _addLog('✓ All selected packages are already present in the image.');
       }
 
       _addLog('Setup completed! Loading workspace...');
@@ -327,7 +370,7 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Core tools (Git, Node.js, bash) are always configured. Choose additional toolchains:',
+            'В образ уже вшиты: Git, Node.js, Python 3, Clang/CMake, JDK 17 и Flutter. Выберите, что нужно доустановить (уже установленное пропустится автоматически):',
             style: GoogleFonts.inter(
               fontSize: 12,
               color: theme.colorScheme.onSurfaceVariant,
@@ -416,13 +459,36 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    stack.label,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          stack.label,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurface,
+                          ),
+                        ),
+                      ),
+                      if (stack.isPreinstalled)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.greenAccent.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.35)),
+                          ),
+                          child: Text(
+                            'В образе',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.greenAccent.shade200,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -430,6 +496,16 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
                     style: GoogleFonts.inter(
                       fontSize: 11.5,
                       color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    stack.installsSummary,
+                    style: GoogleFonts.inter(
+                      fontSize: 10.5,
+                      color: stack.isPreinstalled
+                          ? Colors.greenAccent.shade200.withValues(alpha: 0.9)
+                          : theme.colorScheme.primary.withValues(alpha: 0.9),
                     ),
                   ),
                 ],

@@ -38,8 +38,12 @@ class RuntimeService extends ChangeNotifier {
   int _runningCommands = 0;
   final List<Completer<void>> _commandQueue = [];
 
-  // High-performance pre-built ARM64 Core rootfs (Ubuntu + Node.js 24 + Git + npm)
+  // High-performance pre-built ARM64 Core rootfs (Ubuntu 24.04 + GLIBC 2.39 + Flutter 3.50.0)
+  static const String ubuntu2404RootfsUrl =
+      'https://github.com/Lesorub361/quantum_ide/releases/download/rootfs-v1/quantum-core-arm64-ubuntu2404.tar.zst';
+
   static const List<String> _rootfsUrls = [
+    ubuntu2404RootfsUrl,
     'https://github.com/Lesorub361/quantum_ide/releases/download/v1.0.0/pocketdev-core-arm64-2026.09.5.tar.zst',
     'https://github.com/techjarves/Mobile-Harness/releases/download/runtime-2026.09.4/pocketdev-core-arm64-2026.09.5.tar.zst',
   ];
@@ -56,6 +60,98 @@ class RuntimeService extends ChangeNotifier {
       }
     }
     return true;
+  }
+
+  /// Inspects the current Linux rootfs (OS version, GLIBC, Flutter version, and
+  /// whether an Ubuntu 24.04 migration is needed for Flutter 3.50+).
+  Future<Map<String, String>> inspectEnvironment() async {
+    try {
+      final out = await runCommand(
+        'OS=\$(grep "^PRETTY_NAME=" /etc/os-release 2>/dev/null | cut -d= -f2- | tr -d \'"\' || echo "Linux"); '
+        'GLIBC=\$(ldd --version 2>/dev/null | head -n1 | grep -oE "[0-9]+\\.[0-9]+" | tail -n1 || echo "unknown"); '
+        'FLUTTER=\$(flutter --version 2>/dev/null | head -n1 | awk \'{print \$2}\' || echo "not installed"); '
+        'HAS234=\$(grep -qa "GLIBC_2.34" /lib/aarch64-linux-gnu/libc.so.6 /usr/lib/aarch64-linux-gnu/libc.so.6 /lib/x86_64-linux-gnu/libc.so.6 2>/dev/null && echo "1" || echo "0"); '
+        'echo "OS=\$OS"; echo "GLIBC=\$GLIBC"; echo "FLUTTER=\$FLUTTER"; echo "HAS234=\$HAS234"',
+      );
+      String os = 'Ubuntu Linux';
+      String glibc = 'unknown';
+      String flutter = '—';
+      bool has234 = true;
+      for (final line in out.split('\n')) {
+        final t = line.trim();
+        if (t.startsWith('OS=')) os = t.substring(3).trim();
+        if (t.startsWith('GLIBC=')) glibc = t.substring(6).trim();
+        if (t.startsWith('FLUTTER=')) {
+          final v = t.substring(8).trim();
+          if (v.isNotEmpty) flutter = v;
+        }
+        if (t.startsWith('HAS234=')) has234 = t.substring(7).trim() == '1';
+      }
+      return {
+        'os': os,
+        'glibc': glibc,
+        'flutter': flutter,
+        'needsUpgrade': (!has234).toString(),
+      };
+    } catch (_) {
+      return {
+        'os': 'Linux',
+        'glibc': 'unknown',
+        'flutter': '—',
+        'needsUpgrade': 'false',
+      };
+    }
+  }
+
+  /// Safely migrates an existing Android PRoot rootfs to Ubuntu 24.04 + Flutter 3.50
+  /// while preserving user projects, SSH keys, Git config, and AI CLI credentials.
+  Future<void> migrateToUbuntu2404() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+
+    _isInitializing = true;
+    _progress = 0.02;
+    _status = 'Сохранение проектов и настроек (.ssh, .gitconfig, .gemini)…';
+    notifyListeners();
+
+    try {
+      final rootfsHome = Directory(p.join(_filesDir, 'rootfs', 'ubuntu', 'root'));
+      final backupHome = Directory(p.join(_filesDir, 'tmp', 'preserved_home'));
+      if (await backupHome.exists()) {
+        await backupHome.delete(recursive: true);
+      }
+      await backupHome.create(recursive: true);
+
+      const itemsToPreserve = ['projects', '.ssh', '.gitconfig', '.gemini', '.config'];
+      if (await rootfsHome.exists()) {
+        for (final name in itemsToPreserve) {
+          final srcDir = Directory(p.join(rootfsHome.path, name));
+          final srcFile = File(p.join(rootfsHome.path, name));
+          if (await srcDir.exists()) {
+            await Process.run('cp', ['-a', srcDir.path, p.join(backupHome.path, name)]);
+          } else if (await srcFile.exists()) {
+            await srcFile.copy(p.join(backupHome.path, name));
+          }
+        }
+      }
+
+      _status = 'Очистка старого rootfs (Ubuntu 20.04)…';
+      _progress = 0.08;
+      notifyListeners();
+
+      final rootfsDir = Directory(p.join(_filesDir, 'rootfs', 'ubuntu'));
+      if (await rootfsDir.exists()) {
+        await rootfsDir.delete(recursive: true);
+      }
+
+      _isInitialized = false;
+      _isInitializing = false;
+      await init();
+    } catch (e) {
+      _isInitializing = false;
+      _status = 'Ошибка миграции: $e';
+      notifyListeners();
+      rethrow;
+    }
   }
 
   Future<void> _cleanupWithdrawnMigrationLeftovers() async {

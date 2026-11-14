@@ -27,11 +27,13 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   late TabController _tabController;
+  Future<Map<String, String>>? _envInfoFuture;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 7, vsync: this);
+    _envInfoFuture = ref.read(runtimeServiceProvider).inspectEnvironment();
     _tabController.addListener(() {
       setState(() {
         _searchQuery = '';
@@ -97,6 +99,9 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
         _searchQuery.isEmpty;
 
     final List<Widget> headers = [];
+    if (tabType == 'all' && _searchQuery.isEmpty) {
+      headers.add(_buildEnvironmentHeroCard(context, ref));
+    }
     if (showReleaseEngineHero) {
       headers.add(_buildReleaseEngineHeroCard(context, ref));
     }
@@ -399,6 +404,179 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEnvironmentHeroCard(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<Map<String, String>>(
+      future: _envInfoFuture,
+      builder: (context, snapshot) {
+        final env = snapshot.data;
+        final os = env?['os'] ?? 'Проверка среды...';
+        final glibc = env?['glibc'] ?? '...';
+        final flutter = env?['flutter'] ?? '...';
+        final needsUpgrade = env?['needsUpgrade'] == 'true';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: needsUpgrade
+                  ? const [Color(0xFF1E293B), Color(0xFF1E1B4B)]
+                  : const [Color(0xFF0F2922), Color(0xFF101C38)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: (needsUpgrade ? Colors.amberAccent : Colors.greenAccent).withValues(alpha: 0.35),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    needsUpgrade ? LucideIcons.sparkles : LucideIcons.shield_check,
+                    color: needsUpgrade ? Colors.amberAccent : Colors.greenAccent,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      needsUpgrade
+                          ? 'Доступен переход на Ubuntu 24.04 + Flutter 3.50'
+                          : 'Среда Linux актуальна (Ubuntu 24.04 / GLIBC $glibc)',
+                      style: GoogleFonts.outfit(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'ОС: $os · GLIBC: $glibc · Flutter: $flutter',
+                style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: Colors.white70),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'В базовый образ уже включены: Git, Node.js, Python 3, Clang/CMake, JDK 17 и Flutter.',
+                style: GoogleFonts.inter(fontSize: 11.5, color: Colors.white60),
+              ),
+              if (needsUpgrade) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => _showMigrationDialog(context, ref),
+                    icon: const Icon(LucideIcons.download, size: 16),
+                    label: const Text('Обновить среду до Ubuntu 24.04 + Flutter 3.50'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.amberAccent,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showMigrationDialog(BuildContext context, WidgetRef ref) async {
+    bool started = false;
+    String? errorMsg;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final runtime = ref.watch(runtimeServiceProvider);
+          return AlertDialog(
+            title: Text(
+              started ? 'Обновление среды Linux' : 'Переход на Ubuntu 24.04 + Flutter 3.50',
+              style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!started) ...[
+                  Text(
+                    'Что изменится в окружении:',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('• Ubuntu 20.04 → Ubuntu 24.04 LTS', style: TextStyle(fontSize: 12.5)),
+                  const Text('• GLIBC 2.31 → GLIBC 2.39 (нужно для Dart 3.14)', style: TextStyle(fontSize: 12.5)),
+                  const Text('• Flutter 3.47.8 → Flutter 3.50.0', style: TextStyle(fontSize: 12.5)),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Что сохранится автоматически:',
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.greenAccent),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('• Все проекты (/root/projects), .ssh, .gitconfig, .gemini', style: TextStyle(fontSize: 12.5)),
+                  const Text('• Настройки IDE и открытые рабочие папки', style: TextStyle(fontSize: 12.5)),
+                ] else ...[
+                  LinearProgressIndicator(
+                    value: runtime.progress > 0 ? runtime.progress : null,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    runtime.status,
+                    style: GoogleFonts.jetBrainsMono(fontSize: 12),
+                  ),
+                  if (errorMsg != null) ...[
+                    const SizedBox(height: 8),
+                    Text(errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                  ],
+                ],
+              ],
+            ),
+            actions: [
+              if (!started || errorMsg != null)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Закрыть'),
+                ),
+              if (!started)
+                FilledButton(
+                  onPressed: () async {
+                    setDialogState(() {
+                      started = true;
+                      errorMsg = null;
+                    });
+                    try {
+                      await ref.read(runtimeServiceProvider).migrateToUbuntu2404();
+                      await ref.read(packageServiceProvider.notifier).checkActualInstallation();
+                      if (mounted) {
+                        setState(() {
+                          _envInfoFuture = ref.read(runtimeServiceProvider).inspectEnvironment();
+                        });
+                      }
+                      if (ctx.mounted) Navigator.pop(ctx);
+                    } catch (e) {
+                      setDialogState(() => errorMsg = '$e');
+                    }
+                  },
+                  child: const Text('Скачать и обновить'),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1345,6 +1523,25 @@ class _PackagePageState extends ConsumerState<PackagePage> with SingleTickerProv
                                       ),
                                     ),
                                   ),
+                                if (pkg.isPreinstalledInImage) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.greenAccent.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.35), width: 0.6),
+                                    ),
+                                    child: Text(
+                                      'В образе',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.greenAccent,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ],

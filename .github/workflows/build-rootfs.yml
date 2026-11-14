@@ -1,0 +1,65 @@
+name: Build Rootfs (Ubuntu 24.04 arm64)
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'rootfs-v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - name: Download Ubuntu Base 24.04 (arm64)
+        run: |
+          curl -fsSL -o base.tgz https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz
+          mkdir rootfs
+          sudo tar -xzf base.tgz -C rootfs --numeric-owner --exclude='./dev/*'
+
+      - name: Provision rootfs
+        run: |
+          sudo cp /etc/resolv.conf rootfs/etc/resolv.conf
+          sudo mount --bind /proc rootfs/proc
+          sudo mount --bind /dev rootfs/dev
+          cat > provision.sh <<'EOS'
+          set -e
+          export DEBIAN_FRONTEND=noninteractive HOME=/root
+          export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+          echo 'APT::Sandbox::User "root";' > /etc/apt/apt.conf.d/99nosandbox
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl wget git xz-utils unzip zip zstd sudo nano less procps \
+            locales build-essential clang cmake ninja-build pkg-config \
+            openjdk-17-jdk-headless python3 python3-pip nodejs npm libglu1-mesa
+          locale-gen en_US.UTF-8
+          git clone --depth 1 --branch 3.50.0 https://github.com/flutter/flutter.git /root/flutter
+          FLUTTER_ALLOW_SU_ROOT=true /root/flutter/bin/flutter --version
+          apt-get clean
+          rm -rf /var/lib/apt/lists/* /tmp/* /root/.cache
+          EOS
+          sudo cp provision.sh rootfs/root/provision.sh
+          sudo chroot rootfs /bin/bash /root/provision.sh
+          sudo rm -f rootfs/root/provision.sh rootfs/etc/resolv.conf
+          sudo umount rootfs/dev rootfs/proc
+
+      - name: Pack rootfs
+        run: |
+          cat rootfs/etc/os-release | head -3
+          sudo tar --numeric-owner -C rootfs \
+            --exclude='./dev/*' --exclude='./proc/*' --exclude='./sys/*' \
+            -cf - . | zstd -T0 -19 -o quantum-core-arm64-ubuntu2404.tar.zst
+          ls -lh quantum-core-arm64-ubuntu2404.tar.zst
+          sha256sum quantum-core-arm64-ubuntu2404.tar.zst | tee quantum-core-arm64-ubuntu2404.sha256
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'rootfs-v1' }}
+          name: Rootfs Ubuntu 24.04 (${{ github.ref_name }})
+          files: |
+            quantum-core-arm64-ubuntu2404.tar.zst
+            quantum-core-arm64-ubuntu2404.sha256
