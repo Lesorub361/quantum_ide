@@ -11,6 +11,8 @@ import 'package:quantum_ide/core/services/keyboard_sound_service.dart';
 import 'package:quantum_ide/core/services/network_inspector_service.dart';
 import 'package:quantum_ide/features/preview/presentation/widgets/device_simulator_dialog.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/ui_customizer_modal.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -449,7 +451,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               sn.setGlassmorphismBlur,
             ),
           ),
+          _switchTile(
+            context,
+            title: isRu
+                ? 'Единый стиль (Терминал + Редактор + IDE)'
+                : 'Unified Theme (Terminal + Editor + IDE)',
+            subtitle: isRu
+                ? 'Применять выбранную палитру терминала ко всему интерфейсу и редактору кода'
+                : 'Apply terminal palette colors to editor & app UI',
+            value: s.syncAppWithTerminalPalette,
+            onChanged: sn.setSyncAppWithTerminalPalette,
+          ),
+          _tile(
+            context,
+            icon: LucideIcons.sparkles,
+            title: isRu
+                ? 'Палитры, фон и пресеты (Conduit)'
+                : 'Palettes, Background & Presets',
+            subtitle: resolveConduitPalette(s.terminalTheme).label,
+            onTap: () => showConduitAppearanceSheet(context, ref),
+          ),
         ]),
+        const SizedBox(height: 12),
+        ConduitThemeLivePreview(
+          palette: resolveConduitPalette(s.terminalTheme),
+          fontFamily: s.terminalFontFamily,
+          fontSize: s.terminalFontSize,
+        ),
         const SizedBox(height: 24),
       ]);
     }
@@ -494,8 +522,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             context,
             icon: LucideIcons.palette,
             title: AppLocalizations.of(context)!.terminalTheme,
-            subtitle: _terminalThemeName(context, s.terminalTheme),
-            onTap: () => _showTerminalThemeDialog(context, s.terminalTheme, sn.setTerminalTheme),
+            subtitle: resolveConduitPalette(s.terminalTheme).label,
+            onTap: () => showConduitAppearanceSheet(context, ref),
           ),
           _tile(
             context,
@@ -636,17 +664,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             subtitle: AppLocalizations.of(context)!.hapticFeedback,
             value: s.hapticFeedback,
             onChanged: sn.setHapticFeedback,
-          ),
-          _switchTile(
-            context,
-            title: isRu ? 'Синхронизация проектов в память устройства' : 'External Storage Project Sync',
-            subtitle: isRu
-                ? 'Сохранять резервные копии проектов в /storage/emulated/0/QuantumIDE'
-                : 'Mirror projects to /storage/emulated/0/QuantumIDE',
-            value: s.sdCardSync,
-            onChanged: (v) async {
-              await sn.setSdCardSync(v);
-            },
           ),
           _tile(
             context,
@@ -966,8 +983,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       'Fira Code',
       'Cascadia Code',
       'Source Code Pro',
+      'IBM Plex Mono',
+      'Space Mono',
+      'Roboto Mono',
+      'Ubuntu Mono',
       'Inconsolata',
       'Anonymous Pro',
+      'AtkynsonMonoNerdFontMono',
       'Symbols Nerd Font',
       'Monospace',
     ];

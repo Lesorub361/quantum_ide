@@ -28,6 +28,7 @@ class SettingsState {
   final bool sdCardSync;
   final bool formatOnSave;
   final bool hardwareKeyboardMode;
+  final bool syncAppWithTerminalPalette;
   final bool isInitialized;
 
   SettingsState({
@@ -56,6 +57,7 @@ class SettingsState {
     this.sdCardSync = true,
     this.formatOnSave = false,
     this.hardwareKeyboardMode = false,
+    this.syncAppWithTerminalPalette = true,
     this.deepseekApiKey = '',
     this.openrouterApiKey = '',
     this.openaiApiKey = '',
@@ -111,6 +113,7 @@ class SettingsState {
     bool? sdCardSync,
     bool? formatOnSave,
     bool? hardwareKeyboardMode,
+    bool? syncAppWithTerminalPalette,
     String? deepseekApiKey,
     String? openrouterApiKey,
     String? openaiApiKey,
@@ -153,6 +156,8 @@ class SettingsState {
       sdCardSync: sdCardSync ?? this.sdCardSync,
       formatOnSave: formatOnSave ?? this.formatOnSave,
       hardwareKeyboardMode: hardwareKeyboardMode ?? this.hardwareKeyboardMode,
+      syncAppWithTerminalPalette:
+          syncAppWithTerminalPalette ?? this.syncAppWithTerminalPalette,
       deepseekApiKey: deepseekApiKey ?? this.deepseekApiKey,
       openrouterApiKey: openrouterApiKey ?? this.openrouterApiKey,
       openaiApiKey: openaiApiKey ?? this.openaiApiKey,
@@ -244,6 +249,8 @@ class SettingsService extends StateNotifier<SettingsState> {
       sdCardSync: prefs.getBool(_keySdCardSync) ?? true,
       formatOnSave: prefs.getBool(_keyFormatOnSave) ?? false,
       hardwareKeyboardMode: prefs.getBool('settings_hardware_keyboard_mode') ?? false,
+      syncAppWithTerminalPalette:
+          prefs.getBool('settings_sync_app_with_terminal_palette') ?? true,
       deepseekApiKey: prefs.getString(_keyDeepseekApiKey) ?? '',
       openrouterApiKey: prefs.getString(_keyOpenrouterApiKey) ?? '',
       openaiApiKey: prefs.getString(_keyOpenaiApiKey) ?? '',
@@ -265,6 +272,32 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(themeMode: mode);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyTheme, mode.index);
+  }
+
+  Future<void> setSyncAppWithTerminalPalette(bool enabled) async {
+    state = state.copyWith(syncAppWithTerminalPalette: enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('settings_sync_app_with_terminal_palette', enabled);
+  }
+
+  Future<void> applyWorkspacePreset({
+    required String terminalTheme,
+    required String editorTheme,
+    required String fontFamily,
+  }) async {
+    state = state.copyWith(
+      terminalTheme: terminalTheme,
+      editorTheme: editorTheme,
+      terminalFontFamily: fontFamily,
+      editorFontFamily: fontFamily,
+      syncAppWithTerminalPalette: true,
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyTerminalTheme, terminalTheme);
+    await prefs.setString(_keyEditorTheme, editorTheme);
+    await prefs.setString(_keyTerminalFontFamily, fontFamily);
+    await prefs.setString(_keyEditorFontFamily, fontFamily);
+    await prefs.setBool('settings_sync_app_with_terminal_palette', true);
   }
 
   Future<void> setFontSize(double size) async {

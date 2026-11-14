@@ -57,7 +57,18 @@ class TerminalPage extends ConsumerWidget {
           ),
           actions: [
             IconButton(
-              icon: const Icon(LucideIcons.refresh_cw, size: 20, color: Colors.amberAccent),
+              icon: const Icon(LucideIcons.palette, size: 19, color: Colors.cyanAccent),
+              tooltip: 'Фон, палитра и шрифт',
+              onPressed: () => showConduitAppearanceSheet(context, ref),
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.plus, size: 19, color: Colors.white70),
+              tooltip: 'Новая вкладка терминала',
+              onPressed: () =>
+                  ref.read(terminalTabsProvider.notifier).createNewSession(),
+            ),
+            IconButton(
+              icon: const Icon(LucideIcons.refresh_cw, size: 19, color: Colors.amberAccent),
               tooltip: 'Restart Shell',
               onPressed: () {
                 final notifier = ref.read(terminalTabsProvider.notifier);

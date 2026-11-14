@@ -97,7 +97,80 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
         p.join(home, 'android-sdk');
   }
 
-  String _translateCommandForPC(String cmd) {
+  String _translateCommandForPC(String cmd, {String packageId = ''}) {
+    if (Platform.isWindows) {
+      final winMap = <String, String>{
+        'git': 'winget install -e --id Git.Git',
+        'python': 'winget install -e --id Python.Python.3.12',
+        'nodejs': 'winget install -e --id OpenJS.NodeJS.LTS',
+        'flutter': 'winget install -e --id Google.Flutter',
+        'java': 'winget install -e --id EclipseAdoptium.Temurin.17.JDK',
+        'jdk17': 'winget install -e --id EclipseAdoptium.Temurin.17.JDK',
+        'cmake': 'winget install -e --id Kitware.CMake',
+        'rust': 'winget install -e --id Rustlang.Rustup',
+        'go': 'winget install -e --id GoLang.Go',
+        'docker': 'winget install -e --id Docker.DockerDesktop',
+      };
+      if (winMap.containsKey(packageId)) return winMap[packageId]!;
+      return cmd;
+    }
+
+    if (Platform.isMacOS) {
+      final macMap = <String, String>{
+        'git': 'brew install git',
+        'python': 'brew install python',
+        'nodejs': 'brew install node',
+        'flutter': 'brew install --cask flutter',
+        'java': 'brew install openjdk@17',
+        'jdk17': 'brew install openjdk@17',
+        'cmake': 'brew install cmake',
+        'rust': 'brew install rustup-init && rustup-init -y',
+        'go': 'brew install go',
+      };
+      if (macMap.containsKey(packageId)) return macMap[packageId]!;
+    }
+
+    if (Platform.isLinux) {
+      final hasPacman = File('/usr/bin/pacman').existsSync();
+      final hasDnf = File('/usr/bin/dnf').existsSync();
+      final hasZypper = File('/usr/bin/zypper').existsSync();
+      if (hasPacman) {
+        final archMap = <String, String>{
+          'git': 'sudo pacman -S --noconfirm git',
+          'python': 'sudo pacman -S --noconfirm python python-pip',
+          'nodejs': 'sudo pacman -S --noconfirm nodejs npm',
+          'java': 'sudo pacman -S --noconfirm jdk17-openjdk',
+          'jdk17': 'sudo pacman -S --noconfirm jdk17-openjdk',
+          'cmake': 'sudo pacman -S --noconfirm cmake ninja',
+          'rust': 'sudo pacman -S --noconfirm rustup && rustup default stable',
+          'go': 'sudo pacman -S --noconfirm go',
+        };
+        if (archMap.containsKey(packageId)) return archMap[packageId]!;
+      } else if (hasDnf) {
+        final dnfMap = <String, String>{
+          'git': 'sudo dnf install -y git',
+          'python': 'sudo dnf install -y python3 python3-pip',
+          'nodejs': 'sudo dnf install -y nodejs npm',
+          'java': 'sudo dnf install -y java-17-openjdk-devel',
+          'jdk17': 'sudo dnf install -y java-17-openjdk-devel',
+          'cmake': 'sudo dnf install -y cmake ninja-build',
+          'rust': 'sudo dnf install -y rust cargo',
+          'go': 'sudo dnf install -y golang',
+        };
+        if (dnfMap.containsKey(packageId)) return dnfMap[packageId]!;
+      } else if (hasZypper) {
+        final zypMap = <String, String>{
+          'git': 'sudo zypper install -y git',
+          'python': 'sudo zypper install -y python3 python3-pip',
+          'nodejs': 'sudo zypper install -y nodejs npm',
+          'java': 'sudo zypper install -y java-17-openjdk-devel',
+          'jdk17': 'sudo zypper install -y java-17-openjdk-devel',
+          'cmake': 'sudo zypper install -y cmake ninja',
+        };
+        if (zypMap.containsKey(packageId)) return zypMap[packageId]!;
+      }
+    }
+
     final isRoot = (Platform.environment['USER'] == 'root') || (Platform.environment['HOME'] == '/root');
     if (isRoot) {
       return cmd;
@@ -710,7 +783,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     final terminal = _ref.read(terminalTabsProvider.notifier);
     String command = package.command;
     if (!Platform.isAndroid) {
-      command = _translateCommandForPC(command);
+      command = _translateCommandForPC(command, packageId: package.id);
     }
 
     // Mark as installing — triggers animated spinner in the UI

@@ -9,7 +9,9 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
+import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_chat_notifier.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
@@ -222,6 +224,20 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                                 : const Color(0xFF38BDF8),
                           ),
                           tooltip: 'Подключить провайдера / API',
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        IconButton(
+                          onPressed: () => _showMcpServersDialog(context),
+                          icon: Icon(
+                            LucideIcons.blocks,
+                            size: 17,
+                            color: ref
+                                    .watch(mcpServiceProvider)
+                                    .any((s) => s.isEnabled)
+                                ? const Color(0xFF22C55E)
+                                : mutedColor,
+                          ),
+                          tooltip: 'MCP серверы (Flutter / Context7 / Git)',
                           visualDensity: VisualDensity.compact,
                         ),
                         IconButton(
@@ -1959,5 +1975,132 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     groqCtrl.dispose();
     xaiCtrl.dispose();
     mistralCtrl.dispose();
+  }
+
+  Future<void> _showMcpServersDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return Consumer(
+          builder: (ctx, modalRef, _) {
+            final servers = modalRef.watch(mcpServiceProvider);
+            final workspacePath =
+                modalRef.read(workspaceProvider).currentPath ?? '.';
+            final presets =
+                McpService.topPresets(workspacePath: workspacePath);
+
+            return AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(LucideIcons.blocks, size: 18, color: Color(0xFF22C55E)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'MCP-серверы (Агент + Flutter)',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 440,
+                height: 430,
+                child: ListView(
+                  children: [
+                    if (servers.isNotEmpty) ...[
+                      const Text(
+                        'Подключённые серверы',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      for (final s in servers)
+                        ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          leading: Switch(
+                            value: s.isEnabled,
+                            onChanged: (_) => modalRef
+                                .read(mcpServiceProvider.notifier)
+                                .toggleServer(s.name),
+                          ),
+                          title: Text(s.name),
+                          subtitle: Text(
+                            s.type == McpServerType.stdio
+                                ? '${s.command} ${s.args.join(' ')}'
+                                : s.url,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline, size: 18),
+                            onPressed: () => modalRef
+                                .read(mcpServiceProvider.notifier)
+                                .removeServer(s.name),
+                          ),
+                        ),
+                      const Divider(height: 20),
+                    ],
+                    const Text(
+                      'Топ MCP-серверов (добавить в 1 клик)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    for (final preset in presets)
+                      Builder(
+                        builder: (_) {
+                          final added = servers
+                              .any((s) => s.name == preset.config.name);
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 6),
+                            child: ListTile(
+                              dense: true,
+                              title: Text(
+                                preset.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              subtitle: Text(
+                                preset.description,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                              trailing: added
+                                  ? const Icon(
+                                      Icons.check_circle,
+                                      color: Color(0xFF22C55E),
+                                      size: 18,
+                                    )
+                                  : FilledButton.tonal(
+                                      onPressed: () => modalRef
+                                          .read(mcpServiceProvider.notifier)
+                                          .addServer(preset.config),
+                                      child: const Text('Добавить'),
+                                    ),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Закрыть'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }

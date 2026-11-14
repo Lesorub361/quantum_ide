@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
@@ -268,11 +269,55 @@ class RoxumAgenticTools {
     };
   }
 
+  static final Map<String, ({String server, String tool})> _mcpToolRegistry = {};
+
+  static List<Map<String, dynamic>> buildMcpOpenAiTools(
+    List<Map<String, dynamic>> mcpTools,
+  ) {
+    _mcpToolRegistry.clear();
+    final out = <Map<String, dynamic>>[];
+    for (final t in mcpTools) {
+      final server = t['server']?.toString() ?? 'mcp';
+      final tool = t['name']?.toString() ?? '';
+      if (tool.isEmpty) continue;
+      final safeName =
+          'mcp__${server.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}__${tool.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_')}';
+      _mcpToolRegistry[safeName] = (server: server, tool: tool);
+      final schema = (t['inputSchema'] as Map?)?.cast<String, dynamic>() ??
+          const {'type': 'object', 'properties': <String, dynamic>{}};
+      out.add({
+        'type': 'function',
+        'function': {
+          'name': safeName,
+          'description': '[MCP:$server] ${t['description'] ?? tool}',
+          'parameters': schema,
+        },
+      });
+    }
+    return out;
+  }
+
   Future<RoxumToolExecutionResult> execute(
     String name,
     Map<String, dynamic> args,
   ) async {
     try {
+      if (name.startsWith('mcp__')) {
+        final target = _mcpToolRegistry[name];
+        if (target == null) {
+          return RoxumToolExecutionResult(
+            success: false,
+            output: 'MCP tool not registered: $name',
+          );
+        }
+        final res = await _ref
+            .read(mcpServiceProvider.notifier)
+            .executeMcpTool(target.server, target.tool, args);
+        return RoxumToolExecutionResult(
+          success: res['isError'] != true,
+          output: jsonEncode(res),
+        );
+      }
       switch (name) {
         case 'activeEditorFile':
           return _activeEditorFile();

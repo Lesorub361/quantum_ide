@@ -2670,6 +2670,13 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                     const SizedBox(width: 3),
                   ],
                   _buildTerminalActionButton(
+                    LucideIcons.palette,
+                    'Фон, палитра и шрифт',
+                    () => showConduitAppearanceSheet(context, ref),
+                    color: Colors.cyanAccent,
+                  ),
+                  const SizedBox(width: 3),
+                  _buildTerminalActionButton(
                     LucideIcons.plus,
                     l10n.newSession,
                     () => notifier.createNewSession(),

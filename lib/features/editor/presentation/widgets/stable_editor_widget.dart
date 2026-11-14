@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:re_editor/re_editor.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/code_crafter_ai_service.dart';
@@ -1227,12 +1229,25 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
         fontSize: settings.fontSize,
         fontFamily: _getFontFamily(settings.editorFontFamily),
         fontHeight: 1.48,
-        cursorColor: Colors.cyanAccent,
+        cursorColor: settings.syncAppWithTerminalPalette
+            ? resolveConduitPalette(settings.terminalTheme).accent
+            : Colors.cyanAccent,
         cursorWidth: 2.2,
-        cursorLineColor: const Color(0xFF161C2C).withValues(alpha: 0.42),
-        selectionColor: Colors.cyanAccent.withValues(alpha: 0.26),
-        chunkIndicatorColor: Colors.cyanAccent.withValues(alpha: 0.5),
-        backgroundColor: const Color(0xFF090B12),
+        cursorLineColor: (settings.syncAppWithTerminalPalette
+                ? resolveConduitPalette(settings.terminalTheme).panel
+                : const Color(0xFF161C2C))
+            .withValues(alpha: 0.48),
+        selectionColor: (settings.syncAppWithTerminalPalette
+                ? resolveConduitPalette(settings.terminalTheme).accent
+                : Colors.cyanAccent)
+            .withValues(alpha: 0.26),
+        chunkIndicatorColor: (settings.syncAppWithTerminalPalette
+                ? resolveConduitPalette(settings.terminalTheme).accent
+                : Colors.cyanAccent)
+            .withValues(alpha: 0.5),
+        backgroundColor: settings.syncAppWithTerminalPalette
+            ? resolveConduitPalette(settings.terminalTheme).canvas
+            : const Color(0xFF090B12),
         codeTheme: applyHighlighting
             ? _getHighlightTheme(settings.editorTheme)
             : null,

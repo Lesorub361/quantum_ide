@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:quantum_ide/core/services/mcp_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
@@ -492,9 +493,21 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           )
         : null;
 
-    final toolsSchema = state.chatMode == RoxumChatMode.agent
+    final baseTools = state.chatMode == RoxumChatMode.agent
         ? RoxumAgenticTools.buildOpenAiTools(state.toolSelections)
         : const <Map<String, dynamic>>[];
+    List<Map<String, dynamic>> mcpTools = const [];
+    if (state.chatMode == RoxumChatMode.agent &&
+        ref.read(mcpServiceProvider).any((s) => s.isEnabled)) {
+      try {
+        final rawMcp = await ref
+            .read(mcpServiceProvider.notifier)
+            .getAvailableMcpTools()
+            .timeout(const Duration(seconds: 3));
+        mcpTools = RoxumAgenticTools.buildMcpOpenAiTools(rawMcp);
+      } catch (_) {}
+    }
+    final toolsSchema = <Map<String, dynamic>>[...baseTools, ...mcpTools];
 
     try {
       final finalAnswer = await _client.runAgentLoop(

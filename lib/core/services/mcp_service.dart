@@ -344,12 +344,93 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
   }
 
   Future<void> addServer(McpServerConfig config) async {
+    if (state.any((s) => s.name == config.name)) return;
     state = [...state, config];
     await saveConfigs();
     if (config.isEnabled) {
       await _getOrCreateClient(config).connect();
     }
   }
+
+  static List<({String title, String description, McpServerConfig config})>
+      topPresets({String workspacePath = '.'}) => [
+            (
+              title: 'Dart & Flutter MCP',
+              description:
+                  'Официальный Dart/Flutter MCP: анализ, pub get, поиск ошибок и виджетов',
+              config: McpServerConfig(
+                name: 'dart-flutter',
+                type: McpServerType.stdio,
+                command: 'dart',
+                args: const ['mcp-server'],
+              ),
+            ),
+            (
+              title: 'Context7 Docs',
+              description:
+                  'Актуальная документация Flutter, Dart (pub.dev), Riverpod и любых библиотек',
+              config: McpServerConfig(
+                name: 'context7',
+                type: McpServerType.stdio,
+                command: 'npx',
+                args: const ['-y', '@upstash/context7-mcp'],
+              ),
+            ),
+            (
+              title: 'Filesystem MCP',
+              description: 'Безопасная работа с файлами и каталогами проекта',
+              config: McpServerConfig(
+                name: 'filesystem',
+                type: McpServerType.stdio,
+                command: 'npx',
+                args: ['-y', '@modelcontextprotocol/server-filesystem', workspacePath],
+              ),
+            ),
+            (
+              title: 'Git MCP',
+              description: 'Статус репозитория, диффы, ветки и история коммитов',
+              config: McpServerConfig(
+                name: 'git',
+                type: McpServerType.stdio,
+                command: 'uvx',
+                args: const ['mcp-server-git'],
+              ),
+            ),
+            (
+              title: 'Fetch / Web MCP',
+              description: 'Загрузка веб-страниц, документации и API-ответов',
+              config: McpServerConfig(
+                name: 'fetch',
+                type: McpServerType.stdio,
+                command: 'uvx',
+                args: const ['mcp-server-fetch'],
+              ),
+            ),
+            (
+              title: 'Sequential Thinking',
+              description:
+                  'Пошаговое глубокое планирование перед сложными изменениями кода',
+              config: McpServerConfig(
+                name: 'sequential-thinking',
+                type: McpServerType.stdio,
+                command: 'npx',
+                args: const [
+                  '-y',
+                  '@modelcontextprotocol/server-sequential-thinking',
+                ],
+              ),
+            ),
+            (
+              title: 'GitHub MCP',
+              description: 'Работа с репозиториями, Issues и Pull Requests на GitHub',
+              config: McpServerConfig(
+                name: 'github',
+                type: McpServerType.stdio,
+                command: 'npx',
+                args: const ['-y', '@modelcontextprotocol/server-github'],
+              ),
+            ),
+          ];
 
   Future<void> removeServer(String name) async {
     final client = _clients.remove(name);
