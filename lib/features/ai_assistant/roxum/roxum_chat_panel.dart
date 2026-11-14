@@ -21,7 +21,9 @@ import 'package:quantum_ide/features/ai_assistant/roxum/roxum_modern_cards.dart'
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_tool_catalog.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
+import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
+import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
 class RoxumChatPanel extends ConsumerStatefulWidget {
   final VoidCallback? onClose;
@@ -1486,6 +1488,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           height: 1.45,
         ),
         codeBuilder: (ctx, name, code, closed) {
+          final isShell = _isShellCommandBlock(name, code);
           final ed = ref.read(editorProvider);
           final activeFile = (ed.openFiles.isNotEmpty &&
                   ed.activeTabIndex >= 0 &&
@@ -1495,21 +1498,124 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
           return RoxumCodeBlockCard(
             code: code,
             language: name,
+            isTerminalCommand: isShell,
             surfaceColor: surfaceColor,
             textColor: textColor,
-            onInsertIntoEditor: activeFile != null
+            onRunInTerminal: isShell
                 ? () {
-                    activeFile.controller.replaceSelection(code);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Код вставлен в редактор'),
-                        duration: Duration(seconds: 1),
-                      ),
-                    );
+                    final cleaned = code
+                        .split('\n')
+                        .map((l) => l.trim())
+                        .where((l) => l.isNotEmpty && !l.startsWith('#'))
+                        .map((l) => l.startsWith(r'$ ') ? l.substring(2) : l)
+                        .join(' && ');
+                    if (cleaned.isEmpty) return;
+                    final panel = ref.read(panelProvider.notifier);
+                    panel.selectTab(PanelTab.terminal);
+                    panel.openPanel();
+                    ref
+                        .read(terminalTabsProvider.notifier)
+                        .sendCommand(cleaned);
                   }
+                : null,
+            onInsertIntoEditor: (!isShell)
+                ? () => _applyCodeBlockToTargetFile(code, activeFile)
                 : null,
           );
         },
+      ),
+    );
+  }
+
+  bool _isShellCommandBlock(String lang, String code) {
+    final l = lang.trim().toLowerCase();
+    if (const {
+      'bash',
+      'sh',
+      'zsh',
+      'shell',
+      'console',
+      'terminal',
+      'cmd',
+      'powershell',
+    }.contains(l)) {
+      return true;
+    }
+    if (l.isNotEmpty) return false;
+    final firstLine = code
+        .split('\n')
+        .map((e) => e.trim())
+        .firstWhere((e) => e.isNotEmpty, orElse: () => '');
+    const prefixes = [
+      r'$ ',
+      'flutter ',
+      'dart ',
+      'git ',
+      'npm ',
+      'pnpm ',
+      'yarn ',
+      'cd ',
+      'ls ',
+      'mkdir ',
+      'rm ',
+      'python ',
+      'pip ',
+      'cargo ',
+      'adb ',
+    ];
+    return prefixes.any(firstLine.startsWith);
+  }
+
+  Future<void> _applyCodeBlockToTargetFile(
+    String code,
+    EditorFile? activeFile,
+  ) async {
+    final workspace = ref.read(workspaceProvider).currentPath ?? '';
+    final lines = code.split('\n');
+    EditorFile? target = activeFile;
+    var payload = code;
+
+    if (lines.isNotEmpty && workspace.isNotEmpty) {
+      final first = lines.first.trim();
+      final match = RegExp(
+        r'^(?://|#|--|/\*)\s*(?:file:\s*)?([^\s*]+?\.[a-zA-Z0-9]+)',
+      ).firstMatch(first);
+      if (match != null) {
+        final rel = match.group(1)!;
+        final candidatePath = p.isAbsolute(rel) ? rel : p.join(workspace, rel);
+        if (File(candidatePath).existsSync()) {
+          await ref.read(editorProvider.notifier).openFile(candidatePath);
+          final ed = ref.read(editorProvider);
+          final openedIdx =
+              ed.openFiles.indexWhere((f) => f.path == candidatePath);
+          if (openedIdx >= 0) {
+            target = ed.openFiles[openedIdx];
+            payload = lines.skip(1).join('\n').trimLeft();
+          }
+        }
+      }
+    }
+
+    if (target == null) return;
+    final ctrl = target.controller;
+    final hasSelection = !ctrl.selection.isCollapsed;
+    final looksLikeFullFile = !hasSelection &&
+        lines.length >= 12 &&
+        (payload.trimLeft().startsWith('import ') ||
+            payload.trimLeft().startsWith('library ') ||
+            payload.trimLeft().startsWith('<!DOCTYPE'));
+
+    if (looksLikeFullFile) {
+      ctrl.text = payload;
+    } else {
+      ctrl.replaceSelection(payload);
+    }
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Применено в ${p.basename(target.path)}'),
+        duration: const Duration(seconds: 2),
       ),
     );
   }

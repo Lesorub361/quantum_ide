@@ -59,7 +59,7 @@ class SettingsState {
     this.formatOnSave = false,
     this.hardwareKeyboardMode = false,
     this.syncAppWithTerminalPalette = true,
-    this.useCodeCrafterEditor = false,
+    this.useCodeCrafterEditor = true,
     this.deepseekApiKey = '',
     this.openrouterApiKey = '',
     this.openaiApiKey = '',
@@ -256,7 +256,7 @@ class SettingsService extends StateNotifier<SettingsState> {
       syncAppWithTerminalPalette:
           prefs.getBool('settings_sync_app_with_terminal_palette') ?? true,
       useCodeCrafterEditor:
-          prefs.getBool('settings_use_code_crafter_editor') ?? false,
+          prefs.getBool('settings_use_code_crafter_editor') ?? true,
       deepseekApiKey: prefs.getString(_keyDeepseekApiKey) ?? '',
       openrouterApiKey: prefs.getString(_keyOpenrouterApiKey) ?? '',
       openaiApiKey: prefs.getString(_keyOpenaiApiKey) ?? '',

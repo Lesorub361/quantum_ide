@@ -693,7 +693,9 @@ class _RoxumFileDiffCardState extends State<RoxumFileDiffCard> {
 class RoxumCodeBlockCard extends StatelessWidget {
   final String code;
   final String language;
+  final bool isTerminalCommand;
   final VoidCallback? onInsertIntoEditor;
+  final VoidCallback? onRunInTerminal;
   final Color? surfaceColor;
   final Color? textColor;
 
@@ -701,7 +703,9 @@ class RoxumCodeBlockCard extends StatelessWidget {
     super.key,
     required this.code,
     required this.language,
+    this.isTerminalCommand = false,
     this.onInsertIntoEditor,
+    this.onRunInTerminal,
     this.surfaceColor,
     this.textColor,
   });
@@ -734,8 +738,16 @@ class RoxumCodeBlockCard extends StatelessWidget {
             ),
             child: Row(
               children: [
+                Icon(
+                  isTerminalCommand ? LucideIcons.terminal : LucideIcons.code,
+                  size: 12,
+                  color: accent,
+                ),
+                const SizedBox(width: 5),
                 Text(
-                  language.isEmpty ? 'code' : language,
+                  language.isEmpty
+                      ? (isTerminalCommand ? 'terminal' : 'code')
+                      : language,
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w600,
@@ -743,7 +755,30 @@ class RoxumCodeBlockCard extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                if (onInsertIntoEditor != null) ...[
+                if (isTerminalCommand && onRunInTerminal != null) ...[
+                  InkWell(
+                    onTap: onRunInTerminal,
+                    child: Row(
+                      children: [
+                        Icon(
+                          LucideIcons.terminal,
+                          size: 12,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          AppLocalizations.of(context)!.terminal,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: accent,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ] else if (!isTerminalCommand && onInsertIntoEditor != null) ...[
                   InkWell(
                     onTap: onInsertIntoEditor,
                     child: Row(

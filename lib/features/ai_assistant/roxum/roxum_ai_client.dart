@@ -700,6 +700,8 @@ class RoxumAiClient {
 
     final messages = List<Map<String, dynamic>>.from(historyMessages);
     const maxIterations = 16;
+    var executedAnyTool = false;
+    var nudgedHallucination = false;
 
     try {
       for (int step = 0; step < maxIterations; step++) {
@@ -758,9 +760,26 @@ class RoxumAiClient {
         }
 
         if (turn.toolCalls.isEmpty || agenticTools == null) {
-          return _splitThinkTags(turn.text).answer;
+          final cleanAnswer = _splitThinkTags(turn.text).answer;
+          if (agenticTools != null &&
+              tools.isNotEmpty &&
+              !executedAnyTool &&
+              !nudgedHallucination &&
+              _looksLikeFakeEditClaim(cleanAnswer)) {
+            nudgedHallucination = true;
+            messages.add({'role': 'assistant', 'content': cleanAnswer});
+            messages.add({
+              'role': 'user',
+              'content':
+                  'СТОП! Ты не вызвал ни одного инструмента (readFile / editFile / writeFile / runCommand), поэтому в проекте НИЧЕГО не изменилось. '
+                      'Не пиши отчёт о несуществующих правках — прямо сейчас вызови инструменты и реально прочитай и отредактируй файлы.',
+            });
+            continue;
+          }
+          return cleanAnswer;
         }
 
+        executedAnyTool = true;
         messages.add(turn.rawAssistantMessage);
 
         for (final call in turn.toolCalls) {
@@ -1081,8 +1100,19 @@ class RoxumAiClient {
           'model': model.model,
           'messages': messages,
           if (tools.isNotEmpty) 'tools': tools,
+          if (tools.isNotEmpty) 'tool_choice': 'auto',
         };
     }
+  }
+
+  static final _fakeEditRegex = RegExp(
+    r'(прочитал|внёс\s+правки|правки\s+применены|вот\s+что\s+сделано|добавил|убрал|исправил|переписал|обновил|edited|applied|updated\s+the\s+file|changes\s+made)',
+    caseSensitive: false,
+  );
+
+  bool _looksLikeFakeEditClaim(String text) {
+    if (text.trim().isEmpty) return false;
+    return _fakeEditRegex.hasMatch(text);
   }
 
   _ParsedTurn _parseResponse(
