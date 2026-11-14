@@ -550,6 +550,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   child: Breadcrumbs(
                                     path: activeFile.path,
                                     workspacePath: workspacePath,
+                                    backgroundColor: _palette?.panel ??
+                                        const Color(0xFF0D0F14),
+                                    borderColor: Colors.transparent,
+                                    accentColor: _palette?.accent,
+                                    textColor: _palette?.foreground,
                                   ),
                                 ),
                                 IconButton(

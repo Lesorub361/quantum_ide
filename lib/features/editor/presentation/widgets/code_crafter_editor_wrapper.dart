@@ -242,6 +242,39 @@ class _CodeCrafterEditorWrapperState
         enableGutterDivider: true,
         enableRulerLines: true,
         enableSuggestions: settings.autoCompletion,
+        suggestionStyle: SuggestionStyle(
+          elevation: 8,
+          backgroundColor:
+              palette?.panelElevated ?? palette?.panel ?? const Color(0xFF141824),
+          focusColor: accentColor.withValues(alpha: 0.20),
+          hoverColor: fgColor.withValues(alpha: 0.08),
+          splashColor: accentColor.withValues(alpha: 0.25),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: borderColor, width: 1),
+          ),
+          textStyle: baseStyle.copyWith(
+            fontSize: (settings.fontSize * 0.90).clamp(11.5, 16.0),
+            height: 1.2,
+            color: fgColor,
+          ),
+        ),
+        hoverDetailsStyle: HoverDetailsStyle(
+          elevation: 8,
+          backgroundColor:
+              palette?.panelElevated ?? palette?.panel ?? const Color(0xFF141824),
+          focusColor: accentColor.withValues(alpha: 0.20),
+          hoverColor: fgColor.withValues(alpha: 0.08),
+          splashColor: accentColor.withValues(alpha: 0.25),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: borderColor, width: 1),
+          ),
+          textStyle: baseStyle.copyWith(
+            fontSize: (settings.fontSize * 0.86).clamp(11.0, 15.0),
+            color: fgColor,
+          ),
+        ),
         cursorColor: accentColor,
         selectionColor: accentColor.withValues(alpha: 0.25),
         selectionHandleColor: accentColor,

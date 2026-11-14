@@ -175,6 +175,7 @@ class _CodeCrafterState extends State<CodeCrafter> {
   TextEditingValue? _previousValue;
   bool _lspReady = false;
   String? content;
+  DateTime? _aiCompletionCooldownUntil;
 
   @override
   void initState() {
@@ -316,23 +317,14 @@ class _CodeCrafterState extends State<CodeCrafter> {
             .allMatches(widget.controller.text)
             .map((m) => m.group(0)!)
             .toList();
-        String currentWord = '';
-        if (widget.controller.text.isNotEmpty) {
-          final match = RegExp(r'\w+$').firstMatch(widget.controller.text);
-          if (match != null) {
-            currentWord = match.group(0)!;
-          }
-        }
         _suggestions.clear();
+        final lowerPrefix = prefix.toLowerCase();
         for (var i in words) {
-          if (!_suggestions.contains(i) && i != currentWord) {
+          if (i.length > prefix.length &&
+              i.toLowerCase().startsWith(lowerPrefix) &&
+              !_suggestions.contains(i)) {
             _suggestions.add(i);
           }
-        }
-        if (prefix.isNotEmpty) {
-          _suggestions = _suggestions
-              .where((s) => s.startsWith(prefix))
-              .toList();
         }
 
         if (isTyping &&
@@ -394,15 +386,31 @@ class _CodeCrafterState extends State<CodeCrafter> {
 
         _debounceTimer?.cancel();
 
-        if (widget.aiCompletion?.completionType == CompletionType.auto ||
-            widget.aiCompletion?.completionType == CompletionType.mixed) {
+        if ((widget.aiCompletion?.completionType == CompletionType.auto ||
+                widget.aiCompletion?.completionType == CompletionType.mixed) &&
+            (_aiCompletionCooldownUntil == null ||
+                DateTime.now().isAfter(_aiCompletionCooldownUntil!))) {
           _debounceTimer = Timer(
             Duration(milliseconds: widget.aiCompletion!.debounceTime),
             () async {
-              Shared().aiResponse = await _getCachedResponse(codeToSend);
-              Shared().lastCursorPosition =
-                  widget.controller.selection.baseOffset;
-              setState(() => _aiSuggestion = true);
+              try {
+                final suggestion = await _getCachedResponse(codeToSend);
+                if (!mounted || suggestion.isEmpty) return;
+                Shared().aiResponse = suggestion;
+                Shared().lastCursorPosition =
+                    widget.controller.selection.baseOffset;
+                setState(() => _aiSuggestion = true);
+              } catch (e) {
+                final msg = e.toString();
+                if (msg.contains('402') ||
+                    msg.contains('401') ||
+                    msg.contains('Insufficient credits')) {
+                  _aiCompletionCooldownUntil = DateTime.now().add(
+                    const Duration(minutes: 5),
+                  );
+                }
+                debugPrint('AI inline completion skipped: $e');
+              }
             },
           );
         }
@@ -599,23 +607,30 @@ class _CodeCrafterState extends State<CodeCrafter> {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxOverlayHeight),
           child: Card(
+            margin: EdgeInsets.zero,
+            surfaceTintColor: Colors.transparent,
             elevation: widget.suggestionStyle?.elevation ?? 6,
             color:
                 widget.suggestionStyle?.backgroundColor ??
-                widget.editorTheme?['root']?.backgroundColor?.withAlpha(220) ??
-                Colors.black87,
+                widget.editorTheme?['root']?.backgroundColor?.withAlpha(242) ??
+                const Color(0xFF141824),
             shape:
                 widget.suggestionStyle?.shape ??
-                BeveledRectangleBorder(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                   side: BorderSide(
-                    color: Shared().theme['root']?.color ?? Colors.white,
-                    width: 0.2,
+                    color: (widget.editorTheme?['root']?.color ?? Colors.white)
+                        .withAlpha(45),
+                    width: 0.8,
                   ),
                 ),
             child: Focus(
               child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemExtent: (widget.textStyle?.fontSize ?? 14) + 5,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemExtent: ((widget.textStyle?.fontSize ?? 14) * 1.8).clamp(
+                  24.0,
+                  36.0,
+                ),
                 shrinkWrap: true,
                 itemCount: _suggestions.length,
                 itemBuilder: (_, i) {
@@ -802,11 +817,18 @@ class _CodeCrafterState extends State<CodeCrafter> {
         widget.aiCompletion?.completionType == CompletionType.mixed) {
       final String text = widget.controller.text;
       final int cursorPosition = widget.controller.selection.baseOffset;
+      if (cursorPosition < 0 || cursorPosition > text.length) return;
       final String codeToSend =
           "${text.substring(0, cursorPosition)}<|CURSOR|>${text.substring(cursorPosition)}";
-      Shared().aiResponse = await _getCachedResponse(codeToSend);
-      Shared().lastCursorPosition = widget.controller.selection.baseOffset;
-      setState(() => _aiSuggestion = true);
+      try {
+        final suggestion = await _getCachedResponse(codeToSend);
+        if (!mounted || suggestion.isEmpty) return;
+        Shared().aiResponse = suggestion;
+        Shared().lastCursorPosition = widget.controller.selection.baseOffset;
+        setState(() => _aiSuggestion = true);
+      } catch (e) {
+        debugPrint('Manual AI suggestion failed: $e');
+      }
     }
   }
 

@@ -69,16 +69,24 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
     return false;
   }
 
+  Future<bool> _dirExistsSafe(String path) async {
+    try {
+      return await Directory(path).exists();
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<String> _getAndroidSdkPathAsync() async {
-    if (await Directory('/root/android-sdk').exists()) {
+    if (await _dirExistsSafe('/root/android-sdk')) {
       return '/root/android-sdk';
     }
-    if (await Directory('/usr/lib/android-sdk').exists()) {
+    if (await _dirExistsSafe('/usr/lib/android-sdk')) {
       return '/usr/lib/android-sdk';
     }
     final home = Platform.environment['HOME'] ?? '/root';
     final userSdk = p.join(home, 'Android', 'Sdk');
-    if (await Directory(userSdk).exists()) {
+    if (await _dirExistsSafe(userSdk)) {
       return userSdk;
     }
     final runtime = _ref.read(runtimeServiceProvider);
@@ -89,7 +97,7 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
         '/data/data/com.example.quantum_ide/files/rootfs/ubuntu/root/android-sdk',
       ];
       for (final candidate in prootCandidates) {
-        if (await Directory(candidate).exists()) return candidate;
+        if (await _dirExistsSafe(candidate)) return candidate;
       }
     }
     return Platform.environment['ANDROID_HOME'] ??
@@ -288,9 +296,13 @@ class PackageService extends StateNotifier<List<OptionalPackage>> {
       Future<bool> hasCmd(String cmd) => _hasCommandAsync(cmd, searchDirs);
       Future<bool> hasRootfsEntity(String relPath) async {
         if (rootfsPath.isEmpty) return false;
-        final fullPath = p.join(rootfsPath, relPath);
-        final type = await FileSystemEntity.type(fullPath, followLinks: false);
-        return type != FileSystemEntityType.notFound;
+        try {
+          final fullPath = p.join(rootfsPath, relPath);
+          final type = await FileSystemEntity.type(fullPath, followLinks: false);
+          return type != FileSystemEntityType.notFound;
+        } catch (_) {
+          return false;
+        }
       }
       Future<bool> hasRootfsBin(String bin) async {
         return await hasRootfsEntity(p.join('usr', 'bin', bin)) ||

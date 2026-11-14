@@ -228,6 +228,7 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
   late List<DiffMarker> _diffMarkers;
   late final CodeFindController _findController;
   late final SelectionToolbarController _toolbarController;
+  StateController<CodeFindController?>? _activeFindNotifier;
 
   final Map<int, Offset> _pinchPointers = {};
   double _pinchInitialDistance = 0.0;
@@ -528,9 +529,10 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       builder: _buildToolbarMenu,
     );
     _setupControllerListener();
+    _activeFindNotifier = ref.read(activeFindControllerProvider.notifier);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(activeFindControllerProvider.notifier).state = _findController;
+        _activeFindNotifier?.state = _findController;
       }
     });
   }
@@ -565,8 +567,9 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
     _aiCompletionTimer?.cancel();
     QuantumSelectionToolbarController.dismissAll();
     _removeControllerListener();
-    if (ref.read(activeFindControllerProvider) == _findController) {
-      ref.read(activeFindControllerProvider.notifier).state = null;
+    final findNotifier = _activeFindNotifier;
+    if (findNotifier != null && findNotifier.mounted && findNotifier.state == _findController) {
+      findNotifier.state = null;
     }
     _findController.dispose();
     _scrollController.dispose();

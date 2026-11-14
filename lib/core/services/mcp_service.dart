@@ -311,10 +311,12 @@ class McpService extends StateNotifier<List<McpServerConfig>> {
         state = list
             .map((s) => McpServerConfig.fromJson(jsonDecode(s)))
             .toList();
-        // Connect to enabled servers
+        // Connect to enabled servers without crashing on missing local binaries
         for (final server in state) {
           if (server.isEnabled) {
-            _getOrCreateClient(server).connect();
+            _getOrCreateClient(server).connect().catchError((Object e) {
+              debugPrint('MCP auto-connect skipped for ${server.name}: $e');
+            });
           }
         }
       } catch (e) {
