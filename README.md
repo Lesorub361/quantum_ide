@@ -11,7 +11,7 @@
 [![Build iOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml)
 [![Build Web](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml)
 
-**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.217`](https://github.com/Lesorub361/quantum_ide/releases/latest)
+**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.230`](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
 </div>
 
@@ -39,7 +39,9 @@ QuantumIDE собирается автоматически через GitHub Act
 ### 🤖 AI-агент и умное автодополнение (Roxum Agent + CodeCrafter)
 - **Roxum AI Agent & Chat UI**: полноценный чат-ассистент в режимах **Ask** и **Agent** с историей сессий, переключателем моделей и настройкой прав для каждого инструмента.
 - **20 агентских инструментов**: чтение/поиск/правка файлов, диагностика ошибок, Git (`status`, `diff`, `log`), выполнение команд в Ubuntu PRoot, а также **Keep / Undo Diff** — просмотр и подтверждение или откат каждого изменения, сделанного агентом.
-- **CodeCrafter Inline AI**: встроенное дебаунс-автодополнение кода на базе [`flutter_code_crafter`](packages/flutter_code_crafter) прямо в редакторе.
+- **CodeCrafter Editor & LSP Bridge (`flutter_code_crafter`)**: новый основной редактор кода с подсветкой синтаксиса для всех языков (`allLanguages`), фолдингом, брейкпоинтами, направляющими отступов, встроенным AI inline-дополнением и мостом к общему `LspService` (`LspBridgeConfig`) для подсветки ошибок/предупреждений, LSP-подсказок с иконками и hover-документации.
+- **Умная вставка из AI-чата**: bash/terminal-команды из ответа AI отправляются прямо в терминал, а блоки кода вставляются в активный редактор.
+- **Единая темизация и 5 языков**: синхронизация палитры во всех панелях (хлебные крошки, оверлеи автодополнения, карточки кода в чате) и полный перевод интерфейса на RU / EN / ES / FR / ZH.
 - **Мультипровайдерность**: Google Gemini, DeepSeek, OpenAI, Anthropic Claude, OpenRouter, Groq, xAI Grok, Mistral, а также локальные модели (Ollama / `llama.cpp` / Custom OpenAI-compatible API).
 
 ### 💻 Терминал нового поколения (Conduit Terminal Engine)
