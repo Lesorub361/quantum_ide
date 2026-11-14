@@ -27,6 +27,7 @@ class SettingsState {
   final String hotkeysJson;
   final bool sdCardSync;
   final bool formatOnSave;
+  final bool hardwareKeyboardMode;
   final bool isInitialized;
 
   SettingsState({
@@ -54,6 +55,7 @@ class SettingsState {
     this.hotkeysJson = '{}',
     this.sdCardSync = true,
     this.formatOnSave = false,
+    this.hardwareKeyboardMode = false,
     this.deepseekApiKey = '',
     this.openrouterApiKey = '',
     this.openaiApiKey = '',
@@ -108,6 +110,7 @@ class SettingsState {
     String? hotkeysJson,
     bool? sdCardSync,
     bool? formatOnSave,
+    bool? hardwareKeyboardMode,
     String? deepseekApiKey,
     String? openrouterApiKey,
     String? openaiApiKey,
@@ -149,6 +152,7 @@ class SettingsState {
       hotkeysJson: hotkeysJson ?? this.hotkeysJson,
       sdCardSync: sdCardSync ?? this.sdCardSync,
       formatOnSave: formatOnSave ?? this.formatOnSave,
+      hardwareKeyboardMode: hardwareKeyboardMode ?? this.hardwareKeyboardMode,
       deepseekApiKey: deepseekApiKey ?? this.deepseekApiKey,
       openrouterApiKey: openrouterApiKey ?? this.openrouterApiKey,
       openaiApiKey: openaiApiKey ?? this.openaiApiKey,
@@ -239,6 +243,7 @@ class SettingsService extends StateNotifier<SettingsState> {
       hotkeysJson: prefs.getString(_keyHotkeys) ?? '{}',
       sdCardSync: prefs.getBool(_keySdCardSync) ?? true,
       formatOnSave: prefs.getBool(_keyFormatOnSave) ?? false,
+      hardwareKeyboardMode: prefs.getBool('settings_hardware_keyboard_mode') ?? false,
       deepseekApiKey: prefs.getString(_keyDeepseekApiKey) ?? '',
       openrouterApiKey: prefs.getString(_keyOpenrouterApiKey) ?? '',
       openaiApiKey: prefs.getString(_keyOpenaiApiKey) ?? '',
@@ -278,6 +283,12 @@ class SettingsService extends StateNotifier<SettingsState> {
     state = state.copyWith(aiAutoCompletion: v);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyAiAutoCompletion, v);
+  }
+
+  Future<void> setHardwareKeyboardMode(bool v) async {
+    state = state.copyWith(hardwareKeyboardMode: v);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('settings_hardware_keyboard_mode', v);
   }
 
   Future<void> setWordWrap(bool v) async {

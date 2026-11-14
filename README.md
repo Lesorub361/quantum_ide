@@ -11,7 +11,7 @@
 [![Build iOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml)
 [![Build Web](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml)
 
-**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.216`](https://github.com/Lesorub361/quantum_ide/releases/latest)
+**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.217`](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
 </div>
 

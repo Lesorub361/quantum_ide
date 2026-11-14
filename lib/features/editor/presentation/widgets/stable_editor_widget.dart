@@ -1283,6 +1283,11 @@ class StableEditorWidgetState extends ConsumerState<StableEditorWidget> {
       },
       onPointerUp: (e) {
         _pinchPointers.remove(e.pointer);
+        if (widget.settings.hardwareKeyboardMode) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            SystemChannels.textInput.invokeMethod('TextInput.hide');
+          });
+        }
       },
       onPointerCancel: (e) {
         _pinchPointers.remove(e.pointer);

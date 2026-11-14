@@ -138,7 +138,29 @@ class _ConduitAppearanceSheet extends ConsumerWidget {
                     ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  'Физическая клавиатура (скрывать экранную)',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                subtitle: Text(
+                  'Для USB / Bluetooth клавиатур: не поднимать виртуальную клавиатуру Android при тапе',
+                  style: GoogleFonts.inter(
+                    fontSize: 11.5,
+                    color: Colors.white60,
+                  ),
+                ),
+                value: settings.hardwareKeyboardMode,
+                activeThumbColor: currentPalette.accent,
+                onChanged: (v) => notifier.setHardwareKeyboardMode(v),
+              ),
+              const SizedBox(height: 14),
               Text(
                 'Палитра и фон терминала (${AppPalette.values.length})',
                 style: GoogleFonts.inter(

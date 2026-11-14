@@ -20,6 +20,7 @@ class ConduitTerminalSurface extends StatefulWidget {
     this.onTapUp,
     this.onSecondaryTapDown,
     this.customTheme,
+    this.hardwareKeyboardOnly = false,
     super.key,
   });
 
@@ -36,6 +37,7 @@ class ConduitTerminalSurface extends StatefulWidget {
   final void Function(TapUpDetails, CellOffset)? onTapUp;
   final void Function(TapDownDetails, CellOffset)? onSecondaryTapDown;
   final TerminalTheme? customTheme;
+  final bool hardwareKeyboardOnly;
 
   @override
   State<ConduitTerminalSurface> createState() => _ConduitTerminalSurfaceState();
@@ -127,7 +129,9 @@ class _ConduitTerminalSurfaceState extends State<ConduitTerminalSurface> {
             focusNode: widget.focusNode,
             autofocus: widget.autofocus,
             deleteDetection: true,
-            keyboardType: TextInputType.visiblePassword,
+            keyboardType: widget.hardwareKeyboardOnly
+                ? TextInputType.none
+                : TextInputType.visiblePassword,
             theme: effectiveTheme,
             textStyle: TerminalStyle(
               fontFamily: widget.fontFamily,

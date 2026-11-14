@@ -27,9 +27,8 @@ import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/build_resource_optimizer.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/build_target_dialog.dart';
 
-// Standalone Sidebar Run Panel
-const String _ktRepairCmd =
-    '(if [ -f app/build.gradle.kts ] && grep -q "kotlinOptions" app/build.gradle.kts 2>/dev/null; then python3 -c "import re; p=\'app/build.gradle.kts\'; c=open(p).read(); c=re.sub(r\'[ \\t]*kotlinOptions\\s*[{][^}]*[}]\', \'\\n\', c); c+=\'\\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {\\n    compilerOptions {\\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\\n    }\\n}\\n\' if \'compilerOptions\' not in c else \'\'; open(p,\'w\').write(c)" 2>/dev/null || true; fi) && (if [ -f app/src/main/AndroidManifest.xml ] && grep -q "@mipmap/ic_launcher" app/src/main/AndroidManifest.xml 2>/dev/null; then sed -i "s/@mipmap\\/ic_launcher_round/@android:drawable\\/sym_def_app_icon/g; s/@mipmap\\/ic_launcher/@android:drawable\\/sym_def_app_icon/g" app/src/main/AndroidManifest.xml 2>/dev/null || true; mkdir -p app/src/main/res/mipmap-anydpi-v26 2>/dev/null || true; printf \'<?xml version="1.0" encoding="utf-8"?>\\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\\n    <background android:color="@android:color/holo_blue_dark"/>\\n    <foreground android:drawable="@android:drawable/sym_def_app_icon"/>\\n</adaptive-icon>\\n\' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml 2>/dev/null || true; cp app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml 2>/dev/null || true; fi) && ([ -d /root/android-sdk ] && printf "sdk.dir=/root/android-sdk\\n" > local.properties 2>/dev/null || true) && ';
+// Project-safe: never mutate user's build.gradle.kts or AndroidManifest.xml.
+const String _ktRepairCmd = '';
 
 class SidebarRunPanel extends ConsumerStatefulWidget {
   const SidebarRunPanel({super.key});
@@ -525,31 +524,31 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
 
   Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
     return Padding(
-      padding: const EdgeInsets.only(left: 3),
+      padding: const EdgeInsets.only(left: 5, top: 2, bottom: 2),
       child: Tooltip(
         message: label,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: color.withValues(alpha: 0.2), width: 0.6),
+                color: color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: color.withValues(alpha: 0.32), width: 0.9),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 11, color: color.withValues(alpha: 0.9)),
-                  const SizedBox(width: 3),
+                  Icon(icon, size: 13.5, color: color),
+                  const SizedBox(width: 6),
                   Text(
                     label,
                     style: GoogleFonts.inter(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 9,
+                      color: Colors.white.withValues(alpha: 0.95),
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -904,10 +903,14 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               () => _runDedicatedCommand(workspaceState.currentPath,
                   '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && ([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs (v7/v8/x64) ready in project root"',
                   displayCmd: 'flutter build apk --release --split-per-abi')),
+          _buildActionButton('Web-сервер', LucideIcons.globe, const Color(0xFF38BDF8),
+              () => _runDedicatedCommand(workspaceState.currentPath,
+                  'flutter run -d web-server --web-port=8080 --web-hostname=0.0.0.0',
+                  displayCmd: 'Web-сервер (localhost:8080)')),
           _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
-              () => _runDedicatedCommand(workspaceState.currentPath, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get',
+              () => _runDedicatedCommand(workspaceState.currentPath, 'flutter pub get',
                   displayCmd: 'flutter pub get')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter clean', displayCmd: 'flutter clean')),
@@ -1060,10 +1063,14 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               () => _runDedicatedCommand(workspaceState.currentPath,
                   BuildResourceOptimizer.generateBuildCommand(target: BuildTargetType.debug),
                   displayCmd: 'flutter build apk --debug')),
+          _buildActionButton('Web-сервер', LucideIcons.globe, const Color(0xFF38BDF8),
+              () => _runDedicatedCommand(workspaceState.currentPath,
+                  'flutter run -d web-server --web-port=8080 --web-hostname=0.0.0.0',
+                  displayCmd: 'Web-сервер (localhost:8080)')),
           _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Pub Get', LucideIcons.download, Colors.blue,
-              () => _runDedicatedCommand(workspaceState.currentPath, '(if [ -f pubspec.yaml ] && ! (grep -q "3.1[3-9]" /root/flutter/bin/cache/dart-sdk/version 2>/dev/null || grep -q "3.4[7-9]" /root/flutter/version 2>/dev/null); then sed -i -E "s/sdk:.*3\\.1[3-9].*/sdk: \\x27>=3.12.0 <4.0.0\\x27/g" pubspec.yaml 2>/dev/null || true; fi) && flutter pub get',
+              () => _runDedicatedCommand(workspaceState.currentPath, 'flutter pub get',
                   displayCmd: 'flutter pub get')),
           _buildActionButton('Clean', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath, 'flutter clean', displayCmd: 'flutter clean')),
@@ -1264,31 +1271,31 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
   Widget _buildActionButton(String label, IconData icon, Color color, VoidCallback onTap) {
     return Padding(
-      padding: const EdgeInsets.only(left: 3),
+      padding: const EdgeInsets.only(left: 5, top: 2, bottom: 2),
       child: Tooltip(
         message: label,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.circular(8),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: color.withValues(alpha: 0.2), width: 0.6),
+                color: color.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: color.withValues(alpha: 0.32), width: 0.9),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 11, color: color.withValues(alpha: 0.9)),
-                  const SizedBox(width: 3),
+                  Icon(icon, size: 13.5, color: color),
+                  const SizedBox(width: 6),
                   Text(
                     label,
                     style: GoogleFonts.inter(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 9,
+                      color: Colors.white.withValues(alpha: 0.95),
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),

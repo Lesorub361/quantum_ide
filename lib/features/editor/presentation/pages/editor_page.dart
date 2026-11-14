@@ -453,6 +453,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     final isDesktop = screenWidth >= 768;
     final l10n = AppLocalizations.of(context)!;
 
+    // При повороте экрана в широкий режим закрываем Drawer, чтобы не было двух панелей сразу
+    if (isDesktop && (_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scaffoldKey.currentState?.closeDrawer();
+      });
+    }
+
     // Слушаем смену workspace ОДИН РАЗ — не на каждый build()
     ref.listen<WorkspaceState>(workspaceProvider, (prev, next) {
       final newPath = next.currentPath;
@@ -1023,7 +1030,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                               ActionIconButton(
                                 icon: LucideIcons.panel_left,
                                 color:
-                                    (screenWidth >= 1024 &&
+                                    (isDesktop &&
                                         ref.watch(leftPanelOpenProvider))
                                     ? const Color(0xFFE2E8F0)
                                     : const Color(0xFF94A3B8),
@@ -1031,7 +1038,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                   context,
                                 )!.openExplorer,
                                 onTap: () {
-                                  if (screenWidth >= 1024) {
+                                  if (isDesktop) {
                                     final isOpen = ref.read(
                                       leftPanelOpenProvider,
                                     );
@@ -1063,7 +1070,14 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                           false;
                                     }
                                   } else {
-                                    _scaffoldKey.currentState?.openDrawer();
+                                    if (_scaffoldKey
+                                            .currentState
+                                            ?.isDrawerOpen ??
+                                        false) {
+                                      _scaffoldKey.currentState?.closeDrawer();
+                                    } else {
+                                      _scaffoldKey.currentState?.openDrawer();
+                                    }
                                   }
                                 },
                               ),
@@ -1074,155 +1088,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   _buildQuickUpdatePill(ref),
-                                  // Primary Run Button — Emerald Accent
-                                  ActionIconButton(
-                                    icon: LucideIcons.play,
-                                    color: const Color(0xFF10B981),
-                                    backgroundColor: const Color(
-                                      0xFF10B981,
-                                    ).withValues(alpha: 0.14),
-                                    borderColor: const Color(
-                                      0xFF10B981,
-                                    ).withValues(alpha: 0.32),
-                                    tooltip: 'Запустить проект (F5)',
-                                    onTap: () {
-                                      if (currentProject != null) {
-                                        ref
-                                            .read(
-                                              projectServiceProvider.notifier,
-                                            )
-                                            .runProject(currentProject);
-                                        panelNotifier.selectTab(
-                                          PanelTab.terminal,
-                                        );
-                                        panelNotifier.openPanel();
-                                      } else {
-                                        panelNotifier.selectTab(
-                                          PanelTab.terminal,
-                                        );
-                                        panelNotifier.openPanel();
-                                      }
-                                    },
-                                  ),
-                                  const SizedBox(width: 4),
-                                  // Dedicated Build Menu Button (APK / AAB) — Amber Accent
-                                  PopupMenuButton<String>(
-                                    tooltip: 'Сборка проекта (APK / AAB)',
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    color: const Color(0xFF161922),
-                                    elevation: 12,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                      side: BorderSide(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                      ),
-                                    ),
-                                    icon: Container(
-                                      width: 32,
-                                      height: 32,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFFF59E0B,
-                                        ).withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(7),
-                                        border: Border.all(
-                                          color: const Color(
-                                            0xFFF59E0B,
-                                          ).withValues(alpha: 0.32),
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      child: const Icon(
-                                        LucideIcons.hammer,
-                                        size: 15,
-                                        color: Color(0xFFF59E0B),
-                                      ),
-                                    ),
-                                    itemBuilder: (context) => [
-                                      _buildBuildMenuItem(
-                                        'open_dialog',
-                                        LucideIcons.sliders_horizontal,
-                                        'Настройка и запуск сборки...',
-                                        'Выбор архитектуры, RAM и воркеров CPU',
-                                        const Color(0xFF10B981),
-                                      ),
-                                      const PopupMenuDivider(),
-                                      _buildBuildMenuItem(
-                                        'build_arm64',
-                                        LucideIcons.zap,
-                                        'APK ARM64 (64-бит) ⚡',
-                                        'В 4-5 раз быстрее · Для планшета/телефона',
-                                        Colors.amber,
-                                      ),
-                                      _buildBuildMenuItem(
-                                        'build_arm32',
-                                        LucideIcons.smartphone,
-                                        'APK ARMv7 (32-бит)',
-                                        'Для старых смартфонов (32-bit ARM)',
-                                        Colors.blueAccent,
-                                      ),
-                                      _buildBuildMenuItem(
-                                        'build_x64',
-                                        LucideIcons.monitor,
-                                        'APK x86_64',
-                                        'Для эмуляторов Android и ПК',
-                                        Colors.cyanAccent,
-                                      ),
-                                      _buildBuildMenuItem(
-                                        'build_split',
-                                        LucideIcons.boxes,
-                                        'Split APKs (все архитектуры)',
-                                        'Отдельные APK: arm64, armv7, x86_64',
-                                        Colors.orangeAccent,
-                                      ),
-                                      _buildBuildMenuItem(
-                                        'build_aab',
-                                        LucideIcons.rocket,
-                                        'AppBundle (AAB)',
-                                        'Бандл для публикации в Google Play Store',
-                                        Colors.purpleAccent,
-                                      ),
-                                      _buildBuildMenuItem(
-                                        'build_debug',
-                                        LucideIcons.bug,
-                                        'Debug APK (ARM64)',
-                                        'Быстрая отладочная сборка с логами',
-                                        Colors.yellow,
-                                      ),
-                                    ],
-                                    onSelected: (action) {
-                                      if (action == 'open_dialog') {
-                                        _openBuildTargetDialog(
-                                          context,
-                                          ref,
-                                          panelNotifier,
-                                        );
-                                      } else {
-                                        _triggerProjectBuild(
-                                          ref,
-                                          panelNotifier,
-                                          action,
-                                        );
-                                      }
-                                    },
-                                  ),
-                                  const SizedBox(width: 4),
                                   ActionIconButton(
                                     icon: LucideIcons.save,
                                     color: const Color(0xFF94A3B8),
-                                    tooltip: AppLocalizations.of(
-                                      context,
-                                    )!.saveTooltip,
+                                    tooltip: l10n.saveTooltip,
                                     onTap: () => ref
                                         .read(editorProvider.notifier)
                                         .saveFile(safeActiveIndex),
                                   ),
                                   if (isMarkdownFile) ...[
-                                    const SizedBox(width: 4),
+                                    const SizedBox(width: 6),
                                     ActionIconButton(
                                       icon: activeFile.isMarkdownPreview
                                           ? LucideIcons.code
@@ -1253,114 +1128,43 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                       },
                                     ),
                                   ],
-                                  if (screenWidth >= 420) ...[
-                                    const SizedBox(width: 4),
-                                    Consumer(
-                                      builder: (context, ref, _) {
-                                        final changesCount = ref.watch(
-                                          gitProvider.select(
-                                            (s) =>
-                                                (s.status?.stagedFiles.length ??
-                                                    0) +
-                                                (s
-                                                        .status
-                                                        ?.modifiedFiles
-                                                        .length ??
-                                                    0) +
-                                                (s
-                                                        .status
-                                                        ?.untrackedFiles
-                                                        .length ??
-                                                    0) +
-                                                (s
-                                                        .status
-                                                        ?.conflictedFiles
-                                                        .length ??
-                                                    0),
-                                          ),
-                                        );
-                                        return ActionIconButton(
-                                          icon: LucideIcons.git_branch,
-                                          color:
-                                              (panelState.isOpened &&
-                                                  panelState.selectedTab ==
-                                                      PanelTab.git)
-                                              ? const Color(0xFFE2E8F0)
-                                              : (changesCount > 0
-                                                    ? const Color(0xFFF59E0B)
-                                                    : const Color(0xFF94A3B8)),
-                                          tooltip: changesCount > 0
-                                              ? 'Git ($changesCount изм.)'
-                                              : 'Git',
-                                          onTap: () {
-                                            if (panelState.isOpened &&
-                                                panelState.selectedTab ==
-                                                    PanelTab.git) {
-                                              panelNotifier.closePanel();
-                                            } else {
-                                              panelNotifier.selectTab(
-                                                PanelTab.git,
-                                              );
-                                              panelNotifier.openPanel();
-                                            }
-                                          },
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(width: 4),
-                                    ActionIconButton(
-                                      icon: LucideIcons.terminal,
-                                      color:
-                                          (panelState.isOpened &&
-                                              panelState.selectedTab ==
-                                                  PanelTab.terminal)
-                                          ? const Color(0xFFE2E8F0)
-                                          : const Color(0xFF94A3B8),
-                                      tooltip: AppLocalizations.of(
-                                        context,
-                                      )!.terminal,
-                                      onTap: () {
-                                        if (panelState.isOpened &&
+                                  const SizedBox(width: 6),
+                                  // Открыть / скрыть терминал
+                                  ActionIconButton(
+                                    icon: LucideIcons.terminal,
+                                    color:
+                                        (panelState.isOpened &&
                                             panelState.selectedTab ==
-                                                PanelTab.terminal) {
-                                          panelNotifier.closePanel();
-                                        } else {
-                                          panelNotifier.selectTab(
-                                            PanelTab.terminal,
-                                          );
-                                          panelNotifier.openPanel();
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                  if (screenWidth >= 520) ...[
-                                    const SizedBox(width: 4),
-                                    ActionIconButton(
-                                      icon: LucideIcons.smartphone,
-                                      color:
-                                          (panelState.selectedTab ==
-                                                  PanelTab.deviceMirror &&
-                                              panelState.isOpened)
-                                          ? const Color(0xFFE2E8F0)
-                                          : const Color(0xFF94A3B8),
-                                      tooltip:
-                                          'Экран телефона и USB (Device Mirroring)',
-                                      onTap: () {
-                                        if (panelState.isOpened &&
+                                                PanelTab.terminal)
+                                        ? Colors.white
+                                        : const Color(0xFF38BDF8),
+                                    backgroundColor:
+                                        (panelState.isOpened &&
                                             panelState.selectedTab ==
-                                                PanelTab.deviceMirror) {
-                                          panelNotifier.closePanel();
-                                        } else {
-                                          panelNotifier.selectTab(
-                                            PanelTab.deviceMirror,
-                                          );
-                                          panelNotifier.openPanel();
-                                        }
-                                      },
-                                    ),
-                                  ],
-                                  const SizedBox(width: 4),
-                                  // Quantum AI Agent Right Dock Toggle Button — Soft Violet Accent
+                                                PanelTab.terminal)
+                                        ? const Color(0xFF0284C7)
+                                        : const Color(
+                                            0xFF38BDF8,
+                                          ).withValues(alpha: 0.12),
+                                    borderColor: const Color(
+                                      0xFF38BDF8,
+                                    ).withValues(alpha: 0.32),
+                                    tooltip: l10n.terminal,
+                                    onTap: () {
+                                      if (panelState.isOpened &&
+                                          panelState.selectedTab ==
+                                              PanelTab.terminal) {
+                                        panelNotifier.closePanel();
+                                      } else {
+                                        panelNotifier.selectTab(
+                                          PanelTab.terminal,
+                                        );
+                                        panelNotifier.openPanel();
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(width: 6),
+                                  // Открыть / скрыть AI Чат-Агент
                                   ActionIconButton(
                                     icon: LucideIcons.sparkles,
                                     color: (canDockSide && isRightAiOpen)
@@ -1375,195 +1179,42 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                                     borderColor: const Color(
                                       0xFF8B5CF6,
                                     ).withValues(alpha: 0.38),
-                                    tooltip: 'Боковая панель Quantum AI Агента',
+                                    tooltip: 'AI Чат-Агент',
                                     onTap: () => _toggleAiAgent(
                                       context,
                                       ref,
                                       canDockSide,
                                     ),
                                   ),
-                                  const SizedBox(width: 4),
-                                  PopupMenuButton<String>(
-                                    tooltip: 'Ещё действия',
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    color: const Color(0xFF161922),
-                                    elevation: 12,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                      side: BorderSide(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.08,
-                                        ),
-                                      ),
-                                    ),
-                                    icon: Container(
-                                      width: 32,
-                                      height: 32,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF141720),
-                                        borderRadius: BorderRadius.circular(7),
-                                        border: Border.all(
-                                          color: Colors.white.withValues(
-                                            alpha: 0.08,
-                                          ),
-                                          width: 0.8,
-                                        ),
-                                      ),
-                                      child: const Icon(
-                                        LucideIcons.ellipsis_vertical,
-                                        size: 15,
-                                        color: Color(0xFF94A3B8),
-                                      ),
-                                    ),
-                                    onSelected: (value) async {
-                                      switch (value) {
-                                        case 'format':
-                                          await ref
-                                              .read(editorProvider.notifier)
-                                              .formatActiveFile();
-                                          break;
-                                        case 'find':
-                                          final finder = ref.read(
-                                            activeFindControllerProvider,
+                                  const SizedBox(width: 6),
+                                  // Выйти домой: сохранить всё, закрыть проект, очистить временный кэш
+                                  ActionIconButton(
+                                    icon: LucideIcons.house,
+                                    color: const Color(0xFF94A3B8),
+                                    tooltip: 'Сохранить, закрыть проект и выйти домой',
+                                    onTap: () async {
+                                      final editorNotifier = ref.read(
+                                        editorProvider.notifier,
+                                      );
+                                      final files =
+                                          ref.read(editorProvider).openFiles;
+                                      for (int i = 0; i < files.length; i++) {
+                                        if (files[i].isModified) {
+                                          await editorNotifier.saveFile(i);
+                                        }
+                                      }
+                                      await ref
+                                          .read(workspaceProvider.notifier)
+                                          .closeWorkspace();
+                                      ref
+                                          .read(runtimeServiceProvider)
+                                          .runCommand(
+                                            'rm -rf /tmp/flutter_tools.* /tmp/kotlin-daemon.* /tmp/kotlin-compiler-* /tmp/dart_analyze_output*.txt /tmp/tmp.* /root/.cache/thumbnails 2>/dev/null || true',
                                           );
-                                          if (finder != null) {
-                                            finder.findMode();
-                                            finder.focusOnFindInput();
-                                          }
-                                          break;
-                                        case 'sync':
-                                          final currentWs = ref
-                                              .read(workspaceProvider)
-                                              .currentPath;
-                                          if (currentWs != null) {
-                                            ref
-                                                .read(
-                                                  projectSyncProvider.notifier,
-                                                )
-                                                .startSync(
-                                                  currentWs,
-                                                  force: true,
-                                                );
-                                          }
-                                          break;
-                                        case 'settings':
-                                          context.push('/settings');
-                                          break;
-                                        case 'home':
-                                          await ref
-                                              .read(workspaceProvider.notifier)
-                                              .closeWorkspace();
-                                          if (context.mounted) {
-                                            context.go('/');
-                                          }
-                                          break;
+                                      if (context.mounted) {
+                                        context.go('/');
                                       }
                                     },
-                                    itemBuilder: (context) => [
-                                      const PopupMenuItem(
-                                        value: 'format',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              LucideIcons.code_xml,
-                                              size: 16,
-                                              color: Color(0xFF94A3B8),
-                                            ),
-                                            SizedBox(width: 10),
-                                            Text(
-                                              'Форматировать код',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'find',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              LucideIcons.search,
-                                              size: 16,
-                                              color: Color(0xFF94A3B8),
-                                            ),
-                                            SizedBox(width: 10),
-                                            Text(
-                                              'Поиск в файле (Ctrl+F)',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'sync',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              LucideIcons.refresh_cw,
-                                              size: 16,
-                                              color: Color(0xFF94A3B8),
-                                            ),
-                                            SizedBox(width: 10),
-                                            Text(
-                                              'Синхронизировать проект',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'settings',
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              LucideIcons.settings,
-                                              size: 16,
-                                              color: Color(0xFF94A3B8),
-                                            ),
-                                            SizedBox(width: 10),
-                                            Text(
-                                              'Настройки',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const PopupMenuDivider(),
-                                      PopupMenuItem(
-                                        value: 'home',
-                                        child: Row(
-                                          children: [
-                                            const Icon(
-                                              LucideIcons.house,
-                                              size: 16,
-                                              color: Color(0xFF94A3B8),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Text(
-                                              l10n.home,
-                                              style: const TextStyle(
-                                                fontSize: 13,
-                                                color: Colors.white70,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                   const SizedBox(width: 6),
                                 ],
@@ -2965,133 +2616,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
     );
   }
 
-  PopupMenuItem<String> _buildBuildMenuItem(
-    String value,
-    IconData icon,
-    String title,
-    String subtitle,
-    Color color,
-  ) {
-    return PopupMenuItem<String>(
-      value: value,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(icon, size: 16, color: color),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.inter(
-                    color: Colors.white54,
-                    fontSize: 10.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openBuildTargetDialog(
-    BuildContext context,
-    WidgetRef ref,
-    PanelNotifier panelNotifier,
-  ) {
-    final workspaceState = ref.read(workspaceProvider);
-    final projectName = workspaceState.currentPath != null
-        ? p.basename(workspaceState.currentPath!)
-        : null;
-
-    AdaptiveDialogHelper.showAdaptiveSheet(
-      context: context,
-      desktopMaxWidth: 560,
-      desktopMaxHeight: 680,
-      builder: (ctx) => BuildTargetDialog(
-        initialProjectName: projectName,
-        onStartBuild: (command, displayCmd, target) {
-          panelNotifier.selectTab(PanelTab.buildLogs);
-          panelNotifier.openPanel();
-          ref
-              .read(dedicatedTerminalProvider.notifier)
-              .sendCommand(
-                DedicatedTerminalType.build,
-                command,
-                interrupt: true,
-                clear: false,
-              );
-        },
-      ),
-    );
-  }
-
-  void _triggerProjectBuild(
-    WidgetRef ref,
-    PanelNotifier panelNotifier,
-    String action,
-  ) {
-    panelNotifier.selectTab(PanelTab.buildLogs);
-    panelNotifier.openPanel();
-
-    BuildTargetType target;
-    switch (action) {
-      case 'build_arm32':
-        target = BuildTargetType.arm32;
-        break;
-      case 'build_x64':
-        target = BuildTargetType.x86_64;
-        break;
-      case 'build_aab':
-        target = BuildTargetType.aab;
-        break;
-      case 'build_split':
-        target = BuildTargetType.split;
-        break;
-      case 'build_debug':
-        target = BuildTargetType.debug;
-        break;
-      case 'build_arm64':
-      case 'build_apk':
-      default:
-        target = BuildTargetType.arm64;
-        break;
-    }
-
-    final cmd = BuildResourceOptimizer.generateBuildCommand(
-      target: target,
-      mode: BuildPerformanceMode.balanced,
-    );
-
-    ref
-        .read(dedicatedTerminalProvider.notifier)
-        .sendCommand(
-          DedicatedTerminalType.build,
-          cmd,
-          interrupt: true,
-          clear: false,
-        );
-  }
 }
 
 // ─── Дерево файлов (изолированный StatefulWidget) ───────────────────────────

@@ -157,7 +157,9 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
     }
 
     if (hasInputConnection) {
-      _connection!.show();
+      if (widget.inputType != TextInputType.none) {
+        _connection!.show();
+      }
     } else {
       final config = TextInputConfiguration(
         inputType: widget.inputType,
@@ -170,7 +172,9 @@ class CustomTextEditState extends State<CustomTextEdit> with TextInputClient {
 
       _connection = TextInput.attach(this, config);
 
-      _connection!.show();
+      if (widget.inputType != TextInputType.none) {
+        _connection!.show();
+      }
 
       // setEditableRect(Rect.zero, Rect.zero);
 

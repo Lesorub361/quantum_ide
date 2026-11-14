@@ -1633,17 +1633,9 @@ if os.path.exists(p):
         with open(p, "w") as f: f.write(c)' 2>/dev/null || true
 fi
 
-# Auto-repair local.properties SDK path
-if [ -d /root/android-sdk ]; then
+# Ensure local.properties SDK path if absent
+if [ -d /root/android-sdk ] && [ ! -f "\$DIR/local.properties" ]; then
     printf "sdk.dir=/root/android-sdk\\n" > "\$DIR/local.properties" 2>/dev/null || true
-fi
-
-# Auto-repair missing ic_launcher in AndroidManifest.xml
-if [ -f "\$DIR/app/src/main/AndroidManifest.xml" ] && grep -q "@mipmap/ic_launcher" "\$DIR/app/src/main/AndroidManifest.xml" 2>/dev/null; then
-    sed -i 's/@mipmap\\/ic_launcher_round/@android:drawable\\/sym_def_app_icon/g; s/@mipmap\\/ic_launcher/@android:drawable\\/sym_def_app_icon/g' "\$DIR/app/src/main/AndroidManifest.xml" 2>/dev/null || true
-    mkdir -p "\$DIR/app/src/main/res/mipmap-anydpi-v26" 2>/dev/null || true
-    printf '<?xml version="1.0" encoding="utf-8"?>\\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\\n    <background android:color="@android:color/holo_blue_dark"/>\\n    <foreground android:drawable="@android:drawable/sym_def_app_icon"/>\\n</adaptive-icon>\\n' > "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" 2>/dev/null || true
-    cp "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml" "\$DIR/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml" 2>/dev/null || true
 fi
 
 GRADLE_BIN=""
@@ -2091,11 +2083,6 @@ class MainActivity : AppCompatActivity() {
       if (buildTarget == 'apk') {
         final patchCmd = [
           'cd "$guestPath"',
-          r"sed -i 's/compileSdk = 36/compileSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
-          r"sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
-          r"sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true",
-          r'''sed -i 's/id("com.android.application") version "[0-9.]*"/id("com.android.application") version "8.11.1"/g' android/settings.gradle.kts 2>/dev/null || true''',
-          r"sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-all.zip|g' android/gradle/wrapper/gradle-wrapper.properties 2>/dev/null || true",
           'flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons 2>&1',
           '(cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true)',
         ].join(' && ');
