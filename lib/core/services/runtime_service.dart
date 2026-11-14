@@ -655,27 +655,153 @@ class RuntimeService extends ChangeNotifier {
     return -1;
   }
 
+  bool _isGuestUbuntu2404(String rootfs) {
+    final osRelease = File(p.join(rootfs, 'etc', 'os-release'));
+    if (!osRelease.existsSync()) return false;
+    try {
+      final content = osRelease.readAsStringSync();
+      return content.contains('24.04') || content.contains('noble');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _copyEntitySync(FileSystemEntity entity, String destPath) {
+    if (entity is Link) {
+      final existing = FileSystemEntity.typeSync(destPath, followLinks: false);
+      if (existing == FileSystemEntityType.link) {
+        Link(destPath).deleteSync();
+      } else if (existing == FileSystemEntityType.file) {
+        File(destPath).deleteSync();
+      } else if (existing != FileSystemEntityType.notFound) {
+        return;
+      }
+      Link(destPath).parent.createSync(recursive: true);
+      Link(destPath).createSync(entity.targetSync());
+    } else if (entity is File) {
+      File(destPath).parent.createSync(recursive: true);
+      if (FileSystemEntity.typeSync(destPath, followLinks: false) == FileSystemEntityType.link) {
+        Link(destPath).deleteSync();
+      }
+      entity.copySync(destPath);
+    } else if (entity is Directory) {
+      final existing = FileSystemEntity.typeSync(destPath, followLinks: false);
+      if (existing == FileSystemEntityType.link || existing == FileSystemEntityType.file) {
+        return;
+      }
+      Directory(destPath).createSync(recursive: true);
+      for (final child in entity.listSync(followLinks: false)) {
+        _copyEntitySync(child, p.join(destPath, p.basename(child.path)));
+      }
+    }
+  }
+
   /// True when the native arm64 glibc of the Ubuntu rootfs is unusable. PRoot then reports
-  /// `execve("/usr/bin/env"): Function not implemented` for every command.
+  /// `execve("/usr/bin/env"): Function not implemented` or `version 'GLIBC_2.38' not found`.
   bool isGuestLibcBroken() {
     if (!Platform.isAndroid) return false;
     final rootfs = p.join(_filesDir, 'rootfs', 'ubuntu');
     if (!Directory(rootfs).existsSync()) return false;
+
+    // Detect broken usrmerge `/lib -> usr/lib` symlink on Ubuntu 24.04+
+    // (including when an earlier repair wrote Ubuntu 20.04 glibc 2.31 into a plain `/lib` dir).
+    final libEntry = p.join(rootfs, 'lib');
+    final usrLibc = File(p.join(rootfs, 'usr', 'lib', 'aarch64-linux-gnu', 'libc.so.6'));
+    if (usrLibc.existsSync() &&
+        FileSystemEntity.typeSync(libEntry, followLinks: false) != FileSystemEntityType.link) {
+      return true;
+    }
+
+    if (_isGuestUbuntu2404(rootfs)) {
+      if (FileSystemEntity.typeSync(p.join(rootfs, 'lib', 'ld-2.31.so'), followLinks: false) !=
+              FileSystemEntityType.notFound ||
+          FileSystemEntity.typeSync(
+                  p.join(rootfs, 'lib', 'aarch64-linux-gnu', 'libc-2.31.so'),
+                  followLinks: false) !=
+              FileSystemEntityType.notFound) {
+        return true;
+      }
+    }
+
     return _guestFileSize(rootfs, '/lib/ld-linux-aarch64.so.1') <= 0 ||
         _guestFileSize(rootfs, '/lib/aarch64-linux-gnu/libc.so.6') <= 0;
   }
 
   bool _libcRepairRunning = false;
 
-  /// Restores `/lib` of the rootfs (ld-linux-aarch64.so.1, libc, libm, libpthread, …) from the
-  /// official Ubuntu 20.04 arm64 `libc6` package. Extraction is done on the Android side, so it
-  /// works even though nothing can be executed inside the broken rootfs.
+  /// Restores `/lib` of the rootfs (usrmerge `/lib -> usr/lib` offline first on Ubuntu 24.04+,
+  /// falling back to Ubuntu 20.04 arm64 `libc6` only on non-24.04 rootfs). Extraction is done on
+  /// the Android side so it works even though nothing can execute inside the broken rootfs.
   Future<bool> _repairGuestLibcIfBroken() async {
     if (_libcRepairRunning) return false;
     try {
       if (!isGuestLibcBroken()) return true;
       _libcRepairRunning = true;
       final rootfs = p.join(_filesDir, 'rootfs', 'ubuntu');
+
+      // Fast offline repair for usrmerged Ubuntu (24.04+): if dpkg -x of a legacy .deb
+      // overwrote `/lib` symlink with a plain directory (or an older repair placed 2.31 inside `/lib`),
+      // `/usr/lib/aarch64-linux-gnu` still holds the intact glibc 2.39 binaries.
+      final usrLibAarch64 = Directory(p.join(rootfs, 'usr', 'lib', 'aarch64-linux-gnu'));
+      final usrLibc = File(p.join(usrLibAarch64.path, 'libc.so.6'));
+      final libEntry = p.join(rootfs, 'lib');
+      final libType = FileSystemEntity.typeSync(libEntry, followLinks: false);
+      if (await usrLibc.exists() && libType != FileSystemEntityType.link) {
+        debugPrint('RuntimeService: repairing broken usrmerge /lib -> usr/lib symlink...');
+        _status = 'Восстановление системных библиотек (/lib → usr/lib)…';
+        notifyListeners();
+
+        final usrLd = p.join(rootfs, 'usr', 'lib', 'ld-linux-aarch64.so.1');
+        if (!File(usrLd).existsSync()) {
+          final aarch64Ld = File(p.join(usrLibAarch64.path, 'ld-linux-aarch64.so.1'));
+          if (await aarch64Ld.exists()) {
+            final existingLdType = FileSystemEntity.typeSync(usrLd, followLinks: false);
+            if (existingLdType == FileSystemEntityType.link) {
+              await Link(usrLd).delete();
+            } else if (existingLdType == FileSystemEntityType.file) {
+              await File(usrLd).delete();
+            }
+            await Link(usrLd).create('aarch64-linux-gnu/ld-linux-aarch64.so.1');
+          }
+        }
+
+        if (libType == FileSystemEntityType.directory) {
+          for (final child in Directory(libEntry).listSync(followLinks: false)) {
+            final name = p.basename(child.path);
+            // Never copy downgraded 20.04 glibc 2.31 artifacts into /usr/lib
+            if (name == 'aarch64-linux-gnu' ||
+                name == 'ld-linux-aarch64.so.1' ||
+                name.contains('2.31')) {
+              continue;
+            }
+            final destPath = p.join(rootfs, 'usr', 'lib', name);
+            if (name == 'x86_64-linux-gnu' ||
+                FileSystemEntity.typeSync(destPath, followLinks: false) ==
+                    FileSystemEntityType.notFound) {
+              _copyEntitySync(child, destPath);
+            }
+          }
+          await _forceDeleteDirectory(Directory(libEntry));
+        } else if (libType == FileSystemEntityType.file) {
+          await File(libEntry).delete();
+        }
+
+        await Link(libEntry).create('usr/lib');
+        if (!isGuestLibcBroken()) {
+          debugPrint('RuntimeService: offline /lib -> usr/lib repair succeeded');
+          _status = 'Системные библиотеки восстановлены';
+          notifyListeners();
+          return true;
+        }
+      }
+
+      if (_isGuestUbuntu2404(rootfs)) {
+        debugPrint('RuntimeService: Ubuntu 24.04 glibc cannot be repaired with 20.04 libc6_2.31');
+        _status = 'Повреждён glibc Ubuntu 24.04 — выполните сброс Ubuntu в настройках';
+        notifyListeners();
+        return false;
+      }
+
       debugPrint('RuntimeService: guest glibc is broken, restoring libc6 (arm64)…');
       _status = 'Восстановление системных библиотек (glibc)…';
       notifyListeners();
@@ -732,10 +858,14 @@ class RuntimeService extends ChangeNotifier {
       }
 
       final archive = TarDecoder().decodeBytes(XZDecoder().decodeBytes(dataTarXz));
+      final libIsSymlink = FileSystemEntity.typeSync(libEntry, followLinks: false) == FileSystemEntityType.link;
       var restored = 0;
       for (final entry in archive) {
-        final rel = entry.name.replaceFirst(RegExp(r'^\./'), '');
+        var rel = entry.name.replaceFirst(RegExp(r'^\./'), '');
         if (!rel.startsWith('lib/') || rel.contains('..')) continue;
+        if (libIsSymlink) {
+          rel = 'usr/$rel';
+        }
         final dest = p.join(rootfs, rel);
         if (!entry.isFile && !entry.isSymbolicLink) {
           await Directory(dest).create(recursive: true);
@@ -936,7 +1066,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '32';
+    const bashrcVersion = '33';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -970,7 +1100,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=32
+# BASHRC_VERSION=33
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -1100,23 +1230,6 @@ alias adb-wifi="adb tcpip 5555"
 alias fastboot-devices="fastboot devices"
 alias check-usb="lsusb"
 
-# Antigravity CLI (agy) wrapper for Android PRoot (kernel lacks user namespaces, so internal sandbox fails with EINVAL)
-agy() {
-    case "$1" in
-        help|--help|-h|version|--version|-v|update|install)
-            command agy "$@"
-            return
-            ;;
-    esac
-    case " $* " in
-        *" --settings "*|*" --sandbox "*)
-            command agy "$@"
-            ;;
-        *)
-            command agy --settings '{"enableTerminalSandbox":false}' "$@"
-            ;;
-    esac
-}
 
 # gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
 gradlew() {
@@ -1235,10 +1348,12 @@ flutter() {
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
-        mkdir -p ~/.gradle 2>/dev/null || true
+        mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
         for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
             if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
+                [ -d "$(dirname "$gp")" ] || continue
                 touch "$gp" 2>/dev/null || true
+                [ -w "$gp" ] || continue
                 sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
                 sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
                 sed -i '/kotlin.compiler.execution.strategy/d' "$gp" 2>/dev/null || true
@@ -1493,23 +1608,6 @@ alias check-android="flutter doctor -v | grep -A 5 'Android toolchain'"
 alias cls='clear'
 alias fetch="/usr/local/bin/term-fetch"
 
-# Antigravity CLI (agy) wrapper for Android PRoot (kernel lacks user namespaces, so internal sandbox fails with EINVAL)
-agy() {
-    case "$1" in
-        help|--help|-h|version|--version|-v|update|install)
-            command agy "$@"
-            return
-            ;;
-    esac
-    case " $* " in
-        *" --settings "*|*" --sandbox "*)
-            command agy "$@"
-            ;;
-        *)
-            command agy --settings '{"enableTerminalSandbox":false}' "$@"
-            ;;
-    esac
-}
 
 # gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
 gradlew() {
@@ -1610,10 +1708,12 @@ flutter() {
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
-        mkdir -p ~/.gradle 2>/dev/null || true
+        mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
         for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
             if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
+                [ -d "$(dirname "$gp")" ] || continue
                 touch "$gp" 2>/dev/null || true
+                [ -w "$gp" ] || continue
                 sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
                 sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
                 sed -i '/kotlin.compiler.execution.strategy/d' "$gp" 2>/dev/null || true
@@ -3087,6 +3187,21 @@ fi
 # quantum-heal-x64: Auto-heals x86_64 glibc libraries and ld-linux-x86-64.so.2 dynamic linker
 # on ARM64 Linux / PRoot so Box64 / QEMU can execute Flutter's official gen_snapshot for release APKs.
 
+# 0. Self-heal usrmerge /lib -> usr/lib symlink if an earlier extraction replaced it
+if [ ! -L /lib ] && [ -d /lib ] && [ -d /usr/lib/aarch64-linux-gnu ] && [ -f /usr/lib/aarch64-linux-gnu/libc.so.6 ]; then
+    echo "[quantum-heal-x64] Repairing broken /lib -> usr/lib symlink..."
+    if [ -d /lib/x86_64-linux-gnu ]; then
+        mkdir -p /usr/lib/x86_64-linux-gnu 2>/dev/null || true
+        cp -a /lib/x86_64-linux-gnu/. /usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
+    fi
+    rm -rf /lib.broken 2>/dev/null || true
+    mv /lib /lib.broken 2>/dev/null && ln -s usr/lib /lib 2>/dev/null || true
+    rm -rf /lib.broken 2>/dev/null || true
+    if [ ! -e /usr/lib/ld-linux-aarch64.so.1 ] && [ -f /usr/lib/aarch64-linux-gnu/ld-linux-aarch64.so.1 ]; then
+        ln -sf aarch64-linux-gnu/ld-linux-aarch64.so.1 /usr/lib/ld-linux-aarch64.so.1 2>/dev/null || true
+    fi
+fi
+
 mkdir -p /lib64 2>/dev/null || true
 
 # 1. Box64 provides full native glibc emulation out of the box
@@ -3102,20 +3217,35 @@ if [ -f /lib/x86_64-linux-gnu/libc.so.6 ] && [ -f /lib64/ld-linux-x86-64.so.2 ];
 else
     echo "[quantum-heal-x64] Setting up x86_64 dynamic linker & glibc runtime for Flutter release builds..."
 
-    # 3. Try fast direct deb extraction of libc6:amd64 if missing
+    # 3. Try fast direct deb extraction of libc6:amd64 into a staging directory
+    # CRITICAL: Never run `dpkg -x ... /` on usrmerge Ubuntu 24.04 because legacy debs replace /lib -> usr/lib!
     if [ ! -f /lib/x86_64-linux-gnu/libc.so.6 ]; then
         DEB_DIR="${TMPDIR:-/tmp}/libc6_x64_download_$$"
-        mkdir -p "$DEB_DIR" 2>/dev/null || true
+        mkdir -p "$DEB_DIR/pkg" 2>/dev/null || true
+        X64_LIB_DEST="/lib/x86_64-linux-gnu"
+        [ -L /lib ] && X64_LIB_DEST="/usr/lib/x86_64-linux-gnu"
         for deb_url in \
-            "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3.8_amd64.deb" \
             "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8.3_amd64.deb" \
+            "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.39-0ubuntu8_amd64.deb" \
+            "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3.8_amd64.deb" \
             "http://archive.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.31-0ubuntu9.18_amd64.deb" \
             "http://security.ubuntu.com/ubuntu/pool/main/g/glibc/libc6_2.35-0ubuntu3_amd64.deb"; do
             if curl -fsSL --retry 2 "$deb_url" -o "$DEB_DIR/libc6.deb" 2>/dev/null || \
                wget -qO "$DEB_DIR/libc6.deb" "$deb_url" 2>/dev/null; then
-                dpkg -x "$DEB_DIR/libc6.deb" / 2>/dev/null || true
-                rm -rf "$DEB_DIR" 2>/dev/null || true
-                break
+                rm -rf "$DEB_DIR/pkg" && mkdir -p "$DEB_DIR/pkg" 2>/dev/null || true
+                if dpkg -x "$DEB_DIR/libc6.deb" "$DEB_DIR/pkg" 2>/dev/null; then
+                    mkdir -p "$X64_LIB_DEST" 2>/dev/null || true
+                    if [ -d "$DEB_DIR/pkg/usr/lib/x86_64-linux-gnu" ]; then
+                        cp -a "$DEB_DIR/pkg/usr/lib/x86_64-linux-gnu/." "$X64_LIB_DEST/" 2>/dev/null || true
+                    fi
+                    if [ -d "$DEB_DIR/pkg/lib/x86_64-linux-gnu" ]; then
+                        cp -a "$DEB_DIR/pkg/lib/x86_64-linux-gnu/." "$X64_LIB_DEST/" 2>/dev/null || true
+                    fi
+                    if [ -f "$X64_LIB_DEST/libc.so.6" ]; then
+                        rm -rf "$DEB_DIR" 2>/dev/null || true
+                        break
+                    fi
+                fi
             fi
         done
         rm -rf "$DEB_DIR" 2>/dev/null || true

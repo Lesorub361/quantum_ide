@@ -1529,9 +1529,7 @@ class QuantumAiAgentService extends ChangeNotifier {
             'claude -p ${_shq(query)} --output-format stream-json --verbose --permission-mode $perm'
             '${_cliSessionStarted ? ' --continue' : ''}';
       } else {
-        cmd = Platform.isAndroid
-            ? 'agy --settings \'{"enableTerminalSandbox":false}\' -p ${_shq(query)}'
-            : 'agy -p ${_shq(query)}';
+        cmd = 'agy -p ${_shq(query)}';
       }
 
       final stderrBuf = StringBuffer();

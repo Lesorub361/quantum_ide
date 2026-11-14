@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.232
+- **Ubuntu 24.04 `/lib -> usr/lib` Auto-Repair & `GLIBC_2.38` Mismatch Recovery**:
+  - Updated [`isGuestLibcBroken`](lib/core/services/runtime_service.dart) and [`_repairGuestLibcIfBroken`](lib/core/services/runtime_service.dart) to detect BOTH missing `/lib` (`execve("/usr/bin/bash"): Function not implemented`, `basename: required file not found`) AND broken `/lib` directories downgraded to Ubuntu 20.04 `glibc 2.31` on Ubuntu 24.04 (`libc.so.6: version 'GLIBC_2.38' not found`). Restores `/lib -> usr/lib` + `usr/lib/ld-linux-aarch64.so.1` purely in Dart (without shelling out to `cp`), strips `2.31` leftovers, and blocks downloading `libc6_2.31` onto Ubuntu 24.04.
+  - Updated [`_generateQuantumHealX64Script`](lib/core/services/runtime_service.dart) (`quantum-heal-x64`, used by `flutter-release-engine`, `flutter-release-fix`, and `build-fix`) to extract `libc6:amd64` `.deb` archives into a temporary staging directory instead of `/` and prefer Ubuntu 24.04 `libc6_2.39` first, preventing `dpkg -x` from overwriting `/lib -> usr/lib`.
+- **Clean `flutter()` Gradle Config Wrapper (`BASHRC_VERSION=33`)**:
+  - Updated [`RuntimeService`](lib/core/services/runtime_service.dart) `.bashrc` and `.zshrc` `flutter()` wrappers to create `/root/.gradle` alongside `~/.gradle` and verify `[ -d "$(dirname "$gp")" ]` and `[ -w "$gp" ]` before writing `gradle.properties`, eliminating `bash: /root/.gradle/gradle.properties: No such file or directory` stderr spam.
+- **Antigravity CLI (`agy`) Flag Compatibility**:
+  - Removed the injected `--settings '{"enableTerminalSandbox":false}'` flag from `.bashrc`/`.zshrc` `agy()` wrappers and [`CliAuthService`](lib/core/services/cli_auth_service.dart) (`flags provided but not defined: -settings`).
+
 ## 1.2.231
 - **Ubuntu 24.04 Migration & Rootfs Cleanup (`EACCES` / `errno = 13` Fix)**:
   - Added [`_forceDeleteDirectory`](lib/core/services/runtime_service.dart) (`chmod -R u+rwX` + `rm -rf` with non-symlink-following Dart fallback) for `migrateToUbuntu2404()`, `reset()`, and `preserved_home` cleanup.
