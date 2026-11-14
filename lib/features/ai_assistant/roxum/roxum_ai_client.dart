@@ -19,6 +19,7 @@ class RoxumModelOption {
   final String apiKey;
   final String model;
   final RoxumToolCallingMethod method;
+  final bool isFree;
 
   const RoxumModelOption({
     required this.id,
@@ -28,7 +29,23 @@ class RoxumModelOption {
     required this.apiKey,
     required this.model,
     required this.method,
+    this.isFree = false,
   });
+
+  static String normalizeOpenAiBaseUrl(String raw) {
+    var base = raw.trim().replaceAll(RegExp(r'/+$'), '');
+    if (base.isEmpty) return '';
+    if (base.endsWith('/chat/completions')) {
+      base = base.substring(0, base.length - '/chat/completions'.length);
+    } else if (base.endsWith('/models')) {
+      base = base.substring(0, base.length - '/models'.length);
+    }
+    base = base.replaceAll(RegExp(r'/+$'), '');
+    if (!RegExp(r'/v\d+(beta\d*)?$|/api/v\d+$').hasMatch(base)) {
+      base = '$base/v1';
+    }
+    return base;
+  }
 
   Map<String, String> get headers {
     switch (method) {
@@ -117,19 +134,22 @@ class RoxumModelOption {
     }
     if (settings.openrouterApiKey.trim().isNotEmpty) {
       for (final m in [
-        'anthropic/claude-3.5-sonnet',
-        'qwen/qwen-2.5-coder-32b-instruct',
-        'google/gemini-2.5-flash',
+        ('nvidia/nemotron-3.5-super-vl:free', true),
+        ('cohere/north-mini-code:free', true),
+        ('qwen/qwen-2.5-coder-32b-instruct', false),
+        ('anthropic/claude-3.5-sonnet', false),
+        ('google/gemini-2.5-flash', false),
       ]) {
         list.add(
           RoxumModelOption(
-            id: 'openrouter:$m',
-            name: m,
+            id: 'openrouter:${m.$1}',
+            name: m.$1,
             provider: 'OpenRouter',
             url: 'https://openrouter.ai/api/v1/chat/completions',
             apiKey: settings.openrouterApiKey.trim(),
-            model: m,
+            model: m.$1,
             method: RoxumToolCallingMethod.openAiCompatible,
+            isFree: m.$2,
           ),
         );
       }
@@ -175,17 +195,17 @@ class RoxumModelOption {
     }
     if (settings.customApiBaseUrl.trim().isNotEmpty &&
         settings.customApiModel.trim().isNotEmpty) {
-      final base =
-          settings.customApiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+      final base = normalizeOpenAiBaseUrl(settings.customApiBaseUrl);
       list.add(
         RoxumModelOption(
           id: 'custom:${settings.customApiModel.trim()}',
           name: settings.customApiModel.trim(),
-          provider: 'Custom / Ollama',
+          provider: 'Local / Custom',
           url: '$base/chat/completions',
           apiKey: settings.customApiKey.trim(),
           model: settings.customApiModel.trim(),
           method: RoxumToolCallingMethod.openAiCompatible,
+          isFree: true,
         ),
       );
     }
@@ -319,38 +339,313 @@ class RoxumAiClient {
     required String baseUrl,
     String apiKey = '',
   }) async {
-    final trimmed = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    if (trimmed.isEmpty) return const [];
-    final modelsUrl = trimmed.endsWith('/models') ? trimmed : '$trimmed/models';
-    final res = await http
-        .get(
+    final raw = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    if (raw.isEmpty) return const [];
+    final normalized = RoxumModelOption.normalizeOpenAiBaseUrl(raw);
+    final rawClean = raw.endsWith('/models')
+        ? raw
+        : (raw.endsWith('/chat/completions')
+            ? '${raw.substring(0, raw.length - '/chat/completions'.length)}/models'
+            : '$raw/models');
+    final rootBase = normalized.endsWith('/v1')
+        ? normalized.substring(0, normalized.length - 3)
+        : normalized;
+
+    final candidates = <String>{
+      '$normalized/models',
+      rawClean,
+      if (rootBase.isNotEmpty) '$rootBase/api/tags',
+    }.toList();
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+      if (apiKey.trim().isNotEmpty) 'Authorization': 'Bearer ${apiKey.trim()}',
+    };
+
+    Object? lastError;
+    for (final url in candidates) {
+      try {
+        final res = await http
+            .get(Uri.parse(url), headers: headers)
+            .timeout(const Duration(seconds: 6));
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          lastError = Exception('HTTP ${res.statusCode} ($url)');
+          continue;
+        }
+        final decoded = jsonDecode(res.body);
+        final ids = <String>[];
+        if (decoded is Map && decoded['data'] is List) {
+          for (final item in decoded['data'] as List) {
+            if (item is Map && item['id'] != null) {
+              ids.add(item['id'].toString());
+            }
+          }
+        } else if (decoded is Map && decoded['models'] is List) {
+          for (final item in decoded['models'] as List) {
+            if (item is Map && (item['name'] ?? item['id']) != null) {
+              ids.add((item['name'] ?? item['id']).toString());
+            }
+          }
+        }
+        if (ids.isNotEmpty) return ids;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (lastError != null) throw lastError;
+    return const [];
+  }
+
+  static Future<List<RoxumModelOption>> fetchAllProviderModels(
+    SettingsState settings,
+  ) async {
+    final futures = <Future<List<RoxumModelOption>>>[];
+
+    Future<List<RoxumModelOption>> fetchOpenAiStyle({
+      required String provider,
+      required String modelsUrl,
+      required String chatUrl,
+      required String apiKey,
+      bool Function(String id)? filter,
+      bool defaultFree = false,
+    }) async {
+      try {
+        final res = await http.get(
           Uri.parse(modelsUrl),
           headers: {
             'Content-Type': 'application/json',
-            if (apiKey.trim().isNotEmpty)
-              'Authorization': 'Bearer ${apiKey.trim()}',
+            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
           },
-        )
-        .timeout(const Duration(seconds: 8));
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}: ${res.body}');
-    }
-    final decoded = jsonDecode(res.body);
-    final ids = <String>[];
-    if (decoded is Map && decoded['data'] is List) {
-      for (final item in decoded['data'] as List) {
-        if (item is Map && item['id'] != null) {
-          ids.add(item['id'].toString());
+        ).timeout(const Duration(seconds: 7));
+        if (res.statusCode < 200 || res.statusCode >= 300) return const [];
+        final decoded = jsonDecode(res.body);
+        if (decoded is! Map || decoded['data'] is! List) return const [];
+        final out = <RoxumModelOption>[];
+        for (final item in decoded['data'] as List) {
+          if (item is! Map || item['id'] == null) continue;
+          final id = item['id'].toString();
+          if (filter != null && !filter(id)) continue;
+          final pricing = item['pricing'];
+          final isFree = defaultFree ||
+              id.contains(':free') ||
+              (pricing is Map && pricing['prompt']?.toString() == '0');
+          out.add(
+            RoxumModelOption(
+              id: '${provider.toLowerCase()}:$id',
+              name: item['name']?.toString() ?? id,
+              provider: provider,
+              url: chatUrl,
+              apiKey: apiKey,
+              model: id,
+              method: RoxumToolCallingMethod.openAiCompatible,
+              isFree: isFree,
+            ),
+          );
         }
-      }
-    } else if (decoded is Map && decoded['models'] is List) {
-      for (final item in decoded['models'] as List) {
-        if (item is Map && (item['name'] ?? item['id']) != null) {
-          ids.add((item['name'] ?? item['id']).toString());
-        }
+        return out;
+      } catch (_) {
+        return const [];
       }
     }
-    return ids;
+
+    if (settings.openrouterApiKey.trim().isNotEmpty) {
+      futures.add(
+        fetchOpenAiStyle(
+          provider: 'OpenRouter',
+          modelsUrl: 'https://openrouter.ai/api/v1/models',
+          chatUrl: 'https://openrouter.ai/api/v1/chat/completions',
+          apiKey: settings.openrouterApiKey.trim(),
+        ).then((list) {
+          list.sort((a, b) {
+            if (a.isFree != b.isFree) return a.isFree ? -1 : 1;
+            return a.model.compareTo(b.model);
+          });
+          return list;
+        }),
+      );
+    }
+
+    if (settings.customApiBaseUrl.trim().isNotEmpty) {
+      futures.add(() async {
+        try {
+          final base = RoxumModelOption.normalizeOpenAiBaseUrl(
+            settings.customApiBaseUrl,
+          );
+          final ids = await fetchRemoteModels(
+            baseUrl: settings.customApiBaseUrl,
+            apiKey: settings.customApiKey.trim(),
+          );
+          return ids
+              .map(
+                (id) => RoxumModelOption(
+                  id: 'custom:$id',
+                  name: id,
+                  provider: 'Local / Custom',
+                  url: '$base/chat/completions',
+                  apiKey: settings.customApiKey.trim(),
+                  model: id,
+                  method: RoxumToolCallingMethod.openAiCompatible,
+                  isFree: true,
+                ),
+              )
+              .toList();
+        } catch (_) {
+          return const <RoxumModelOption>[];
+        }
+      }());
+    }
+
+    if (settings.geminiApiKey.trim().isNotEmpty) {
+      futures.add(() async {
+        final key = settings.geminiApiKey.trim();
+        try {
+          final res = await http
+              .get(
+                Uri.parse(
+                  'https://generativelanguage.googleapis.com/v1beta/models?key=$key',
+                ),
+              )
+              .timeout(const Duration(seconds: 7));
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            return const <RoxumModelOption>[];
+          }
+          final decoded = jsonDecode(res.body);
+          if (decoded is! Map || decoded['models'] is! List) {
+            return const <RoxumModelOption>[];
+          }
+          final out = <RoxumModelOption>[];
+          for (final m in decoded['models'] as List) {
+            if (m is! Map) continue;
+            final methods = (m['supportedGenerationMethods'] as List?) ?? const [];
+            if (!methods.contains('generateContent')) continue;
+            var id = m['name']?.toString() ?? '';
+            if (id.startsWith('models/')) id = id.substring(7);
+            if (id.isEmpty) continue;
+            out.add(
+              RoxumModelOption(
+                id: 'gemini:$id',
+                name: m['displayName']?.toString() ?? id,
+                provider: 'Gemini',
+                url:
+                    'https://generativelanguage.googleapis.com/v1beta/models/$id:generateContent?key=$key',
+                apiKey: key,
+                model: id,
+                method: RoxumToolCallingMethod.geminiFunctionCalling,
+                isFree: id.contains('flash'),
+              ),
+            );
+          }
+          return out;
+        } catch (_) {
+          return const <RoxumModelOption>[];
+        }
+      }());
+    }
+
+    if (settings.deepseekApiKey.trim().isNotEmpty) {
+      futures.add(
+        fetchOpenAiStyle(
+          provider: 'DeepSeek',
+          modelsUrl: 'https://api.deepseek.com/models',
+          chatUrl: 'https://api.deepseek.com/chat/completions',
+          apiKey: settings.deepseekApiKey.trim(),
+        ),
+      );
+    }
+
+    if (settings.openaiApiKey.trim().isNotEmpty) {
+      futures.add(
+        fetchOpenAiStyle(
+          provider: 'OpenAI',
+          modelsUrl: 'https://api.openai.com/v1/models',
+          chatUrl: 'https://api.openai.com/v1/chat/completions',
+          apiKey: settings.openaiApiKey.trim(),
+          filter: (id) =>
+              id.startsWith('gpt-') ||
+              id.startsWith('o1') ||
+              id.startsWith('o3') ||
+              id.startsWith('o4') ||
+              id.startsWith('chatgpt'),
+        ),
+      );
+    }
+
+    if (settings.anthropicApiKey.trim().isNotEmpty) {
+      futures.add(() async {
+        final key = settings.anthropicApiKey.trim();
+        try {
+          final res = await http.get(
+            Uri.parse('https://api.anthropic.com/v1/models'),
+            headers: {
+              'x-api-key': key,
+              'anthropic-version': '2023-06-01',
+            },
+          ).timeout(const Duration(seconds: 7));
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            return const <RoxumModelOption>[];
+          }
+          final decoded = jsonDecode(res.body);
+          if (decoded is! Map || decoded['data'] is! List) {
+            return const <RoxumModelOption>[];
+          }
+          return (decoded['data'] as List)
+              .whereType<Map>()
+              .where((m) => m['id'] != null)
+              .map(
+                (m) => RoxumModelOption(
+                  id: 'anthropic:${m['id']}',
+                  name: m['display_name']?.toString() ?? m['id'].toString(),
+                  provider: 'Anthropic',
+                  url: 'https://api.anthropic.com/v1/messages',
+                  apiKey: key,
+                  model: m['id'].toString(),
+                  method: RoxumToolCallingMethod.anthropicMessages,
+                ),
+              )
+              .toList();
+        } catch (_) {
+          return const <RoxumModelOption>[];
+        }
+      }());
+    }
+
+    if (settings.groqApiKey.trim().isNotEmpty) {
+      futures.add(
+        fetchOpenAiStyle(
+          provider: 'Groq',
+          modelsUrl: 'https://api.groq.com/openai/v1/models',
+          chatUrl: 'https://api.groq.com/openai/v1/chat/completions',
+          apiKey: settings.groqApiKey.trim(),
+          defaultFree: true,
+        ),
+      );
+    }
+
+    if (settings.xaiApiKey.trim().isNotEmpty) {
+      futures.add(
+        fetchOpenAiStyle(
+          provider: 'xAI',
+          modelsUrl: 'https://api.x.ai/v1/models',
+          chatUrl: 'https://api.x.ai/v1/chat/completions',
+          apiKey: settings.xaiApiKey.trim(),
+        ),
+      );
+    }
+
+    if (settings.mistralApiKey.trim().isNotEmpty) {
+      futures.add(
+        fetchOpenAiStyle(
+          provider: 'Mistral',
+          modelsUrl: 'https://api.mistral.ai/v1/models',
+          chatUrl: 'https://api.mistral.ai/v1/chat/completions',
+          apiKey: settings.mistralApiKey.trim(),
+        ),
+      );
+    }
+
+    if (futures.isEmpty) return const [];
+    final results = await Future.wait(futures);
+    return results.expand((e) => e).toList();
   }
 
   static Future<OpenRouterKeyLimits> fetchOpenRouterKeyLimits(

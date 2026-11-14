@@ -207,6 +207,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
       updatedAt: DateTime.now(),
     );
     _restoreSessions();
+    Future.microtask(refreshAllModels);
     return RoxumChatState(
       sessions: [initialSession],
       currentSessionId: initialId,
@@ -346,40 +347,31 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     ];
   }
 
-  Future<void> refreshCustomModels() async {
+  Future<void> refreshAllModels() async {
     final settings = ref.read(settingsProvider);
-    final baseUrl = settings.customApiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    if (baseUrl.isEmpty) return;
     state = state.copyWith(isRefreshingModels: true);
     try {
-      final ids = await RoxumAiClient.fetchRemoteModels(
-        baseUrl: baseUrl,
-        apiKey: settings.customApiKey.trim(),
-      );
-      final discovered = ids
-          .map(
-            (id) => RoxumModelOption(
-              id: 'custom:$id',
-              name: id,
-              provider: 'Local / Custom',
-              url: '$baseUrl/chat/completions',
-              apiKey: settings.customApiKey.trim(),
-              model: id,
-              method: RoxumToolCallingMethod.openAiCompatible,
-            ),
-          )
-          .toList();
+      final discovered = await RoxumAiClient.fetchAllProviderModels(settings);
+      final merged = availableModels(settings);
+      final currentValid = state.selectedModelId != null &&
+          (discovered.any((m) => m.id == state.selectedModelId) ||
+              merged.any((m) => m.id == state.selectedModelId));
       state = state.copyWith(
         discoveredCustomModels: discovered,
         isRefreshingModels: false,
-        selectedModelId: state.selectedModelId ??
-            (discovered.isNotEmpty ? discovered.first.id : null),
+        selectedModelId: currentValid
+            ? state.selectedModelId
+            : (discovered.isNotEmpty
+                ? discovered.first.id
+                : (merged.isNotEmpty ? merged.first.id : null)),
       );
     } catch (e) {
-      TalkerService.warning('[RoxumChat] Failed to fetch custom models: $e');
+      TalkerService.warning('[RoxumChat] Failed to fetch provider models: $e');
       state = state.copyWith(isRefreshingModels: false);
     }
   }
+
+  Future<void> refreshCustomModels() => refreshAllModels();
 
   Future<void> refreshOpenRouterLimits() async {
     final key = ref.read(settingsProvider).openrouterApiKey.trim();

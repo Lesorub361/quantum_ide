@@ -562,61 +562,286 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
       );
     }
 
-    return Container(
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.black.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
+    final selected = models.firstWhere(
+      (m) => m.id == selectedModelId,
+      orElse: () => models.first,
+    );
+    final isRefreshing = ref.watch(roxumChatProvider).isRefreshingModels;
+
+    return InkWell(
+      onTap: () => _showModelPickerDialog(context, models, selected.id),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.08),
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              LucideIcons.sparkles,
+              size: 13,
+              color: Color(0xFF38BDF8),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '${selected.provider}: ${selected.name}',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: textColor, fontSize: 12.5),
+              ),
+            ),
+            if (selected.isFree) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF22C55E).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'FREE',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF22C55E),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: 4),
+            if (isRefreshing)
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 1.8),
+              )
+            else
+              Icon(
+                Icons.arrow_drop_down,
+                color: textColor.withValues(alpha: 0.6),
+                size: 18,
+              ),
+          ],
         ),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: selectedModelId,
-          isExpanded: true,
-          isDense: true,
-          dropdownColor: isDark ? const Color(0xFF1E2230) : Colors.white,
-          icon: Icon(
-            Icons.arrow_drop_down,
-            color: textColor.withValues(alpha: 0.6),
-            size: 18,
-          ),
-          style: TextStyle(color: textColor, fontSize: 12.5),
-          items: models.map((m) {
-            return DropdownMenuItem<String>(
-              value: m.id,
-              child: Row(
+    );
+  }
+
+  Future<void> _showModelPickerDialog(
+    BuildContext context,
+    List<RoxumModelOption> initialModels,
+    String currentSelectedId,
+  ) async {
+    String query = '';
+    String filterTab = 'ALL'; // ALL, FREE, or provider name
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final chatState = ref.watch(roxumChatProvider);
+            final settings = ref.watch(settingsProvider);
+            final models =
+                ref.read(roxumChatProvider.notifier).availableModels(settings);
+            final providers = <String>{for (final m in models) m.provider}.toList();
+
+            final filtered = models.where((m) {
+              if (filterTab == 'FREE' && !m.isFree) return false;
+              if (filterTab != 'ALL' &&
+                  filterTab != 'FREE' &&
+                  m.provider != filterTab) {
+                return false;
+              }
+              if (query.isNotEmpty) {
+                final q = query.toLowerCase();
+                return m.name.toLowerCase().contains(q) ||
+                    m.model.toLowerCase().contains(q) ||
+                    m.provider.toLowerCase().contains(q);
+              }
+              return true;
+            }).toList();
+
+            return AlertDialog(
+              title: Row(
                 children: [
-                  const Icon(
-                    LucideIcons.sparkles,
-                    size: 13,
-                    color: Color(0xFF38BDF8),
+                  const Icon(LucideIcons.sparkles,
+                      size: 18, color: Color(0xFF38BDF8)),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Выбор модели', style: TextStyle(fontSize: 16)),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '${m.provider}: ${m.name}',
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(color: textColor, fontSize: 12.5),
-                    ),
+                  IconButton(
+                    onPressed: chatState.isRefreshingModels
+                        ? null
+                        : () => ref
+                            .read(roxumChatProvider.notifier)
+                            .refreshAllModels(),
+                    icon: chatState.isRefreshingModels
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh, size: 18),
+                    tooltip: 'Обновить список моделей',
                   ),
                 ],
               ),
+              content: SizedBox(
+                width: 440,
+                height: 440,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search, size: 18),
+                        hintText: 'Поиск модели (qwen, gemini, free...)',
+                        isDense: true,
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (v) => setModalState(() => query = v.trim()),
+                    ),
+                    const SizedBox(height: 8),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          ChoiceChip(
+                            label: Text('Все (${models.length})'),
+                            selected: filterTab == 'ALL',
+                            onSelected: (_) =>
+                                setModalState(() => filterTab = 'ALL'),
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: Text(
+                              'Бесплатные (${models.where((m) => m.isFree).length})',
+                            ),
+                            selected: filterTab == 'FREE',
+                            selectedColor:
+                                const Color(0xFF22C55E).withValues(alpha: 0.25),
+                            onSelected: (_) =>
+                                setModalState(() => filterTab = 'FREE'),
+                          ),
+                          for (final prov in providers) ...[
+                            const SizedBox(width: 6),
+                            ChoiceChip(
+                              label: Text(prov),
+                              selected: filterTab == prov,
+                              onSelected: (_) =>
+                                  setModalState(() => filterTab = prov),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: filtered.isEmpty
+                          ? const Center(
+                              child: Text('Модели не найдены'),
+                            )
+                          : ListView.builder(
+                              itemCount: filtered.length,
+                              itemBuilder: (_, i) {
+                                final m = filtered[i];
+                                final isSel = m.id ==
+                                    (chatState.selectedModelId ??
+                                        currentSelectedId);
+                                return ListTile(
+                                  dense: true,
+                                  selected: isSel,
+                                  leading: Icon(
+                                    isSel
+                                        ? Icons.check_circle
+                                        : LucideIcons.cpu,
+                                    size: 16,
+                                    color: isSel
+                                        ? const Color(0xFF38BDF8)
+                                        : null,
+                                  ),
+                                  title: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          m.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (m.isFree)
+                                        Container(
+                                          margin: const EdgeInsets.only(left: 6),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 1,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF22C55E)
+                                                .withValues(alpha: 0.2),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            'FREE',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w700,
+                                              color: Color(0xFF22C55E),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  subtitle: Text(
+                                    '${m.provider} • ${m.model}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                  onTap: () {
+                                    ref
+                                        .read(roxumChatProvider.notifier)
+                                        .selectModel(m.id);
+                                    Navigator.of(dialogCtx).pop();
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogCtx).pop();
+                    _showProvidersDialog(context);
+                  },
+                  child: const Text('Настроить API'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: const Text('Закрыть'),
+                ),
+              ],
             );
-          }).toList(),
-          onChanged: (id) {
-            if (id != null) {
-              ref.read(roxumChatProvider.notifier).selectModel(id);
-            }
           },
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1383,12 +1608,14 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     final openRouterCtrl = TextEditingController(text: s.openrouterApiKey);
     final customUrlCtrl = TextEditingController(text: s.customApiBaseUrl);
     final customKeyCtrl = TextEditingController(text: s.customApiKey);
-    final customModelCtrl = TextEditingController(text: s.customApiModel);
     final geminiCtrl = TextEditingController(text: s.geminiApiKey);
     final deepseekCtrl = TextEditingController(text: s.deepseekApiKey);
     final openaiCtrl = TextEditingController(text: s.openaiApiKey);
     final anthropicCtrl = TextEditingController(text: s.anthropicApiKey);
     final groqCtrl = TextEditingController(text: s.groqApiKey);
+    final xaiCtrl = TextEditingController(text: s.xaiApiKey);
+    final mistralCtrl = TextEditingController(text: s.mistralApiKey);
+    String discoveredPrimaryModel = s.customApiModel;
 
     OpenRouterKeyLimits? limitsPreview;
     String? limitsError;
@@ -1520,14 +1747,14 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                         ),
                       const Divider(height: 20),
                       const Text(
-                        'Локальный ИИ / Custom OpenAI (/v1)',
+                        'Локальный ИИ / Custom OpenAI',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 6),
                       TextField(
                         controller: customUrlCtrl,
                         decoration: const InputDecoration(
-                          labelText: 'Base URL (например http://10.61.156.225:8080/v1)',
+                          labelText: 'URL сервера (напр. http://10.61.156.225:8080/v1)',
                           isDense: true,
                           border: OutlineInputBorder(),
                         ),
@@ -1538,15 +1765,6 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                         obscureText: true,
                         decoration: const InputDecoration(
                           labelText: 'Bearer Token / API Key (если нужен)',
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      TextField(
-                        controller: customModelCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'ID модели',
                           isDense: true,
                           border: OutlineInputBorder(),
                         ),
@@ -1568,9 +1786,8 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                                   );
                                   setModalState(() {
                                     fetchedModels = list;
-                                    if (list.isNotEmpty &&
-                                        customModelCtrl.text.trim().isEmpty) {
-                                      customModelCtrl.text = list.first;
+                                    if (list.isNotEmpty) {
+                                      discoveredPrimaryModel = list.first;
                                     }
                                     fetchingModels = false;
                                   });
@@ -1587,8 +1804,8 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                                 height: 12,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Icon(Icons.cloud_download_outlined, size: 14),
-                        label: const Text('Загрузить модели (/v1/models)'),
+                            : const Icon(Icons.search, size: 14),
+                        label: const Text('Найти модели автоматически'),
                       ),
                       if (modelsError != null)
                         Padding(
@@ -1608,10 +1825,13 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                             spacing: 6,
                             runSpacing: 6,
                             children: fetchedModels.map((id) {
-                              return ActionChip(
+                              final isSelected = discoveredPrimaryModel == id;
+                              return ChoiceChip(
                                 label: Text(id, style: const TextStyle(fontSize: 11)),
-                                onPressed: () =>
-                                    setModalState(() => customModelCtrl.text = id),
+                                selected: isSelected,
+                                onSelected: (_) => setModalState(
+                                  () => discoveredPrimaryModel = id,
+                                ),
                               );
                             }).toList(),
                           ),
@@ -1671,6 +1891,26 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                           border: OutlineInputBorder(),
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: xaiCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'xAI (Grok) API Key',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: mistralCtrl,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Mistral API Key',
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1686,16 +1926,16 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                     await notifier.setOpenrouterApiKey(openRouterCtrl.text.trim());
                     await notifier.setCustomApiBaseUrl(customUrlCtrl.text.trim());
                     await notifier.setCustomApiKey(customKeyCtrl.text.trim());
-                    await notifier.setCustomApiModel(customModelCtrl.text.trim());
+                    await notifier.setCustomApiModel(discoveredPrimaryModel.trim());
                     await notifier.setGeminiApiKey(geminiCtrl.text.trim());
                     await notifier.setDeepseekApiKey(deepseekCtrl.text.trim());
                     await notifier.setOpenaiApiKey(openaiCtrl.text.trim());
                     await notifier.setAnthropicApiKey(anthropicCtrl.text.trim());
                     await notifier.setGroqApiKey(groqCtrl.text.trim());
+                    await notifier.setXaiApiKey(xaiCtrl.text.trim());
+                    await notifier.setMistralApiKey(mistralCtrl.text.trim());
                     final chatNotifier = ref.read(roxumChatProvider.notifier);
-                    if (customUrlCtrl.text.trim().isNotEmpty) {
-                      chatNotifier.refreshCustomModels();
-                    }
+                    chatNotifier.refreshAllModels();
                     if (openRouterCtrl.text.trim().isNotEmpty) {
                       chatNotifier.refreshOpenRouterLimits();
                     }
@@ -1712,11 +1952,12 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     openRouterCtrl.dispose();
     customUrlCtrl.dispose();
     customKeyCtrl.dispose();
-    customModelCtrl.dispose();
     geminiCtrl.dispose();
     deepseekCtrl.dispose();
     openaiCtrl.dispose();
     anthropicCtrl.dispose();
     groqCtrl.dispose();
+    xaiCtrl.dispose();
+    mistralCtrl.dispose();
   }
 }
