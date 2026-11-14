@@ -869,6 +869,13 @@ gradlew() {
 
 # Flutter build wrapper to auto-ensure ARM64 target, disable daemon, and use native aapt2 on mobile Android PRoot
 flutter() {
+    if [ "$1" = "upgrade" ]; then
+        if ! grep -qa "GLIBC_2.34" /lib/aarch64-linux-gnu/libc.so.6 /usr/lib/aarch64-linux-gnu/libc.so.6 2>/dev/null; then
+            echo "ERROR: Flutter 3.50+ (Dart 3.14) requires GLIBC >= 2.34 (Ubuntu 22.04+/24.04 rootfs)."
+            echo "Current rootfs has an older GLIBC; staying on Flutter 3.47.8 to keep SDK functional."
+            return 1
+        fi
+    fi
     local proj_name="$(basename "$PWD")"
     for ext_root in "/sdcard/QuantumIDE/$proj_name" "/storage/emulated/0/QuantumIDE/$proj_name" "/root/projects/external/$proj_name"; do
         if [ -d "$ext_root" ] && [ "$PWD" != "$ext_root" ]; then
@@ -1385,6 +1392,13 @@ gradlew() {
 
 # Flutter build wrapper to auto-ensure ARM64 target, disable daemon, and use native aapt2 on mobile Android PRoot
 flutter() {
+    if [ "$1" = "upgrade" ]; then
+        if ! grep -qa "GLIBC_2.34" /lib/aarch64-linux-gnu/libc.so.6 /usr/lib/aarch64-linux-gnu/libc.so.6 2>/dev/null; then
+            echo "ERROR: Flutter 3.50+ (Dart 3.14) requires GLIBC >= 2.34 (Ubuntu 22.04+/24.04 rootfs)."
+            echo "Current rootfs has an older GLIBC; staying on Flutter 3.47.8 to keep SDK functional."
+            return 1
+        fi
+    fi
     if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
@@ -3323,10 +3337,13 @@ if [ -d "$SDK_ROOT" ]; then
     done
 fi
 
-# Flutter Version Pinning & Auto-Healing (Target: 3.47.8)
-# Guarantees that Flutter on device stays at verified 3.47.8 tag, preventing
-# ARM64 AOT gen_snapshot errors and Vulkan Impeller black screen crashes.
+# Flutter Version Pinning & Auto-Healing
+# Uses 3.50.0 on Ubuntu 22.04+/24.04 rootfs (GLIBC >= 2.34), or pins 3.47.8 on
+# older rootfs (GLIBC 2.31) where Dart 3.14 fails with GLIBC_2.34 not found.
 TARGET_FLUTTER_TAG="3.47.8"
+if grep -qa "GLIBC_2.34" /lib/aarch64-linux-gnu/libc.so.6 /usr/lib/aarch64-linux-gnu/libc.so.6 2>/dev/null; then
+    TARGET_FLUTTER_TAG="3.50.0"
+fi
 if [ -d "/root/flutter/.git" ]; then
     rm -f /root/flutter/.git/*.lock 2>/dev/null || true
     git -C /root/flutter config --global --add safe.directory /root/flutter 2>/dev/null || true
