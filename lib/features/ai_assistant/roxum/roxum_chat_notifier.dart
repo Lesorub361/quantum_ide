@@ -22,6 +22,7 @@ class RoxumTimelineItem {
   final String id;
   final RoxumTimelineKind kind;
   final String text;
+  final int durationMs;
   final RoxumToolCallRecord? toolCall;
   final RoxumPendingEdit? fileEdit;
 
@@ -29,6 +30,7 @@ class RoxumTimelineItem {
     required this.id,
     required this.kind,
     this.text = '',
+    this.durationMs = 0,
     this.toolCall,
     this.fileEdit,
   });
@@ -523,6 +525,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     ];
 
     final startedAt = DateTime.now();
+    var stepStartedAt = startedAt;
     var currentStep = 0;
     final turnEditedPaths = <String>{};
     final stepEditIds = <String, String>{};
@@ -607,6 +610,7 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         isCancelled: () => _cancelled,
         onStepStart: (step) {
           currentStep = step;
+          stepStartedAt = DateTime.now();
         },
         onToolEvent: (record) {
           _updateTurn(turnId, (turn) {
@@ -644,7 +648,9 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
           });
         },
         onReasoningText: (reasoning) {
-          final elapsed = DateTime.now().difference(startedAt).inMilliseconds;
+          final now = DateTime.now();
+          final totalElapsed = now.difference(startedAt).inMilliseconds;
+          final stepElapsed = now.difference(stepStartedAt).inMilliseconds;
           _updateTurn(
             turnId,
             (turn) {
@@ -656,11 +662,12 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
                         id: 'step_${currentStep}_reasoning',
                         kind: RoxumTimelineKind.reasoning,
                         text: reasoning,
+                        durationMs: stepElapsed,
                       ),
                     );
               return turn.copyWith(
                 reasoningText: reasoning,
-                thinkingDurationMs: elapsed,
+                thinkingDurationMs: totalElapsed,
                 timeline: tl,
               );
             },

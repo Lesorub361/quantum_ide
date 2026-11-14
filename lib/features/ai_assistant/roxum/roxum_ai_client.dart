@@ -315,12 +315,14 @@ class OpenRouterKeyLimits {
 
 class _ParsedTurn {
   final String text;
+  final String reasoning;
   final List<({String id, String name, Map<String, dynamic> args})> toolCalls;
   final Map<String, dynamic> rawAssistantMessage;
   final RoxumUsageStats usage;
 
   const _ParsedTurn({
     required this.text,
+    this.reasoning = '',
     required this.toolCalls,
     required this.rawAssistantMessage,
     this.usage = const RoxumUsageStats(),
@@ -737,9 +739,12 @@ class RoxumAiClient {
 
           final decoded = jsonDecode(res.body) as Map<String, dynamic>;
           turn = _parseResponse(model.method, decoded);
+          if (turn.reasoning.isNotEmpty) {
+            onReasoningText?.call(turn.reasoning);
+          }
           if (turn.text.isNotEmpty) {
             final extracted = _splitThinkTags(turn.text);
-            if (extracted.reasoning.isNotEmpty) {
+            if (extracted.reasoning.isNotEmpty && turn.reasoning.isEmpty) {
               onReasoningText?.call(extracted.reasoning);
             }
             onAssistantText(extracted.answer);
@@ -915,10 +920,25 @@ class RoxumAiClient {
           if (delta == null) continue;
 
           final rDelta = delta['reasoning_content']?.toString() ??
-              delta['reasoning']?.toString();
+              delta['reasoning']?.toString() ??
+              delta['thought']?.toString();
           if (rDelta != null && rDelta.isNotEmpty) {
             reasoningBuf.write(rDelta);
             onReasoningText?.call(reasoningBuf.toString());
+          }
+          final rDetails = delta['reasoning_details'];
+          if (rDetails is List) {
+            final buf = StringBuffer();
+            for (final item in rDetails) {
+              if (item is Map) {
+                final t = item['text']?.toString() ?? item['summary']?.toString();
+                if (t != null && t.isNotEmpty) buf.write(t);
+              }
+            }
+            if (buf.isNotEmpty) {
+              reasoningBuf.write(buf.toString());
+              onReasoningText?.call(reasoningBuf.toString());
+            }
           }
 
           final cDelta = delta['content']?.toString();
@@ -1073,6 +1093,19 @@ class RoxumAiClient {
       case RoxumToolCallingMethod.openAiCompatible:
         final msg = (json['choices'] as List).first['message'] as Map<String, dynamic>;
         final text = msg['content']?.toString() ?? '';
+        var reasoning = msg['reasoning_content']?.toString() ??
+            msg['reasoning']?.toString() ??
+            '';
+        if (reasoning.isEmpty && msg['reasoning_details'] is List) {
+          final rBuf = StringBuffer();
+          for (final item in (msg['reasoning_details'] as List)) {
+            if (item is Map) {
+              final t = item['text']?.toString() ?? item['summary']?.toString();
+              if (t != null && t.isNotEmpty) rBuf.write(t);
+            }
+          }
+          reasoning = rBuf.toString();
+        }
         final calls = <({String id, String name, Map<String, dynamic> args})>[];
         final rawCalls = msg['tool_calls'] as List?;
         if (rawCalls != null) {
@@ -1100,10 +1133,13 @@ class RoxumAiClient {
         final oCost = (openAiUsage?['cost'] as num?)?.toDouble() ?? 0.0;
         return _ParsedTurn(
           text: text,
+          reasoning: reasoning,
           toolCalls: calls,
           rawAssistantMessage: {
             'role': 'assistant',
-            'content': text,
+            'content': (text.isEmpty && rawCalls != null && rawCalls.isNotEmpty)
+                ? null
+                : text,
             if (rawCalls != null && rawCalls.isNotEmpty) 'tool_calls': rawCalls,
           },
           usage: RoxumUsageStats(
@@ -1117,11 +1153,14 @@ class RoxumAiClient {
       case RoxumToolCallingMethod.anthropicMessages:
         final blocks = (json['content'] as List?) ?? const [];
         final textBuf = StringBuffer();
+        final reasonBuf = StringBuffer();
         final calls = <({String id, String name, Map<String, dynamic> args})>[];
         final rawToolCalls = <Map<String, dynamic>>[];
         for (final b in blocks) {
           if (b is! Map) continue;
-          if (b['type'] == 'text') {
+          if (b['type'] == 'thinking') {
+            reasonBuf.write(b['thinking']?.toString() ?? '');
+          } else if (b['type'] == 'text') {
             textBuf.write(b['text']?.toString() ?? '');
           } else if (b['type'] == 'tool_use') {
             final id = b['id']?.toString() ?? 'tool_${calls.length}';
@@ -1143,6 +1182,7 @@ class RoxumAiClient {
         final aOut = (antUsage?['output_tokens'] as num?)?.toInt() ?? 0;
         return _ParsedTurn(
           text: textBuf.toString(),
+          reasoning: reasonBuf.toString(),
           toolCalls: calls,
           rawAssistantMessage: {
             'role': 'assistant',
@@ -1167,11 +1207,14 @@ class RoxumAiClient {
         }
         final parts = (candidates.first['content']?['parts'] as List?) ?? const [];
         final textBuf = StringBuffer();
+        final reasonBuf = StringBuffer();
         final calls = <({String id, String name, Map<String, dynamic> args})>[];
         final rawToolCalls = <Map<String, dynamic>>[];
         for (final part in parts) {
           if (part is! Map) continue;
-          if (part['text'] != null) {
+          if (part['thought'] == true && part['text'] != null) {
+            reasonBuf.write(part['text'].toString());
+          } else if (part['text'] != null) {
             textBuf.write(part['text'].toString());
           } else if (part['functionCall'] is Map) {
             final fc = part['functionCall'] as Map;
@@ -1195,6 +1238,7 @@ class RoxumAiClient {
         final gTotal = (gemUsage?['totalTokenCount'] as num?)?.toInt() ?? (gIn + gOut);
         return _ParsedTurn(
           text: textBuf.toString(),
+          reasoning: reasonBuf.toString(),
           toolCalls: calls,
           rawAssistantMessage: {
             'role': 'assistant',

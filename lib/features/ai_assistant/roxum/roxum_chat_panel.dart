@@ -1328,7 +1328,9 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
             widgets.add(
               RoxumThinkingCard(
                 reasoningText: item.text,
-                durationMs: turn.thinkingDurationMs,
+                durationMs: item.durationMs > 0
+                    ? item.durationMs
+                    : turn.thinkingDurationMs,
                 isStreaming: isGeneratingThis && i == items.length - 1,
                 surfaceColor: surfaceColor,
                 textColor: textColor,

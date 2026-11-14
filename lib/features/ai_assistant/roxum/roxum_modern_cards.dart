@@ -93,15 +93,19 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
               ),
             ),
           ),
-          if (_expanded && widget.reasoningText.isNotEmpty)
+          if ((_expanded || widget.isStreaming) &&
+              widget.reasoningText.isNotEmpty)
             Container(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Text(
                 widget.reasoningText,
+                maxLines: _expanded ? null : 3,
+                overflow:
+                    _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 11.5,
                   height: 1.45,
-                  color: widget.textColor.withValues(alpha: 0.72),
+                  color: widget.textColor.withValues(alpha: 0.75),
                 ),
               ),
             ),
