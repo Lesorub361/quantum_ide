@@ -112,6 +112,19 @@ jobs:
             sed -i 's/\^Pkg\\\.Desc = Android NDK/Pkg\\\.Desc = Android NDK/g' "$tc" || true
           done
 
+      - name: Build static ruri-arm64 binary (RuriOSS/ruri)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+          git clone --depth 1 https://github.com/RuriOSS/ruri.git /tmp/ruri-src
+          mkdir -p assets/bin
+          aarch64-linux-gnu-gcc -static -DRURI_CORE_ONLY -O2 -w \
+            /tmp/ruri-src/src/*.c /tmp/ruri-src/src/easteregg/*.c \
+            -o assets/bin/ruri-arm64 -lpthread
+          aarch64-linux-gnu-strip assets/bin/ruri-arm64
+          ls -lh assets/bin/ruri-arm64
+          rm -rf /tmp/ruri-src
+
       - name: Get dependencies
         run: flutter pub get
 

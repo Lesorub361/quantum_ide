@@ -1409,6 +1409,12 @@ class RuntimeService extends ChangeNotifier {
       debugPrint('Warning: Failed to ensure bundled aapt2: $e');
     }
 
+    try {
+      await _ensureBundledRuri();
+    } catch (e) {
+      debugPrint('Warning: Failed to ensure bundled ruri: $e');
+    }
+
       // Enhanced .bashrc with robust PATH, Ubuntu prompt and greeting
       // Written if missing OR if version tag has changed (to push updates to users)
     final bashrc = File(
@@ -2402,6 +2408,36 @@ fi
     }
   }
 
+  /// Extracts the pre-bundled static ARM64 `ruri` (RuriOSS/ruri) container runtime
+  /// into `$_filesDir/bin/ruri` so rooted devices can run Ubuntu 24.04 at native
+  /// kernel speed without `libproot.so` ptrace overhead.
+  Future<void> _ensureBundledRuri() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final binDir = Directory(p.join(_filesDir, 'bin'));
+      if (!await binDir.exists()) {
+        await binDir.create(recursive: true);
+      }
+      final targetFile = File(p.join(binDir.path, 'ruri'));
+      if (await targetFile.exists() && await targetFile.length() > 100000) {
+        await Process.run('chmod', ['755', targetFile.path]);
+        return;
+      }
+      final byteData = await rootBundle.load('assets/bin/ruri-arm64');
+      final bytes = byteData.buffer.asUint8List(
+        byteData.offsetInBytes,
+        byteData.lengthInBytes,
+      );
+      if (await targetFile.exists()) await targetFile.delete();
+      await targetFile.writeAsBytes(bytes, flush: true);
+      await Process.run('chmod', ['755', targetFile.path]);
+      debugPrint('[RURI] Installed static ruri-arm64 at ${targetFile.path}');
+    } catch (e) {
+      // Gracefully ignore in local dev builds where assets/bin/ruri-arm64 wasn't compiled
+      debugPrint('[RURI] Bundled ruri-arm64 not available or skipped: $e');
+    }
+  }
+
   String _generateTermFetchScript() {
     return r'''#!/bin/bash
 # ==============================================================================
@@ -2610,6 +2646,47 @@ if [ -f "\$CONFIG/native_root_mode.flag" ]; then
             break
         fi
     done
+    RURI_BIN="\$FILES_DIR/bin/ruri"
+    if [ -n "\$SU_BIN" ] && [ -x "\$RURI_BIN" ] && [ -x "\$ROOTFS/bin/bash" ]; then
+        case "\$GUEST_CWD" in
+            "\$FILES_DIR/projects"/*) RURI_CWD="/root/projects/\${GUEST_CWD#\$FILES_DIR/projects/}" ;;
+            "\$FILES_DIR/projects")   RURI_CWD="/root/projects" ;;
+            "\$FILES_DIR"*)           RURI_CWD="/root" ;;
+            /storage/emulated/0/*)    RURI_CWD="/sdcard/\${GUEST_CWD#/storage/emulated/0/}" ;;
+            /root*)                   RURI_CWD="\$GUEST_CWD" ;;
+            /sdcard*)                 RURI_CWD="\$GUEST_CWD" ;;
+            *)                        RURI_CWD="/root" ;;
+        esac
+        mkdir -p "\$FILES_DIR/projects" "\$TMPDIR" "\$ROOTFS/etc" "\$ROOTFS/sdcard" "\$ROOTFS/tmp" "\$ROOTFS/root/projects" 2>/dev/null || true
+        [ ! -f "\$TMPDIR/resolv.conf" ] && printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > "\$TMPDIR/resolv.conf" 2>/dev/null || true
+        [ ! -f "\$TMPDIR/hosts" ] && printf '127.0.0.1 localhost localhost.localdomain quantum-ide\n::1 localhost ip6-localhost ip6-loopback\n' > "\$TMPDIR/hosts" 2>/dev/null || true
+        [ ! -f "\$TMPDIR/nsswitch.conf" ] && printf 'passwd: files\ngroup: files\nshadow: files\nhosts: files dns\nnetworks: files\nprotocols: files\nservices: files\nethers: files\nrpc: files\n' > "\$TMPDIR/nsswitch.conf" 2>/dev/null || true
+        RURI_MOUNTS="-m \\"\$FILES_DIR/projects\\" /root/projects -m /storage/emulated/0 /sdcard -m \\"\$TMPDIR/resolv.conf\\" /etc/resolv.conf -m \\"\$TMPDIR/hosts\\" /etc/hosts -m \\"\$TMPDIR/nsswitch.conf\\" /etc/nsswitch.conf -m \\"\$TMPDIR\\" /tmp"
+        if [ -d "/storage/emulated/0/QuantumIDE" ]; then
+            mkdir -p "\$ROOTFS/root/projects/external" 2>/dev/null || true
+            RURI_MOUNTS="\$RURI_MOUNTS -m /storage/emulated/0/QuantumIDE /root/projects/external"
+        fi
+        for sys_dir in /system /apex /vendor /product; do
+            if [ -d "\$sys_dir" ]; then
+                mkdir -p "\$ROOTFS\$sys_dir" 2>/dev/null || true
+                RURI_MOUNTS="\$RURI_MOUNTS -m \$sys_dir \$sys_dir"
+            fi
+        done
+        RURI_ENV="-e HOME /root -e USER root -e TMPDIR /tmp -e TEMP /tmp -e TERM xterm-256color -e COLORTERM truecolor -e LANG C.UTF-8 -e LC_ALL C.UTF-8 -e DEBIAN_FRONTEND noninteractive -e FLUTTER_ALLOW_SU_ROOT true -e ANDROID_HOME /root/android-sdk -e ANDROID_SDK_ROOT /root/android-sdk -e PATH /usr/local/sbin:/usr/local/bin:/root/.bun/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin"
+        if [ \$# -gt 2 ]; then
+            shift 2
+            if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
+                shift 2
+            fi
+            CMD_STR="\$*"
+            RURI_SCRIPT="\$TMPDIR/.rc_\$\$.sh"
+            printf '%s\n' "\$CMD_STR" > "\$RURI_SCRIPT"
+            exec "\$SU_BIN" -c "\\"\$RURI_BIN\\" -w -W \\"\$RURI_CWD\\" \$RURI_MOUNTS \$RURI_ENV \\"\$ROOTFS\\" /bin/bash -c 'C=\\"\$(cat /tmp/.rc_\$\$.sh)\\"; rm -f /tmp/.rc_\$\$.sh; eval \\"\$C\\"' "
+        else
+            exec "\$SU_BIN" -c "\\"\$RURI_BIN\\" -w -W \\"\$RURI_CWD\\" \$RURI_MOUNTS \$RURI_ENV \\"\$ROOTFS\\" /bin/bash --login"
+        fi
+    fi
+
     if [ \$# -gt 2 ]; then
         shift 2
         if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
