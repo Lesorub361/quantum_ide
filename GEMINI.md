@@ -78,9 +78,13 @@ All code must comply with `analysis_options.yaml`:
    - Avoid empty or unnecessary `Container()` widgets.
    - Ensure null safety: avoid force-unwrapping `!` unless nullability is proven via previous checks.
 
-5. **Sandbox & File Paths**:
-   - Remember that paths inside the PRoot terminal sandbox (`/home/...`) differ from Android/host paths.
-   - Use path translation helpers in `lib/core/utils/` when translating paths between the host app and PRoot.
+5. **Sandbox, Native Root Mode & Cross-OS File Paths**:
+   - **Android (Ubuntu 24.04 PRoot Mode)**: Projects reside in fast internal storage (`$_filesDir/projects/<name>`), mapped inside PRoot as `/root/projects/<name>`. Use `RuntimeService.toProotPath()` / `PathMapper.mapToGuest()` when translating host paths to guest paths.
+   - **Android (Native Root Kernel Mode — `su`)**: Users with Root access (Magisk / KernelSU / APatch) can enable `useNativeRootMode` (`RuntimeService.setUseNativeRootMode(true)`) to execute terminal and AI agent commands directly on the Android device kernel without downloading the Ubuntu 24.04 rootfs or invoking `libproot.so`.
+   - **Desktop (Linux / Windows / macOS)**:
+     - Imported projects are opened **in-place** at their real filesystem path (`isInternal: false`) without copying into `~/.quantum_ide/projects`.
+     - Newly created projects default to `PlatformUtils.defaultDesktopProjectsDir` (`~/QuantumIDEProjects` or `/persistent/home/<user>/QuantumIDEProjects`) or the user-selected folder from the Create Project dialog.
+     - `RuntimeService.desktopEnv` and `PlatformUtils.commonBinaryDirs` automatically scan all candidate home directories (including `/persistent/home/<user>`, `~/.local/bin`, `~/.agy/bin`, `~/.gemini/antigravity/bin`, `/opt/flutter/bin`, `/snap/bin`) so `flutter`, `dart`, `agy`, `node`, `npm`, `cargo`, `go`, and `python3` work out of the box in both the terminal and AI agents.
 
 ---
 

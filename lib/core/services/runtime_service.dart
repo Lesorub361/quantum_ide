@@ -504,6 +504,15 @@ class RuntimeService extends ChangeNotifier {
     }
   }
 
+  /// Translates an Android host path to its PRoot guest path (`/root/projects/...`),
+  /// or returns [hostPath] unchanged on Desktop or Native Root Kernel mode.
+  String toProotPath(String hostPath) {
+    if (!Platform.isAndroid || _useNativeRootMode || _filesDir.isEmpty) {
+      return hostPath;
+    }
+    return PathMapper.mapToGuest(hostPath, _filesDir);
+  }
+
   /// Translates any hardcoded Android host paths inside a shell command string
   /// (e.g. `/data/user/0/com.../files/projects/foo`) to their guest equivalents
   /// (`/root/projects/foo`) when running in PRoot mode.
@@ -514,7 +523,7 @@ class RuntimeService extends ChangeNotifier {
     return command
         .replaceAll('$_filesDir/projects', '/root/projects')
         .replaceAll(
-          RegExp(r'/data/(?:user/0|data)/[^/\s"'\'']+/files/projects'),
+          RegExp('/data/(?:user/0|data)/[^/\\s"\']+/files/projects'),
           '/root/projects',
         );
   }
