@@ -1,16 +1,16 @@
 {
-  "versionCode": 258,
-  "versionName": "1.2.241",
-  "notes": "## 🚀 QuantumIDE v1.2.241\n\n### Что нового\n- **Исправление Native Root Kernel Mode (`su`) без Ubuntu PRoot**:\n  - Устранены ошибки `mkdir: '/root': Read-only file system`, `mkdir: '/tmp': Read-only file system` и `/system/bin/sh: can't create /root/.bashrc` — домашняя и временная директории перенесены в записываемые `$FILES_DIR/home` и `$FILES_DIR/tmp`.\n  - Установщик пакетов (`PackageInstallDialog`) и `RuntimeService.runCommandStream` теперь распознают Native Root Kernel Mode (`su`), адаптируют пути `/root` → `$FILES_DIR/home` и заменяют `apt`-блоки на проверку Termux/AGY `pkg` и нативных инструментов.\n- **Native Root Kernel Mode (`su`) без скачивания Ubuntu**:\n  - Пользователи Android с Root-правами (**Magisk / KernelSU / APatch**) могут работать напрямую на своём ядре устройства без загрузки архива Ubuntu 24.04.\n- **Ультрабыстрые пакетные менеджеры в Ubuntu 24.04 (`uv`, `bun`, `pnpm`)**:\n  - Автоматическая установка **`uv`** (Python), **`bun`** (ARM64 JS/TS) и **`pnpm`** в `setup-arm64.sh`.\n- **Нативные пути на ПК (Linux / Windows / macOS) и Android**:\n  - На ПК проекты при добавлении открываются мгновенно на месте (in-place), добавлена папка `~/QuantumIDEProjects` и автопоиск `flutter`, `dart`, `agy`, `node`, `npm`, `cargo`, `go`, `python3`.\n- **ИИ-агент (до 48 шагов) + 4 нативных MCP-сервера + Conduit Terminal (`conduit_vt`)**.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 259,
+  "versionName": "1.2.242",
+  "notes": "## 🚀 QuantumIDE v1.2.242\n\n### Что нового\n- **Исправление скролла и отображения терминала при открытии/закрытии панелей (`conduit_vt`, `TerminalPanelContent`)**:\n  - Боковая панель **«СЕССИИ»** теперь открывается поверх терминала (overlay), не сжимая экран и не сбивая вывод интерактивных CLI (`agy`, `vim`, `htop`).\n  - В [`RenderTerminal`](packages/conduit_vt/lib/src/ui/render.dart) сохраняется привязка к низу экрана (`_stickToBottom`) при любом изменении ширины (открытие чат-бота, дерева файлов, поворот экрана) — больше не появляется пустая область под курсором и текст не улетает в старую историю.\n  - Увеличен debounce отправки `SIGWINCH` в PTY до `220 мс`, чтобы анимация боковых панелей завершалась до перерисовки CLI.\n- **Исправление Native Root Kernel Mode (`su`) без Ubuntu PRoot**:\n  - Записываемые `$FILES_DIR/home` и `$FILES_DIR/tmp` вместо read-only `/root` и `/tmp`, адаптация `PackageInstallDialog` под нативное ядро.\n- **Ультрабыстрые `uv`, `bun`, `pnpm` в Ubuntu 24.04 и нативные пути на ПК**.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.241/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.242/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.241",
-  "buildNumber": 258,
-  "tag_name": "v1.2.241",
-  "releaseNotes": "Исправление Native Root Kernel Mode (su) без Ubuntu PRoot (устранение Read-only file system для /root и /tmp, адаптация установщика пакетов), ультрабыстрые uv/bun/pnpm в Ubuntu 24.04 и нативные пути на ПК."
+  "version": "1.2.242",
+  "buildNumber": 259,
+  "tag_name": "v1.2.242",
+  "releaseNotes": "Исправление скролла и перерисовки терминала при открытии боковых панелей (СЕССИИ, файлы, чат-бот), Native Root Kernel Mode (su) без Ubuntu PRoot и ультрабыстрые uv/bun/pnpm."
 }

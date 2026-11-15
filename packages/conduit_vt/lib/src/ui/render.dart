@@ -165,9 +165,11 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   final TerminalPainter _painter;
 
   var _stickToBottom = true;
+  var _isUpdatingLayout = false;
 
   void _onScroll() {
-    _stickToBottom = _scrollOffset >= _maxScrollExtent;
+    if (_isUpdatingLayout) return;
+    _stickToBottom = _scrollOffset >= _maxScrollExtent - 1.0;
     markNeedsLayout();
     markNeedsPaint();
     _notifyEditableRect();
@@ -227,14 +229,21 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   @override
   void performLayout() {
-    size = constraints.biggest;
+    final wasStuckToBottom = _stickToBottom;
+    _isUpdatingLayout = true;
+    try {
+      size = constraints.biggest;
 
-    _updateViewportSize();
+      _updateViewportSize();
 
-    _updateScrollOffset();
+      _updateScrollOffset();
 
-    if (_stickToBottom) {
-      _offset.correctBy(_maxScrollExtent - _scrollOffset);
+      if (wasStuckToBottom) {
+        _offset.correctBy(_maxScrollExtent - _scrollOffset);
+        _stickToBottom = true;
+      }
+    } finally {
+      _isUpdatingLayout = false;
     }
   }
 

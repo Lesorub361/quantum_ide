@@ -2773,23 +2773,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           ],
         );
 
-        if (!isCompact) {
-          return Row(
-            children: [
-              if (_isSidebarOpen)
-                SizedBox(
-                  width: 220,
-                  child: _buildSessionsSidebarList(
-                    sessions,
-                    notifier,
-                    isOverlay: false,
-                  ),
-                ),
-              Expanded(child: terminalContent),
-            ],
-          );
-        }
-
         return Stack(
           children: [
             terminalContent,
@@ -2797,14 +2780,14 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
               Positioned.fill(
                 child: GestureDetector(
                   onTap: () => setState(() => _isSidebarOpen = false),
-                  child: Container(color: Colors.black.withValues(alpha: 0.65)),
+                  child: Container(color: Colors.black.withValues(alpha: 0.55)),
                 ),
               ),
               Positioned(
                 left: 0,
                 top: 0,
                 bottom: 0,
-                width: 230,
+                width: isCompact ? 230 : 240,
                 child: _buildSessionsSidebarList(
                   sessions,
                   notifier,
