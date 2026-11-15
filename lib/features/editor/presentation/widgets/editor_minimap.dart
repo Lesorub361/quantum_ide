@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:re_editor/re_editor.dart';
@@ -23,6 +24,9 @@ class EditorMinimap extends StatefulWidget {
 }
 
 class _EditorMinimapState extends State<EditorMinimap> {
+  Timer? _debounce;
+  int _revision = 0;
+
   @override
   void initState() {
     super.initState();
@@ -40,33 +44,46 @@ class _EditorMinimapState extends State<EditorMinimap> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     widget.controller.removeListener(_onChanged);
     super.dispose();
   }
 
   void _onChanged() {
-    if (mounted) setState(() {});
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+      setState(() => _revision++);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = widget.controller.text;
-    final lines = text.split('\n');
-    final totalLines = lines.length;
+    final codeLines = widget.controller.codeLines;
+    final totalLines = codeLines.length;
 
     if (totalLines == 0) {
       return const SizedBox.shrink();
     }
 
-    final maxLineLength = lines.map((l) => l.length).fold(0, (a, b) => max(a, b)).clamp(20, 200);
+    var maxLineLength = 20;
+    final sampleStep = max(1, totalLines ~/ 200);
+    for (int i = 0; i < totalLines; i += sampleStep) {
+      final len = codeLines[i].length;
+      if (len > maxLineLength) maxLineLength = len;
+    }
+    maxLineLength = maxLineLength.clamp(20, 200);
+
     final lineHeight = max(1.5, widget.width / maxLineLength);
     final totalHeight = totalLines * lineHeight;
 
     final selection = widget.controller.selection;
     final currentLine = selection.isCollapsed ? selection.start.index : -1;
 
-    final viewportTop = currentLine >= 0 
-        ? (currentLine * lineHeight).clamp(0.0, max(0.0, totalHeight - 20)).toDouble()
+    final viewportTop = currentLine >= 0
+        ? (currentLine * lineHeight)
+            .clamp(0.0, max(0.0, totalHeight - 20))
+            .toDouble()
         : 0.0;
 
     return Container(
@@ -76,12 +93,15 @@ class _EditorMinimapState extends State<EditorMinimap> {
         children: [
           SingleChildScrollView(
             controller: widget.scrollController,
-            child: CustomPaint(
-              size: Size(widget.width, totalHeight),
-              painter: _MinimapPainter(
-                lines: lines,
-                lineHeight: lineHeight,
-                currentLine: currentLine,
+            child: RepaintBoundary(
+              child: CustomPaint(
+                size: Size(widget.width, totalHeight),
+                painter: _MinimapPainter(
+                  codeLines: codeLines,
+                  lineHeight: lineHeight,
+                  currentLine: currentLine,
+                  revision: _revision,
+                ),
               ),
             ),
           ),
@@ -102,52 +122,71 @@ class _EditorMinimapState extends State<EditorMinimap> {
 }
 
 class _MinimapPainter extends CustomPainter {
-  final List<String> lines;
+  final CodeLines codeLines;
   final double lineHeight;
   final int currentLine;
+  final int revision;
 
   _MinimapPainter({
-    required this.lines,
+    required this.codeLines,
     required this.lineHeight,
     required this.currentLine,
+    required this.revision,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint();
+    final total = codeLines.length;
+    final stride = max(1, total ~/ 600);
+    final rectHeight = max(lineHeight * stride - 0.5, 0.5);
 
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i];
-      if (line.trim().isEmpty) continue;
+    for (int i = 0; i < total; i += stride) {
+      final line = codeLines[i].text;
+      final trimmed = line.trimLeft();
+      if (trimmed.isEmpty) continue;
 
       final y = i * lineHeight;
-      final indent = line.length - line.trimLeft().length;
-      final contentLength = line.trim().length;
+      final indent = line.length - trimmed.length;
+      final contentLength = trimmed.trimRight().length;
 
       final indentWidth = indent * 0.5;
       final contentWidth = max(1.0, contentLength * 0.3);
 
       Color lineColor = Colors.white.withValues(alpha: 0.3);
 
-      if (line.trimLeft().startsWith('//') || line.trimLeft().startsWith('#') || line.trimLeft().startsWith('/*')) {
+      if (trimmed.startsWith('//') ||
+          trimmed.startsWith('#') ||
+          trimmed.startsWith('/*')) {
         lineColor = Colors.green.withValues(alpha: 0.4);
-      } else if (line.trimLeft().startsWith('import ') || line.trimLeft().startsWith('from ') || line.trimLeft().startsWith('use ')) {
+      } else if (trimmed.startsWith('import ') ||
+          trimmed.startsWith('from ') ||
+          trimmed.startsWith('use ')) {
         lineColor = Colors.purpleAccent.withValues(alpha: 0.5);
-      } else if (line.trimLeft().startsWith('class ') || line.trimLeft().startsWith('struct ') || line.trimLeft().startsWith('fn ') || line.trimLeft().startsWith('def ') || line.trimLeft().startsWith('function ')) {
+      } else if (trimmed.startsWith('class ') ||
+          trimmed.startsWith('struct ') ||
+          trimmed.startsWith('fn ') ||
+          trimmed.startsWith('def ') ||
+          trimmed.startsWith('function ')) {
         lineColor = Colors.cyanAccent.withValues(alpha: 0.6);
-      } else if (line.trimLeft().startsWith('return ') || line.trimLeft().startsWith('yield ')) {
+      } else if (trimmed.startsWith('return ') || trimmed.startsWith('yield ')) {
         lineColor = Colors.orangeAccent.withValues(alpha: 0.5);
-      } else if (line.contains('=') && !line.trimLeft().startsWith('//')) {
+      } else if (trimmed.contains('=')) {
         lineColor = Colors.blueAccent.withValues(alpha: 0.35);
       }
 
       if (i == currentLine) {
-        lineColor = Colors.white.withValues(alpha: 0.8);
+        lineColor = Colors.white.withValues(alpha: 0.85);
       }
 
       paint.color = lineColor;
       canvas.drawRect(
-        Rect.fromLTWH(indentWidth, y, min(contentWidth, size.width - indentWidth), max(lineHeight - 0.5, 0.5)),
+        Rect.fromLTWH(
+          indentWidth,
+          y,
+          min(contentWidth, size.width - indentWidth),
+          rectHeight,
+        ),
         paint,
       );
     }
@@ -155,7 +194,7 @@ class _MinimapPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MinimapPainter oldDelegate) {
-    return oldDelegate.lines != lines ||
+    return oldDelegate.revision != revision ||
         oldDelegate.lineHeight != lineHeight ||
         oldDelegate.currentLine != currentLine;
   }
