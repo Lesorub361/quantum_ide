@@ -3899,8 +3899,11 @@ if [ -f /usr/local/bin/bundletool ] && grep -q "export HOME=" /usr/local/bin/bun
     fi
 fi
 
-# 7. Box64 anti-fasttop profile for Flutter gen_snapshot
-if [ ! -f /etc/box64.box64rc ] || ! grep -q '\[gen_snapshot\]' /etc/box64.box64rc 2>/dev/null; then
+# 7. Box64 anti-fasttop profile for Flutter gen_snapshot (compatible with Box64 v0.2.6+)
+if [ -f /etc/box64.box64rc ] && grep -q 'BOX64_MMAP32' /etc/box64.box64rc 2>/dev/null; then
+    sed -i '/BOX64_MMAP32/d' /etc/box64.box64rc 2>/dev/null || true
+fi
+if [ ! -f /etc/box64.box64rc ] || ! grep -q '\[gen_snapshot\.x64\]' /etc/box64.box64rc 2>/dev/null; then
     mkdir -p /etc 2>/dev/null || true
     cat << 'EOF' >> /etc/box64.box64rc 2>/dev/null || true
 
@@ -3908,9 +3911,60 @@ if [ ! -f /etc/box64.box64rc ] || ! grep -q '\[gen_snapshot\]' /etc/box64.box64r
 BOX64_DYNAREC_STRONGMEM=1
 BOX64_DYNAREC_BIGBLOCK=0
 BOX64_DYNAREC_SAFEFLAGS=2
-BOX64_MMAP32=0
+
+[gen_snapshot.x64]
+BOX64_DYNAREC_STRONGMEM=1
+BOX64_DYNAREC_BIGBLOCK=0
+BOX64_DYNAREC_SAFEFLAGS=2
 EOF
 fi
+
+# 7b. Wrap x86_64 Flutter gen_snapshot so a Box64 heap crash auto-recovers via QEMU in-place (no 7-min Gradle restart)
+for gs in /root/flutter/bin/cache/artifacts/engine/android-*-release/linux-x64/gen_snapshot; do
+    [ -e "$gs" ] || continue
+    # Skip if already wrapped by QuantumIDE
+    if head -c 4 "$gs" 2>/dev/null | grep -q $'\x7fELF'; then
+        mv -f "$gs" "${gs}.x64" 2>/dev/null || continue
+        chmod 755 "${gs}.x64" 2>/dev/null || true
+        cat << 'WRAPPER_EOF' > "$gs"
+#!/bin/sh
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+X64_BIN="$SELF_DIR/gen_snapshot.x64"
+ARM64_BIN="/usr/local/bin/gen_snapshot-arm64"
+ENGINE_VER_FILE="/root/flutter/bin/internal/engine.version"
+ARM64_VER_FILE="/usr/local/bin/gen_snapshot-arm64.version"
+
+# 1. Native ARM64 gen_snapshot if installed for this exact Flutter engine.version
+if [ -x "$ARM64_BIN" ] && [ -f "$ENGINE_VER_FILE" ] && [ -f "$ARM64_VER_FILE" ]; then
+    if [ "$(cat "$ENGINE_VER_FILE" 2>/dev/null)" = "$(cat "$ARM64_VER_FILE" 2>/dev/null)" ]; then
+        exec "$ARM64_BIN" "$@"
+    fi
+fi
+
+# 2. Safe mode: run directly under qemu-x86_64-static (avoids Box64 v0.2.6 native glibc wrapping heap corruption)
+if [ "$QUANTUM_BUILD_PROFILE" = "safe" ] && [ -x /usr/bin/qemu-x86_64-static ]; then
+    exec /usr/bin/qemu-x86_64-static "$X64_BIN" "$@"
+fi
+
+# 3. Auto/Turbo: try Box64 first; if it crashes (fasttop / prev_size), immediately fallback to QEMU in-place
+if command -v box64 >/dev/null 2>&1; then
+    box64 "$X64_BIN" "$@"
+    rc=$?
+    if [ $rc -ne 0 ] && [ -x /usr/bin/qemu-x86_64-static ]; then
+        echo "[QuantumIDE] ⚠ Box64 gen_snapshot exited ($rc), retrying via qemu-x86_64-static..." >&2
+        exec /usr/bin/qemu-x86_64-static "$X64_BIN" "$@"
+    fi
+    exit $rc
+elif [ -x /usr/bin/qemu-x86_64-static ]; then
+    exec /usr/bin/qemu-x86_64-static "$X64_BIN" "$@"
+else
+    exec "$X64_BIN" "$@"
+fi
+WRAPPER_EOF
+        chmod 755 "$gs" 2>/dev/null || true
+        echo "[quantum-heal-x64] ✓ Wrapped gen_snapshot with automatic QEMU crash-recovery."
+    fi
+done
 
 # 8. Build Doctor (--doctor): verify android.jar integrity, clean stale Gradle locks, fix local.properties
 if [ "$1" = "--doctor" ]; then

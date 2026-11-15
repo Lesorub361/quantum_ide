@@ -674,14 +674,16 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
   Future<void> _installBuildAccelerators(String? workspacePath) async {
     const cmd =
-        'echo "⚡ Установка ускорителей сборки (mold, ccache, AAPT2 36.x, Box64 профиль)..." && '
+        'echo "⚡ Установка ускорителей сборки (mold, ccache, Box64, AAPT2)..." && '
         'export DEBIAN_FRONTEND=noninteractive && '
         '(apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true) && '
         '(apt-get install -y --no-install-recommends ccache mold unzip curl 2>/dev/null || true) && '
         'mkdir -p /root/.ccache 2>/dev/null || true && '
+        '(curl -k -fsSL --connect-timeout 6 --max-time 40 "https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/box64-arm64" -o /tmp/box64-new && chmod +x /tmp/box64-new && /tmp/box64-new -v >/dev/null 2>&1 && mv -f /tmp/box64-new /usr/local/bin/box64 && echo "✓ Обновлён Box64 до актуальной сборки" || rm -f /tmp/box64-new) && '
+        '(curl -k -fsSL --connect-timeout 6 --max-time 40 "https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/aapt2-arm64" -o /tmp/aapt2-new && chmod +x /tmp/aapt2-new && (/tmp/aapt2-new compile --help 2>&1 | grep -q -- "--source-path") && mv -f /tmp/aapt2-new /usr/bin/aapt2 && echo "✓ Обновлён AAPT2 до актуальной сборки" || rm -f /tmp/aapt2-new) && '
         '(/usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true) && '
-        'echo "✓ Ускорители готовы (mold + ccache + AAPT2 + Box64 anti-fasttop)."';
-    await _runDedicatedCommand(workspacePath, cmd, displayCmd: 'Install Build Accelerators (mold + ccache + AAPT2)');
+        'echo "✓ Ускорители готовы (mold + ccache + AAPT2 + Box64 + QEMU fallback)."';
+    await _runDedicatedCommand(workspacePath, cmd, displayCmd: 'Install Build Accelerators (mold + ccache + Box64 + AAPT2)');
   }
 
   Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {

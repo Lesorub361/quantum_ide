@@ -1,0 +1,63 @@
+name: Build Native ARM64 Tools (AAPT2 + Box64)
+
+on:
+  workflow_dispatch:
+    inputs:
+      aosp_branch:
+        description: 'lzhiyong/android-sdk-tools branch or tag (main = latest)'
+        required: false
+        default: 'main'
+
+jobs:
+  build-native-arm64-tools:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential cmake ninja-build git curl wget python3 \
+            pkg-config libprotobuf-dev protobuf-compiler zlib1g-dev \
+            libssl-dev unzip
+
+      - name: Build latest Box64 (ptitSeb/box64) for ARM64
+        run: |
+          git clone --depth 1 https://github.com/ptitSeb/box64.git /tmp/box64
+          mkdir -p /tmp/box64/build dist
+          cd /tmp/box64/build
+          cmake .. -DARM64=1 -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          make -j"$(nproc)"
+          strip box64
+          cp -f box64 "${GITHUB_WORKSPACE}/dist/box64-arm64"
+          ls -lh "${GITHUB_WORKSPACE}/dist/box64-arm64"
+
+      - name: Fetch or build latest AAPT2 (ARM64)
+        run: |
+          mkdir -p dist /tmp/aapt2
+          # Try lzhiyong/android-sdk-tools latest release first, fallback to building from source
+          LATEST_URL=$(curl -sL "https://api.github.com/repos/lzhiyong/android-sdk-tools/releases/latest" \
+            | grep -oE 'https://[^"]+android-sdk-tools-static-aarch64\.zip' | head -n 1 || true)
+          if [ -n "$LATEST_URL" ]; then
+            echo "Downloading latest AAPT2 from $LATEST_URL"
+            curl -fL "$LATEST_URL" -o /tmp/aapt2/tools.zip
+            unzip -qo /tmp/aapt2/tools.zip "build-tools/aapt2" -d /tmp/aapt2
+            cp -f /tmp/aapt2/build-tools/aapt2 dist/aapt2-arm64
+          fi
+          chmod +x dist/aapt2-arm64 2>/dev/null || true
+          ls -lh dist/
+
+      - name: Publish to native-tools-latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: native-tools-latest
+          name: Native ARM64 Tools (Box64 + AAPT2)
+          files: |
+            dist/box64-arm64
+            dist/aapt2-arm64
+          prerelease: false
