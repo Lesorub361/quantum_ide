@@ -22,9 +22,15 @@ void main() async {
     // Global error handlers
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
-      LogService.log('Flutter Error: ${details.exception}\n${details.stack}');
+      LogService.log('[ERR] Flutter Error: ${details.exception}\n${details.stack}');
       GhostQAService.instance.recordFlutterError(details);
       TalkerService.handle(details.exception, details.stack, 'Flutter Error');
+    };
+
+    PlatformDispatcher.instance.onError = (error, stack) {
+      LogService.log('[ERR] Platform Error: $error\n$stack');
+      TalkerService.handle(error, stack, 'Platform Error');
+      return true;
     };
 
     // Initialize LogService with temporary directory safely
@@ -38,36 +44,41 @@ void main() async {
     // Initialize Quick Actions (App Shortcuts)
     try {
       QuickActionsService.instance.init();
+      LogService.log('[OK] QuickActionsService initialized');
     } catch (e) {
-      debugPrint('QuickActions init error: $e');
+      LogService.log('[ERR] QuickActions init error: $e');
     }
 
     // Initialize ASMR Mechanical Keyboard & Haptic Engine
     try {
       await KeyboardSoundService.init();
+      LogService.log('[OK] KeyboardSoundService initialized');
     } catch (e) {
-      debugPrint('KeyboardSoundService init error: $e');
+      LogService.log('[ERR] KeyboardSoundService init error: $e');
     }
 
     // Initialize In-App Network Inspector (Chucker)
     try {
       NetworkInspectorService.init();
+      LogService.log('[OK] NetworkInspectorService initialized');
     } catch (e) {
-      debugPrint('NetworkInspectorService init error: $e');
+      LogService.log('[ERR] NetworkInspectorService init error: $e');
     }
 
     // Initialize Ghost QA engine (only activates if owner is authorized)
     try {
       await GhostQAService.instance.init();
+      LogService.log('[OK] GhostQAService initialized');
     } catch (e) {
-      debugPrint('Ghost QA init error: $e');
+      LogService.log('[ERR] Ghost QA init error: $e');
     }
 
     // Initialize Live Telemetry Bridge (metrics, logs and terminal monitoring)
     try {
       await LiveTelemetryService.instance.init();
+      LogService.log('[OK] LiveTelemetryService initialized');
     } catch (e) {
-      debugPrint('LiveTelemetryService init error: $e');
+      LogService.log('[ERR] LiveTelemetryService init error: $e');
     }
 
     // Handle desktop-specific initialization

@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path/path.dart' as p;
+import 'package:quantum_ide/core/utils/file_icon_helper.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_agentic_tools.dart';
 import 'package:quantum_ide/features/ai_assistant/roxum/roxum_ai_client.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
@@ -453,62 +454,19 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
   }
 
   ({IconData icon, Color color, String? badge}) _fileBadgeFor(String filename) {
-    final ext = p.extension(filename).toLowerCase();
-    switch (ext) {
-      case '.dart':
-        return (
-          icon: Icons.flutter_dash,
-          color: const Color(0xFF38BDF8),
-          badge: null,
-        );
-      case '.js':
-      case '.jsx':
-        return (
-          icon: LucideIcons.file_code,
-          color: const Color(0xFFFACC15),
-          badge: 'JS',
-        );
-      case '.ts':
-      case '.tsx':
-        return (
-          icon: LucideIcons.file_code,
-          color: const Color(0xFF60A5FA),
-          badge: 'TS',
-        );
-      case '.py':
-        return (
-          icon: LucideIcons.file_code,
-          color: const Color(0xFF4ADE80),
-          badge: 'PY',
-        );
-      case '.json':
-      case '.yaml':
-      case '.yml':
-      case '.toml':
-        return (
-          icon: LucideIcons.braces,
-          color: const Color(0xFFF59E0B),
-          badge: null,
-        );
-      case '.md':
-        return (
-          icon: LucideIcons.book_open,
-          color: const Color(0xFFA78BFA),
-          badge: 'MD',
-        );
-      case '.sh':
-        return (
-          icon: LucideIcons.terminal,
-          color: const Color(0xFF22C55E),
-          badge: 'SH',
-        );
-      default:
-        return (
-          icon: LucideIcons.file_code,
-          color: const Color(0xFF38BDF8),
-          badge: null,
-        );
+    if (filename.isEmpty) {
+      return (
+        icon: LucideIcons.file_code,
+        color: const Color(0xFF38BDF8),
+        badge: null,
+      );
     }
+    final info = FileIconHelper.getIconInfo(filename, false);
+    return (
+      icon: info.icon,
+      color: info.color,
+      badge: null,
+    );
   }
 }
 

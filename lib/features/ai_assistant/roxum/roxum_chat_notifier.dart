@@ -690,17 +690,20 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
         refreshOpenRouterLimits();
       }
 
-      if (!_cancelled && finalAnswer.isNotEmpty) {
+      if (!_cancelled) {
+        final effectiveAnswer = finalAnswer.trim().isNotEmpty
+            ? finalAnswer
+            : 'Модель вернула пустой ответ. Попробуйте повторить запрос или сменить модель.';
         _updateTurn(
           turnId,
           (turn) => turn.copyWith(
-            aiResponse: finalAnswer,
+            aiResponse: effectiveAnswer,
             timeline: upsertTimeline(
               turn.timeline,
               RoxumTimelineItem(
                 id: 'step_${currentStep}_text',
                 kind: RoxumTimelineKind.text,
-                text: finalAnswer,
+                text: effectiveAnswer,
               ),
             ),
           ),

@@ -702,6 +702,7 @@ class RoxumAiClient {
     const maxIterations = 48;
     var executedAnyTool = false;
     var nudgedHallucination = false;
+    var nudgedEmptyAfterTools = false;
 
     try {
       for (int step = 0; step < maxIterations; step++) {
@@ -777,6 +778,22 @@ class RoxumAiClient {
                       'Не пиши отчёт о несуществующих правках — прямо сейчас вызови инструменты и реально прочитай и отредактируй файлы.',
             });
             continue;
+          }
+          if (agenticTools != null &&
+              cleanAnswer.trim().isEmpty &&
+              executedAnyTool) {
+            if (!nudgedEmptyAfterTools) {
+              nudgedEmptyAfterTools = true;
+              messages.add({
+                'role': 'user',
+                'content':
+                    'Ты остановился после выполнения инструментов и не написал ответ. '
+                        'Если задача не завершена — продолжи вызов инструментов. '
+                        'Если завершена или возникла ошибка — кратко напиши итог и результат.',
+              });
+              continue;
+            }
+            return 'Модель завершила шаги без текстового отчёта. Проверьте результаты выполненных шагов выше или нажмите «Продолжить выполнение».';
           }
           return cleanAnswer;
         }

@@ -166,6 +166,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
   var _stickToBottom = true;
   var _isUpdatingLayout = false;
+  var _editableRectScheduled = false;
 
   void _onScroll() {
     if (_isUpdatingLayout) return;
@@ -180,12 +181,14 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   void _onTerminalChange() {
-    markNeedsLayout();
-    // This render object is a repaint boundary, so a layout that resolves to
-    // the same size (e.g. switching between two same-size alt-screen buffers)
-    // would otherwise reuse the cached layer and never repaint. The visible
-    // cell contents changed, so always repaint.
-    markNeedsPaint();
+    if (!_isUpdatingLayout) {
+      markNeedsLayout();
+      // This render object is a repaint boundary, so a layout that resolves to
+      // the same size (e.g. switching between two same-size alt-screen buffers)
+      // would otherwise reuse the cached layer and never repaint. The visible
+      // cell contents changed, so always repaint.
+      markNeedsPaint();
+    }
     _notifyEditableRect();
   }
 
@@ -338,8 +341,30 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     return _terminal.mouseInput(button, buttonState, position);
   }
 
+  void _scheduleNotifyEditableRect() {
+    if (_editableRectScheduled || _onEditableRect == null) return;
+    _editableRectScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _editableRectScheduled = false;
+      if (!attached || !hasSize || _isUpdatingLayout) return;
+      _notifyEditableRect();
+    });
+  }
+
   void _notifyEditableRect() {
-    final cursor = localToGlobal(cursorOffset);
+    if (_onEditableRect == null) return;
+    if (!attached || !hasSize || _isUpdatingLayout) {
+      _scheduleNotifyEditableRect();
+      return;
+    }
+
+    final Offset cursor;
+    try {
+      cursor = localToGlobal(cursorOffset);
+    } on StateError {
+      _scheduleNotifyEditableRect();
+      return;
+    }
 
     final rect = Rect.fromLTRB(
       cursor.dx,

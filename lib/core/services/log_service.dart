@@ -87,24 +87,41 @@ class LogService {
     }
   }
 
+  static bool _isForwardingToTalker = false;
+
   static void log(String message) {
+    _appendFormatted(message, forwardToTalker: true);
+  }
+
+  static void recordFromTalker(String level, String message) {
+    if (_isForwardingToTalker) return;
+    _appendFormatted('[$level] $message', forwardToTalker: false);
+  }
+
+  static void _appendFormatted(String message, {required bool forwardToTalker}) {
     final timestamp = DateFormat('yyyy-MM-dd HH:mm:ss.SSS').format(DateTime.now());
     final formattedLine = '[$timestamp] $message';
-    
+
     _inMemoryLogs.add(formattedLine);
     if (_inMemoryLogs.length > _maxInMemoryLines) {
       _inMemoryLogs.removeAt(0);
     }
-    
+
     _logStreamController.add(formattedLine);
-    
+
     try {
       stdout.writeln(formattedLine);
     } catch (_) {}
 
-    try {
-      TalkerService.info(message);
-    } catch (_) {}
+    if (forwardToTalker) {
+      _isForwardingToTalker = true;
+      try {
+        TalkerService.info(message);
+      } catch (_) {
+      } finally {
+        _isForwardingToTalker = false;
+      }
+    }
 
     try {
       LiveTelemetryService.instance.logEvent(message);
