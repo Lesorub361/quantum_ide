@@ -153,6 +153,11 @@ class PerformanceProfilerService extends StateNotifier<PerformanceProfilerState>
   }
 
   void _collectSample() {
+    if (!state.isRecording) {
+      _frameCount = 0;
+      _lastFrameTime = DateTime.now();
+      return;
+    }
     final now = DateTime.now();
     final elapsed = _lastFrameTime != null ? now.difference(_lastFrameTime!).inMilliseconds / 1000.0 : 1.0;
     _currentFps = elapsed > 0 ? (_frameCount / elapsed).clamp(0, 120) : 0.0;

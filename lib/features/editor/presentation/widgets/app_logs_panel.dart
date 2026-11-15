@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:quantum_ide/core/services/log_service.dart';
+import 'package:quantum_ide/core/services/system_stats_service.dart';
 
 enum _LogLevel { error, warning, ok, info }
 
@@ -235,6 +236,34 @@ class _AppLogsPanelState extends ConsumerState<AppLogsPanel> {
                       color: errCount > 0 ? Colors.redAccent : Colors.white70,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                // Free RAM / kill idle background daemons
+                Tooltip(
+                  message: 'Освободить RAM (остановить фоновые демоны)',
+                  child: InkWell(
+                    onTap: () async {
+                      await ref
+                          .read(systemStatsProvider.notifier)
+                          .freeBackgroundMemory(force: true);
+                      LogService.log('[OK] Фоновые демоны остановлены, RAM освобождена');
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Фоновая память очищена'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(4),
+                    child: const Padding(
+                      padding: EdgeInsets.all(5),
+                      child: Icon(
+                        LucideIcons.zap,
+                        size: 13,
+                        color: Colors.amberAccent,
+                      ),
                     ),
                   ),
                 ),
