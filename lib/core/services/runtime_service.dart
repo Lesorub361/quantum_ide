@@ -1422,7 +1422,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '34';
+    const bashrcVersion = '35';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -1456,7 +1456,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=34
+# BASHRC_VERSION=35
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -1587,19 +1587,120 @@ alias fastboot-devices="fastboot devices"
 alias check-usb="lsusb"
 
 
-# gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
-gradlew() {
-    if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+# Shared hardware auto-tuner & build-doctor for Flutter, Java, Kotlin, and Gradle builds
+_quantum_tune_gradle() {
+    pkill -9 -f "dart.*language-server" 2>/dev/null || true
+    pkill -9 -f "analysis_server" 2>/dev/null || true
+    pkill -9 -f GradleDaemon 2>/dev/null || true
+    pkill -9 -f KotlinCompileDaemon 2>/dev/null || true
+
+    # Box64 + glibc anti-fasttop crash protection for x86_64 tools (e.g. Flutter gen_snapshot)
+    export BOX64_DYNAREC_STRONGMEM=1
+    export BOX64_DYNAREC_BIGBLOCK=0
+    export BOX64_DYNAREC_SAFEFLAGS=2
+    export BOX64_NOBANNER=1
+    export MALLOC_ARENA_MAX=2
+
+    # Native C/C++/NDK acceleration (ccache + mold linker if installed)
+    if command -v ccache >/dev/null 2>&1; then
+        export CCACHE_DIR="/root/.ccache"
+        export CMAKE_C_COMPILER_LAUNCHER="ccache"
+        export CMAKE_CXX_COMPILER_LAUNCHER="ccache"
     fi
-    if [ -f "./gradlew" ]; then
-        bash ./gradlew --no-daemon "$@"
+    if command -v mold >/dev/null 2>&1; then
+        case " ${LDFLAGS:-} " in
+            *"-fuse-ld=mold"*) ;;
+            *) export LDFLAGS="${LDFLAGS:+$LDFLAGS }-fuse-ld=mold" ;;
+        esac
+    fi
+
+    _qt_cores=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 4)
+    [ -z "$_qt_cores" ] || [ "$_qt_cores" -lt 1 ] && _qt_cores=4
+    local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
+    _qt_mem_mb=$(( ${mem_avail_kb:-2000000} / 1024 ))
+
+    _qt_jvm="1280m"
+    _qt_meta="384m"
+    _qt_dart="768"
+    _qt_workers=2
+    _qt_parallel=true
+
+    if [ "$_qt_mem_mb" -ge 6000 ]; then
+        _qt_jvm="2560m"; _qt_meta="512m"; _qt_dart="1280"
+        if [ "$_qt_cores" -ge 8 ]; then _qt_workers=6
+        elif [ "$_qt_cores" -ge 6 ]; then _qt_workers=4
+        elif [ "$_qt_cores" -ge 4 ]; then _qt_workers=3
+        else _qt_workers=2; fi
+    elif [ "$_qt_mem_mb" -ge 3200 ]; then
+        _qt_jvm="2048m"; _qt_meta="512m"; _qt_dart="1024"
+        if [ "$_qt_cores" -ge 6 ]; then _qt_workers=4
+        elif [ "$_qt_cores" -ge 4 ]; then _qt_workers=3
+        else _qt_workers=2; fi
+    elif [ "$_qt_mem_mb" -ge 2000 ]; then
+        _qt_jvm="1600m"; _qt_meta="448m"; _qt_dart="896"
+        if [ "$_qt_cores" -ge 6 ]; then _qt_workers=3
+        else _qt_workers=2; fi
+    elif [ "$_qt_mem_mb" -ge 1400 ]; then
+        _qt_jvm="1280m"; _qt_meta="384m"; _qt_dart="768"
+        _qt_workers=2; _qt_parallel=false
     else
-        command gradlew --no-daemon "$@"
+        _qt_jvm="1024m"; _qt_meta="320m"; _qt_dart="640"
+        _qt_workers=1; _qt_parallel=false
     fi
+
+    if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
+        _qt_workers="$GRADLE_WORKERS_OVERRIDE"
+    fi
+
+    export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
+    export DART_VM_OPTIONS="--old_gen_heap_size=${_qt_dart}"
+    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${_qt_workers} -Dorg.gradle.parallel=${_qt_parallel} -Dorg.gradle.caching=true -Dkotlin.compiler.execution.strategy=in-process"
+
+    /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
+    /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+
+    mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
+    for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties gradle.properties; do
+        if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
+            [ -d "$(dirname "$gp")" ] || continue
+            touch "$gp" 2>/dev/null || continue
+            [ -w "$gp" ] || continue
+            sed -i '/extra-gen-snapshot-options/d;/org.gradle.jvmargs/d;/kotlin.compiler.execution.strategy/d;/org.gradle.caching/d;/org.gradle.parallel/d;/org.gradle.workers.max/d' "$gp" 2>/dev/null || true
+            printf "org.gradle.jvmargs=-Xmx%s -XX:MaxMetaspaceSize=%s -Dfile.encoding=UTF-8\nkotlin.compiler.execution.strategy=in-process\norg.gradle.caching=true\norg.gradle.parallel=%s\norg.gradle.workers.max=%s\n" \
+                "$_qt_jvm" "$_qt_meta" "$_qt_parallel" "$_qt_workers" >> "$gp"
+            grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
+            grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
+            grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
+            grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
+        fi
+    done
 }
 
-# Flutter build wrapper to auto-ensure ARM64 target, disable daemon, and use native aapt2 on mobile Android PRoot
+# gradlew wrapper for Java / Kotlin / Android projects (noexec-safe + Build Doctor + RAM/CPU tuning)
+gradlew() {
+    _quantum_tune_gradle
+    echo -e "\033[1;36m⚡ QuantumIDE Gradle:\033[0m RAM free=${_qt_mem_mb}MB, CPU=${_qt_cores} ядер → jvm=${_qt_jvm}, workers=${_qt_workers}, cache=on..."
+    local gflags=(
+        "--no-daemon"
+        "-Dorg.gradle.caching=true"
+        "-Pandroid.aapt2FromMaven=false"
+        "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+        "-Pandroid.aapt2.daemon=false"
+    )
+    if [ -f "./gradlew" ]; then
+        bash ./gradlew "${gflags[@]}" "$@"
+    else
+        command gradlew "${gflags[@]}" "$@"
+    fi
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo -e "\033[1;33m[Build Doctor]\033[0m Проверяю целостность SDK/AAPT2/кэшей после ошибки..."
+        /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
+    fi
+    return $ret
+}
+
+# Flutter build wrapper to auto-ensure ARM64 target, disable daemon, use native aapt2, and auto-heal on crash
 flutter() {
     if [ "$1" = "upgrade" ]; then
         if ! grep -qa "GLIBC_2.34" /lib/aarch64-linux-gnu/libc.so.6 /usr/lib/aarch64-linux-gnu/libc.so.6 2>/dev/null; then
@@ -1624,109 +1725,7 @@ flutter() {
     done
 
     if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
-        # Free background memory and daemons before heavy compilation
-        pkill -9 -f "dart.*language-server" 2>/dev/null || true
-        pkill -9 -f "analysis_server" 2>/dev/null || true
-        pkill -9 -f GradleDaemon 2>/dev/null || true
-        pkill -9 -f KotlinCompileDaemon 2>/dev/null || true
-
-        # Dynamically auto-tune CPU workers, JVM heap and Dart heap based on real hardware (CPU cores + free RAM)
-        local cpu_cores=$(nproc 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 4)
-        [ -z "$cpu_cores" ] || [ "$cpu_cores" -lt 1 ] && cpu_cores=4
-
-        local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
-        local mem_avail_mb=$(( ${mem_avail_kb:-2000000} / 1024 ))
-
-        local jvm_xmx="1280m"
-        local jvm_meta="384m"
-        local dart_heap="768"
-        local gradle_workers=2
-        local gradle_parallel=true
-
-        if [ "$mem_avail_mb" -ge 6000 ]; then
-            jvm_xmx="2560m"
-            jvm_meta="512m"
-            dart_heap="1280"
-            if [ "$cpu_cores" -ge 8 ]; then
-                gradle_workers=6
-            elif [ "$cpu_cores" -ge 6 ]; then
-                gradle_workers=4
-            elif [ "$cpu_cores" -ge 4 ]; then
-                gradle_workers=3
-            else
-                gradle_workers=2
-            fi
-        elif [ "$mem_avail_mb" -ge 3200 ]; then
-            # Sweet spot for 4GB-8GB tablets/phones (e.g. 8 cores with ~3.9GB available RAM)
-            jvm_xmx="2048m"
-            jvm_meta="512m"
-            dart_heap="1024"
-            if [ "$cpu_cores" -ge 8 ]; then
-                gradle_workers=4
-            elif [ "$cpu_cores" -ge 6 ]; then
-                gradle_workers=4
-            elif [ "$cpu_cores" -ge 4 ]; then
-                gradle_workers=3
-            else
-                gradle_workers=2
-            fi
-        elif [ "$mem_avail_mb" -ge 2000 ]; then
-            jvm_xmx="1600m"
-            jvm_meta="448m"
-            dart_heap="896"
-            if [ "$cpu_cores" -ge 6 ]; then
-                gradle_workers=3
-            else
-                gradle_workers=2
-            fi
-        elif [ "$mem_avail_mb" -ge 1400 ]; then
-            jvm_xmx="1280m"
-            jvm_meta="384m"
-            dart_heap="768"
-            gradle_workers=2
-            gradle_parallel=false
-        else
-            jvm_xmx="1024m"
-            jvm_meta="320m"
-            dart_heap="640"
-            gradle_workers=1
-            gradle_parallel=false
-        fi
-
-        if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
-            gradle_workers="$GRADLE_WORKERS_OVERRIDE"
-        fi
-
-        export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
-        export DART_VM_OPTIONS="--old_gen_heap_size=${dart_heap}"
-        export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${gradle_workers} -Dorg.gradle.parallel=${gradle_parallel} -Dorg.gradle.caching=true -Dkotlin.compiler.execution.strategy=in-process"
-
-        /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
-        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
-
-        mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
-        for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
-            if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
-                [ -d "$(dirname "$gp")" ] || continue
-                touch "$gp" 2>/dev/null || true
-                [ -w "$gp" ] || continue
-                sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
-                sed -i '/kotlin.compiler.execution.strategy/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.caching/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.parallel/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.workers.max/d' "$gp" 2>/dev/null || true
-                echo "org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8" >> "$gp"
-                echo "kotlin.compiler.execution.strategy=in-process" >> "$gp"
-                echo "org.gradle.caching=true" >> "$gp"
-                echo "org.gradle.parallel=${gradle_parallel}" >> "$gp"
-                echo "org.gradle.workers.max=${gradle_workers}" >> "$gp"
-                grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
-                grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
-                grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
-                grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
-            fi
-        done
+        _quantum_tune_gradle
 
         local has_plat=false
         local has_val=false
@@ -1774,18 +1773,25 @@ flutter() {
             "-Dorg.gradle.daemon=false"
         )
         if [ "$has_workers" = "false" ]; then
-            extra_flags+=("-Porg.gradle.workers.max=${gradle_workers}")
+            extra_flags+=("-Porg.gradle.workers.max=${_qt_workers}")
         fi
         if [ "$has_parallel" = "false" ]; then
-            extra_flags+=("-Porg.gradle.parallel=${gradle_parallel}")
+            extra_flags+=("-Porg.gradle.parallel=${_qt_parallel}")
         fi
         if [ "$has_jvm" = "false" ]; then
-            extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}")
+            extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${_qt_jvm} -XX:MaxMetaspaceSize=${_qt_meta}")
         fi
 
-        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB, CPU=${cpu_cores} ядер → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
+        echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${_qt_mem_mb}MB, CPU=${_qt_cores} ядер → dart=${_qt_dart}MB, jvm=${_qt_jvm}, workers=${_qt_workers}, cache=on)..."
         command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
         local ret=$?
+
+        if [ $ret -ne 0 ]; then
+            echo -e "\033[1;33m[Build Doctor]\033[0m Ошибка сборки (код $ret). Запускаю авто-диагностику (SDK/AAPT2/Box64) и безопасный повтор..."
+            /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
+            BOX64_DYNAREC=0 MALLOC_CHECK_=0 command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
+            ret=$?
+        fi
 
         if [ $ret -eq 0 ]; then
             if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
@@ -2993,6 +2999,8 @@ if [ \$# -gt 2 ]; then
             export PATH="\$1" JAVA_HOME="\$2" ANDROID_HOME="\$3" ANDROID_SDK_ROOT="\$4"
             export LANG=C.UTF-8 LC_ALL=C.UTF-8 DEBIAN_FRONTEND=noninteractive
             export FLUTTER_ALLOW_SU_ROOT=true
+            export BOX64_DYNAREC_STRONGMEM=1 BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_SAFEFLAGS=2 BOX64_NOBANNER=1 MALLOC_ARENA_MAX=2
+            export CCACHE_DIR=/root/.ccache
             export LD_LIBRARY_PATH="/usr/local/lib:/usr/lib:/usr/lib/aarch64-linux-gnu:/lib"
             export TERM=xterm-256color COLORTERM=truecolor
             export TERMINFO_DIRS=/usr/share/terminfo:/lib/terminfo:/etc/terminfo
@@ -3810,39 +3818,108 @@ else
     fi
 fi
 
-# 6. Auto-heal AAPT2 to modern ARM64 binary with --source-path support (required for AGP 8+)
+# 6. Auto-heal AAPT2 to modern ARM64 binary (supports Android 16 / API 36 & --source-path)
+NEED_AAPT2_UPGRADE=0
 if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
-    if [ -x /usr/local/bin/aapt2-arm64 ] && (/usr/local/bin/aapt2-arm64 compile --help 2>&1 | grep -q -- '--source-path'); then
+    NEED_AAPT2_UPGRADE=1
+elif [ -d /root/android-sdk/platforms/android-36 ] && ! (/usr/bin/aapt2 version 2>&1 | grep -qE '36\.|2\.19-1[2-9]'); then
+    NEED_AAPT2_UPGRADE=1
+fi
+
+if [ "$NEED_AAPT2_UPGRADE" = "1" ]; then
+    TMP_ZIP="${TMPDIR:-/tmp}/sdk-tools-$$.zip"
+    TMP_DIR="${TMPDIR:-/tmp}/sdk_tools_$$"
+    mkdir -p "$TMP_DIR" 2>/dev/null || true
+    AAPT2_DONE=0
+    for tools_url in \
+        "https://github.com/lzhiyong/android-sdk-tools/releases/download/36.0.0/android-sdk-tools-static-aarch64.zip" \
+        "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" \
+        "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-sdk-tools-static-aarch64.zip"; do
+        if curl -k -fsSL --connect-timeout 8 --max-time 45 --retry 2 "$tools_url" -o "$TMP_ZIP" 2>/dev/null || \
+           wget --no-check-certificate -qO "$TMP_ZIP" "$tools_url" 2>/dev/null; then
+            unzip -qo "$TMP_ZIP" "build-tools/aapt2" -d "$TMP_DIR" 2>/dev/null || unzip -qo "$TMP_ZIP" -d "$TMP_DIR" 2>/dev/null
+            if [ -f "$TMP_DIR/build-tools/aapt2" ] && "$TMP_DIR/build-tools/aapt2" compile --help 2>&1 | grep -q -- '--source-path'; then
+                cp -f "$TMP_DIR/build-tools/aapt2" /usr/bin/aapt2
+                chmod +x /usr/bin/aapt2
+                echo "[quantum-heal-x64] ✓ Modern AAPT2 installed ($tools_url)."
+                AAPT2_DONE=1
+                break
+            fi
+        fi
+    done
+    rm -rf "$TMP_ZIP" "$TMP_DIR" 2>/dev/null || true
+    if [ "$AAPT2_DONE" = "0" ] && [ -x /usr/local/bin/aapt2-arm64 ] && (/usr/local/bin/aapt2-arm64 compile --help 2>&1 | grep -q -- '--source-path'); then
         cp -f /usr/local/bin/aapt2-arm64 /usr/bin/aapt2
         chmod +x /usr/bin/aapt2
         echo "[quantum-heal-x64] ✓ Modern AAPT2 restored from /usr/local/bin/aapt2-arm64."
-    else
-        echo "[quantum-heal-x64] Upgrading AAPT2 to modern ARM64 binary with --source-path support..."
-        TMP_ZIP="${TMPDIR:-/tmp}/sdk-tools-$$.zip"
-        TMP_DIR="${TMPDIR:-/tmp}/sdk_tools_$$"
-        mkdir -p "$TMP_DIR" 2>/dev/null || true
-        if curl -k -fsSL --retry 3 "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null || \
-           wget --no-check-certificate -qO "$TMP_ZIP" "https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip" 2>/dev/null || \
-           curl -k -fsSL --retry 3 "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.32/android-sdk-tools-static-aarch64.zip" -o "$TMP_ZIP" 2>/dev/null; then
-            unzip -qo "$TMP_ZIP" "build-tools/aapt2" -d "$TMP_DIR" 2>/dev/null || unzip -qo "$TMP_ZIP" -d "$TMP_DIR" 2>/dev/null
-            if [ -f "$TMP_DIR/build-tools/aapt2" ]; then
-                cp -f "$TMP_DIR/build-tools/aapt2" /usr/bin/aapt2
-                chmod +x /usr/bin/aapt2
-                echo "[quantum-heal-x64] ✓ Modern AAPT2 successfully installed to /usr/bin/aapt2."
-            fi
-            rm -rf "$TMP_ZIP" "$TMP_DIR" 2>/dev/null || true
-        fi
     fi
 fi
 
-# Ensure SDK build-tools has working modern aapt2
+# Ensure SDK build-tools and Gradle caches use our working ARM64 aapt2
 if /usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'; then
     for bt in /root/android-sdk/build-tools/*; do
         if [ -d "$bt" ]; then
-            ln -sf /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
             cp -f /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
+            chmod +x "$bt/aapt2" 2>/dev/null || true
         fi
     done
+fi
+
+# 7. Box64 anti-fasttop profile for Flutter gen_snapshot
+if [ ! -f /etc/box64.box64rc ] || ! grep -q '\[gen_snapshot\]' /etc/box64.box64rc 2>/dev/null; then
+    mkdir -p /etc 2>/dev/null || true
+    cat << 'EOF' >> /etc/box64.box64rc 2>/dev/null || true
+
+[gen_snapshot]
+BOX64_DYNAREC_STRONGMEM=1
+BOX64_DYNAREC_BIGBLOCK=0
+BOX64_DYNAREC_SAFEFLAGS=2
+BOX64_MMAP32=0
+EOF
+fi
+
+# 8. Build Doctor (--doctor): verify android.jar integrity, clean stale Gradle locks, fix local.properties
+if [ "$1" = "--doctor" ]; then
+    # Clean stale Gradle lock files that can wedge builds after a crash
+    find /root/.gradle -name "*.lock" -mmin +5 -delete 2>/dev/null || true
+    [ -d .gradle ] && find .gradle -name "*.lock" -mmin +5 -delete 2>/dev/null || true
+
+    # Auto-repair local.properties sdk.dir if inside an Android/Flutter project
+    if [ -d /root/android-sdk ]; then
+        for lp in android/local.properties local.properties; do
+            if [ -d "$(dirname "$lp")" ] && ( [ -f android/build.gradle ] || [ -f android/build.gradle.kts ] || [ -f build.gradle ] || [ -f build.gradle.kts ] ); then
+                if [ ! -f "$lp" ] || ! grep -q "sdk.dir=/root/android-sdk" "$lp" 2>/dev/null; then
+                    touch "$lp" 2>/dev/null || true
+                    sed -i '/^sdk\.dir=/d' "$lp" 2>/dev/null || true
+                    echo "sdk.dir=/root/android-sdk" >> "$lp" 2>/dev/null || true
+                fi
+            fi
+        done
+    fi
+
+    # Verify every installed android.jar with unzip -tq; reinstall if corrupted
+    if command -v unzip >/dev/null 2>&1; then
+        SDKMGR=""
+        for cand in /root/android-sdk/cmdline-tools/latest/bin/sdkmanager /root/android-sdk/cmdline-tools/*/bin/sdkmanager; do
+            [ -x "$cand" ] && SDKMGR="$cand" && break
+        done
+        for jar in /root/android-sdk/platforms/android-*/android.jar; do
+            [ -e "$jar" ] || continue
+            plat_dir="$(dirname "$jar")"
+            plat_name="$(basename "$plat_dir")"
+            jar_size=$(wc -c < "$jar" 2>/dev/null || echo 0)
+            if [ "$jar_size" -lt 1000000 ] || ! unzip -tq "$jar" >/dev/null 2>&1; then
+                echo "[Build Doctor] ⚠ Обнаружен повреждённый $plat_name/android.jar — переустанавливаю..."
+                rm -rf "$plat_dir" 2>/dev/null || true
+                if [ -n "$SDKMGR" ]; then
+                    yes | "$SDKMGR" --sdk_root=/root/android-sdk "platforms;$plat_name" >/dev/null 2>&1 || true
+                    if [ -f "$jar" ] && unzip -tq "$jar" >/dev/null 2>&1; then
+                        echo "[Build Doctor] ✓ $plat_name успешно восстановлен."
+                    fi
+                fi
+            fi
+        done
+    fi
 fi
 ''';
 
@@ -3906,7 +3983,7 @@ if [ -d /lib/terminfo ] && [ ! -e /usr/share/terminfo/x ]; then
 fi
 
 # Ensure all essential terminal utilities, ADB/Fastboot, and firmware flashing tools are installed
-if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! command -v vim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1 || ! command -v pip3 >/dev/null 2>&1 || ! command -v rg >/dev/null 2>&1 || ! command -v fdfind >/dev/null 2>&1 || ! command -v batcat >/dev/null 2>&1; then
+if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! command -v vim >/dev/null 2>&1 || ! command -v tmux >/dev/null 2>&1 || ! command -v pip3 >/dev/null 2>&1 || ! command -v rg >/dev/null 2>&1 || ! command -v fdfind >/dev/null 2>&1 || ! command -v batcat >/dev/null 2>&1 || ! command -v ccache >/dev/null 2>&1 || ! command -v mold >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true
     apt-get install -y --no-install-recommends \
@@ -3919,7 +3996,7 @@ if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! com
         locales ripgrep fzf iproute2 iputils-ping net-tools lsof \
         android-tools-adb android-tools-fastboot \
         usbutils aria2 p7zip-full zstd brotli libusb-1.0-0 \
-        python3-pip fd-find bat rsync >/dev/null 2>&1 || true
+        python3-pip fd-find bat rsync ccache mold >/dev/null 2>&1 || true
     locale-gen en_US.UTF-8 ru_RU.UTF-8 >/dev/null 2>&1 || true
     update-locale LANG=ru_RU.UTF-8 LC_ALL=ru_RU.UTF-8 >/dev/null 2>&1 || true
     ln -sf /usr/bin/fdfind /usr/bin/fd 2>/dev/null || true
