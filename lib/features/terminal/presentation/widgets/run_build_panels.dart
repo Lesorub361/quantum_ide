@@ -679,9 +679,15 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         '(apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true) && '
         '(apt-get install -y --no-install-recommends ccache mold unzip curl 2>/dev/null || true) && '
         'mkdir -p /root/.ccache 2>/dev/null || true && '
-        '(curl -k -fsSL --connect-timeout 6 --max-time 40 "https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/box64-arm64" -o /tmp/box64-new && chmod +x /tmp/box64-new && /tmp/box64-new -v >/dev/null 2>&1 && mv -f /tmp/box64-new /usr/local/bin/box64 && echo "✓ Обновлён Box64 до актуальной сборки" || rm -f /tmp/box64-new) && '
-        '(curl -k -fsSL --connect-timeout 6 --max-time 40 "https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/aapt2-arm64" -o /tmp/aapt2-new && chmod +x /tmp/aapt2-new && (/tmp/aapt2-new compile --help 2>&1 | grep -q -- "--source-path") && mv -f /tmp/aapt2-new /usr/bin/aapt2 && echo "✓ Обновлён AAPT2 до актуальной сборки" || rm -f /tmp/aapt2-new) && '
+        '(curl -k -fsSL --connect-timeout 8 --max-time 60 "https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/box64-arm64" -o /tmp/box64-new && chmod +x /tmp/box64-new && /tmp/box64-new -v >/dev/null 2>&1 && mv -f /tmp/box64-new /usr/local/bin/box64 && ([ ! -e /usr/bin/box64 ] || cp -f /usr/local/bin/box64 /usr/bin/box64 2>/dev/null || true) && echo "✓ Обновлён Box64 до актуальной сборки" || rm -f /tmp/box64-new) && '
+        '(curl -k -fsSL --connect-timeout 8 --max-time 60 "https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/aapt2-arm64" -o /tmp/aapt2-new && chmod +x /tmp/aapt2-new && (/tmp/aapt2-new compile --help 2>&1 | grep -q -- "--source-path") && mv -f /tmp/aapt2-new /usr/bin/aapt2 && cp -f /usr/bin/aapt2 /usr/local/bin/aapt2-arm64 2>/dev/null || true && echo "✓ Обновлён AAPT2 до актуальной сборки" || rm -f /tmp/aapt2-new) && '
+        'hash -r 2>/dev/null || true && '
         '(/usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true) && '
+        'echo "--- Версии ускорителей ---" && '
+        'echo "Box64: \$(box64 -v 2>&1 | tail -n 1)" && '
+        'echo "AAPT2: \$(/usr/bin/aapt2 version 2>&1 | head -n 1)" && '
+        'echo "ccache: \$(ccache --version 2>&1 | head -n 1)" && '
+        'echo "mold: \$(mold --version 2>&1 | head -n 1)" && '
         'echo "✓ Ускорители готовы (mold + ccache + AAPT2 + Box64 + QEMU fallback)."';
     await _runDedicatedCommand(workspacePath, cmd, displayCmd: 'Install Build Accelerators (mold + ccache + Box64 + AAPT2)');
   }
