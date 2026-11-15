@@ -9,6 +9,8 @@ class ShizukuBridge {
 
   static const _channel = MethodChannel('com.example.quantum_ide/native');
 
+  final ValueNotifier<int> statusVersion = ValueNotifier<int>(0);
+
   bool _isAvailable = false;
   bool _permissionGranted = false;
   int _uid = -1;
@@ -18,10 +20,15 @@ class ShizukuBridge {
   bool get hasPermission => _permissionGranted;
   int get uid => _uid;
 
+  void _notifyStatusChanged() {
+    statusVersion.value++;
+  }
+
   Future<void> initialize() async {
     if (!Platform.isAndroid) {
       _isAvailable = false;
       _permissionGranted = false;
+      _notifyStatusChanged();
       return;
     }
     try {
@@ -39,6 +46,7 @@ class ShizukuBridge {
       _isAvailable = false;
       _permissionGranted = false;
     }
+    _notifyStatusChanged();
   }
 
   Future<bool> requestPermission() async {
@@ -75,5 +83,16 @@ class ShizukuBridge {
     final stderr = res?['stderr']?.toString() ?? '';
 
     return ProcessResult(0, exitCode, stdout, stderr);
+  }
+
+  Future<bool> trimBackgroundMemory() async {
+    if (!isAvailable) return false;
+    try {
+      final res = await execute('sh', ['-c', 'am kill-all']);
+      return res.exitCode == 0;
+    } catch (e) {
+      debugPrint('Shizuku trimBackgroundMemory error: $e');
+      return false;
+    }
   }
 }

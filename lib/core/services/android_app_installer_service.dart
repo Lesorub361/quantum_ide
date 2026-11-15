@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 
 final androidAppInstallerServiceProvider = Provider<AndroidAppInstallerService>((ref) {
   return AndroidAppInstallerService();
@@ -24,10 +25,8 @@ class InstallResult {
 class AndroidAppInstallerService {
   static const _channel = MethodChannel('com.example.quantum_ide/native');
 
-  /// Installs an APK directly using Android's native PackageInstaller (without ADB).
-  ///
-  /// On Android 12+, updates to already installed packages require no user action.
-  /// On MIUI/HyperOS, falls back to the system package installer via FileProvider.
+  /// Installs an APK using Shizuku silent `pm install` when available,
+  /// otherwise falls back to Android's native PackageInstaller.
   Future<InstallResult> installApk(
     String apkPath, {
     bool launchAfterInstall = true,
@@ -45,6 +44,11 @@ class AndroidAppInstallerService {
         success: false,
         message: 'APK file not found: $apkPath',
       );
+    }
+
+    final shizukuResult = await _tryInstallViaShizuku(file);
+    if (shizukuResult != null) {
+      return shizukuResult;
     }
 
     try {
@@ -77,6 +81,54 @@ class AndroidAppInstallerService {
         message: e.toString(),
       );
     }
+  }
+
+  Future<InstallResult?> _tryInstallViaShizuku(File apkFile) async {
+    try {
+      if (!ShizukuBridge.instance.isAvailable) {
+        await ShizukuBridge.instance.initialize();
+      }
+      if (!ShizukuBridge.instance.isAvailable) return null;
+
+      String targetPath = apkFile.absolute.path;
+      File? tempCopy;
+      if (!targetPath.startsWith('/storage/emulated/0/') &&
+          !targetPath.startsWith('/sdcard/')) {
+        const tmpDir = '/storage/emulated/0/Download';
+        final dir = Directory(tmpDir);
+        if (dir.existsSync()) {
+          final tmpPath =
+              '$tmpDir/.quantum_install_${DateTime.now().millisecondsSinceEpoch}.apk';
+          tempCopy = await apkFile.copy(tmpPath);
+          targetPath = tempCopy.path;
+        }
+      }
+
+      try {
+        final procRes = await ShizukuBridge.instance.execute(
+          'pm',
+          ['install', '-r', '-t', targetPath],
+        );
+        final out = '${procRes.stdout}\n${procRes.stderr}'.trim();
+        if (procRes.exitCode == 0 && out.contains('Success')) {
+          return const InstallResult(
+            success: true,
+            method: 'Shizuku (pm install)',
+            message: 'APK silently installed via Shizuku.',
+          );
+        }
+        debugPrint('Shizuku pm install fallback: code=${procRes.exitCode} $out');
+      } finally {
+        if (tempCopy != null && tempCopy.existsSync()) {
+          try {
+            await tempCopy.delete();
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('Shizuku install skipped: $e');
+    }
+    return null;
   }
 
   /// Launches an installed application by package name.

@@ -19,6 +19,7 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/build_completion_dialog.dart';
+import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 
 class StatusBar extends ConsumerStatefulWidget {
   const StatusBar({super.key});
@@ -223,6 +224,10 @@ class _StatusBarState extends ConsumerState<StatusBar> {
                           ultraCompact: isUltraNarrow,
                         ),
                         _StatusBarBuildIndicator(isNarrow: isNarrow),
+                        if (Platform.isAndroid) ...[
+                          SizedBox(width: isNarrow ? 5 : 8),
+                          _ShizukuStatusChip(compact: isNarrow),
+                        ],
                       ],
                     ),
                   ),
@@ -1457,3 +1462,118 @@ class _StatusBarBuildIndicator extends ConsumerWidget {
     );
   }
 }
+
+class _ShizukuStatusChip extends StatelessWidget {
+  final bool compact;
+
+  const _ShizukuStatusChip({required this.compact});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<int>(
+      valueListenable: ShizukuBridge.instance.statusVersion,
+      builder: (context, _, _) {
+        final bridge = ShizukuBridge.instance;
+        final isReady = bridge.isAvailable;
+        final isRoot = isReady && bridge.uid == 0;
+        final needsPerm = bridge.isBinderAlive && !bridge.hasPermission;
+
+        final Color color;
+        final String label;
+        if (isRoot) {
+          color = Colors.greenAccent;
+          label = compact ? 'Root' : 'Shizuku: Root';
+        } else if (isReady) {
+          color = Colors.cyanAccent;
+          label = compact ? 'ADB' : 'Shizuku: ADB';
+        } else if (needsPerm) {
+          color = Colors.amberAccent;
+          label = compact ? 'Shizuku?' : 'Shizuku: Права';
+        } else {
+          color = Colors.white54;
+          label = 'Shizuku';
+        }
+
+        return Tooltip(
+          message: isReady
+              ? 'Shizuku подключён (uid=${bridge.uid}). Нажмите для очистки фоновой RAM.'
+              : (needsPerm
+                  ? 'Нажмите, чтобы выдать права Shizuku для QuantumIDE'
+                  : 'Нажмите, чтобы проверить подключение Shizuku'),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(4),
+            onTap: () async {
+              if (isReady) {
+                final ok = await bridge.trimBackgroundMemory();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      ok
+                          ? 'Shizuku: фоновая память очищена (am kill-all, uid=${bridge.uid})'
+                          : 'Shizuku активен (uid=${bridge.uid})',
+                    ),
+                    backgroundColor: Colors.teal.shade700,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+                return;
+              }
+
+              await bridge.initialize();
+              if (!bridge.isBinderAlive) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Shizuku не запущен. Запустите сервис Shizuku и нажмите снова.'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+                return;
+              }
+
+              if (!bridge.hasPermission) {
+                final granted = await bridge.requestPermission();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      granted
+                          ? 'Shizuku подключён! (uid=${bridge.uid})'
+                          : 'Доступ Shizuku не выдан.',
+                    ),
+                    backgroundColor: granted ? Colors.green : Colors.orange,
+                  ),
+                );
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(3.5),
+                border: Border.all(color: color.withValues(alpha: 0.28), width: 0.5),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.shield_check, size: 10, color: color),
+                  const SizedBox(width: 3),
+                  Text(
+                    label,
+                    style: GoogleFonts.inter(
+                      fontSize: 9.5,
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
