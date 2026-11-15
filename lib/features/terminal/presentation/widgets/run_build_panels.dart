@@ -640,10 +640,48 @@ class SidebarBuildPanel extends ConsumerStatefulWidget {
 class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   int _buildSubTab = 0;
   int _buildViewerMode = 0; // 0 = Pipeline (GitHub Actions), 1 = Raw Terminal
+  String _buildProfile = 'auto'; // 'auto' | 'turbo' | 'safe'
 
   void _stopCommand() {
     ref.read(dedicatedTerminalProvider.notifier).sendRawChar(DedicatedTerminalType.build, String.fromCharCode(3));
     ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: true);
+  }
+
+  String _buildProfileEnvPrefix() {
+    switch (_buildProfile) {
+      case 'turbo':
+        return 'export QUANTUM_BUILD_PROFILE=turbo BOX64_DYNAREC_STRONGMEM=1 BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_SAFEFLAGS=2 MALLOC_ARENA_MAX=2; ';
+      case 'safe':
+        return 'export QUANTUM_BUILD_PROFILE=safe GRADLE_WORKERS_OVERRIDE=1 BOX64_DYNAREC=0 MALLOC_CHECK_=0 MALLOC_ARENA_MAX=1; ';
+      default:
+        return 'export QUANTUM_BUILD_PROFILE=auto BOX64_DYNAREC_STRONGMEM=1 BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_SAFEFLAGS=2 MALLOC_ARENA_MAX=2; ';
+    }
+  }
+
+  Future<void> _runBuildDoctor(String? workspacePath) async {
+    const cmd =
+        'echo "🩺 Запуск Доктора сборки (SDK / AAPT2 / Box64 / Gradle)..." && '
+        '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && '
+        '(/usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true) && '
+        'echo "--- Статус инструментов ---" && '
+        'echo "AAPT2: \$(/usr/bin/aapt2 version 2>&1 | head -n 1)" && '
+        'echo "ccache: \$(command -v ccache >/dev/null 2>&1 && echo "✓ установлен" || echo "✗ не установлен")" && '
+        'echo "mold: \$(command -v mold >/dev/null 2>&1 && echo "✓ установлен" || echo "✗ не установлен")" && '
+        'echo "Box64: \$(command -v box64 >/dev/null 2>&1 && box64 -v 2>&1 | head -n 1 || echo "нет")" && '
+        'echo "✓ Диагностика завершена."';
+    await _runDedicatedCommand(workspacePath, cmd, displayCmd: 'Build Doctor (SDK / AAPT2 / Cache)');
+  }
+
+  Future<void> _installBuildAccelerators(String? workspacePath) async {
+    const cmd =
+        'echo "⚡ Установка ускорителей сборки (mold, ccache, AAPT2 36.x, Box64 профиль)..." && '
+        'export DEBIAN_FRONTEND=noninteractive && '
+        '(apt-get update -o Acquire::Retries=1 >/dev/null 2>&1 || true) && '
+        '(apt-get install -y --no-install-recommends ccache mold unzip curl 2>/dev/null || true) && '
+        'mkdir -p /root/.ccache 2>/dev/null || true && '
+        '(/usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true) && '
+        'echo "✓ Ускорители готовы (mold + ccache + AAPT2 + Box64 anti-fasttop)."';
+    await _runDedicatedCommand(workspacePath, cmd, displayCmd: 'Install Build Accelerators (mold + ccache + AAPT2)');
   }
 
   Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
@@ -663,9 +701,10 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         '(pkill -9 -f KotlinCompileDaemon 2>/dev/null || true); '
         '(mkdir -p ~/.gradle 2>/dev/null || true); '
         '(sed -i "/extra-gen-snapshot-options/d" ~/.gradle/gradle.properties 2>/dev/null || true); ';
+    final profilePrefix = _buildProfileEnvPrefix();
     final finalCmd = cdCmd.isNotEmpty
-        ? '$clearScreen && $killZombiesAndPrepMem$cdCmd && $banner && ($cmd)$restoreTty'
-        : '$clearScreen && $killZombiesAndPrepMem$banner && ($cmd)$restoreTty';
+        ? '$clearScreen && $killZombiesAndPrepMem$profilePrefix$cdCmd && $banner && ($cmd)$restoreTty'
+        : '$clearScreen && $killZombiesAndPrepMem$profilePrefix$banner && ($cmd)$restoreTty';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.build, finalCmd, interrupt: true, clear: false);
   }
 
@@ -1091,8 +1130,26 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         ];
     }
 
-    buildActions.add(_buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60,
-        () => _copyTerminalOutput(session, l10n)));
+    buildActions.addAll([
+      _buildActionButton(
+        isRu ? 'Доктор SDK' : 'Build Doctor',
+        LucideIcons.shield_check,
+        Colors.tealAccent,
+        () => _runBuildDoctor(workspaceState.currentPath),
+      ),
+      _buildActionButton(
+        isRu ? 'Ускорители' : 'Accelerators',
+        LucideIcons.zap,
+        Colors.cyanAccent,
+        () => _installBuildAccelerators(workspaceState.currentPath),
+      ),
+      _buildActionButton(
+        l10n.copy,
+        LucideIcons.copy,
+        Colors.white60,
+        () => _copyTerminalOutput(session, l10n),
+      ),
+    ]);
 
     return Column(
       children: [
@@ -1117,6 +1174,35 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               ? Column(
                   children: [
                     _buildActionHeader(l10n.build, buildActions),
+                    // Build Profile Selector (Auto / Turbo / Safe Anti-Crash)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.16),
+                        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.04))),
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            Text(
+                              isRu ? 'Режим:' : 'Profile:',
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white54,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildProfileChip('auto', isRu ? 'Авто' : 'Auto', LucideIcons.cpu, Colors.blueAccent),
+                            const SizedBox(width: 6),
+                            _buildProfileChip('turbo', isRu ? 'Турбо (ccache+mold)' : 'Turbo', LucideIcons.zap, Colors.orangeAccent),
+                            const SizedBox(width: 6),
+                            _buildProfileChip('safe', isRu ? 'Безопасный (Anti-Crash)' : 'Safe', LucideIcons.shield, Colors.greenAccent),
+                          ],
+                        ),
+                      ),
+                    ),
                     // Toggle Pipeline vs Terminal
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -1326,6 +1412,39 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileChip(String id, String label, IconData icon, Color accent) {
+    final isActive = _buildProfile == id;
+    return GestureDetector(
+      onTap: () => setState(() => _buildProfile = id),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: isActive ? accent.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isActive ? accent.withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.08),
+            width: 0.8,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 11, color: isActive ? accent : Colors.white54),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                color: isActive ? Colors.white : Colors.white60,
+              ),
+            ),
+          ],
         ),
       ),
     );

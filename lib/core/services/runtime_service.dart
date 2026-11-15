@@ -1648,6 +1648,14 @@ _quantum_tune_gradle() {
         _qt_workers=1; _qt_parallel=false
     fi
 
+    if [ "$QUANTUM_BUILD_PROFILE" = "safe" ]; then
+        _qt_workers=1
+        _qt_parallel=false
+    elif [ "$QUANTUM_BUILD_PROFILE" = "turbo" ]; then
+        _qt_parallel=true
+        [ "$_qt_cores" -ge 4 ] && [ "$_qt_workers" -lt "$_qt_cores" ] && _qt_workers="$_qt_cores"
+    fi
+
     if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
         _qt_workers="$GRADLE_WORKERS_OVERRIDE"
     fi
