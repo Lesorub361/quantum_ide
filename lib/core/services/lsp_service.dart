@@ -52,6 +52,7 @@ class LspService {
   final StreamController<FileDiagnostics> _diagnosticController = StreamController.broadcast();
 
   final Map<String, int> _serverVersions = {};
+  final Map<String, Timer> _didChangeTimers = {};
 
   LspService(this.ref, this.fallbackProjectPath, this.initHostPath, this.filesDirPath);
 
@@ -219,12 +220,13 @@ class LspService {
       } else if (key == 'cpp') {
         commandArgs = ['clangd'];
       } else {
-        // Cap Dart Analysis Server heap at 512 MB for stable multi-package indexing
-        commandArgs = ['dart', '--old_gen_heap_size=512', 'language-server', '--protocol=lsp'];
+        commandArgs = await _resolveDartLspCommand();
       }
 
-      if (!await _isBinaryAvailable(commandArgs[0])) {
-        debugPrint('LSP [$key]: Binary ${commandArgs[0]} not found. Skipping start.');
+      final availabilityCheckBinary =
+          key == 'dart' ? 'dart' : commandArgs[0];
+      if (!await _isBinaryAvailable(availabilityCheckBinary)) {
+        debugPrint('LSP [$key]: Binary $availabilityCheckBinary not found. Skipping start.');
         _lastStartFailure[key] = DateTime.now();
         completer.complete(false);
         return false;
@@ -470,21 +472,58 @@ class LspService {
     });
   }
 
+  Future<List<String>> _resolveDartLspCommand() async {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final hostDartSdkBin = p.join(
+        filesDirPath,
+        'rootfs',
+        'ubuntu',
+        'root',
+        'flutter',
+        'bin',
+        'cache',
+        'dart-sdk',
+        'bin',
+      );
+      final hostAot = File(p.join(hostDartSdkBin, 'dartaotruntime'));
+      final hostSnapshot = File(
+        p.join(hostDartSdkBin, 'snapshots', 'analysis_server_aot.dart.snapshot'),
+      );
+      if (await hostAot.exists() && await hostSnapshot.exists()) {
+        return [
+          '/root/flutter/bin/cache/dart-sdk/bin/dartaotruntime',
+          '/root/flutter/bin/cache/dart-sdk/bin/snapshots/analysis_server_aot.dart.snapshot',
+          '--lsp',
+        ];
+      }
+    }
+    return [
+      'dart',
+      '--old_gen_heap_size=256',
+      'language-server',
+      '--protocol=lsp',
+    ];
+  }
+
   Future<void> onFileChanged(String path, String content) async {
     final key = _getServerKey(path);
-    if (!await _ensureServerStarted(key)) return;
+    _didChangeTimers[path]?.cancel();
+    _didChangeTimers[path] = Timer(const Duration(milliseconds: 180), () async {
+      _didChangeTimers.remove(path);
+      if (!await _ensureServerStarted(key)) return;
 
-    final guestPath = PathMapper.mapToGuest(path, filesDirPath);
+      final guestPath = PathMapper.mapToGuest(path, filesDirPath);
 
-    _serverVersions[path] = (_serverVersions[path] ?? 1) + 1;
-    _sendNotificationForServer(key, 'textDocument/didChange', {
-      'textDocument': {
-        'uri': Uri.file(guestPath).toString(),
-        'version': _serverVersions[path],
-      },
-      'contentChanges': [
-        {'text': content}
-      ]
+      _serverVersions[path] = (_serverVersions[path] ?? 1) + 1;
+      _sendNotificationForServer(key, 'textDocument/didChange', {
+        'textDocument': {
+          'uri': Uri.file(guestPath).toString(),
+          'version': _serverVersions[path],
+        },
+        'contentChanges': [
+          {'text': content}
+        ]
+      });
     });
   }
 
@@ -850,6 +889,10 @@ class LspService {
     }
     _pendingRequests.clear();
     _serverVersions.clear();
+    for (final timer in _didChangeTimers.values) {
+      timer.cancel();
+    }
+    _didChangeTimers.clear();
     if (!_diagnosticController.isClosed) _diagnosticController.close();
   }
 }

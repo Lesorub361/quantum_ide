@@ -188,6 +188,14 @@ class TerminalViewState extends State<TerminalView> {
 
   Offset? _magnifierFocalPoint;
 
+  Timer? _autoScrollTimer;
+
+  int _autoScrollDirection = 0;
+
+  bool _autoScrollIsStart = false;
+
+  Offset? _lastHandleTargetGlobal;
+
   RenderTerminal get renderTerminal =>
       _viewportKey.currentContext!.findRenderObject() as RenderTerminal;
 
@@ -231,6 +239,7 @@ class TerminalViewState extends State<TerminalView> {
 
   @override
   void dispose() {
+    _autoScrollTimer?.cancel();
     _selectionToolbarTimer?.cancel();
     _hideSelectionToolbar();
     _selectionRevision.dispose();
@@ -574,27 +583,43 @@ class TerminalViewState extends State<TerminalView> {
     _bumpSelectionRevision();
   }
 
+  void _updateAutoScroll(int direction, bool isStart) {
+    _autoScrollIsStart = isStart;
+    if (direction == 0) {
+      _autoScrollTimer?.cancel();
+      _autoScrollTimer = null;
+      _autoScrollDirection = 0;
+      return;
+    }
+    if (_autoScrollDirection == direction && _autoScrollTimer != null) return;
+    _autoScrollDirection = direction;
+    _autoScrollTimer?.cancel();
+    _autoScrollTimer = Timer.periodic(const Duration(milliseconds: 55), (_) {
+      if (!mounted || !_draggingHandle || !_scrollController.hasClients) {
+        _updateAutoScroll(0, isStart);
+        return;
+      }
+      final step = renderTerminal.lineHeight;
+      final nextOffset = (_scrollController.offset + _autoScrollDirection * step)
+          .clamp(0.0, _scrollController.position.maxScrollExtent);
+      if ((nextOffset - _scrollController.offset).abs() < 0.5) return;
+      _scrollController.jumpTo(nextOffset);
+      final target = _lastHandleTargetGlobal;
+      if (target != null) {
+        if (_autoScrollIsStart) {
+          renderTerminal.updateSelectionStart(target);
+        } else {
+          renderTerminal.updateSelectionEnd(target);
+        }
+        _bumpSelectionRevision();
+      }
+    });
+  }
+
   void _onHandlePanUpdate(Offset fingerGlobalPosition, {required bool isStart}) {
     final targetGlobal = fingerGlobalPosition + _handleDragOffset;
+    _lastHandleTargetGlobal = targetGlobal;
     _magnifierFocalPoint = targetGlobal;
-
-    // Auto-scroll when dragging a handle near the top or bottom edge of the viewport
-    if (_scrollController.hasClients) {
-      final localPos = renderTerminal.globalToLocal(targetGlobal);
-      const edgeThreshold = 28.0;
-      final viewportHeight = renderTerminal.size.height;
-      if (localPos.dy < edgeThreshold && _scrollController.offset > 0) {
-        final nextOffset = (_scrollController.offset - renderTerminal.lineHeight)
-            .clamp(0.0, _scrollController.position.maxScrollExtent);
-        _scrollController.jumpTo(nextOffset);
-      } else if (localPos.dy > viewportHeight - edgeThreshold &&
-          _scrollController.offset <
-              _scrollController.position.maxScrollExtent) {
-        final nextOffset = (_scrollController.offset + renderTerminal.lineHeight)
-            .clamp(0.0, _scrollController.position.maxScrollExtent);
-        _scrollController.jumpTo(nextOffset);
-      }
-    }
 
     if (isStart) {
       renderTerminal.updateSelectionStart(targetGlobal);
@@ -602,9 +627,27 @@ class TerminalViewState extends State<TerminalView> {
       renderTerminal.updateSelectionEnd(targetGlobal);
     }
     _bumpSelectionRevision();
+
+    // Smoothly auto-scroll when dragging a handle near the top or bottom edge
+    if (_scrollController.hasClients) {
+      final localPos = renderTerminal.globalToLocal(targetGlobal);
+      const edgeThreshold = 32.0;
+      final viewportHeight = renderTerminal.size.height;
+      if (localPos.dy < edgeThreshold && _scrollController.offset > 0) {
+        _updateAutoScroll(-1, isStart);
+      } else if (localPos.dy > viewportHeight - edgeThreshold &&
+          _scrollController.offset <
+              _scrollController.position.maxScrollExtent) {
+        _updateAutoScroll(1, isStart);
+      } else {
+        _updateAutoScroll(0, isStart);
+      }
+    }
   }
 
   void _onHandlePanEnd() {
+    _updateAutoScroll(0, false);
+    _lastHandleTargetGlobal = null;
     _draggingHandle = false;
     _handleDragOffset = Offset.zero;
     _magnifierFocalPoint = null;

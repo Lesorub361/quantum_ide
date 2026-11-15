@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:quantum_ide/shared/widgets/unified_load_meter.dart';
 import 'package:quantum_ide/features/editor/presentation/pages/editor_page.dart';
@@ -156,6 +157,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
           case 'env':
             showEnvironmentBottomSheet(context, ref);
             break;
+          case 'clean_cache':
+            _cleanBuildCacheDialog(context, ref, workspacePath);
+            break;
         }
       },
       itemBuilder: (context) => [
@@ -203,7 +207,112 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
             ],
           ),
         ),
+        const PopupMenuItem(
+          value: 'clean_cache',
+          height: 32,
+          child: Row(
+            children: [
+              Icon(LucideIcons.sparkles, size: 14, color: Colors.amberAccent),
+              SizedBox(width: 8),
+              Text('Очистить кэш сборки', style: TextStyle(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
       ],
+    );
+  }
+
+  Future<int> _dirSizeBytes(Directory dir) async {
+    var total = 0;
+    try {
+      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+        if (entity is File) {
+          total += await entity.length();
+        }
+      }
+    } catch (_) {}
+    return total;
+  }
+
+  String _formatBytes(int bytes) {
+    if (bytes >= 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} ГБ';
+    }
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
+    }
+    return '${(bytes / 1024).toStringAsFixed(0)} КБ';
+  }
+
+  Future<void> _cleanBuildCacheDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String workspacePath,
+  ) async {
+    if (workspacePath.isEmpty) return;
+    final cacheTargets = [
+      p.join(workspacePath, 'build'),
+      p.join(workspacePath, '.dart_tool'),
+      p.join(workspacePath, 'android', '.gradle'),
+      p.join(workspacePath, 'android', 'app', 'build'),
+      p.join(workspacePath, 'android', 'build'),
+    ];
+    final existing = <Directory>[];
+    var totalBytes = 0;
+    for (final path in cacheTargets) {
+      final dir = Directory(path);
+      if (await dir.exists()) {
+        existing.add(dir);
+        totalBytes += await _dirSizeBytes(dir);
+      }
+    }
+    if (!context.mounted) return;
+    if (existing.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Кэш сборки уже пуст')),
+      );
+      return;
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF151922),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text(
+          'Очистить кэш сборки?',
+          style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Будут удалены только временные папки (build, .dart_tool, android/.gradle, android/app/build).\n\nОсвободится: ${_formatBytes(totalBytes)}\nИсходный код проекта не затрагивается.',
+          style: const TextStyle(color: Colors.white70, fontSize: 12.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: const Text('Отмена', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text(
+              'Очистить',
+              style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    for (final dir in existing) {
+      try {
+        await dir.delete(recursive: true);
+      } catch (_) {}
+    }
+    if (!context.mounted) return;
+    ref.read(fileExplorerProvider.notifier).scanDirectory(workspacePath);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Кэш сборки очищен (${_formatBytes(totalBytes)})')),
     );
   }
 

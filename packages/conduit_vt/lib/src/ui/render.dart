@@ -193,8 +193,8 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   }
 
   void _onControllerUpdate() {
-    markNeedsLayout();
-    // Selection highlight is a visual change; repaint even if layout is stable.
+    // Selection highlight is a visual change; repaint without triggering layout
+    // so active selections never snap the viewport back to bottom.
     markNeedsPaint();
   }
 
@@ -241,7 +241,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
 
       _updateScrollOffset();
 
-      if (wasStuckToBottom) {
+      if (wasStuckToBottom && _controller.selection == null) {
         _offset.correctBy(_maxScrollExtent - _scrollOffset);
         _stickToBottom = true;
       }
