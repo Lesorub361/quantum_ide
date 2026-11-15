@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:quantum_ide/core/services/build_progress_tracker.dart';
 import 'package:quantum_ide/core/services/live_telemetry_service.dart';
 
 class SystemProcessItem {
@@ -354,7 +355,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     final String socName = await _detectSocName();
 
     // 4. Список активных процессов: только по запросу (Диспетчер задач) или во время активной сборки
-    final isBuilding = LiveTelemetryService.instance.isBuilding;
+    final isBuilding = LiveTelemetryService.instance.isBuilding ||
+        BuildProgressTracker.instance.progress.value.active;
     List<SystemProcessItem> processes = _cachedProcesses;
     if (fetchProcesses || isBuilding) {
       processes = await _fetchProcessList(appRssBytes, cpu);
@@ -662,7 +664,36 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   }
 
   SystemProcessItem? _classifyProcess(int procPid, double cpu, int rssBytes, String args) {
-    final lower = args.toLowerCase();
+    final trimmed = args.trim();
+    final firstToken = trimmed.isEmpty ? '' : trimmed.split(RegExp(r'\s+')).first;
+    final exeName = firstToken.split('/').last.toLowerCase();
+    final lower = trimmed.toLowerCase();
+
+    // Сначала проверяем реальный исполняемый файл: proot/libproot.so и shell-обёртки
+    // часто содержат в аргументах пути к gradlew, JAVA_HOME и т.д., но сами не являются JVM/Gradle.
+    if (exeName.contains('proot') || lower.startsWith('proot ')) {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'PRoot Container',
+        description: 'Гостевая изолированная среда Linux / Ubuntu rootfs',
+        category: 'Песочница',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
+
+    if (exeName == 'sh' || exeName == 'bash' || exeName == 'zsh' || exeName == 'dash') {
+      return SystemProcessItem(
+        pid: procPid,
+        name: 'Terminal Session',
+        description: 'Интерактивная или фоновая оболочка Bash/SH',
+        category: 'Терминал',
+        cpuPercent: cpu,
+        rssBytes: rssBytes,
+        command: args,
+      );
+    }
 
     if (lower.contains('gradledaemon') || lower.contains('gradlew') || lower.contains('gradle-launcher')) {
       return SystemProcessItem(

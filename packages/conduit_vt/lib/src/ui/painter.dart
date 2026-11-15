@@ -24,7 +24,7 @@ class TerminalPainter {
   /// The cached for cells in the terminal. Should be cleared when the same
   /// cell no longer produces the same visual output. For example, when
   /// [_textStyle] is changed, or when the system font changes.
-  final _paragraphCache = ParagraphCache(10240);
+  final _paragraphCache = ParagraphCache(2048);
 
   TerminalStyle get textStyle => _textStyle;
   TerminalStyle _textStyle;

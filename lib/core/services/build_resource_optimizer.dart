@@ -138,15 +138,15 @@ class BuildResourceOptimizer {
       case BuildPerformanceMode.balanced:
         // Balanced: optimal compilation speed without risking Android LMK
         if (ram >= 6000) {
-          jvmHeap = 2560;
-          jvmMeta = 512;
-          dartHeap = 1280;
-          workers = cores >= 8 ? 4 : math.min(cores, 3);
-        } else if (ram >= 3200) {
-          jvmHeap = 2048;
+          jvmHeap = 1792;
           jvmMeta = 512;
           dartHeap = 1024;
-          workers = cores >= 8 ? 4 : (cores >= 6 ? 4 : math.min(cores, 3));
+          workers = cores >= 8 ? 4 : math.min(cores, 3);
+        } else if (ram >= 3200) {
+          jvmHeap = 1536;
+          jvmMeta = 448;
+          dartHeap = 896;
+          workers = cores >= 6 ? 3 : math.min(cores, 2);
         } else if (ram >= 2000) {
           jvmHeap = 1600;
           jvmMeta = 448;

@@ -59,8 +59,9 @@ class ApkSizeBreakdown {
     int otherBytes = 0;
     final entries = <ApkFileEntry>[];
 
+    InputFileStream? inputStream;
     try {
-      final inputStream = InputFileStream(filePath);
+      inputStream = InputFileStream(filePath);
       final archive = ZipDecoder().decodeStream(inputStream);
 
       for (final f in archive.files) {
@@ -82,9 +83,12 @@ class ApkSizeBreakdown {
           otherBytes += size;
         }
       }
-      inputStream.close();
     } catch (e, st) {
       TalkerService.error('Failed to parse APK/AAB archive: $e', e, st);
+    } finally {
+      try {
+        inputStream?.close();
+      } catch (_) {}
     }
 
     entries.sort((a, b) => b.size.compareTo(a.size));

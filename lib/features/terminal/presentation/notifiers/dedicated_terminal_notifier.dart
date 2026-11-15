@@ -97,7 +97,14 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       }
     }
 
-    if (type == DedicatedTerminalType.build) {
+    final lowerCmd = command.toLowerCase();
+    final isBuildCmd = type == DedicatedTerminalType.build ||
+        lowerCmd.contains('flutter build') ||
+        lowerCmd.contains('gradlew') ||
+        lowerCmd.contains('assembledebug') ||
+        lowerCmd.contains('assemblerelease') ||
+        lowerCmd.contains('appbundle');
+    if (isBuildCmd) {
       LiveTelemetryService.instance.onBuildStarted(command);
     }
 
@@ -219,7 +226,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
             // Never re-write chunk on error to avoid duplicate words.
           }
           BuildProgressTracker.instance.feed(text);
-          if (type == DedicatedTerminalType.build) {
+          if (type == DedicatedTerminalType.build || LiveTelemetryService.instance.isBuilding) {
             LiveTelemetryService.instance.appendBuildOutput(text);
             if (text.contains('✓ Built build/app/outputs/') ||
                 text.contains('✓ APK готов:') ||
@@ -239,7 +246,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
         },
         onDone: () {
           _markAsExited(type);
-          if (type == DedicatedTerminalType.build) {
+          if (type == DedicatedTerminalType.build || LiveTelemetryService.instance.isBuilding) {
             if (LiveTelemetryService.instance.isBuilding) {
               xtermTerm.write(
                 '\r\n\x1b[1;33m[Сессия терминала перезапущена — нажмите кнопку сборки повторно]\x1b[0m\r\n',

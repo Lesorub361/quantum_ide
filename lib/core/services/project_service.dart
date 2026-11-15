@@ -242,7 +242,7 @@ class ProjectService extends StateNotifier<List<Project>> {
     final projectsDir = Directory(p.join(runtime.appDirectory, 'projects'));
     if (!await projectsDir.exists()) await projectsDir.create(recursive: true);
 
-    _watcherSubscription = projectsDir.watch(recursive: true).listen((event) async {
+    _watcherSubscription = projectsDir.watch(recursive: !Platform.isAndroid).listen((event) async {
       final path = event.path;
       // Skip noise before checking filesystem
       if (path.contains('/.dart_tool/') || 
