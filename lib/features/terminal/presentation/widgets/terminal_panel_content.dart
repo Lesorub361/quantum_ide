@@ -97,58 +97,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       0; // 0: Все, 1: Ошибки, 2: Предупреждения, 3: Инфо
   int _buildSubTab = 0;
   bool _isWakelockEnabled = false;
-  double _pinchBaseFontSize = 13.0;
-  final Map<int, Offset> _pinchPointers = {};
-  double? _initialPinchDistance;
-  double? _pendingPinchFontSize;
-
-  Widget _buildTerminalPinchWrapper({required Widget child}) {
-    return Listener(
-      onPointerDown: (event) {
-        _pinchPointers[event.pointer] = event.position;
-        if (_pinchPointers.length == 2) {
-          final points = _pinchPointers.values.toList();
-          _initialPinchDistance = (points[0] - points[1]).distance;
-          _pinchBaseFontSize = ref.read(settingsProvider).terminalFontSize;
-          _pendingPinchFontSize = _pinchBaseFontSize;
-        }
-      },
-      onPointerMove: (event) {
-        _pinchPointers[event.pointer] = event.position;
-        if (_pinchPointers.length >= 2 &&
-            _initialPinchDistance != null &&
-            _initialPinchDistance! > 0) {
-          final points = _pinchPointers.values.toList();
-          final currentDistance = (points[0] - points[1]).distance;
-          final scale = currentDistance / _initialPinchDistance!;
-          _pendingPinchFontSize = (_pinchBaseFontSize * scale).clamp(9.0, 28.0);
-        }
-      },
-      onPointerUp: (event) {
-        _pinchPointers.remove(event.pointer);
-        if (_pinchPointers.length < 2) {
-          _initialPinchDistance = null;
-          if (_pendingPinchFontSize != null) {
-            final rounded = _pendingPinchFontSize!.roundToDouble();
-            if ((rounded - ref.read(settingsProvider).terminalFontSize).abs() >=
-                1.0) {
-              ref.read(settingsProvider.notifier).setTerminalFontSize(rounded);
-            }
-            _pendingPinchFontSize = null;
-          }
-        }
-      },
-      onPointerCancel: (event) {
-        _pinchPointers.remove(event.pointer);
-        if (_pinchPointers.length < 2) {
-          _initialPinchDistance = null;
-          _pendingPinchFontSize = null;
-        }
-      },
-      child: child,
-    );
-  }
-
   final Map<String, GlobalKey> _terminalKeys = {};
   final Map<String, TerminalFocusNode> _terminalFocusNodes = {};
 
@@ -3154,84 +3102,61 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                         LogicalKeyboardKey.keyA,
                       ): const SelectAllTextIntent(),
                     },
-                    child: _buildTerminalPinchWrapper(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onTap: () {
-                          if (!isMobile) {
-                            _openTerminalKeyboard(
-                              session,
-                              isSecondary: isSecondary,
-                              clearSelection: true,
-                            );
-                          } else if (session.xtermViewController.selection !=
-                              null) {
-                            session.xtermViewController.clearSelection();
-                          }
-                        },
-                        onSecondaryTapDown: (details) {
-                          if (session.xtermViewController.selection != null) {
-                            _copySelection(session);
-                          } else {
-                            _pasteToTerminal(session);
-                          }
-                        },
-                        child: ConduitTerminalSurface(
-                          key: _getTerminalKey(keyId),
-                          terminal: session.xtermTerminal,
-                          controller: session.xtermViewController,
-                          focusNode: _getFocusNode(keyId),
-                          autofocus: !isMobile,
-                          hardwareKeyboardOnly:
-                              ref.watch(settingsProvider).hardwareKeyboardMode,
-                          palette: resolveConduitPalette(
-                            ref.watch(settingsProvider).terminalTheme,
-                          ),
-                          brightness: Brightness.dark,
-                          customTheme: theme,
-                          fontFamily: _getFontFamily(
-                            ref.watch(settingsProvider).terminalFontFamily,
-                          ),
-                          fontSize: terminalFontSize,
-                          onFontSizeChanged: (newSize) {
-                            ref
-                                .read(settingsProvider.notifier)
-                                .setTerminalFontSize(newSize.clamp(8.0, 26.0));
-                          },
-                          onTapUp: (details, offset) {
-                            if (session.xtermViewController.selection != null) {
-                              session.xtermViewController.clearSelection();
-                              return;
-                            }
-
-                            final lineIndex = offset.y;
-                            final colIndex = offset.x;
-                            final buffer = session.xtermTerminal.buffer;
-                            if (lineIndex >= 0 &&
-                                lineIndex < buffer.lines.length) {
-                              final lineText = buffer.lines[lineIndex]
-                                  .toString();
-                              final link = QuantumLinkDetector.findLinkAt(
-                                lineText,
-                                colIndex,
-                              );
-                              if (link != null) {
-                                QuantumLinkDetector.handleLinkTap(
-                                  context,
-                                  ref,
-                                  link,
-                                );
-                                return;
-                              }
-                            }
-
-                            _openTerminalKeyboard(
-                              session,
-                              isSecondary: isSecondary,
-                            );
-                          },
-                        ),
+                    child: ConduitTerminalSurface(
+                      key: _getTerminalKey(keyId),
+                      terminal: session.xtermTerminal,
+                      controller: session.xtermViewController,
+                      focusNode: _getFocusNode(keyId),
+                      autofocus: !isMobile,
+                      hardwareKeyboardOnly:
+                          ref.watch(settingsProvider).hardwareKeyboardMode,
+                      palette: resolveConduitPalette(
+                        ref.watch(settingsProvider).terminalTheme,
                       ),
+                      brightness: Brightness.dark,
+                      customTheme: theme,
+                      fontFamily: _getFontFamily(
+                        ref.watch(settingsProvider).terminalFontFamily,
+                      ),
+                      fontSize: terminalFontSize,
+                      onFontSizeChanged: (newSize) {
+                        ref
+                            .read(settingsProvider.notifier)
+                            .setTerminalFontSize(newSize.clamp(8.0, 26.0));
+                      },
+                      onSecondaryTapDown: (details, offset) {
+                        if (session.xtermViewController.selection != null) {
+                          _copySelection(session);
+                        } else {
+                          _pasteToTerminal(session);
+                        }
+                      },
+                      onTapUp: (details, offset) {
+                        final buffer = session.xtermTerminal.buffer;
+                        final link = QuantumLinkDetector.findLinkInBuffer(
+                          buffer,
+                          offset.y,
+                          offset.x,
+                        );
+                        if (link != null) {
+                          QuantumLinkDetector.handleLinkTap(
+                            context,
+                            ref,
+                            link,
+                          );
+                          return;
+                        }
+
+                        if (session.xtermViewController.selection != null) {
+                          session.xtermViewController.clearSelection();
+                          return;
+                        }
+
+                        _openTerminalKeyboard(
+                          session,
+                          isSecondary: isSecondary,
+                        );
+                      },
                     ),
                   ),
                 ),

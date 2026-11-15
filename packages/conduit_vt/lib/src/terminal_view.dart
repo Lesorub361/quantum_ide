@@ -180,6 +180,8 @@ class TerminalViewState extends State<TerminalView> {
 
   bool _draggingHandle = false;
 
+  Offset _handleDragOffset = Offset.zero;
+
   Offset? _magnifierFocalPoint;
 
   RenderTerminal get renderTerminal =>
@@ -253,7 +255,7 @@ class TerminalViewState extends State<TerminalView> {
           terminal: widget.terminal,
           controller: _controller,
           offset: offset,
-          padding: MediaQuery.of(context).padding,
+          padding: EdgeInsets.zero,
           autoResize: widget.autoResize,
           textStyle: widget.textStyle,
           textScaler: widget.textScaler ?? MediaQuery.textScalerOf(context),
@@ -373,8 +375,9 @@ class TerminalViewState extends State<TerminalView> {
     final offset = renderTerminal.getCellOffset(details.localPosition);
     widget.onTapUp?.call(details, offset);
 
-    if (_selectionClearedByTapDown) {
+    if (_selectionClearedByTapDown || _controller.selection != null) {
       _selectionClearedByTapDown = false;
+      _controller.clearSelection();
       return;
     }
 
@@ -386,12 +389,7 @@ class TerminalViewState extends State<TerminalView> {
   }
 
   void _onTapDown(_) {
-    if (_controller.selection != null) {
-      _controller.clearSelection();
-      _selectionClearedByTapDown = true;
-    } else {
-      _selectionClearedByTapDown = false;
-    }
+    _selectionClearedByTapDown = _controller.selection != null;
   }
 
   void _handleSelectionChanged() {
@@ -413,48 +411,80 @@ class TerminalViewState extends State<TerminalView> {
     _bumpSelectionRevision();
     _hideSelectionToolbar();
     _selectionToolbarTimer?.cancel();
-    _selectionToolbarTimer = Timer(
-      const Duration(milliseconds: 150),
-      _showSelectionToolbar,
-    );
+    if (!_draggingHandle) {
+      _selectionToolbarTimer = Timer(
+        const Duration(milliseconds: 150),
+        _showSelectionToolbar,
+      );
+    }
   }
 
   void _bumpSelectionRevision() {
     _selectionRevision.value++;
   }
 
-  Widget _buildSelectionHandles(BuildContext context) {
+  Widget _buildSelectionHandles(BuildContext overlayContext) {
     return ValueListenableBuilder<int>(
       valueListenable: _selectionRevision,
-      builder: (context, _, __) {
+      builder: (ctx, _, __) {
         if (_viewportKey.currentContext == null ||
             _controller.selection == null) {
           return const SizedBox.shrink();
         }
 
         final render = renderTerminal;
-        final start = render.selectionStartHandleOffset;
-        final end = render.selectionEndHandleOffset;
-        if (start == null || end == null) {
+        final startGlobal = render.selectionStartHandleOffset;
+        final endGlobal = render.selectionEndHandleOffset;
+        if (startGlobal == null || endGlobal == null) {
           return const SizedBox.shrink();
         }
 
-        return Stack(
-          children: [
-            _buildHandle(start, isStart: true),
-            _buildHandle(end, isStart: false),
-            if (_draggingHandle && _magnifierFocalPoint != null)
-              _buildMagnifier(_magnifierFocalPoint!),
-          ],
+        final overlayBox =
+            overlayContext.findRenderObject() as RenderBox?;
+        final startLocal = overlayBox != null && overlayBox.hasSize
+            ? overlayBox.globalToLocal(startGlobal)
+            : startGlobal;
+        final endLocal = overlayBox != null && overlayBox.hasSize
+            ? overlayBox.globalToLocal(endGlobal)
+            : endGlobal;
+        final magnifierLocal =
+            _magnifierFocalPoint != null &&
+                    overlayBox != null &&
+                    overlayBox.hasSize
+                ? overlayBox.globalToLocal(_magnifierFocalPoint!)
+                : _magnifierFocalPoint;
+
+        return SizedBox.expand(
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _buildHandle(
+                localCorner: startLocal,
+                globalCorner: startGlobal,
+                isStart: true,
+              ),
+              _buildHandle(
+                localCorner: endLocal,
+                globalCorner: endGlobal,
+                isStart: false,
+              ),
+              if (_draggingHandle && magnifierLocal != null)
+                _buildMagnifier(magnifierLocal),
+            ],
+          ),
         );
       },
     );
   }
 
-  Widget _buildHandle(Offset corner, {required bool isStart}) {
-    const visual = 18.0;
-    const touch = 72.0;
-    final center = corner.translate(0, visual / 2 + 2);
+  Widget _buildHandle({
+    required Offset localCorner,
+    required Offset globalCorner,
+    required bool isStart,
+  }) {
+    const visual = 20.0;
+    const touch = 56.0;
+    final center = localCorner.translate(0, visual / 2 + 2);
     return Positioned(
       left: center.dx - touch / 2,
       top: center.dy - touch / 2,
@@ -462,19 +492,30 @@ class TerminalViewState extends State<TerminalView> {
       height: touch,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onPanStart: (_) => _onHandlePanStart(corner),
+        onPanStart: (details) =>
+            _onHandlePanStart(globalCorner, details.globalPosition),
         onPanUpdate: (details) =>
             _onHandlePanUpdate(details.globalPosition, isStart: isStart),
         onPanEnd: (_) => _onHandlePanEnd(),
+        onPanCancel: _onHandlePanEnd,
         child: Center(
           child: Container(
             width: visual,
             height: visual,
             decoration: BoxDecoration(
               color: widget.theme.cursor,
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(isStart ? visual / 2 : 3),
+                topRight: Radius.circular(isStart ? 3 : visual / 2),
+                bottomLeft: const Radius.circular(visual / 2),
+                bottomRight: const Radius.circular(visual / 2),
+              ),
+              border: Border.all(
+                color: const Color(0xAAFFFFFF),
+                width: 1.2,
+              ),
               boxShadow: const [
-                BoxShadow(color: Color(0x55000000), blurRadius: 2),
+                BoxShadow(color: Color(0x77000000), blurRadius: 4),
               ],
             ),
           ),
@@ -489,40 +530,68 @@ class TerminalViewState extends State<TerminalView> {
     return Positioned(
       left: focalPoint.dx - size.width / 2,
       top: focalPoint.dy - size.height - gap,
-      child: RawMagnifier(
-        size: size,
-        magnificationScale: 1.6,
-        focalPointOffset: Offset(0, size.height / 2 + gap),
-        decoration: MagnifierDecoration(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: widget.theme.cursor, width: 1),
+      child: IgnorePointer(
+        child: RawMagnifier(
+          size: size,
+          magnificationScale: 1.6,
+          focalPointOffset: Offset(0, size.height / 2 + gap),
+          decoration: MagnifierDecoration(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: widget.theme.cursor, width: 1),
+            ),
           ),
         ),
       ),
     );
   }
 
-  void _onHandlePanStart(Offset corner) {
+  void _onHandlePanStart(Offset globalCorner, Offset fingerGlobalPosition) {
     _draggingHandle = true;
-    _magnifierFocalPoint = corner;
+    final cellAnchorGlobal = globalCorner.translate(
+      0,
+      -renderTerminal.lineHeight * 0.5,
+    );
+    _handleDragOffset = cellAnchorGlobal - fingerGlobalPosition;
+    _magnifierFocalPoint = cellAnchorGlobal;
     _hideSelectionToolbar();
     _selectionToolbarTimer?.cancel();
     _bumpSelectionRevision();
   }
 
-  void _onHandlePanUpdate(Offset globalPosition, {required bool isStart}) {
-    _magnifierFocalPoint = globalPosition;
+  void _onHandlePanUpdate(Offset fingerGlobalPosition, {required bool isStart}) {
+    final targetGlobal = fingerGlobalPosition + _handleDragOffset;
+    _magnifierFocalPoint = targetGlobal;
+
+    // Auto-scroll when dragging a handle near the top or bottom edge of the viewport
+    if (_scrollController.hasClients) {
+      final localPos = renderTerminal.globalToLocal(targetGlobal);
+      const edgeThreshold = 28.0;
+      final viewportHeight = renderTerminal.size.height;
+      if (localPos.dy < edgeThreshold && _scrollController.offset > 0) {
+        final nextOffset = (_scrollController.offset - renderTerminal.lineHeight)
+            .clamp(0.0, _scrollController.position.maxScrollExtent);
+        _scrollController.jumpTo(nextOffset);
+      } else if (localPos.dy > viewportHeight - edgeThreshold &&
+          _scrollController.offset <
+              _scrollController.position.maxScrollExtent) {
+        final nextOffset = (_scrollController.offset + renderTerminal.lineHeight)
+            .clamp(0.0, _scrollController.position.maxScrollExtent);
+        _scrollController.jumpTo(nextOffset);
+      }
+    }
+
     if (isStart) {
-      renderTerminal.updateSelectionStart(globalPosition);
+      renderTerminal.updateSelectionStart(targetGlobal);
     } else {
-      renderTerminal.updateSelectionEnd(globalPosition);
+      renderTerminal.updateSelectionEnd(targetGlobal);
     }
     _bumpSelectionRevision();
   }
 
   void _onHandlePanEnd() {
     _draggingHandle = false;
+    _handleDragOffset = Offset.zero;
     _magnifierFocalPoint = null;
     _bumpSelectionRevision();
     _selectionToolbarTimer?.cancel();
@@ -587,8 +656,9 @@ class TerminalViewState extends State<TerminalView> {
 
   void _selectAll() {
     final buffer = widget.terminal.buffer;
+    if (buffer.lines.length == 0) return;
     _controller.setSelection(
-      buffer.createAnchor(0, buffer.height - widget.terminal.viewHeight),
+      buffer.createAnchor(0, 0),
       buffer.createAnchor(widget.terminal.viewWidth, buffer.height - 1),
     );
   }

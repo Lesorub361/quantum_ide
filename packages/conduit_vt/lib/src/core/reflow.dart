@@ -27,6 +27,9 @@ class _LineBuilder {
 
   /// Reuses the given [line] as the initial buffer for this builder.
   void setBuffer(BufferLine line, int length) {
+    for (var i = length; i < line.length; i++) {
+      line.resetCell(i);
+    }
     _result = line;
     _length = length;
   }
@@ -37,8 +40,10 @@ class _LineBuilder {
 
   BufferLine take({required bool wrapped}) {
     final result = _result;
+    for (var i = _length; i < result.length; i++) {
+      result.resetCell(i);
+    }
     result.isWrapped = wrapped;
-    // result.resize(_length);
 
     _result = BufferLine(_capacity);
     _length = 0;
@@ -66,6 +71,7 @@ class _LineReflow {
 
     // A fast path for empty lines
     if (trimmedLength == 0) {
+      line.resize(newWidth);
       _lines.add(line);
       return;
     }
@@ -79,6 +85,7 @@ class _LineReflow {
 
     if (newWidth >= oldWidth) {
       // Reuse the line to avoid copying the content and object allocation.
+      line.resize(newWidth);
       _builder.setBuffer(line, trimmedLength);
     } else {
       _lines.add(line);
@@ -90,9 +97,8 @@ class _LineReflow {
           _addPart(line, from: newWidth, to: trimmedLength);
         }
       }
+      line.resize(newWidth);
     }
-
-    line.resize(newWidth);
 
     if (line.getWidth(newWidth - 1) == 2) {
       line.resetCell(newWidth - 1);
@@ -154,6 +160,12 @@ class _LineReflow {
   List<BufferLine> finish() {
     if (_builder.isNotEmpty) {
       _lines.add(_builder.take(wrapped: _lines.isNotEmpty));
+    } else if (_builder._result.anchors.isNotEmpty && _lines.isNotEmpty) {
+      final lastLine = _lines.last;
+      final endCol = lastLine.getTrimmedLength(newWidth).clamp(0, newWidth - 1);
+      for (final anchor in _builder._result.anchors.toList()) {
+        anchor.reparent(lastLine, endCol);
+      }
     }
 
     return _lines;

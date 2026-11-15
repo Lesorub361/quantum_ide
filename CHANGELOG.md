@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.235
+- **Conduit Terminal Reflow & Pinch-to-Zoom Artifacts Fix (`conduit_vt`, `ConduitTerminalSurface`)**:
+  - Fixed ghost character artifacts (`' ' : : #`, `⠋`, `⠙`, `⠸`, `□`) appearing after pinching to zoom in and out by zeroing stale cells in [`BufferLine.resize`](packages/conduit_vt/lib/src/core/buffer/line.dart) and [`_LineBuilder`](packages/conduit_vt/lib/src/core/reflow.dart), tracking cursor coordinates across `reflow()` with `CellAnchor` in [`Buffer.resize`](packages/conduit_vt/lib/src/core/buffer/buffer.dart), and triggering immediate repaints in [`RenderTerminal`](packages/conduit_vt/lib/src/ui/render.dart) and [`Terminal.resize`](packages/conduit_vt/lib/src/terminal.dart).
+  - Quantized pinch-to-zoom font steps in [`ConduitTerminalSurface`](lib/features/terminal/conduit/conduit_terminal_surface.dart), removed duplicate pinch/tap wrappers in [`terminal_panel_content.dart`](lib/features/terminal/presentation/widgets/terminal_panel_content.dart), and debounced PTY resize in [`dedicated_terminal_notifier.dart`](lib/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart).
+- **Multi-Line Wrapped URL Opening & Smooth Selection Handles (`Buffer`, `TerminalView`, `QuantumLinkDetector`)**:
+  - Added multi-line URL stitching (`findUrlRangeAt` / `getUrlAt`) in [`Buffer`](packages/conduit_vt/lib/src/core/buffer/buffer.dart) and [`QuantumLinkDetector.findLinkInBuffer`](lib/features/terminal/engine/quantum_link_detector.dart) so tapping or long-pressing any line of a multi-line wrapped URL (including `agy` OAuth links) opens and selects the full unbroken URL without `\n` breaks.
+  - Fixed selection handle dragging in [`TerminalView`](packages/conduit_vt/lib/src/terminal_view.dart) and [`RenderTerminal`](packages/conduit_vt/lib/src/ui/render.dart) with finger-offset tracking, viewport edge auto-scroll, and toolbar suppression while dragging.
+
 ## 1.2.234
 - **Redesigned Professional Git UI & Workflow (`GitPanel`, `GitGraphPage`)**:
   - Replaced cluttered stacked toolbars and clipped horizontal buttons with a clean compact header, full-width segmented quick-action bar (`Sync`, `Fetch`, `Pull`, `Push`, `Stash`), overflow menu, and streamlined tabs (`Изменения`, `История`, `Ветки`, `Релизы`).

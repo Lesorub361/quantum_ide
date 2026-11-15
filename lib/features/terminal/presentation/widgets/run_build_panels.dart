@@ -25,7 +25,11 @@ import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/build_resource_optimizer.dart';
+import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/build_target_dialog.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
+import 'package:quantum_ide/features/terminal/conduit/conduit_terminal_surface.dart';
+import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart';
 
 // Project-safe: never mutate user's build.gradle.kts or AndroidManifest.xml.
 const String _ktRepairCmd = '';
@@ -452,28 +456,36 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
             child: session != null
                 ? (_showBeautifulLogs
                     ? BeautifulLogsViewer(session: session)
-                    : xt.TerminalView(
-                        session.xtermTerminal,
+                    : ConduitTerminalSurface(
+                        terminal: session.xtermTerminal,
                         controller: session.xtermViewController,
                         autofocus: !(Platform.isAndroid || Platform.isIOS),
-                        theme: theme,
-                        backgroundOpacity: 0,
-                        textStyle: xt.TerminalStyle(
-                          fontSize: terminalFontSize * 0.9,
-                          fontFamily: 'jetBrainsMono',
-                          fontFamilyFallback: const [
-                            'SymbolsNerdFont',
-                            'Symbols Nerd Font',
-                            'cascadia',
-                            'dejaVuSansMono',
-                            'firaCode',
-                            'Noto Sans Mono',
-                            'DejaVu Sans Mono',
-                            'monospace',
-                          ],
+                        palette: resolveConduitPalette(
+                          ref.watch(settingsProvider).terminalTheme,
                         ),
-                        keyboardType: TextInputType.emailAddress,
-                        deleteDetection: Platform.isAndroid || Platform.isIOS,
+                        brightness: Brightness.dark,
+                        customTheme: theme,
+                        fontFamily: 'jetBrainsMono',
+                        fontSize: terminalFontSize,
+                        onFontSizeChanged: (newSize) {
+                          ref
+                              .read(settingsProvider.notifier)
+                              .setTerminalFontSize(newSize.clamp(8.0, 26.0));
+                        },
+                        onTapUp: (details, offset) {
+                          final link = QuantumLinkDetector.findLinkInBuffer(
+                            session.xtermTerminal.buffer,
+                            offset.y,
+                            offset.x,
+                          );
+                          if (link != null) {
+                            QuantumLinkDetector.handleLinkTap(
+                              context,
+                              ref,
+                              link,
+                            );
+                          }
+                        },
                       ))
                 : Center(child: Text(l10n.startTheProject, style: const TextStyle(color: Colors.white38))),
           ),
@@ -1165,28 +1177,39 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                     border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                                   ),
                                   clipBehavior: Clip.antiAlias,
-                                  child: xt.TerminalView(
-                                    session.xtermTerminal,
+                                  child: ConduitTerminalSurface(
+                                    terminal: session.xtermTerminal,
                                     controller: session.xtermViewController,
                                     autofocus: !(Platform.isAndroid || Platform.isIOS),
-                                    theme: theme,
-                                    backgroundOpacity: 0,
-                                    textStyle: xt.TerminalStyle(
-                                      fontSize: terminalFontSize * 0.9,
-                                      fontFamily: 'jetBrainsMono',
-                                      fontFamilyFallback: const [
-                                        'SymbolsNerdFont',
-                                        'Symbols Nerd Font',
-                                        'cascadia',
-                                        'dejaVuSansMono',
-                                        'firaCode',
-                                        'Noto Sans Mono',
-                                        'DejaVu Sans Mono',
-                                        'monospace',
-                                      ],
+                                    palette: resolveConduitPalette(
+                                      ref.watch(settingsProvider).terminalTheme,
                                     ),
-                                    keyboardType: TextInputType.emailAddress,
-                                    deleteDetection: Platform.isAndroid || Platform.isIOS,
+                                    brightness: Brightness.dark,
+                                    customTheme: theme,
+                                    fontFamily: 'jetBrainsMono',
+                                    fontSize: terminalFontSize,
+                                    onFontSizeChanged: (newSize) {
+                                      ref
+                                          .read(settingsProvider.notifier)
+                                          .setTerminalFontSize(
+                                            newSize.clamp(8.0, 26.0),
+                                          );
+                                    },
+                                    onTapUp: (details, offset) {
+                                      final link =
+                                          QuantumLinkDetector.findLinkInBuffer(
+                                            session.xtermTerminal.buffer,
+                                            offset.y,
+                                            offset.x,
+                                          );
+                                      if (link != null) {
+                                        QuantumLinkDetector.handleLinkTap(
+                                          context,
+                                          ref,
+                                          link,
+                                        );
+                                      }
+                                    },
                                   ),
                                 ))
                           : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),

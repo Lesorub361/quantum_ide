@@ -61,7 +61,7 @@ class GitThemeColors {
     final colorScheme = theme.colorScheme;
     final brightness = theme.brightness;
 
-    final AppSettings settings = ref != null
+    final settings = ref != null
         ? ref.watch(settingsProvider)
         : ProviderScope.containerOf(context, listen: false)
             .read(settingsProvider);

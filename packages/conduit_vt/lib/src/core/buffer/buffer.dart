@@ -435,32 +435,25 @@ class Buffer {
   }
 
   void resize(int oldWidth, int oldHeight, int newWidth, int newHeight) {
-    // 1. Adjust the height.
-    if (newHeight > oldHeight) {
-      // Grow larger
-      for (var i = 0; i < newHeight - oldHeight; i++) {
-        if (newHeight > lines.length) {
-          lines.push(_newEmptyLine(newWidth));
-        } else {
-          _cursorY++;
-        }
-      }
-    } else {
-      // Shrink smaller
-      for (var i = 0; i < oldHeight - newHeight; i++) {
-        if (_cursorY > newHeight - 1) {
-          _cursorY--;
-        } else {
-          lines.pop();
-        }
+    final initialAbsCursorY = absoluteCursorY.clamp(0, lines.length - 1);
+    final cursorAnchor = lines[initialAbsCursorY].createAnchor(
+      _cursorX.clamp(0, oldWidth),
+    );
+
+    // Trim trailing blank viewport lines below the cursor before reflow so
+    // wrapped lines expand into unused bottom rows instead of pushing top lines
+    // into scrollback or desynchronizing cursorY.
+    while (lines.length > initialAbsCursorY + 1) {
+      final lastLine = lines[lines.length - 1];
+      if (!lastLine.isWrapped &&
+          lastLine.anchors.isEmpty &&
+          lastLine.getTrimmedLength(oldWidth) == 0) {
+        lines.pop();
+      } else {
+        break;
       }
     }
 
-    // Ensure cursor is within the screen.
-    _cursorX = _cursorX.clamp(0, newWidth - 1);
-    _cursorY = _cursorY.clamp(0, newHeight - 1);
-
-    // 2. Adjust the width.
     if (newWidth != oldWidth) {
       if (terminal.reflowEnabled && !isAltBuffer) {
         final reflowResult = reflow(lines, oldWidth, newWidth);
@@ -472,8 +465,49 @@ class Buffer {
         lines.replaceWith(reflowResult);
       } else {
         lines.forEach((item) => item.resize(newWidth));
+        while (lines.length < newHeight) {
+          lines.push(_newEmptyLine(newWidth));
+        }
+      }
+    } else {
+      while (lines.length < newHeight) {
+        lines.push(_newEmptyLine(newWidth));
       }
     }
+
+    var newAbsCursorY = -1;
+    final anchoredLine = cursorAnchor.line;
+    if (anchoredLine != null) {
+      for (var i = lines.length - 1; i >= 0; i--) {
+        if (identical(lines[i], anchoredLine)) {
+          newAbsCursorY = i;
+          break;
+        }
+      }
+    }
+
+    if (newAbsCursorY != -1) {
+      // If there are trailing blank lines after the cursor and lines.length > newHeight,
+      // pop excess blank lines so the cursor stays at its natural viewport row.
+      while (lines.length > newHeight && lines.length > newAbsCursorY + 1) {
+        final tail = lines[lines.length - 1];
+        if (!tail.isWrapped &&
+            tail.anchors.isEmpty &&
+            tail.getTrimmedLength(newWidth) == 0) {
+          lines.pop();
+        } else {
+          break;
+        }
+      }
+      final newBaseY = (lines.length - newHeight).clamp(0, lines.length);
+      _cursorY = (newAbsCursorY - newBaseY).clamp(0, newHeight - 1);
+      _cursorX = cursorAnchor.x.clamp(0, newWidth - 1);
+    } else {
+      _cursorX = _cursorX.clamp(0, newWidth - 1);
+      _cursorY = _cursorY.clamp(0, newHeight - 1);
+    }
+
+    cursorAnchor.dispose();
   }
 
   /// Create a new [CellAnchor] at the specified [x] and [y] coordinates.
@@ -500,26 +534,162 @@ class Buffer {
   static final defaultWordSeparators = <int>{
     0,
     r' '.codeUnitAt(0),
-    r'.'.codeUnitAt(0),
-    r':'.codeUnitAt(0),
-    r'-'.codeUnitAt(0),
-    r'\'.codeUnitAt(0),
+    r'	'.codeUnitAt(0),
     r'"'.codeUnitAt(0),
-    r'*'.codeUnitAt(0),
-    r'+'.codeUnitAt(0),
-    r'/'.codeUnitAt(0),
-    r'\'.codeUnitAt(0),
+    r"'".codeUnitAt(0),
+    r'('.codeUnitAt(0),
+    r')'.codeUnitAt(0),
+    r'['.codeUnitAt(0),
+    r']'.codeUnitAt(0),
+    r'{'.codeUnitAt(0),
+    r'}'.codeUnitAt(0),
+    r'<'.codeUnitAt(0),
+    r'>'.codeUnitAt(0),
+    r','.codeUnitAt(0),
+    r';'.codeUnitAt(0),
   };
 
+  static bool _isUrlCodePoint(int code) {
+    if (code <= 0x20 || code >= 0x7f) return false;
+    switch (code) {
+      case 0x22: // "
+      case 0x27: // '
+      case 0x3c: // <
+      case 0x3e: // >
+      case 0x60: // `
+      case 0x28: // (
+      case 0x29: // )
+      case 0x5b: // [
+      case 0x5d: // ]
+      case 0x7b: // {
+      case 0x7d: // }
+        return false;
+      default:
+        return true;
+    }
+  }
+
+  bool _isSoftUrlContinuation(int prevRow, int nextRow) {
+    if (prevRow < 0 || nextRow >= lines.length) return false;
+    final prevLine = lines[prevRow];
+    final nextLine = lines[nextRow];
+    if (nextLine.isWrapped) return true;
+
+    final prevLen = prevLine.getTrimmedLength(viewWidth);
+    final nextLen = nextLine.getTrimmedLength(viewWidth);
+    if (prevLen < (viewWidth - 6).clamp(1, viewWidth) || nextLen == 0) {
+      return false;
+    }
+    final lastChar = prevLine.getCodePoint(prevLen - 1);
+    final firstChar = nextLine.getCodePoint(0);
+    return _isUrlCodePoint(lastChar) && _isUrlCodePoint(firstChar);
+  }
+
+  static final RegExp _bufferUrlRegex = RegExp(
+    r'https?:\/\/[^\s<>\"\x27`\)\]\x00-\x1f]+',
+    caseSensitive: false,
+  );
+
+  /// Finds the multi-line [BufferRangeLine] of a URL at [position], if any.
+  BufferRangeLine? findUrlRangeAt(CellOffset position) {
+    if (position.y < 0 || position.y >= lines.length) return null;
+
+    var startRow = position.y;
+    while (startRow > 0 &&
+        position.y - startRow < 14 &&
+        _isSoftUrlContinuation(startRow - 1, startRow)) {
+      startRow--;
+    }
+
+    var endRow = position.y;
+    while (endRow + 1 < lines.length &&
+        endRow - position.y < 14 &&
+        _isSoftUrlContinuation(endRow, endRow + 1)) {
+      endRow++;
+    }
+
+    final combined = StringBuffer();
+    final offsets = <CellOffset>[];
+
+    for (var r = startRow; r <= endRow; r++) {
+      final line = lines[r];
+      final len = line.getTrimmedLength(viewWidth);
+      final maxCol = len > 0 ? len : 0;
+      for (var c = 0; c < maxCol; c++) {
+        final cp = line.getCodePoint(c);
+        combined.writeCharCode(cp == 0 ? 0x20 : cp);
+        offsets.add(CellOffset(c, r));
+      }
+    }
+
+    if (offsets.isEmpty) return null;
+    final text = combined.toString();
+
+    for (final match in _bufferUrlRegex.allMatches(text)) {
+      var mStart = match.start;
+      var mEnd = match.end;
+      while (mEnd > mStart) {
+        final ch = text.codeUnitAt(mEnd - 1);
+        if (ch == 0x2e || // .
+            ch == 0x2c || // ,
+            ch == 0x3b || // ;
+            ch == 0x3a || // :
+            ch == 0x29 || // )
+            ch == 0x5d) {
+          mEnd--;
+        } else {
+          break;
+        }
+      }
+      if (mEnd <= mStart) continue;
+
+      bool hitsPosition = false;
+      for (var idx = mStart; idx < mEnd; idx++) {
+        final cell = offsets[idx];
+        if (cell.y == position.y && (cell.x - position.x).abs() <= 1) {
+          hitsPosition = true;
+          break;
+        }
+      }
+
+      if (hitsPosition) {
+        final first = offsets[mStart];
+        final last = offsets[mEnd - 1];
+        return BufferRangeLine(
+          first,
+          CellOffset((last.x + 1).clamp(0, viewWidth), last.y),
+        );
+      }
+    }
+
+    return null;
+  }
+
+  /// Extracts the full unbroken URL string at [position], stitching wrapped lines.
+  String? getUrlAt(CellOffset position) {
+    final range = findUrlRangeAt(position);
+    if (range == null) return null;
+    final raw = getText(range).replaceAll('\n', '').replaceAll('\r', '').trim();
+    return raw.isEmpty ? null : raw;
+  }
+
   BufferRangeLine? getWordBoundary(CellOffset position) {
-    var separators = wordSeparators ?? defaultWordSeparators;
-    if (position.y >= lines.length) {
+    if (position.y < 0 || position.y >= lines.length) {
       return null;
     }
 
-    var line = lines[position.y];
-    var start = position.x;
-    var end = position.x;
+    // 1. If the user tapped or long-pressed on a URL (including multi-line wrapped URLs),
+    // select the entire URL automatically.
+    final urlRange = findUrlRangeAt(position);
+    if (urlRange != null) {
+      return urlRange;
+    }
+
+    final separators = wordSeparators ?? defaultWordSeparators;
+    final line = lines[position.y];
+    final clampedX = position.x.clamp(0, (viewWidth - 1).clamp(0, viewWidth));
+    var start = clampedX;
+    var end = clampedX;
 
     do {
       if (start == 0) {
@@ -544,7 +714,10 @@ class Buffer {
     } while (true);
 
     if (start == end) {
-      return null;
+      return BufferRangeLine(
+        CellOffset(clampedX, position.y),
+        CellOffset((clampedX + 1).clamp(0, viewWidth), position.y),
+      );
     }
 
     return BufferRangeLine(
@@ -564,18 +737,23 @@ class Buffer {
     range = range.normalized;
 
     final builder = StringBuffer();
+    int? prevLineIndex;
 
     for (var segment in range.toSegments()) {
       if (segment.line < 0 || segment.line >= height) {
         continue;
       }
       final line = lines[segment.line];
+      final isContinuation = prevLineIndex != null &&
+          segment.line == prevLineIndex + 1 &&
+          (line.isWrapped || _isSoftUrlContinuation(prevLineIndex, segment.line));
       if (!(segment.line == range.begin.y ||
           segment.line == 0 ||
-          line.isWrapped)) {
+          isContinuation)) {
         builder.write("\n");
       }
       builder.write(line.getText(segment.start, segment.end));
+      prevLineIndex = segment.line;
     }
 
     return builder.toString();

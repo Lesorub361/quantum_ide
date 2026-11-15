@@ -92,7 +92,12 @@ class _ConduitTerminalSurfaceState extends State<ConduitTerminalSurface> {
         startFontSize == null) {
       return;
     }
-    widget.onFontSizeChanged(startFontSize * (_pinchDistance / startDistance));
+    final rawSize =
+        (startFontSize * (_pinchDistance / startDistance)).clamp(8.0, 26.0);
+    final quantized = (rawSize * 2.0).round() / 2.0;
+    if ((quantized - widget.fontSize).abs() >= 0.45) {
+      widget.onFontSizeChanged(quantized);
+    }
   }
 
   void _handlePointerEnd(PointerEvent event) {

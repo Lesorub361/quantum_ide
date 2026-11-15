@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:conduit_vt/conduit_vt.dart' as xt;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,7 +65,7 @@ class QuantumTerminalLink {
 
 class QuantumLinkDetector {
   static final RegExp _webUrlRegExp = RegExp(
-    r'(https?:\/\/[^\s<>"]+[\w\/])',
+    r'(https?:\/\/[^\s<>\"\x27`\)\]\x00-\x1f]+)',
     caseSensitive: false,
   );
 
@@ -83,21 +84,42 @@ class QuantumLinkDetector {
     caseSensitive: false,
   );
 
+  static String _trimUrlPunctuation(String raw) {
+    var end = raw.length;
+    while (end > 0) {
+      final ch = raw.codeUnitAt(end - 1);
+      if (ch == 0x2e || // .
+          ch == 0x2c || // ,
+          ch == 0x3b || // ;
+          ch == 0x3a || // :
+          ch == 0x29 || // )
+          ch == 0x5d) {
+        end--;
+      } else {
+        break;
+      }
+    }
+    return raw.substring(0, end);
+  }
+
   /// Find all links and file paths within [text]
   static List<QuantumTerminalLink> detectAll(String text) {
     final List<QuantumTerminalLink> results = [];
 
     // 1. Web URLs (https://, http://)
     for (final m in _webUrlRegExp.allMatches(text)) {
-      final raw = m.group(1);
-      if (raw != null) {
-        results.add(QuantumTerminalLink(
-          type: QuantumLinkType.webUrl,
-          rawText: raw,
-          target: raw,
-          startOffset: m.start,
-          endOffset: m.end,
-        ));
+      final rawMatch = m.group(1);
+      if (rawMatch != null) {
+        final raw = _trimUrlPunctuation(rawMatch);
+        if (raw.isNotEmpty) {
+          results.add(QuantumTerminalLink(
+            type: QuantumLinkType.webUrl,
+            rawText: raw,
+            target: raw,
+            startOffset: m.start,
+            endOffset: m.start + raw.length,
+          ));
+        }
       }
     }
 
@@ -169,6 +191,33 @@ class QuantumLinkDetector {
     return null;
   }
 
+  /// Locate link (including multi-line wrapped URLs) in [buffer] at ([lineIndex], [colIndex]).
+  static QuantumTerminalLink? findLinkInBuffer(
+    xt.Buffer buffer,
+    int lineIndex,
+    int colIndex,
+  ) {
+    if (lineIndex < 0 || lineIndex >= buffer.lines.length) {
+      return null;
+    }
+
+    // 1. Check multi-line stitched URL first (handles wrapped OAuth / web URLs)
+    final url = buffer.getUrlAt(xt.CellOffset(colIndex, lineIndex));
+    if (url != null && url.isNotEmpty) {
+      return QuantumTerminalLink(
+        type: QuantumLinkType.webUrl,
+        rawText: url,
+        target: url,
+        startOffset: colIndex,
+        endOffset: colIndex + 1,
+      );
+    }
+
+    // 2. Fallback to single-line detection for file paths, localhost, and git URLs
+    final lineStr = buffer.lines[lineIndex].toString();
+    return findLinkAt(lineStr, colIndex);
+  }
+
   /// Interactive handler to open link, local server or jump to file in code editor
   static Future<void> handleLinkTap(
     BuildContext context,
@@ -180,14 +229,32 @@ class QuantumLinkDetector {
     switch (link.type) {
       case QuantumLinkType.webUrl:
       case QuantumLinkType.localhost:
+        await Clipboard.setData(ClipboardData(text: link.target));
         final uri = Uri.tryParse(link.target);
         if (uri != null) {
-          final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-          if (!ok && context.mounted) {
+          var ok = false;
+          try {
+            ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } catch (_) {
+            ok = false;
+          }
+          if (!ok) {
+            try {
+              ok = await launchUrl(uri, mode: LaunchMode.platformDefault);
+            } catch (_) {
+              ok = false;
+            }
+          }
+          if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Не удалось открыть: ${link.target}'),
+                content: Text(
+                  ok
+                      ? 'Ссылка открыта и скопирована в буфер обмена'
+                      : 'Ссылка скопирована в буфер: ${link.target}',
+                ),
                 behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 2),
               ),
             );
           }

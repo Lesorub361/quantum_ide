@@ -1847,7 +1847,7 @@ class _GitPanelState extends ConsumerState<GitPanel>
                 ),
               ),
             ),
-            ?trailing,
+            if (trailing != null) trailing,
           ],
         ),
       ),

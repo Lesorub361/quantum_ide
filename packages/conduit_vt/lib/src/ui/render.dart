@@ -86,6 +86,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (value == _padding) return;
     _padding = value;
     markNeedsLayout();
+    markNeedsPaint();
   }
 
   bool _autoResize;
@@ -99,12 +100,14 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (value == _painter.textStyle) return;
     _painter.textStyle = value;
     markNeedsLayout();
+    markNeedsPaint();
   }
 
   set textScaler(TextScaler value) {
     if (value == _painter.textScaler) return;
     _painter.textScaler = value;
     markNeedsLayout();
+    markNeedsPaint();
   }
 
   set theme(TerminalTheme value) {
@@ -166,6 +169,7 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
   void _onScroll() {
     _stickToBottom = _scrollOffset >= _maxScrollExtent;
     markNeedsLayout();
+    markNeedsPaint();
     _notifyEditableRect();
   }
 
@@ -485,9 +489,10 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
     if (selection == null) {
       return;
     }
-    final cell = getCellOffset(globalToLocal(globalPosition));
+    var cell = getCellOffset(globalToLocal(globalPosition));
     if (cell.isAfterOrSame(selection.end)) {
-      return;
+      final maxX = (selection.end.x - 1).clamp(0, _terminal.viewWidth - 1);
+      cell = CellOffset(maxX, selection.end.y);
     }
     _controller.setSelection(
       _terminal.buffer.createAnchorFromOffset(cell),
@@ -501,9 +506,13 @@ class RenderTerminal extends RenderBox with RelayoutWhenSystemFontsChangeMixin {
       return;
     }
     final raw = getCellOffset(globalToLocal(globalPosition));
-    final cell = CellOffset(raw.x + 1, raw.y);
+    var cell = CellOffset(
+      (raw.x + 1).clamp(1, _terminal.viewWidth),
+      raw.y,
+    );
     if (cell.isBeforeOrSame(selection.begin)) {
-      return;
+      final minX = (selection.begin.x + 1).clamp(1, _terminal.viewWidth);
+      cell = CellOffset(minX, selection.begin.y);
     }
     _controller.setSelection(
       _terminal.buffer.createAnchorFromOffset(selection.begin),

@@ -240,8 +240,19 @@ class BufferLine with IndexedItem {
 
       if (newBufferSize > _data.length) {
         final newBuffer = Uint32List(newBufferSize);
-        newBuffer.setRange(0, _data.length, _data);
+        newBuffer.setRange(0, _length * _cellSize, _data);
         _data = newBuffer;
+      } else {
+        final clearStart = _length * _cellSize;
+        final clearEnd = length * _cellSize;
+        if (clearEnd <= _data.length && clearStart < clearEnd) {
+          _data.fillRange(clearStart, clearEnd, 0);
+        }
+      }
+    } else {
+      final clearStart = length * _cellSize;
+      if (clearStart < _data.length) {
+        _data.fillRange(clearStart, _data.length, 0);
       }
     }
 

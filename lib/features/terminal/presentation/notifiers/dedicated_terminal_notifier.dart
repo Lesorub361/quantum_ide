@@ -172,6 +172,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       final xtermVc = xt.TerminalController();
       int lastCols = -1;
       int lastRows = -1;
+      Timer? resizeDebounce;
       final inputGuard = TerminalInputGuard();
       final xtermTerm = xt.Terminal(
         maxLines: 2500,
@@ -194,9 +195,12 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           if (safeRows != lastRows || safeCols != lastCols) {
             lastRows = safeRows;
             lastCols = safeCols;
-            try {
-              pty.resize(safeRows, safeCols);
-            } catch (_) {}
+            resizeDebounce?.cancel();
+            resizeDebounce = Timer(const Duration(milliseconds: 180), () {
+              try {
+                pty.resize(safeRows, safeCols);
+              } catch (_) {}
+            });
           }
         },
       );

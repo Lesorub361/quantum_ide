@@ -381,6 +381,7 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
     _altBuffer.resetVerticalMargins();
     _mainBuffer.resetVerticalMargins();
+    notifyListeners();
   }
 
   @override
