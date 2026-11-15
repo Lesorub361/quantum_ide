@@ -137,18 +137,17 @@ jobs:
 
       - name: Build release APK (Universal & Split ABIs)
         env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8'"
+          GRADLE_OPTS: "-Xmx1024m -Dfile.encoding=UTF-8"
         run: |
-          sed -i "/org.gradle.jvmargs/d" android/gradle.properties
-          sed -i "/kotlin.compiler.execution.strategy/d" android/gradle.properties
-          sed -i "s/org.gradle.daemon=.*/org.gradle.daemon=true/g" android/gradle.properties
-          sed -i "s/org.gradle.parallel=.*/org.gradle.parallel=true/g" android/gradle.properties
-          sed -i "s/org.gradle.workers.max=.*/org.gradle.workers.max=2/g" android/gradle.properties
-          sed -i "s/android.aapt2FromMaven=.*/android.aapt2FromMaven=true/g" android/gradle.properties
-          cat << EOF >> android/gradle.properties
-          org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8
-          kotlin.compiler.execution.strategy=daemon
-          EOF
+          sed -i '/org.gradle.jvmargs/d' android/gradle.properties
+          sed -i '/kotlin.compiler.execution.strategy/d' android/gradle.properties
+          sed -i '/android.aapt2FromMavenOverride/d' android/gradle.properties
+          sed -i '/android.aapt2.daemon/d' android/gradle.properties
+          sed -i 's/org.gradle.daemon=.*/org.gradle.daemon=true/g' android/gradle.properties
+          sed -i 's/org.gradle.parallel=.*/org.gradle.parallel=true/g' android/gradle.properties
+          sed -i 's/org.gradle.workers.max=.*/org.gradle.workers.max=2/g' android/gradle.properties
+          sed -i 's/android.aapt2FromMaven=.*/android.aapt2FromMaven=true/g' android/gradle.properties
+          printf 'org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8\nkotlin.compiler.execution.strategy=daemon\n' >> android/gradle.properties
           flutter build apk --release --no-tree-shake-icons --split-per-abi
           mkdir -p build/app/outputs/flutter-apk/
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk build/app/outputs/flutter-apk/app-release.apk
