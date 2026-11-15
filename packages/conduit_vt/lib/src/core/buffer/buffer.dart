@@ -51,6 +51,9 @@ class Buffer {
 
   final charset = Charset();
 
+  /// Active OSC 8 hyperlink URL (`\x1b]8;;url\x07`), if currently open.
+  String? activeOsc8Url;
+
   /// Width of the viewport in columns. Also the index of the last column.
   int get viewWidth => terminal.viewWidth;
 
@@ -119,6 +122,9 @@ class Buffer {
     }
 
     final line = currentLine;
+    if (activeOsc8Url != null && activeOsc8Url!.isNotEmpty) {
+      line.osc8Url = activeOsc8Url;
+    }
     line.setCell(_cursorX, codePoint, cellWidth, terminal.cursor);
 
     if (_cursorX < viewWidth) {
@@ -569,6 +575,32 @@ class Buffer {
     }
   }
 
+  static int _firstNonSpaceCol(BufferLine line, int maxLen) {
+    for (var c = 0; c < maxLen; c++) {
+      final cp = line.getCodePoint(c);
+      if (cp != 0 && cp != 0x20) {
+        return c;
+      }
+    }
+    return maxLen;
+  }
+
+  static bool _allUrlCodePoints(BufferLine line, int startCol, int endCol) {
+    if (startCol >= endCol) return false;
+    for (var c = startCol; c < endCol; c++) {
+      if (!_isUrlCodePoint(line.getCodePoint(c))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _startsWithHttpScheme(BufferLine line, int startCol, int endCol) {
+    if (endCol - startCol < 7) return false;
+    final prefix = line.getText(startCol, min(endCol, startCol + 8)).toLowerCase();
+    return prefix.startsWith('http://') || prefix.startsWith('https://');
+  }
+
   bool _isSoftUrlContinuation(int prevRow, int nextRow) {
     if (prevRow < 0 || nextRow >= lines.length) return false;
     final prevLine = lines[prevRow];
@@ -577,12 +609,33 @@ class Buffer {
 
     final prevLen = prevLine.getTrimmedLength(viewWidth);
     final nextLen = nextLine.getTrimmedLength(viewWidth);
-    if (prevLen < (viewWidth - 6).clamp(1, viewWidth) || nextLen == 0) {
+    if (prevLen <= 0 || nextLen <= 0) {
       return false;
     }
+
+    final prevStart = _firstNonSpaceCol(prevLine, prevLen);
+    final nextStart = _firstNonSpaceCol(nextLine, nextLen);
+    if (prevStart >= prevLen || nextStart >= nextLen || nextStart > 12) {
+      return false;
+    }
+
+    // Do not merge two separate URLs on consecutive lines.
+    if (_startsWithHttpScheme(nextLine, nextStart, nextLen)) {
+      return false;
+    }
+
     final lastChar = prevLine.getCodePoint(prevLen - 1);
-    final firstChar = nextLine.getCodePoint(0);
-    return _isUrlCodePoint(lastChar) && _isUrlCodePoint(firstChar);
+    final firstChar = nextLine.getCodePoint(nextStart);
+    if (!_isUrlCodePoint(lastChar) || !_isUrlCodePoint(firstChar)) {
+      return false;
+    }
+
+    final nearRightEdge = prevLen >= (viewWidth - 12).clamp(1, viewWidth);
+    final unbrokenUrlBlock = (prevLen - prevStart) >= 32 &&
+        _allUrlCodePoints(prevLine, prevStart, prevLen) &&
+        _allUrlCodePoints(nextLine, nextStart, nextLen);
+
+    return nearRightEdge || unbrokenUrlBlock;
   }
 
   static final RegExp _bufferUrlRegex = RegExp(
@@ -590,20 +643,36 @@ class Buffer {
     caseSensitive: false,
   );
 
-  /// Finds the multi-line [BufferRangeLine] of a URL at [position], if any.
-  BufferRangeLine? findUrlRangeAt(CellOffset position) {
+  bool _isLinkTriggerLine(int row) {
+    if (row < 0 || row >= lines.length) return false;
+    final line = lines[row];
+    if (line.osc8Url != null && line.osc8Url!.isNotEmpty) return true;
+    final text = line.toString().trim().toLowerCase();
+    if (text.isEmpty) return false;
+    return text.contains('click here') ||
+        text.contains('authenticate') ||
+        text.contains('open link') ||
+        text.contains('open url') ||
+        text.contains('open in browser') ||
+        text.contains('sign in') ||
+        text.contains('log in') ||
+        text.contains('authorize') ||
+        (text.startsWith('→') && text.length < 60);
+  }
+
+  BufferRangeLine? _findDirectUrlRangeAt(CellOffset position) {
     if (position.y < 0 || position.y >= lines.length) return null;
 
     var startRow = position.y;
     while (startRow > 0 &&
-        position.y - startRow < 14 &&
+        position.y - startRow < 16 &&
         _isSoftUrlContinuation(startRow - 1, startRow)) {
       startRow--;
     }
 
     var endRow = position.y;
     while (endRow + 1 < lines.length &&
-        endRow - position.y < 14 &&
+        endRow - position.y < 16 &&
         _isSoftUrlContinuation(endRow, endRow + 1)) {
       endRow++;
     }
@@ -615,7 +684,8 @@ class Buffer {
       final line = lines[r];
       final len = line.getTrimmedLength(viewWidth);
       final maxCol = len > 0 ? len : 0;
-      for (var c = 0; c < maxCol; c++) {
+      final startCol = r > startRow ? _firstNonSpaceCol(line, maxCol) : 0;
+      for (var c = startCol; c < maxCol; c++) {
         final cp = line.getCodePoint(c);
         combined.writeCharCode(cp == 0 ? 0x20 : cp);
         offsets.add(CellOffset(c, r));
@@ -643,18 +713,29 @@ class Buffer {
       }
       if (mEnd <= mStart) continue;
 
+      final first = offsets[mStart];
+      final last = offsets[mEnd - 1];
+
       bool hitsPosition = false;
       for (var idx = mStart; idx < mEnd; idx++) {
         final cell = offsets[idx];
-        if (cell.y == position.y && (cell.x - position.x).abs() <= 1) {
+        if (cell.y == position.y && (cell.x - position.x).abs() <= 2) {
           hitsPosition = true;
           break;
         }
       }
 
+      if (!hitsPosition &&
+          first.y < last.y &&
+          position.y >= first.y &&
+          position.y <= last.y) {
+        final rowLen = lines[position.y].getTrimmedLength(viewWidth);
+        if (position.x <= rowLen + 4) {
+          hitsPosition = true;
+        }
+      }
+
       if (hitsPosition) {
-        final first = offsets[mStart];
-        final last = offsets[mEnd - 1];
         return BufferRangeLine(
           first,
           CellOffset((last.x + 1).clamp(0, viewWidth), last.y),
@@ -665,12 +746,56 @@ class Buffer {
     return null;
   }
 
-  /// Extracts the full unbroken URL string at [position], stitching wrapped lines.
+  /// Finds the multi-line [BufferRangeLine] of a URL at [position], if any.
+  /// Also resolves nearby URLs when tapping/long-pressing action prompts like
+  /// `→ Click here to authenticate`.
+  BufferRangeLine? findUrlRangeAt(CellOffset position) {
+    final direct = _findDirectUrlRangeAt(position);
+    if (direct != null) return direct;
+
+    if (_isLinkTriggerLine(position.y)) {
+      for (var r = position.y - 1; r >= max(0, position.y - 12); r--) {
+        final line = lines[r];
+        final len = line.getTrimmedLength(viewWidth);
+        if (len <= 0) continue;
+        final nonSpace = _firstNonSpaceCol(line, len);
+        final nearby = _findDirectUrlRangeAt(CellOffset(nonSpace, r));
+        if (nearby != null) {
+          return nearby;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /// Extracts the full unbroken URL string at [position], stitching wrapped lines
+  /// and resolving OSC 8 or `Click here to authenticate` trigger lines.
   String? getUrlAt(CellOffset position) {
+    if (position.y < 0 || position.y >= lines.length) return null;
+
+    final osc8 = lines[position.y].osc8Url;
+    if (osc8 != null && osc8.isNotEmpty) {
+      return osc8;
+    }
+
     final range = findUrlRangeAt(position);
     if (range == null) return null;
     final raw = getText(range).replaceAll('\n', '').replaceAll('\r', '').trim();
     return raw.isEmpty ? null : raw;
+  }
+
+  /// Extracts a full unbroken URL from a [BufferRange] selection if the selection
+  /// is on or contains a URL (or a link trigger line).
+  String? getUrlFromSelection(BufferRange selection) {
+    final norm = selection.normalized;
+    final byCell = getUrlAt(norm.begin) ?? getUrlAt(norm.end);
+    if (byCell != null && byCell.isNotEmpty) {
+      return byCell;
+    }
+    final raw = getText(norm).replaceAll('\n', '').replaceAll('\r', '').trim();
+    final match = _bufferUrlRegex.firstMatch(raw);
+    return match?.group(0);
   }
 
   BufferRangeLine? getWordBoundary(CellOffset position) {
@@ -678,8 +803,8 @@ class Buffer {
       return null;
     }
 
-    // 1. If the user tapped or long-pressed on a URL (including multi-line wrapped URLs),
-    // select the entire URL automatically.
+    // 1. If the user tapped or long-pressed on a URL (including multi-line wrapped URLs
+    // or a `Click here to authenticate` prompt), select the entire URL automatically.
     final urlRange = findUrlRangeAt(position);
     if (urlRange != null) {
       return urlRange;
@@ -744,15 +869,26 @@ class Buffer {
         continue;
       }
       final line = lines[segment.line];
+      final isSoftUrlCont = prevLineIndex != null &&
+          segment.line == prevLineIndex + 1 &&
+          _isSoftUrlContinuation(prevLineIndex, segment.line);
       final isContinuation = prevLineIndex != null &&
           segment.line == prevLineIndex + 1 &&
-          (line.isWrapped || _isSoftUrlContinuation(prevLineIndex, segment.line));
+          (line.isWrapped || isSoftUrlCont);
       if (!(segment.line == range.begin.y ||
           segment.line == 0 ||
           isContinuation)) {
         builder.write("\n");
       }
-      builder.write(line.getText(segment.start, segment.end));
+      var segStart = segment.start;
+      if (isSoftUrlCont) {
+        final len = line.getTrimmedLength(viewWidth);
+        final nonSpace = _firstNonSpaceCol(line, len);
+        if (segStart == null || segStart < nonSpace) {
+          segStart = nonSpace;
+        }
+      }
+      builder.write(line.getText(segStart, segment.end));
       prevLineIndex = segment.line;
     }
 

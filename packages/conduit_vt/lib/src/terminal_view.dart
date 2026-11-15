@@ -38,6 +38,7 @@ class TerminalView extends StatefulWidget {
     this.focusNode,
     this.autofocus = false,
     this.onTapUp,
+    this.onOpenLink,
     this.onSecondaryTapDown,
     this.onSecondaryTapUp,
     this.mouseCursor = SystemMouseCursors.text,
@@ -92,6 +93,9 @@ class TerminalView extends StatefulWidget {
 
   /// Callback for when the user taps on the terminal.
   final void Function(TapUpDetails, CellOffset)? onTapUp;
+
+  /// Callback invoked when the user taps or selects "Open Link" on a terminal URL.
+  final void Function(String url)? onOpenLink;
 
   /// Function called when the user taps on the terminal with a secondary
   /// button.
@@ -373,13 +377,24 @@ class TerminalViewState extends State<TerminalView> {
 
   void _onTapUp(TapUpDetails details) {
     final offset = renderTerminal.getCellOffset(details.localPosition);
-    widget.onTapUp?.call(details, offset);
 
     if (_selectionClearedByTapDown || _controller.selection != null) {
       _selectionClearedByTapDown = false;
       _controller.clearSelection();
       return;
     }
+
+    final tappedUrl = widget.terminal.buffer.getUrlAt(offset);
+    if (tappedUrl != null && tappedUrl.isNotEmpty) {
+      if (widget.onOpenLink != null) {
+        widget.onOpenLink!(tappedUrl);
+      } else {
+        widget.onTapUp?.call(details, offset);
+      }
+      return;
+    }
+
+    widget.onTapUp?.call(details, offset);
 
     if (!widget.hardwareKeyboardOnly) {
       _customTextEditKey.currentState?.requestKeyboard();
@@ -618,12 +633,26 @@ class TerminalViewState extends State<TerminalView> {
       secondaryAnchor: rect.bottomCenter,
     );
 
+    final selection = _controller.selection;
+    final selectedUrl = selection != null
+        ? widget.terminal.buffer.getUrlFromSelection(selection)
+        : null;
+
     _contextMenuController.show(
       context: context,
       contextMenuBuilder: (context) {
         return AdaptiveTextSelectionToolbar.buttonItems(
           anchors: anchors,
           buttonItems: [
+            if (selectedUrl != null && selectedUrl.isNotEmpty)
+              ContextMenuButtonItem(
+                label: 'Открыть ссылку',
+                onPressed: () {
+                  _hideSelectionToolbar();
+                  _controller.clearSelection();
+                  widget.onOpenLink?.call(selectedUrl);
+                },
+              ),
             ContextMenuButtonItem(
               type: ContextMenuButtonType.copy,
               onPressed: _copySelection,
@@ -647,7 +676,14 @@ class TerminalViewState extends State<TerminalView> {
   void _copySelection() {
     final selection = _controller.selection;
     if (selection != null) {
-      final text = widget.terminal.buffer.getText(selection);
+      var text = widget.terminal.buffer.getText(selection);
+      final norm = selection.normalized;
+      if (norm.begin.y == norm.end.y && !text.contains('http')) {
+        final oscUrl = widget.terminal.buffer.getUrlFromSelection(selection);
+        if (oscUrl != null && oscUrl.isNotEmpty) {
+          text = oscUrl;
+        }
+      }
       Clipboard.setData(ClipboardData(text: text));
     }
     _hideSelectionToolbar();

@@ -909,6 +909,17 @@ class Terminal with Observable implements TerminalState, EscapeHandler {
 
   @override
   void unknownOSC(String ps, List<String> pt) {
+    if (ps == '8') {
+      final url = pt.length >= 2
+          ? pt.sublist(1).join(';').trim()
+          : (pt.isNotEmpty ? pt.last.trim() : '');
+      if (url.isNotEmpty) {
+        _buffer.activeOsc8Url = url;
+        _buffer.currentLine.osc8Url = url;
+      } else {
+        _buffer.activeOsc8Url = null;
+      }
+    }
     onPrivateOSC?.call(ps, pt);
   }
 }

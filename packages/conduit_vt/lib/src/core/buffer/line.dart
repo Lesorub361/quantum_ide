@@ -29,6 +29,9 @@ class BufferLine with IndexedItem {
 
   var isWrapped = false;
 
+  /// Optional hyperlink target attached via OSC 8 (`\x1b]8;;url\x07`).
+  String? osc8Url;
+
   int get length => _length;
 
   final _anchors = <CellAnchor>[];
