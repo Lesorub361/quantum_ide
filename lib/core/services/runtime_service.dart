@@ -630,81 +630,101 @@ class RuntimeService extends ChangeNotifier {
   List<String>? _cachedDiscoveredSdkDirs;
 
   /// Automatically scans the host system (Linux, macOS, Windows) for installed
-  /// Flutter, Dart, Java, Gradle, Android SDK, Node, Python, Rust, and Go toolchains.
+  /// Flutter, Dart, Antigravity (agy), Java, Gradle, Android SDK, Node, Python, Rust, and Go toolchains.
   List<String> _discoverDesktopSdkDirs(String home) {
     if (_cachedDiscoveredSdkDirs != null) return _cachedDiscoveredSdkDirs!;
     final sep = Platform.pathSeparator;
+    final homes = <String>{
+      if (home.isNotEmpty) home,
+      ...PlatformUtils.candidateHomeDirs,
+    };
+
     final candidates = <String>[
-      '$home${sep}flutter${sep}bin',
-      '$home${sep}development${sep}flutter${sep}bin',
-      '$home${sep}dev${sep}flutter${sep}bin',
-      '$home${sep}sdk${sep}flutter${sep}bin',
-      '$home${sep}tools${sep}flutter${sep}bin',
-      '$home${sep}fvm${sep}default${sep}bin',
-      '$home$sep.fvm${sep}default${sep}bin',
-      '$home$sep.local${sep}share${sep}flutter${sep}bin',
-      '$home${sep}snap${sep}flutter${sep}common${sep}flutter${sep}bin',
+      ...PlatformUtils.commonBinaryDirs,
       '/opt/flutter/bin',
       '/usr/lib/flutter/bin',
       '/usr/local/flutter/bin',
+      '/opt/antigravity/bin',
+      '/opt/agy/bin',
       '/snap/bin',
-      '$home$sep.pub-cache${sep}bin',
-      '$home$sep.local${sep}bin',
-      '$home$sep.npm-global${sep}bin',
-      '$home$sep.cargo${sep}bin',
-      '$home${sep}go${sep}bin',
       '/usr/local/go/bin',
-      '$home$sep.bun${sep}bin',
-      '$home$sep.volta${sep}bin',
-      '$home$sep.pyenv${sep}shims',
-      '$home$sep.sdkman${sep}candidates${sep}java${sep}current${sep}bin',
-      '$home$sep.sdkman${sep}candidates${sep}gradle${sep}current${sep}bin',
-      '$home${sep}Android${sep}Sdk${sep}cmdline-tools${sep}latest${sep}bin',
-      '$home${sep}Android${sep}Sdk${sep}platform-tools',
       '/opt/android-sdk/cmdline-tools/latest/bin',
       '/opt/android-sdk/platform-tools',
-      '$home${sep}bin',
       '/usr/local/lib/nodejs/bin',
+      '/usr/local/sbin',
       '/usr/local/bin',
+      '/usr/sbin',
       '/usr/bin',
+      '/sbin',
       '/bin',
-      if (Platform.isWindows) ...[
-        r'C:\src\flutter\bin',
-        r'C:\flutter\bin',
-        r'C:\tools\flutter\bin',
-        '$home\\AppData\\Local\\Pub\\Cache\\bin',
-        '$home\\AppData\\Local\\Android\\Sdk\\platform-tools',
-        '$home\\AppData\\Local\\Android\\Sdk\\cmdline-tools\\latest\\bin',
-        '$home\\AppData\\Roaming\\npm',
-      ],
     ];
 
-    for (final nvmRoot in [
-      '$home/.nvm/versions/node',
-      '$home/.config/nvm/versions/node',
-      '$home/.local/share/fnm/node-versions',
-    ]) {
-      try {
-        final dir = Directory(nvmRoot);
-        if (dir.existsSync()) {
-          final versions = dir
-              .listSync()
-              .whereType<Directory>()
-              .map((d) => d.path)
-              .toList()
-            ..sort((a, b) => b.compareTo(a));
-          for (final v in versions) {
-            candidates.add('$v/bin');
-            candidates.add('$v/installation/bin');
-          }
-        }
-      } catch (_) {}
-    }
+    for (final h in homes) {
+      candidates.addAll([
+        '$h$sep.local${sep}bin',
+        '$h${sep}bin',
+        '$h$sep.agy${sep}bin',
+        '$h$sep.antigravity${sep}bin',
+        '$h$sep.gemini${sep}antigravity${sep}bin',
+        '$h$sep.gemini${sep}bin',
+        '$h${sep}flutter${sep}bin',
+        '$h${sep}development${sep}flutter${sep}bin',
+        '$h${sep}dev${sep}flutter${sep}bin',
+        '$h${sep}sdk${sep}flutter${sep}bin',
+        '$h${sep}tools${sep}flutter${sep}bin',
+        '$h${sep}fvm${sep}default${sep}bin',
+        '$h$sep.fvm${sep}default${sep}bin',
+        '$h$sep.local${sep}share${sep}flutter${sep}bin',
+        '$h${sep}snap${sep}flutter${sep}common${sep}flutter${sep}bin',
+        '$h$sep.pub-cache${sep}bin',
+        '$h$sep.npm-global${sep}bin',
+        '$h$sep.yarn${sep}bin',
+        '$h$sep.local${sep}share${sep}pnpm',
+        '$h$sep.cargo${sep}bin',
+        '$h${sep}go${sep}bin',
+        '$h$sep.bun${sep}bin',
+        '$h$sep.volta${sep}bin',
+        '$h$sep.pyenv${sep}shims',
+        '$h$sep.sdkman${sep}candidates${sep}java${sep}current${sep}bin',
+        '$h$sep.sdkman${sep}candidates${sep}gradle${sep}current${sep}bin',
+        '$h${sep}Android${sep}Sdk${sep}cmdline-tools${sep}latest${sep}bin',
+        '$h${sep}Android${sep}Sdk${sep}platform-tools',
+        if (Platform.isWindows) ...[
+          r'C:\src\flutter\bin',
+          r'C:\flutter\bin',
+          r'C:\tools\flutter\bin',
+          '$h\\AppData\\Local\\Pub\\Cache\\bin',
+          '$h\\AppData\\Local\\Android\\Sdk\\platform-tools',
+          '$h\\AppData\\Local\\Android\\Sdk\\cmdline-tools\\latest\\bin',
+          '$h\\AppData\\Roaming\\npm',
+        ],
+      ]);
 
-    // Also scan 1 level deep in $HOME for any custom folder containing flutter/bin
-    if (home.isNotEmpty) {
+      for (final nvmRoot in [
+        '$h/.nvm/versions/node',
+        '$h/.config/nvm/versions/node',
+        '$h/.local/share/fnm/node-versions',
+      ]) {
+        try {
+          final dir = Directory(nvmRoot);
+          if (dir.existsSync()) {
+            final versions = dir
+                .listSync()
+                .whereType<Directory>()
+                .map((d) => d.path)
+                .toList()
+              ..sort((a, b) => b.compareTo(a));
+            for (final v in versions) {
+              candidates.add('$v/bin');
+              candidates.add('$v/installation/bin');
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Scan 1 level deep in each home dir for custom folders containing flutter/bin or bin/agy
       try {
-        final homeDir = Directory(home);
+        final homeDir = Directory(h);
         if (homeDir.existsSync()) {
           for (final entity in homeDir.listSync(followLinks: false)) {
             if (entity is Directory) {
@@ -713,6 +733,11 @@ class RuntimeService extends ChangeNotifier {
               final subFlutter = p.join(entity.path, 'flutter', 'bin');
               if (Directory(subFlutter).existsSync()) {
                 candidates.insert(0, subFlutter);
+              }
+              final subBin = p.join(entity.path, 'bin');
+              if (File(p.join(subBin, 'agy')).existsSync() ||
+                  File(p.join(subBin, 'flutter')).existsSync()) {
+                candidates.insert(0, subBin);
               }
             }
           }
@@ -732,13 +757,14 @@ class RuntimeService extends ChangeNotifier {
   }
 
   /// Desktop environment with a PATH that automatically includes all discovered
-  /// Flutter, Dart, Android SDK, Node, Python, Rust, and Go toolchains.
+  /// Flutter, Dart, Antigravity (agy), Android SDK, Node, Python, Rust, and Go toolchains.
   Map<String, String> get desktopEnv {
     final env = Map<String, String>.from(Platform.environment);
     final home = env['HOME'] ?? env['USERPROFILE'] ?? PlatformUtils.userHomeDir;
     final extra = _discoverDesktopSdkDirs(home);
     final sep = Platform.isWindows ? ';' : ':';
-    final current = env['PATH'] ?? (Platform.isWindows ? '' : '/usr/local/bin:/usr/bin:/bin');
+    final current =
+        env['PATH'] ?? (Platform.isWindows ? '' : '/usr/local/bin:/usr/bin:/bin');
     final currentParts = current.split(sep).where((e) => e.isNotEmpty).toList();
     final merged = <String>[
       ...extra,
@@ -746,7 +772,9 @@ class RuntimeService extends ChangeNotifier {
     ];
     env['PATH'] = merged.join(sep);
     env['TERM'] = 'xterm-256color';
+    env['COLORTERM'] = 'truecolor';
     env.putIfAbsent('LANG', () => 'C.UTF-8');
+    env.putIfAbsent('LC_ALL', () => 'C.UTF-8');
     return env;
   }
 
@@ -3101,15 +3129,9 @@ fi
   }
 
   Map<String, String> get env {
-    // Desktop: pass through the real system environment
+    // Desktop: return desktopEnv with all discovered SDKs and user binary paths (agy, flutter, etc.)
     if (!Platform.isAndroid && !Platform.isIOS) {
-      return {
-        ...Platform.environment,
-        'TERM': 'xterm-256color',
-        'COLORTERM': 'truecolor',
-        'LANG': Platform.environment['LANG'] ?? 'C.UTF-8',
-        'LC_ALL': Platform.environment['LC_ALL'] ?? 'C.UTF-8',
-      };
+      return desktopEnv;
     }
     // Android/iOS: use PRoot-specific environment
     return {

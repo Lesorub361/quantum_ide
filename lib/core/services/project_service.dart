@@ -1,4 +1,5 @@
 import 'package:quantum_ide/core/utils/path_mapper.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -286,17 +287,18 @@ class ProjectService extends StateNotifier<List<Project>> {
       savedProjects = list.map((e) => Project.fromJson(e)).toList();
     }
 
-    // Dynamic path correction on PC: convert mobile paths to local PC paths
+    // Dynamic path correction on PC: only convert legacy mobile paths when target does not exist
     if (!Platform.isAndroid && !Platform.isIOS) {
       final runtime = _ref.read(runtimeServiceProvider);
       final pcProjectsDir = p.join(runtime.appDirectory, 'projects');
       bool modified = false;
       savedProjects = savedProjects.map((proj) {
+        if (Directory(proj.path).existsSync()) return proj;
         String newPath = proj.path;
         if (proj.path.startsWith('/root/projects/')) {
           newPath = p.join(pcProjectsDir, proj.path.substring('/root/projects/'.length));
           modified = true;
-        } else if (proj.path.contains('/projects/') && !proj.path.startsWith(runtime.appDirectory)) {
+        } else if (proj.path.startsWith('/data/user/') && proj.path.contains('/projects/')) {
           final index = proj.path.indexOf('/projects/');
           newPath = p.join(pcProjectsDir, proj.path.substring(index + '/projects/'.length));
           modified = true;
@@ -319,6 +321,33 @@ class ProjectService extends StateNotifier<List<Project>> {
         }
         return proj;
       }).toList();
+
+      // Also scan visible ~/QuantumIDEProjects on Desktop so projects created there are always listed
+      try {
+        final desktopDefaultDir = Directory(PlatformUtils.defaultDesktopProjectsDir);
+        if (await desktopDefaultDir.exists()) {
+          await for (final entity in desktopDefaultDir.list(followLinks: false)) {
+            if (entity is Directory) {
+              final name = p.basename(entity.path);
+              if (name.startsWith('.')) continue;
+              final alreadySaved = savedProjects.any((pr) => pr.path == entity.path);
+              if (!alreadySaved) {
+                savedProjects.add(
+                  Project(
+                    id: const Uuid().v4(),
+                    name: name,
+                    path: entity.path,
+                    type: _identifyProjectType(entity.path),
+                    lastOpened: DateTime.now(),
+                    isInternal: false,
+                  ),
+                );
+                modified = true;
+              }
+            }
+          }
+        }
+      } catch (_) {}
 
       if (modified) {
         await prefs.setString(_key, json.encode(savedProjects.map((e) => e.toJson()).toList()));
@@ -448,9 +477,22 @@ class ProjectService extends StateNotifier<List<Project>> {
       throw Exception('Project name "$name" is reserved and will cause conflicts.');
     }
 
-    // ALWAYS use internal storage for performance and permissions
     final runtime = _ref.read(runtimeServiceProvider);
-    final String finalPath = p.join(runtime.appDirectory, 'projects', name);
+    final String finalPath;
+    final bool isInternalProject;
+    if (PlatformUtils.isDesktop) {
+      final baseDir = path.trim().isNotEmpty
+          ? path.trim()
+          : PlatformUtils.defaultDesktopProjectsDir;
+      finalPath = p.basename(baseDir) == name
+          ? baseDir
+          : p.join(baseDir, name);
+      isInternalProject = false;
+    } else {
+      // Android/iOS: use fast internal app storage for performance and exec permissions
+      finalPath = p.join(runtime.appDirectory, 'projects', name);
+      isInternalProject = true;
+    }
 
     final project = Project(
       id: const Uuid().v4(),
@@ -462,7 +504,7 @@ class ProjectService extends StateNotifier<List<Project>> {
       colorValue: colorValue,
       iconFontFamily: iconFontFamily,
       iconFontPackage: iconFontPackage,
-      isInternal: true,
+      isInternal: isInternalProject,
       platforms: platforms,
       sdkVersion: sdkVersion,
     );
@@ -478,21 +520,31 @@ class ProjectService extends StateNotifier<List<Project>> {
     return project;
   }
 
-  Future<void> importProject(String path) async {
+  Future<Project> importProject(String path) async {
     final name = p.basename(path);
     final runtime = _ref.read(runtimeServiceProvider);
 
-    // Always migrate to internal projects folder
-    final String finalPath = p.join(runtime.appDirectory, 'projects', name);
+    final String finalPath;
+    final bool isInternalProject;
 
-    if (path != finalPath) {
-      debugPrint('Importing/Migrating $path to $finalPath');
-      final sourceDir = Directory(path);
-      final targetDir = Directory(finalPath);
-      if (!await targetDir.exists()) {
-        await targetDir.create(recursive: true);
+    if (PlatformUtils.isDesktop) {
+      // Desktop (Linux/Windows/macOS): open the project directly in-place at its
+      // real path without copying gigabytes into ~/.quantum_ide/projects!
+      finalPath = path;
+      isInternalProject = false;
+    } else {
+      // Android/iOS: migrate from external storage into internal app storage
+      finalPath = p.join(runtime.appDirectory, 'projects', name);
+      isInternalProject = true;
+      if (path != finalPath) {
+        debugPrint('Importing/Migrating $path to $finalPath');
+        final sourceDir = Directory(path);
+        final targetDir = Directory(finalPath);
+        if (!await targetDir.exists()) {
+          await targetDir.create(recursive: true);
+        }
+        await _copyDirectory(sourceDir, targetDir);
       }
-      await _copyDirectory(sourceDir, targetDir);
     }
 
     // Identify type based on files
@@ -504,12 +556,15 @@ class ProjectService extends StateNotifier<List<Project>> {
       path: finalPath,
       type: type,
       lastOpened: DateTime.now(),
-      isInternal: true,
+      isInternal: isInternalProject,
     );
 
     await saveProject(project);
-    // Mirror user-visible files in background without blocking import or failing on .git packfiles
-    _mirrorInitialFiles(finalPath, name);
+    if (!PlatformUtils.isDesktop) {
+      // Mirror user-visible files in background on Android
+      _mirrorInitialFiles(finalPath, name);
+    }
+    return project;
   }
 
   Future<void> _copyDirectory(Directory source, Directory destination) async {

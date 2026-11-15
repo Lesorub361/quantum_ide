@@ -43,6 +43,62 @@ class PlatformUtils {
     return p.join(home, '.quantum_ide');
   }
 
+  /// Default visible directory on Desktop (Linux/Windows/macOS) where new projects
+  /// are created by default so they are immediately visible in the OS file manager.
+  static String get defaultDesktopProjectsDir {
+    final home = userHomeDir;
+    // Prefer /persistent/home/<user> if present on persistent Linux setups
+    if (!kIsWeb && Platform.isLinux && home.startsWith('/home/')) {
+      final persistentHome = '/persistent$home';
+      if (Directory(persistentHome).existsSync()) {
+        return p.join(persistentHome, 'QuantumIDEProjects');
+      }
+    }
+    return p.join(home, 'QuantumIDEProjects');
+  }
+
+  /// Returns all candidate home directories for the current desktop user
+  /// (including resolved symlinks and `/persistent/home/<user>` on Linux).
+  static List<String> get candidateHomeDirs {
+    if (kIsWeb) return const [];
+    final primary = userHomeDir;
+    final homes = <String>{if (primary.isNotEmpty) primary};
+    try {
+      if (primary.isNotEmpty && Directory(primary).existsSync()) {
+        final resolved = Directory(primary).resolveSymbolicLinksSync();
+        if (resolved.isNotEmpty) homes.add(resolved);
+      }
+    } catch (_) {}
+    if (Platform.isLinux && primary.startsWith('/home/')) {
+      final persistentHome = '/persistent$primary';
+      if (Directory(persistentHome).existsSync()) {
+        homes.add(persistentHome);
+      }
+    }
+    return homes.toList();
+  }
+
+  /// Opens [dirPath] in the native desktop file manager (Nautilus/Dolphin/Explorer/Finder).
+  static Future<bool> openInFileManager(String dirPath) async {
+    if (!isDesktop) return false;
+    try {
+      final target = Directory(dirPath).existsSync()
+          ? dirPath
+          : p.dirname(dirPath);
+      if (Platform.isLinux) {
+        await Process.start('xdg-open', [target], mode: ProcessStartMode.detached);
+        return true;
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [target], mode: ProcessStartMode.detached);
+        return true;
+      } else if (Platform.isWindows) {
+        await Process.start('explorer', [target], mode: ProcessStartMode.detached);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
   /// List of common directories where developer CLI tools and language servers are installed.
   static List<String> get commonBinaryDirs {
     if (kIsWeb) return const [];
@@ -52,30 +108,57 @@ class PlatformUtils {
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'] ?? '';
       final localAppData = Platform.environment['LOCALAPPDATA'] ?? '';
-      final programFiles = Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
-      
+      final programFiles =
+          Platform.environment['ProgramFiles'] ?? r'C:\Program Files';
+
       if (appData.isNotEmpty) dirs.add(p.join(appData, 'npm'));
       if (localAppData.isNotEmpty) {
         dirs.add(p.join(localAppData, 'Programs'));
         dirs.add(p.join(localAppData, 'Programs', 'Python'));
+        dirs.add(p.join(localAppData, 'Pub', 'Cache', 'bin'));
       }
       dirs.add(p.join(home, '.cargo', 'bin'));
+      dirs.add(p.join(home, '.agy', 'bin'));
       dirs.add(p.join(programFiles, 'nodejs'));
       dirs.add(p.join(programFiles, 'Git', 'bin'));
       dirs.add(p.join(programFiles, 'Git', 'usr', 'bin'));
     } else {
       // Linux & macOS
       dirs.addAll([
+        '/usr/local/sbin',
         '/usr/local/bin',
+        '/usr/sbin',
         '/usr/bin',
+        '/sbin',
         '/bin',
+        '/snap/bin',
+        '/var/lib/flatpak/exports/bin',
         '/opt/homebrew/bin',
         '/opt/homebrew/sbin',
-        p.join(home, '.local', 'bin'),
-        p.join(home, '.cargo', 'bin'),
-        p.join(home, 'bin'),
-        p.join(home, 'flutter', 'bin'),
+        '/opt/flutter/bin',
+        '/opt/antigravity/bin',
+        '/opt/agy/bin',
       ]);
+      for (final h in candidateHomeDirs) {
+        dirs.addAll([
+          p.join(h, '.local', 'bin'),
+          p.join(h, 'bin'),
+          p.join(h, '.agy', 'bin'),
+          p.join(h, '.antigravity', 'bin'),
+          p.join(h, '.gemini', 'antigravity', 'bin'),
+          p.join(h, '.gemini', 'bin'),
+          p.join(h, '.npm-global', 'bin'),
+          p.join(h, '.yarn', 'bin'),
+          p.join(h, '.local', 'share', 'pnpm'),
+          p.join(h, '.cargo', 'bin'),
+          p.join(h, 'go', 'bin'),
+          p.join(h, '.pub-cache', 'bin'),
+          p.join(h, 'flutter', 'bin'),
+          p.join(h, 'development', 'flutter', 'bin'),
+          p.join(h, '.fvm', 'default', 'bin'),
+          p.join(h, '.local', 'share', 'flatpak', 'exports', 'bin'),
+        ]);
+      }
     }
     return dirs;
   }

@@ -4,8 +4,10 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/services/project_service.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'package:quantum_ide/models/project_model.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
@@ -32,6 +34,22 @@ class _HomePageState extends ConsumerState<HomePage> {
   String? _dismissedUpdateTag;
   bool _dismissedPackagesBanner = false;
   bool _checkedPackagesPrompt = false;
+
+  Future<void> _importAndOpenProject(BuildContext context, WidgetRef ref) async {
+    final dir = await FilePicker.getDirectoryPath();
+    if (dir == null || dir.trim().isEmpty) return;
+    final imported =
+        await ref.read(projectServiceProvider.notifier).importProject(dir);
+    await ref.read(workspaceProvider.notifier).setWorkspace(imported.path);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Проект открыт: ${imported.path}'),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    context.go('/editor');
+  }
 
   bool _matchesStackFilter(Project p) {
     switch (_selectedStackFilter) {
@@ -200,12 +218,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         icon: LucideIcons.folder_open,
                         tooltip: AppLocalizations.of(context)!.open,
                         color: Colors.cyanAccent,
-                        onTap: () async {
-                          final dir = await FilePicker.getDirectoryPath();
-                          if (dir != null) {
-                            await ref.read(projectServiceProvider.notifier).importProject(dir);
-                          }
-                        },
+                        onTap: () => _importAndOpenProject(context, ref),
                       ),
                       _buildRailItem(
                         icon: LucideIcons.git_branch,
@@ -568,12 +581,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         icon: LucideIcons.folder_open,
                         label: AppLocalizations.of(context)!.open,
                         color: Colors.cyanAccent,
-                        onTap: () async {
-                          final dir = await FilePicker.getDirectoryPath();
-                          if (dir != null) {
-                            await ref.read(projectServiceProvider.notifier).importProject(dir);
-                          }
-                        },
+                        onTap: () => _importAndOpenProject(context, ref),
                       ),
                       _buildSidebarItem(
                         icon: LucideIcons.git_branch,
@@ -738,7 +746,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     sliver: SliverGrid(
                       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                         maxCrossAxisExtent: 320,
-                        mainAxisExtent: 175,
+                        mainAxisExtent: 192,
                         mainAxisSpacing: 16,
                         crossAxisSpacing: 16,
                       ),
@@ -853,6 +861,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                               : Icon(project.icon, color: project.color, size: 20),
                         ),
                         const Spacer(),
+                        if (PlatformUtils.isDesktop) ...[
+                          IconButton(
+                            icon: const Icon(LucideIcons.folder_open, size: 14, color: Colors.cyanAccent),
+                            tooltip: 'Открыть папку в файловом менеджере (${project.path})',
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            onPressed: () => PlatformUtils.openInFileManager(project.path),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
                         IconButton(
                           icon: const Icon(LucideIcons.play, size: 14, color: Colors.greenAccent),
                           tooltip: AppLocalizations.of(context)!.runTooltip,
@@ -879,6 +897,19 @@ class _HomePageState extends ConsumerState<HomePage> {
                       style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 14),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Tooltip(
+                      message: project.path,
+                      child: Text(
+                        project.path,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jetBrainsMono(
+                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
+                          fontSize: 9.5,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Row(
@@ -2335,14 +2366,9 @@ class _HomePageState extends ConsumerState<HomePage> {
       (
         icon: LucideIcons.folder_open,
         label: AppLocalizations.of(context)!.open,
-        subtitle: 'Импорт готовой папки',
+        subtitle: 'Открыть готовую папку',
         color: Colors.cyanAccent,
-        onTap: () async {
-          final dir = await FilePicker.getDirectoryPath();
-          if (dir != null) {
-            await ref.read(projectServiceProvider.notifier).importProject(dir);
-          }
-        },
+        onTap: () => _importAndOpenProject(context, ref),
       ),
       (
         icon: LucideIcons.git_branch,
@@ -2561,6 +2587,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                             '${project.type.name.toUpperCase()} • $dateStr',
                             style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6), fontSize: 11),
                           ),
+                          const SizedBox(height: 2),
+                          Text(
+                            project.path,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.jetBrainsMono(
+                              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+                              fontSize: 9.5,
+                            ),
+                          ),
                           if (project.platforms != null && project.platforms!.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Wrap(
@@ -2589,6 +2625,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                         ],
                       ),
                     ),
+                    if (PlatformUtils.isDesktop)
+                      IconButton(
+                        tooltip: 'Открыть папку в файловом менеджере',
+                        icon: Icon(
+                          LucideIcons.folder_open,
+                          size: 15,
+                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.65),
+                        ),
+                        onPressed: () => PlatformUtils.openInFileManager(project.path),
+                      ),
                     Icon(LucideIcons.chevron_right, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5), size: 14),
                   ],
                 ),
@@ -2672,6 +2718,16 @@ class _HomePageState extends ConsumerState<HomePage> {
                           ],
                         ],
                       ),
+                      const SizedBox(height: 2),
+                      Text(
+                        project.path,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jetBrainsMono(
+                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
+                          fontSize: 10,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2692,6 +2748,18 @@ class _HomePageState extends ConsumerState<HomePage> {
                 if (context.mounted) context.go('/editor');
               },
             ),
+
+            if (PlatformUtils.isDesktop)
+              _buildActionTile(
+                icon: LucideIcons.external_link,
+                label: 'Показать в файловом менеджере',
+                sublabel: project.path,
+                color: Colors.cyanAccent,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  PlatformUtils.openInFileManager(project.path);
+                },
+              ),
 
             // Action: Fix Android Build (only for Flutter)
             if (project.type == ProjectType.flutter) ...[
@@ -2832,6 +2900,9 @@ class _HomePageState extends ConsumerState<HomePage> {
   void _showProjectDialog(BuildContext context, WidgetRef ref, {Project? project}) async {
     final isEdit = project != null;
     final nameCtrl = TextEditingController(text: project?.name);
+    final locationCtrl = TextEditingController(
+      text: project != null ? p.dirname(project.path) : PlatformUtils.defaultDesktopProjectsDir,
+    );
     ProjectType selectedType = project?.type ?? ProjectType.flutter;
     final theme = Theme.of(context);
 
@@ -3000,6 +3071,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               TextField(
                                 controller: nameCtrl,
                                 autofocus: !isEdit,
+                                onChanged: (_) => setState(() {}),
                                 style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 15),
                                 decoration: InputDecoration(
                                   hintText: AppLocalizations.of(context)!.projectName,
@@ -3010,6 +3082,68 @@ class _HomePageState extends ConsumerState<HomePage> {
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                                 ),
                               ),
+                              if (!isEdit && PlatformUtils.isDesktop) ...[
+                                const SizedBox(height: 16),
+                                Text(
+                                  'ПАПКА РАСПОЛОЖЕНИЯ ПРОЕКТА',
+                                  style: GoogleFonts.inter(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: locationCtrl,
+                                        onChanged: (_) => setState(() {}),
+                                        style: GoogleFonts.jetBrainsMono(
+                                          color: theme.colorScheme.onSurface,
+                                          fontSize: 12,
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: PlatformUtils.defaultDesktopProjectsDir,
+                                          filled: true,
+                                          fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+                                          border: OutlineInputBorder(
+                                            borderRadius: BorderRadius.circular(10),
+                                            borderSide: BorderSide.none,
+                                          ),
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: () async {
+                                        final picked = await FilePicker.getDirectoryPath();
+                                        if (picked != null && picked.trim().isNotEmpty) {
+                                          setState(() => locationCtrl.text = picked);
+                                        }
+                                      },
+                                      icon: const Icon(LucideIcons.folder_open, size: 15),
+                                      label: Text('Обзор...', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Будет создан в: ${p.join(locationCtrl.text.trim().isEmpty ? PlatformUtils.defaultDesktopProjectsDir : locationCtrl.text.trim(), nameCtrl.text.trim().isEmpty ? '<имя_проекта>' : nameCtrl.text.trim())}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    color: theme.colorScheme.primary.withValues(alpha: 0.8),
+                                    fontSize: 10.5,
+                                  ),
+                                ),
+                              ],
                               if (!isEdit) ...[
                                 const SizedBox(height: 24),
                                 Text(AppLocalizations.of(context)!.projectType, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
@@ -3387,7 +3521,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                               } else {
                                 final newProj = await ref.read(projectServiceProvider.notifier).createProject(
                                   name: nameCtrl.text,
-                                  path: '',
+                                  path: PlatformUtils.isDesktop ? locationCtrl.text.trim() : '',
                                   type: selectedType,
                                   iconCodePoint: selectedIconCodePoint,
                                   colorValue: selectedColorValue,
@@ -3465,6 +3599,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   TextField(
                     controller: nameCtrl,
                     autofocus: !isEdit,
+                    onChanged: (_) => setState(() {}),
                     style: GoogleFonts.inter(color: theme.colorScheme.onSurface, fontSize: 16),
                     decoration: InputDecoration(
                       hintText: AppLocalizations.of(context)!.projectName,
@@ -3475,6 +3610,68 @@ class _HomePageState extends ConsumerState<HomePage> {
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                     ),
                   ),
+                  if (!isEdit && PlatformUtils.isDesktop) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'ПАПКА РАСПОЛОЖЕНИЯ ПРОЕКТА',
+                      style: GoogleFonts.inter(
+                        color: theme.colorScheme.onSurfaceVariant,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: locationCtrl,
+                            onChanged: (_) => setState(() {}),
+                            style: GoogleFonts.jetBrainsMono(
+                              color: theme.colorScheme.onSurface,
+                              fontSize: 12,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: PlatformUtils.defaultDesktopProjectsDir,
+                              filled: true,
+                              fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final picked = await FilePicker.getDirectoryPath();
+                            if (picked != null && picked.trim().isNotEmpty) {
+                              setState(() => locationCtrl.text = picked);
+                            }
+                          },
+                          icon: const Icon(LucideIcons.folder_open, size: 15),
+                          label: Text('Обзор...', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Будет создан в: ${p.join(locationCtrl.text.trim().isEmpty ? PlatformUtils.defaultDesktopProjectsDir : locationCtrl.text.trim(), nameCtrl.text.trim().isEmpty ? '<имя_проекта>' : nameCtrl.text.trim())}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.8),
+                        fontSize: 10.5,
+                      ),
+                    ),
+                  ],
                   if (!isEdit) ...[
                     const SizedBox(height: 24),
                     Text(AppLocalizations.of(context)!.projectType, style: GoogleFonts.inter(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
@@ -3853,7 +4050,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           } else {
                             final newProj = await ref.read(projectServiceProvider.notifier).createProject(
                               name: nameCtrl.text,
-                              path: '',
+                              path: PlatformUtils.isDesktop ? locationCtrl.text.trim() : '',
                               type: selectedType,
                               iconCodePoint: selectedIconCodePoint,
                               colorValue: selectedColorValue,

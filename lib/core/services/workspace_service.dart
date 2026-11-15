@@ -41,13 +41,14 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
     final prefs = await SharedPreferences.getInstance();
     var recent = prefs.getStringList(_keyRecentProjects) ?? [];
 
-    // Migrate old /tmp/quantum_ide and mobile paths to ~/.quantum_ide (Desktop)
+    // Migrate old /tmp/quantum_ide and Android mobile paths on Desktop
     if (!Platform.isAndroid && !Platform.isIOS) {
       final newBase = PlatformUtils.desktopDataDir;
       final pcProjectsDir = p.join(newBase, 'projects');
       const oldBase = '/tmp/quantum_ide';
       bool migrated = false;
       recent = recent.map((path) {
+        if (Directory(path).existsSync()) return path;
         if (path.startsWith(oldBase)) {
           migrated = true;
           return path.replaceFirst(oldBase, newBase);
@@ -56,7 +57,7 @@ class WorkspaceNotifier extends StateNotifier<WorkspaceState> {
           migrated = true;
           return p.join(pcProjectsDir, path.substring('/root/projects/'.length));
         }
-        if (path.contains('/projects/') && !path.startsWith(newBase)) {
+        if (path.startsWith('/data/user/') && path.contains('/projects/')) {
           migrated = true;
           final index = path.indexOf('/projects/');
           return p.join(pcProjectsDir, path.substring(index + '/projects/'.length));

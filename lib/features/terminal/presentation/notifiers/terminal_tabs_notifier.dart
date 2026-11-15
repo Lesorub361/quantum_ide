@@ -113,29 +113,35 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
     final id = const Uuid().v4();
 
     try {
-      // Ensure scripts are up to date with latest fixes
-      await runtime.updateScripts();
+      if (Platform.isAndroid) {
+        // Ensure scripts are up to date with latest fixes on Android
+        await runtime.updateScripts();
+      }
 
       String dir =
           workingDir ?? workspace.currentPath ?? runtime.workingDirectory;
       dir = PathMapper.mapToGuest(dir, runtime.appDirectory);
+      if (!Platform.isAndroid && !Directory(dir).existsSync()) {
+        dir = runtime.workingDirectory;
+      }
 
       final String dirName = p.basename(dir);
       final sessionTitle = title ?? (dirName == 'root' ? 'Home' : dirName);
 
       final env = Map<String, String>.from(runtime.env);
 
-      final sessionTmpDir = p.join(
-        runtime.appDirectory,
-        'runtime',
-        'tmp',
-        'session_$id',
-      );
-      Directory(sessionTmpDir).createSync(recursive: true);
-
-      env['PROOT_TMP_DIR'] = sessionTmpDir;
-      env.remove('PROOT_NO_SECCOMP');
-      env.remove('LD_PRELOAD');
+      if (Platform.isAndroid) {
+        final sessionTmpDir = p.join(
+          runtime.appDirectory,
+          'runtime',
+          'tmp',
+          'session_$id',
+        );
+        Directory(sessionTmpDir).createSync(recursive: true);
+        env['PROOT_TMP_DIR'] = sessionTmpDir;
+        env.remove('PROOT_NO_SECCOMP');
+        env.remove('LD_PRELOAD');
+      }
       env['PWD'] = dir;
 
       if (workspace.currentPath != null) {
@@ -144,9 +150,11 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
 
       final shell = Platform.isAndroid
           ? '/system/bin/sh'
-          : (Platform.isWindows ? 'cmd.exe' : (Platform.environment['SHELL'] ?? 'bash'));
+          : (Platform.isWindows
+              ? 'cmd.exe'
+              : (Platform.environment['SHELL'] ?? 'bash'));
 
-      // Desktop Linux: run bash in interactive login mode so .bashrc/.bash_profile are loaded
+      // Desktop Linux/macOS: run interactive shell
       // Android: args are handled by the PRoot wrapper script
       final List<String> args = Platform.isAndroid
           ? [
@@ -156,8 +164,8 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
               ...(initialArgs ?? []),
             ]
           : Platform.isWindows
-          ? []
-          : ['-i']; // -i = interactive (loads .bashrc, enables readline)
+              ? (initialArgs ?? [])
+              : (initialArgs ?? ['-i']);
 
       // Add proper terminal env vars for rich terminal experience and bracketed paste
       final has256Terminfo = !Platform.isAndroid ||
