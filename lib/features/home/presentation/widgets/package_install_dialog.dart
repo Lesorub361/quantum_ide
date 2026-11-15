@@ -96,6 +96,64 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
   static final _ansiRegex = RegExp(r'\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*\x07|[()][A-Za-z0-9])');
   String _cleanAnsi(String text) => text.replaceAll(_ansiRegex, '');
 
+  String _adaptCommandForNativeRoot(String command, String filesDir) {
+    final nativeHome = '$filesDir/home';
+    final nativeTmp = '$filesDir/tmp';
+    final nativeBin = '$filesDir/bin';
+
+    var adapted = command;
+    const lockMarker = 'ca-certificates 2>/dev/null || true ; ';
+    if (adapted.contains(lockMarker)) {
+      adapted = adapted.substring(adapted.indexOf(lockMarker) + lockMarker.length);
+    } else if (adapted.contains('kill -9 \$(pgrep')) {
+      final parts = adapted.split(' ; ');
+      adapted = parts
+          .where((part) =>
+              !part.contains('pgrep') &&
+              !part.contains('/var/lib/') &&
+              !part.contains('/var/cache/') &&
+              !part.contains('dpkg --configure') &&
+              !part.contains('dpkg --remove') &&
+              !part.contains('apt-get install -f') &&
+              !part.contains('export HOME=/root') &&
+              !part.contains('export USER=root'))
+          .join(' ; ');
+    }
+
+    adapted = adapted
+        .replaceAll('(/bin/bash /root/setup-arm64.sh 2>/dev/null || true)', 'true')
+        .replaceAll('/bin/bash /root/setup-arm64.sh', 'true')
+        .replaceAll('/root/setup-arm64.sh', 'true')
+        .replaceAll('/root/', '$nativeHome/')
+        .replaceAll('/root', nativeHome)
+        .replaceAll('/tmp/', '$nativeTmp/')
+        .replaceAll('/usr/local/bin/', '$nativeBin/')
+        .replaceAll('/usr/local/bin', nativeBin);
+
+    // Replace `apt update && apt install ...` or `apt-get install ...` with a Termux/AGY `pkg` or tool-check shim
+    adapted = adapted.replaceAllMapped(
+      RegExp(r'(?:apt-get|apt)\s+update\s*&&\s*(?:apt-get|apt)\s+install\s+(?:--reinstall\s+)?(?:-y\s+)?[^;&|]+'),
+      (_) => '_q_native_pkg_check',
+    );
+    adapted = adapted.replaceAllMapped(
+      RegExp(r'(?:apt-get|apt)\s+install\s+(?:--reinstall\s+)?(?:-y\s+)?(?:--no-install-recommends\s+)?[^;&|]+'),
+      (_) => '_q_native_pkg_check',
+    );
+
+    final prelude =
+        'mkdir -p "$filesDir/home" "$filesDir/tmp" "$filesDir/bin" 2>/dev/null || true; '
+        'export HOME="$filesDir/home" TMPDIR="$filesDir/tmp" TEMP="$filesDir/tmp"; '
+        '_q_native_pkg_check() { '
+        'if command -v pkg >/dev/null 2>&1; then return 0; fi; '
+        'if command -v git >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then return 0; fi; '
+        'echo "⚠️ В режиме Native Root Kernel (без Ubuntu) пакетный менеджер apt недоступен."; '
+        'echo "💡 Установите Termux или переключитесь на Ubuntu 24.04 PRoot в настройках среды."; '
+        'return 1; '
+        '}; ';
+
+    return '$prelude$adapted';
+  }
+
   Future<void> _startProcess() async {
     setState(() {
       _isRunning = true;
@@ -148,7 +206,13 @@ class _PackageInstallDialogState extends ConsumerState<PackageInstallDialog> {
 
     try {
       if (Platform.isAndroid || Platform.isIOS) {
-        _logs.add('📦 Окружение: Android PRoot userspace');
+        final isNativeRoot = Platform.isAndroid && runtime.useNativeRootMode;
+        if (isNativeRoot) {
+          command = _adaptCommandForNativeRoot(command, runtime.filesDir);
+          _logs.add('📦 Окружение: Android Native Root Kernel (su)');
+        } else {
+          _logs.add('📦 Окружение: Android PRoot userspace');
+        }
         _logs.add('\$ $command\n');
 
         _streamingCommand = runtime.runCommandStream(

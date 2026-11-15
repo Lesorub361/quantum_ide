@@ -828,11 +828,14 @@ class RuntimeService extends ChangeNotifier {
         }
       }
       final guestCwd = workingDirectory != null
-          ? PathMapper.mapToGuest(workingDirectory, _filesDir)
-          : '/root';
+          ? (_useNativeRootMode
+              ? workingDirectory
+              : PathMapper.mapToGuest(workingDirectory, _filesDir))
+          : (_useNativeRootMode ? p.join(_filesDir, 'home') : '/root');
+      final translatedCmd = translateCommandPaths(command);
       process = await Process.start(
         'sh',
-        [initHost, _filesDir, guestCwd, '/bin/bash', '-c', command],
+        [initHost, _filesDir, guestCwd, '/bin/bash', '-c', translatedCmd],
       );
     } else {
       process = await Process.start(
@@ -2569,7 +2572,8 @@ CONFIG="\$FILES_DIR/config"
 
 # ── Native Root Kernel Mode (Direct execution on device kernel without Ubuntu PRoot) ──
 if [ -f "\$CONFIG/native_root_mode.flag" ]; then
-    mkdir -p "\$FILES_DIR/projects" "\$TMPDIR" 2>/dev/null || true
+    NATIVE_HOME="\$FILES_DIR/home"
+    mkdir -p "\$NATIVE_HOME" "\$FILES_DIR/projects" "\$FILES_DIR/bin" "\$TMPDIR" 2>/dev/null || true
     case "\$GUEST_CWD" in
         /root/projects/*)
             REL_P="\${GUEST_CWD#/root/projects/}"
@@ -2580,7 +2584,7 @@ if [ -f "\$CONFIG/native_root_mode.flag" ]; then
             NATIVE_CWD="\$FILES_DIR/projects"
             ;;
         /root)
-            NATIVE_CWD="\$FILES_DIR/projects"
+            NATIVE_CWD="\$NATIVE_HOME"
             ;;
         /sdcard/*)
             REL_S="\${GUEST_CWD#/sdcard/}"
@@ -2590,17 +2594,17 @@ if [ -f "\$CONFIG/native_root_mode.flag" ]; then
             NATIVE_CWD="\$GUEST_CWD"
             ;;
     esac
-    [ ! -d "\$NATIVE_CWD" ] && NATIVE_CWD="\$FILES_DIR"
-    NATIVE_PATH="/data/data/com.termux/files/usr/bin:/data/user/0/com.termux/files/usr/bin:/data/user/0/com.agy/files/usr/bin:/data/local/tmp/bin:/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:\$FILES_DIR/bin:/system/bin:/system/xbin:/sbin:/vendor/bin"
+    [ ! -d "\$NATIVE_CWD" ] && NATIVE_CWD="\$NATIVE_HOME"
+    NATIVE_PATH="\$NATIVE_HOME/flutter/bin:\$NATIVE_HOME/android-sdk/cmdline-tools/latest/bin:\$NATIVE_HOME/android-sdk/platform-tools:\$NATIVE_HOME/.bun/bin:\$NATIVE_HOME/.local/bin:\$FILES_DIR/bin:/data/data/com.termux/files/usr/bin:/data/user/0/com.termux/files/usr/bin:/data/user/0/com.agy/files/usr/bin:/data/local/tmp/bin:/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:/system/bin:/system/xbin:/sbin:/vendor/bin"
     SU_BIN=""
-    for cand in su /system/bin/su /system/xbin/su /sbin/su /su/bin/su /data/adb/magisk/su /data/adb/ksu/bin/su /data/adb/ap/bin/su; do
+    for cand in su /system/bin/su /system/xbin/su /sbin/su /su/bin/su /debug_ramdisk/su /system_ext/bin/su /vendor/bin/su /data/adb/magisk/su /data/adb/ksu/bin/su /data/adb/ap/bin/su; do
         if command -v "\$cand" >/dev/null 2>&1 || [ -x "\$cand" ]; then
             SU_BIN="\$cand"
             break
         fi
     done
     SHELL_BIN="/system/bin/sh"
-    for sh_cand in /data/data/com.termux/files/usr/bin/bash /data/user/0/com.agy/files/usr/bin/bash /bin/bash /system/bin/sh; do
+    for sh_cand in /data/data/com.termux/files/usr/bin/bash /data/user/0/com.termux/files/usr/bin/bash /data/user/0/com.agy/files/usr/bin/bash /bin/bash /system/bin/sh; do
         if [ -x "\$sh_cand" ]; then
             SHELL_BIN="\$sh_cand"
             break
@@ -2613,17 +2617,17 @@ if [ -f "\$CONFIG/native_root_mode.flag" ]; then
         fi
         CMD_STR="\$*"
         if [ -n "\$SU_BIN" ]; then
-            exec "\$SU_BIN" -c "export PATH=\\"\$NATIVE_PATH:\\\$PATH\\" HOME=\\"\$FILES_DIR\\" TMPDIR=\\"\$TMPDIR\\" TERM=xterm-256color; cd \\"\$NATIVE_CWD\\" 2>/dev/null || true; \$CMD_STR"
+            exec "\$SU_BIN" -c "export PATH=\\"\$NATIVE_PATH:\\\$PATH\\" HOME=\\"\$NATIVE_HOME\\" TMPDIR=\\"\$TMPDIR\\" TEMP=\\"\$TMPDIR\\" ANDROID_HOME=\\"\$NATIVE_HOME/android-sdk\\" ANDROID_SDK_ROOT=\\"\$NATIVE_HOME/android-sdk\\" FLUTTER_ROOT=\\"\$NATIVE_HOME/flutter\\" TERM=xterm-256color; cd \\"\$NATIVE_CWD\\" 2>/dev/null || true; \$CMD_STR"
         else
-            export PATH="\$NATIVE_PATH:\$PATH" HOME="\$FILES_DIR" TMPDIR="\$TMPDIR" TERM=xterm-256color
+            export PATH="\$NATIVE_PATH:\$PATH" HOME="\$NATIVE_HOME" TMPDIR="\$TMPDIR" TEMP="\$TMPDIR" ANDROID_HOME="\$NATIVE_HOME/android-sdk" ANDROID_SDK_ROOT="\$NATIVE_HOME/android-sdk" FLUTTER_ROOT="\$NATIVE_HOME/flutter" TERM=xterm-256color
             cd "\$NATIVE_CWD" 2>/dev/null || true
             exec "\$SHELL_BIN" -c "\$CMD_STR"
         fi
     else
         if [ -n "\$SU_BIN" ]; then
-            exec "\$SU_BIN" -c "export PATH=\\"\$NATIVE_PATH:\\\$PATH\\" HOME=\\"\$FILES_DIR\\" TMPDIR=\\"\$TMPDIR\\" TERM=xterm-256color COLORTERM=truecolor; cd \\"\$NATIVE_CWD\\" 2>/dev/null || true; echo '⚡ QuantumIDE Native Root Kernel Mode (uid=0)'; exec \\"\$SHELL_BIN\\""
+            exec "\$SU_BIN" -c "export PATH=\\"\$NATIVE_PATH:\\\$PATH\\" HOME=\\"\$NATIVE_HOME\\" TMPDIR=\\"\$TMPDIR\\" TEMP=\\"\$TMPDIR\\" ANDROID_HOME=\\"\$NATIVE_HOME/android-sdk\\" ANDROID_SDK_ROOT=\\"\$NATIVE_HOME/android-sdk\\" FLUTTER_ROOT=\\"\$NATIVE_HOME/flutter\\" TERM=xterm-256color COLORTERM=truecolor; cd \\"\$NATIVE_CWD\\" 2>/dev/null || true; echo '⚡ QuantumIDE Native Root Kernel Mode (uid=0)'; exec \\"\$SHELL_BIN\\""
         else
-            export PATH="\$NATIVE_PATH:\$PATH" HOME="\$FILES_DIR" TMPDIR="\$TMPDIR" TERM=xterm-256color COLORTERM=truecolor
+            export PATH="\$NATIVE_PATH:\$PATH" HOME="\$NATIVE_HOME" TMPDIR="\$TMPDIR" TEMP="\$TMPDIR" ANDROID_HOME="\$NATIVE_HOME/android-sdk" ANDROID_SDK_ROOT="\$NATIVE_HOME/android-sdk" FLUTTER_ROOT="\$NATIVE_HOME/flutter" TERM=xterm-256color COLORTERM=truecolor
             cd "\$NATIVE_CWD" 2>/dev/null || true
             echo "⚡ QuantumIDE Native Kernel Shell"
             exec "\$SHELL_BIN"
@@ -3143,6 +3147,27 @@ fi
     // Desktop: return desktopEnv with all discovered SDKs and user binary paths (agy, flutter, etc.)
     if (!Platform.isAndroid && !Platform.isIOS) {
       return desktopEnv;
+    }
+    if (Platform.isAndroid && _useNativeRootMode) {
+      final nativeHome = p.join(_filesDir, 'home');
+      final nativeTmp = p.join(_filesDir, 'tmp');
+      final nativeBin = p.join(_filesDir, 'bin');
+      return {
+        'HOME': nativeHome,
+        'TMPDIR': nativeTmp,
+        'TEMP': nativeTmp,
+        'TERM': 'xterm-256color',
+        'COLORTERM': 'truecolor',
+        'ANDROID_HOME': p.join(nativeHome, 'android-sdk'),
+        'ANDROID_SDK_ROOT': p.join(nativeHome, 'android-sdk'),
+        'FLUTTER_ROOT': p.join(nativeHome, 'flutter'),
+        'PATH':
+            '$nativeHome/flutter/bin:$nativeHome/android-sdk/cmdline-tools/latest/bin:$nativeHome/android-sdk/platform-tools:$nativeHome/.bun/bin:$nativeHome/.local/bin:$nativeBin:/data/data/com.termux/files/usr/bin:/data/user/0/com.termux/files/usr/bin:/data/user/0/com.agy/files/usr/bin:/system/bin:/system/xbin:/sbin:/vendor/bin',
+        'USER': 'root',
+        'LANG': 'C.UTF-8',
+        'LC_ALL': 'C.UTF-8',
+        'FLUTTER_ALLOW_SU_ROOT': 'true',
+      };
     }
     // Android/iOS: use PRoot-specific environment
     return {
