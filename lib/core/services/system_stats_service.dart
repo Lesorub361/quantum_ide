@@ -41,6 +41,8 @@ class SystemStats {
   final double gpuUsage;
   /// Модель или наименование графического чипа GPU (например, "Adreno 810" или "Mali")
   final String gpuName;
+  /// true, если аппаратный датчик GPU заблокирован SELinux и используется оценка
+  final bool isGpuEstimated;
   /// Доля памяти, занимаемая самим приложением Quantum IDE относительно доступного лимита
   final double ramUsage;
   final double ramTotalGB;
@@ -74,6 +76,7 @@ class SystemStats {
     this.socName = 'Snapdragon / ARM64',
     this.gpuUsage = 0.05,
     this.gpuName = 'GPU',
+    this.isGpuEstimated = false,
     this.ramUsage = 0.0,
     this.ramTotalGB = 8.0,
     this.ramUsedGB = 0.18,
@@ -124,6 +127,7 @@ class SystemStats {
     String? socName,
     double? gpuUsage,
     String? gpuName,
+    bool? isGpuEstimated,
     double? ramUsage,
     double? ramTotalGB,
     double? ramUsedGB,
@@ -144,6 +148,7 @@ class SystemStats {
       socName: socName ?? this.socName,
       gpuUsage: gpuUsage ?? this.gpuUsage,
       gpuName: gpuName ?? this.gpuName,
+      isGpuEstimated: isGpuEstimated ?? this.isGpuEstimated,
       ramUsage: ramUsage ?? this.ramUsage,
       ramTotalGB: ramTotalGB ?? this.ramTotalGB,
       ramUsedGB: ramUsedGB ?? this.ramUsedGB,
@@ -421,6 +426,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         socName: socName,
         gpuUsage: gpu,
         gpuName: gpuName,
+        isGpuEstimated: _gpuSysfsBlocked,
         ramUsage: appRamUsageRatio,
         ramTotalGB: deviceTotalGB,
         ramUsedGB: appRamGB,
@@ -462,7 +468,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     double totalCores = 0;
 
     try {
-      if (!Platform.isWindows) {
+      if (!Platform.isWindows && !Platform.isAndroid) {
         final res = await Process.run('sh', [
           '-c',
           'ps -eo pid,%cpu,rss,args -ww 2>/dev/null || ps -o pid,%cpu,rss,args -ww 2>/dev/null || ps -eo pid,%cpu,rss,args 2>/dev/null',
@@ -1302,18 +1308,20 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
       for (int i = 0; i < 8; i++) {
         final curFile = File('/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq');
         final maxFile = File('/sys/devices/system/cpu/cpu$i/cpufreq/scaling_max_freq');
-        if (await curFile.exists() && await maxFile.exists()) {
-          final curStr = (await curFile.readAsString()).trim();
-          final maxStr = (await maxFile.readAsString()).trim();
-          final cur = int.tryParse(curStr);
-          final max = int.tryParse(maxStr);
-          if (cur != null && max != null && max > 0) {
-            totalRatio += (cur / max).clamp(0.0, 1.0);
-            count++;
-          }
+        if (!await curFile.exists() || !await maxFile.exists()) {
+          _sysfsCpuBlocked = true;
+          break;
+        }
+        final curStr = (await curFile.readAsString()).trim();
+        final maxStr = (await maxFile.readAsString()).trim();
+        final cur = int.tryParse(curStr);
+        final max = int.tryParse(maxStr);
+        if (cur != null && max != null && max > 0) {
+          totalRatio += (cur / max).clamp(0.0, 1.0);
+          count++;
         }
       }
-      if (count > 0) {
+      if (count > 0 && !_sysfsCpuBlocked) {
         return totalRatio / count;
       }
       _sysfsCpuBlocked = true;

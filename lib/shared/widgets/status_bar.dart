@@ -1106,7 +1106,9 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               ),
               _row(
                 'Видеоускоритель (${stats.gpuName})',
-                '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
+                stats.isGpuEstimated
+                    ? '~${(stats.gpuUsage * 100).toStringAsFixed(0)}% (оценка)'
+                    : '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
                 stats.gpuUsage,
                 LucideIcons.zap,
               ),
