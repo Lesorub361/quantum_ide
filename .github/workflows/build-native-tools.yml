@@ -7,6 +7,13 @@ on:
         description: 'lzhiyong/android-sdk-tools branch or tag (main = latest)'
         required: false
         default: 'main'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-native-tools.yml'
+  schedule:
+    - cron: '0 4 * * 1'
 
 jobs:
   build-native-arm64-tools:
@@ -37,19 +44,19 @@ jobs:
           cp -f box64 "${GITHUB_WORKSPACE}/dist/box64-arm64"
           ls -lh "${GITHUB_WORKSPACE}/dist/box64-arm64"
 
-      - name: Fetch or build latest AAPT2 (ARM64)
+      - name: Fetch latest AAPT2 (ARM64)
         run: |
           mkdir -p dist /tmp/aapt2
-          # Try lzhiyong/android-sdk-tools latest release first, fallback to building from source
           LATEST_URL=$(curl -sL "https://api.github.com/repos/lzhiyong/android-sdk-tools/releases/latest" \
             | grep -oE 'https://[^"]+android-sdk-tools-static-aarch64\.zip' | head -n 1 || true)
-          if [ -n "$LATEST_URL" ]; then
-            echo "Downloading latest AAPT2 from $LATEST_URL"
-            curl -fL "$LATEST_URL" -o /tmp/aapt2/tools.zip
-            unzip -qo /tmp/aapt2/tools.zip "build-tools/aapt2" -d /tmp/aapt2
-            cp -f /tmp/aapt2/build-tools/aapt2 dist/aapt2-arm64
+          if [ -z "$LATEST_URL" ]; then
+            LATEST_URL="https://github.com/lzhiyong/android-sdk-tools/releases/download/35.0.2/android-sdk-tools-static-aarch64.zip"
           fi
-          chmod +x dist/aapt2-arm64 2>/dev/null || true
+          echo "Downloading AAPT2 from $LATEST_URL"
+          curl -fL "$LATEST_URL" -o /tmp/aapt2/tools.zip
+          unzip -qo /tmp/aapt2/tools.zip "build-tools/aapt2" -d /tmp/aapt2
+          cp -f /tmp/aapt2/build-tools/aapt2 dist/aapt2-arm64
+          chmod +x dist/aapt2-arm64
           ls -lh dist/
 
       - name: Publish to native-tools-latest release
@@ -57,6 +64,7 @@ jobs:
         with:
           tag_name: native-tools-latest
           name: Native ARM64 Tools (Box64 + AAPT2)
+          fail_on_unmatched_files: false
           files: |
             dist/box64-arm64
             dist/aapt2-arm64
