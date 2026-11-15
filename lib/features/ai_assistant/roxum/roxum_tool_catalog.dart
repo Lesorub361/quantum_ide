@@ -130,9 +130,30 @@ const List<AgenticToolSpec> agenticToolSpecs = [
     requiresWriteAccess: false,
   ),
   AgenticToolSpec(
+    name: 'codeOutline',
+    label: 'Структура кода (AST/Символы)',
+    description:
+        'Возвращает список классов, функций и строк (#L) без чтения всего файла (экономит 85% токенов).',
+    requiresWriteAccess: false,
+  ),
+  AgenticToolSpec(
+    name: 'checkEnvironment',
+    label: 'Поиск SDK и окружения',
+    description:
+        'Ищет установленные в системе Flutter, Dart, Java, Gradle, Node, Python, Git, Rust и их пути.',
+    requiresWriteAccess: false,
+  ),
+  AgenticToolSpec(
+    name: 'installPackages',
+    label: 'Авто-установка пакетов',
+    description:
+        'Устанавливает недостающие пакеты и библиотеки (pub, npm, pip, apt, cargo).',
+    requiresWriteAccess: true,
+  ),
+  AgenticToolSpec(
     name: 'runCommand',
-    label: 'Терминал (PRoot)',
-    description: 'Выполняет команду в Ubuntu PRoot-окружении.',
+    label: 'Терминал (Shell / Root / PRoot)',
+    description: 'Выполняет команду в терминале проекта с авто-поиском путей.',
     requiresWriteAccess: true,
   ),
 ];

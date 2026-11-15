@@ -34,64 +34,50 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final isDark = ThemeData.estimateBrightnessForColor(widget.surfaceColor) ==
-        Brightness.dark;
-    final thinkAccent =
-        isDark ? const Color(0xFFC4B5FD) : const Color(0xFF6D28D9);
-    final sec = (widget.durationMs / 1000).toStringAsFixed(1);
-    final label = widget.isStreaming && widget.reasoningText.isNotEmpty
-        ? l10n.thinkingNow
-        : (widget.durationMs > 0
-            ? '${l10n.thinkingAgent} · ${sec}s'
-            : l10n.thinkingAgent);
+    final sec = (widget.durationMs / 1000).round();
+    final secDisplay = sec > 0
+        ? '${sec}s'
+        : '${(widget.durationMs / 1000).toStringAsFixed(1)}s';
+    final label = widget.isStreaming
+        ? 'Thinking...'
+        : (widget.durationMs > 0 ? 'Thought for $secDisplay' : 'Thought');
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: widget.surfaceColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: thinkAccent.withValues(alpha: 0.32),
-        ),
-      ),
+    final muted = widget.textColor.withValues(alpha: 0.62);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(6),
             onTap: () => setState(() => _expanded = !_expanded),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    LucideIcons.brain,
-                    size: 14,
-                    color: thinkAccent,
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: muted,
+                    ),
                   )
                       .animate(
-                        onPlay: (c) => widget.isStreaming ? c.repeat() : c.stop(),
+                        onPlay: (c) =>
+                            widget.isStreaming ? c.repeat() : c.stop(),
                       )
                       .shimmer(
-                        duration: 1200.ms,
-                        color: widget.textColor.withValues(alpha: 0.45),
+                        duration: 1300.ms,
+                        color: widget.textColor.withValues(alpha: 0.9),
                       ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: thinkAccent,
-                      ),
-                    ),
-                  ),
+                  const SizedBox(width: 6),
                   Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    _expanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
                     size: 16,
-                    color: widget.textColor.withValues(alpha: 0.55),
+                    color: muted,
                   ),
                 ],
               ),
@@ -100,22 +86,31 @@ class _RoxumThinkingCardState extends State<RoxumThinkingCard> {
           if ((_expanded || widget.isStreaming) &&
               widget.reasoningText.isNotEmpty)
             Container(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              margin: const EdgeInsets.only(left: 6, top: 4, bottom: 4),
+              padding: const EdgeInsets.only(left: 10, top: 2, bottom: 2),
+              decoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: widget.textColor.withValues(alpha: 0.18),
+                    width: 2,
+                  ),
+                ),
+              ),
               child: Text(
                 widget.reasoningText,
                 maxLines: _expanded ? null : 3,
                 overflow:
                     _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 11.5,
+                  fontSize: 12,
                   height: 1.45,
-                  color: widget.textColor.withValues(alpha: 0.75),
+                  color: widget.textColor.withValues(alpha: 0.68),
                 ),
               ),
             ),
         ],
       ),
-    ).animate().fadeIn(duration: 180.ms);
+    );
   }
 }
 
@@ -123,12 +118,14 @@ class RoxumAgentTimeline extends StatefulWidget {
   final List<RoxumToolCallRecord> toolCalls;
   final Color surfaceColor;
   final Color textColor;
+  final void Function(String filePath)? onOpenFile;
 
   const RoxumAgentTimeline({
     super.key,
     required this.toolCalls,
     required this.surfaceColor,
     required this.textColor,
+    this.onOpenFile,
   });
 
   @override
@@ -137,242 +134,129 @@ class RoxumAgentTimeline extends StatefulWidget {
 
 class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
   final Set<String> _expandedIds = {};
-  bool _exploredExpanded = false;
-
-  static const _exploreTools = {
-    'activeEditorFile',
-    'currentlySelectedText',
-    'getLspDiagnostics',
-    'readFile',
-    'readFilesBatch',
-    'listFiles',
-    'globSearchFiles',
-    'grepInFiles',
-    'searchInFiles',
-    'getFileInfo',
-  };
 
   @override
   Widget build(BuildContext context) {
     if (widget.toolCalls.isEmpty) return const SizedBox.shrink();
 
-    final exploreCalls = <RoxumToolCallRecord>[];
-    final actionCalls = <RoxumToolCallRecord>[];
-    for (final tc in widget.toolCalls) {
-      if (_exploreTools.contains(tc.name) && !tc.isRunning) {
-        exploreCalls.add(tc);
-      } else {
-        actionCalls.add(tc);
-      }
-    }
-
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (exploreCalls.isNotEmpty) _buildExploredGroup(exploreCalls),
-          for (final tc in actionCalls) _buildActionStep(tc),
+          for (final tc in widget.toolCalls) _buildInlineStepRow(tc),
         ],
       ),
     );
   }
 
-  Widget _buildExploredGroup(List<RoxumToolCallRecord> calls) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: widget.surfaceColor.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: widget.textColor.withValues(alpha: 0.09)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => setState(() => _exploredExpanded = !_exploredExpanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              child: Row(
-                children: [
-                  const Icon(
-                    LucideIcons.search,
-                    size: 13.5,
-                    color: Color(0xFF38BDF8),
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      '${AppLocalizations.of(context)!.exploredLabel} · ${calls.length}',
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: widget.textColor.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ),
-                  Icon(
-                    _exploredExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: widget.textColor.withValues(alpha: 0.5),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_exploredExpanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: calls.map((tc) {
-                  final target = tc.arguments['filePath'] ??
-                      tc.arguments['query'] ??
-                      tc.arguments['pattern'] ??
-                      tc.arguments['directoryPath'] ??
-                      '';
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          tc.success ? Icons.check : Icons.error_outline,
-                          size: 12,
-                          color: tc.success
-                              ? const Color(0xFF22C55E)
-                              : Colors.redAccent,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '${tc.name}${target.toString().isNotEmpty ? ': $target' : ''}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              color: widget.textColor.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-        ],
-      ),
-    ).animate().fadeIn(duration: 160.ms);
-  }
-
-  Widget _buildActionStep(RoxumToolCallRecord tc) {
+  Widget _buildInlineStepRow(RoxumToolCallRecord tc) {
     final isExpanded = _expandedIds.contains(tc.id);
-    final isShell = tc.name == 'runCommand' || tc.name.startsWith('git');
-    final isMcp = tc.name.startsWith('mcp__');
-    final isEdit = const {
-      'writeFile',
-      'editFile',
-      'insertAtLine',
-      'replaceAllInFile',
-    }.contains(tc.name);
+    final info = _describeStep(tc);
+    final muted = widget.textColor.withValues(alpha: 0.62);
 
-    final label = _formatActionLabel(tc);
-    final accent = tc.isRunning
-        ? const Color(0xFF38BDF8)
-        : (tc.success
-            ? (isMcp ? const Color(0xFFA78BFA) : const Color(0xFF22C55E))
-            : Colors.redAccent);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      decoration: BoxDecoration(
-        color: widget.surfaceColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accent.withValues(alpha: 0.3)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: tc.output.isEmpty
-                ? null
-                : () => setState(() {
-                      if (isExpanded) {
-                        _expandedIds.remove(tc.id);
-                      } else {
-                        _expandedIds.add(tc.id);
-                      }
-                    }),
+            borderRadius: BorderRadius.circular(6),
+            onTap: () {
+              if (info.filePath != null &&
+                  info.filePath!.isNotEmpty &&
+                  widget.onOpenFile != null &&
+                  (tc.name == 'readFile' ||
+                      tc.name == 'codeOutline' ||
+                      tc.name == 'writeFile' ||
+                      tc.name == 'editFile')) {
+                widget.onOpenFile!(info.filePath!);
+                return;
+              }
+              if (tc.output.isNotEmpty) {
+                setState(() {
+                  if (isExpanded) {
+                    _expandedIds.remove(tc.id);
+                  } else {
+                    _expandedIds.add(tc.id);
+                  }
+                });
+              }
+            },
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3.5),
               child: Row(
                 children: [
-                  if (tc.isRunning)
+                  if (tc.isRunning) ...[
                     SizedBox(
-                      width: 13,
-                      height: 13,
+                      width: 12,
+                      height: 12,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: accent,
+                        strokeWidth: 1.8,
+                        color: info.iconColor,
                       ),
-                    )
-                  else
-                    Icon(
-                      isShell
-                          ? LucideIcons.terminal
-                          : (isMcp
-                              ? LucideIcons.blocks
-                              : (isEdit
-                                  ? LucideIcons.file_pen
-                                  : Icons.check_circle_outline)),
-                      size: 14,
-                      color: accent,
                     ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(
+                    info.verb,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: muted,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _buildFileOrToolBadge(info),
                   const SizedBox(width: 7),
-                  Expanded(
+                  Flexible(
                     child: Text(
-                      label,
+                      info.primaryTarget,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: isShell
+                      style: info.isMono
                           ? GoogleFonts.jetBrainsMono(
-                              fontSize: 11,
-                              color: widget.textColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: widget.textColor.withValues(alpha: 0.9),
                             )
                           : TextStyle(
-                              fontSize: 11.5,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
-                              color: widget.textColor,
+                              color: widget.textColor.withValues(alpha: 0.9),
                             ),
                     ),
                   ),
-                  if (!tc.isRunning)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 1.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accent.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        tc.success ? 'OK' : 'ERR',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: accent,
-                        ),
+                  if (info.lineRange != null && info.lineRange!.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      info.lineRange!,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w400,
+                        color: widget.textColor.withValues(alpha: 0.55),
                       ),
                     ),
-                  if (tc.output.isNotEmpty) ...[
+                  ],
+                  if (!tc.isRunning && !tc.success) ...[
+                    const SizedBox(width: 6),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 14,
+                      color: Colors.redAccent,
+                    ),
+                  ],
+                  if (tc.output.isNotEmpty &&
+                      tc.name != 'readFile' &&
+                      tc.name != 'writeFile' &&
+                      tc.name != 'editFile') ...[
                     const SizedBox(width: 4),
                     Icon(
-                      isExpanded ? Icons.expand_less : Icons.expand_more,
+                      isExpanded
+                          ? Icons.keyboard_arrow_down
+                          : Icons.chevron_right,
                       size: 15,
-                      color: widget.textColor.withValues(alpha: 0.5),
+                      color: widget.textColor.withValues(alpha: 0.45),
                     ),
                   ],
                 ],
@@ -381,17 +265,18 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
           ),
           if (isExpanded && tc.output.isNotEmpty)
             Container(
-              padding: const EdgeInsets.fromLTRB(10, 4, 10, 9),
+              margin: const EdgeInsets.only(top: 4, bottom: 4, left: 6),
+              padding: const EdgeInsets.all(9),
               decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(
-                    color: widget.textColor.withValues(alpha: 0.08),
-                  ),
+                color: widget.surfaceColor.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: widget.textColor.withValues(alpha: 0.09),
                 ),
               ),
               child: SelectableText(
-                tc.output.length > 1500
-                    ? '${tc.output.substring(0, 1500)}\n... [truncated]'
+                tc.output.length > 1600
+                    ? '${tc.output.substring(0, 1600)}\n... [truncated]'
                     : tc.output,
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 10.5,
@@ -402,33 +287,251 @@ class _RoxumAgentTimelineState extends State<RoxumAgentTimeline> {
             ),
         ],
       ),
-    ).animate().fadeIn(duration: 180.ms).slideY(begin: 0.05, end: 0);
+    );
   }
 
-  String _formatActionLabel(RoxumToolCallRecord tc) {
-    if (tc.name == 'runCommand') {
-      return '\$ ${tc.arguments['command'] ?? ''}';
+  Widget _buildFileOrToolBadge(_StepDescriptor info) {
+    if (info.badgeText != null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1),
+        decoration: BoxDecoration(
+          color: info.iconColor.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          info.badgeText!,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+            color: info.iconColor,
+          ),
+        ),
+      );
     }
-    if (tc.name.startsWith('mcp__')) {
-      final parts = tc.name.split('__');
-      final srv = parts.length > 1 ? parts[1] : 'mcp';
-      final fn = parts.length > 2 ? parts.sublist(2).join('_') : tc.name;
-      return 'MCP [$srv] · $fn';
-    }
-    final fp = tc.arguments['filePath']?.toString();
-    if (fp != null && fp.isNotEmpty) {
-      return '${tc.name} · ${p.basename(fp)}';
-    }
-    return tc.name;
+    return Icon(
+      info.icon,
+      size: 14.5,
+      color: info.iconColor,
+    );
   }
 
-  String _plural(int n) {
-    if (n % 10 == 1 && n % 100 != 11) return 'шаг';
-    if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) {
-      return 'шага';
+  _StepDescriptor _describeStep(RoxumToolCallRecord tc) {
+    final fp = tc.arguments['filePath']?.toString() ??
+        tc.arguments['directoryPath']?.toString() ??
+        '';
+    final base = fp.isNotEmpty ? p.basename(fp) : '';
+
+    switch (tc.name) {
+      case 'readFile':
+      case 'activeEditorFile':
+        final range = _extractLineRange(tc);
+        final lang = _fileBadgeFor(base);
+        return _StepDescriptor(
+          verb: 'Analyzed',
+          primaryTarget: base.isNotEmpty ? base : 'file',
+          lineRange: range,
+          icon: lang.icon,
+          iconColor: lang.color,
+          badgeText: lang.badge,
+          filePath: fp,
+        );
+      case 'codeOutline':
+        final lang = _fileBadgeFor(base);
+        return _StepDescriptor(
+          verb: 'Analyzed',
+          primaryTarget: base.isNotEmpty ? base : 'outline',
+          lineRange: 'outline',
+          icon: lang.icon,
+          iconColor: lang.color,
+          badgeText: lang.badge,
+          filePath: fp,
+        );
+      case 'writeFile':
+      case 'editFile':
+      case 'insertAtLine':
+      case 'replaceAllInFile':
+        final lang = _fileBadgeFor(base);
+        return _StepDescriptor(
+          verb: tc.name == 'writeFile' ? 'Created' : 'Edited',
+          primaryTarget: base.isNotEmpty ? base : 'file',
+          icon: lang.icon,
+          iconColor: lang.color,
+          badgeText: lang.badge,
+          filePath: fp,
+        );
+      case 'grepInFiles':
+      case 'searchInFiles':
+        final q = tc.arguments['query']?.toString() ??
+            tc.arguments['pattern']?.toString() ??
+            '';
+        return _StepDescriptor(
+          verb: 'Searched',
+          primaryTarget: q.isNotEmpty ? '"$q"' : 'workspace',
+          icon: LucideIcons.search,
+          iconColor: const Color(0xFF38BDF8),
+        );
+      case 'listFiles':
+      case 'globSearchFiles':
+        final pat = tc.arguments['pattern']?.toString() ??
+            (base.isNotEmpty ? base : 'workspace');
+        return _StepDescriptor(
+          verb: 'Explored',
+          primaryTarget: pat,
+          icon: LucideIcons.folder_search,
+          iconColor: const Color(0xFF38BDF8),
+        );
+      case 'getLspDiagnostics':
+        return _StepDescriptor(
+          verb: 'Checked diagnostics',
+          primaryTarget: base.isNotEmpty ? base : 'workspace',
+          icon: LucideIcons.activity,
+          iconColor: const Color(0xFF22C55E),
+        );
+      case 'checkEnvironment':
+        return const _StepDescriptor(
+          verb: 'Checked environment',
+          primaryTarget: 'SDKs & toolchains',
+          icon: LucideIcons.cpu,
+          iconColor: Color(0xFF38BDF8),
+        );
+      case 'installPackages':
+        final mgr = tc.arguments['manager']?.toString() ?? '';
+        final pkgs = tc.arguments['packages']?.toString() ?? '';
+        return _StepDescriptor(
+          verb: 'Installed',
+          primaryTarget: '$mgr $pkgs'.trim(),
+          icon: LucideIcons.package_plus,
+          iconColor: const Color(0xFFA78BFA),
+        );
+      case 'runCommand':
+        final cmd = tc.arguments['command']?.toString() ?? '';
+        return _StepDescriptor(
+          verb: 'Ran',
+          primaryTarget: cmd,
+          icon: LucideIcons.terminal,
+          iconColor: const Color(0xFF22C55E),
+          isMono: true,
+        );
+      default:
+        if (tc.name.startsWith('mcp__')) {
+          final parts = tc.name.split('__');
+          final srv = parts.length > 1 ? parts[1] : 'mcp';
+          final fn = parts.length > 2 ? parts.sublist(2).join('_') : tc.name;
+          return _StepDescriptor(
+            verb: 'MCP [$srv]',
+            primaryTarget: fn,
+            icon: LucideIcons.blocks,
+            iconColor: const Color(0xFFA78BFA),
+          );
+        }
+        return _StepDescriptor(
+          verb: 'Executed',
+          primaryTarget: base.isNotEmpty ? '${tc.name} · $base' : tc.name,
+          icon: LucideIcons.sparkles,
+          iconColor: const Color(0xFF38BDF8),
+        );
     }
-    return 'шагов';
   }
+
+  String? _extractLineRange(RoxumToolCallRecord tc) {
+    final headerMatch = RegExp(r'#L(\d+-\d+)').firstMatch(tc.output);
+    if (headerMatch != null) {
+      return '#L${headerMatch.group(1)}';
+    }
+    final s = tc.arguments['startLine'];
+    final e = tc.arguments['endLine'];
+    if (s != null && e != null) {
+      return '#L$s-$e';
+    }
+    if (tc.output.isNotEmpty) {
+      final lineCount = '\n'.allMatches(tc.output).length;
+      if (lineCount > 1) {
+        return '#L1-$lineCount';
+      }
+    }
+    return null;
+  }
+
+  ({IconData icon, Color color, String? badge}) _fileBadgeFor(String filename) {
+    final ext = p.extension(filename).toLowerCase();
+    switch (ext) {
+      case '.dart':
+        return (
+          icon: Icons.flutter_dash,
+          color: const Color(0xFF38BDF8),
+          badge: null,
+        );
+      case '.js':
+      case '.jsx':
+        return (
+          icon: LucideIcons.file_code,
+          color: const Color(0xFFFACC15),
+          badge: 'JS',
+        );
+      case '.ts':
+      case '.tsx':
+        return (
+          icon: LucideIcons.file_code,
+          color: const Color(0xFF60A5FA),
+          badge: 'TS',
+        );
+      case '.py':
+        return (
+          icon: LucideIcons.file_code,
+          color: const Color(0xFF4ADE80),
+          badge: 'PY',
+        );
+      case '.json':
+      case '.yaml':
+      case '.yml':
+      case '.toml':
+        return (
+          icon: LucideIcons.braces,
+          color: const Color(0xFFF59E0B),
+          badge: null,
+        );
+      case '.md':
+        return (
+          icon: LucideIcons.book_open,
+          color: const Color(0xFFA78BFA),
+          badge: 'MD',
+        );
+      case '.sh':
+        return (
+          icon: LucideIcons.terminal,
+          color: const Color(0xFF22C55E),
+          badge: 'SH',
+        );
+      default:
+        return (
+          icon: LucideIcons.file_code,
+          color: const Color(0xFF38BDF8),
+          badge: null,
+        );
+    }
+  }
+}
+
+class _StepDescriptor {
+  final String verb;
+  final String primaryTarget;
+  final String? lineRange;
+  final IconData icon;
+  final Color iconColor;
+  final String? badgeText;
+  final String? filePath;
+  final bool isMono;
+
+  const _StepDescriptor({
+    required this.verb,
+    required this.primaryTarget,
+    this.lineRange,
+    required this.icon,
+    required this.iconColor,
+    this.badgeText,
+    this.filePath,
+    this.isMono = false,
+  });
 }
 
 class RoxumFileDiffCard extends StatefulWidget {

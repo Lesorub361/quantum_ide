@@ -49,10 +49,90 @@ class RuntimeService extends ChangeNotifier {
   ];
 
   bool _isInitializing = false;
+  bool _useNativeRootMode = false;
+  bool get useNativeRootMode => _useNativeRootMode;
+  bool? _hasRootAccessCache;
+  bool? get hasRootAccessCached => _hasRootAccessCache;
+
+  String get _nativeRootFlagPath =>
+      p.join(_filesDir, 'config', 'native_root_mode.flag');
+
+  /// Checks whether the device has working root access (`su -c id` -> `uid=0`).
+  Future<bool> checkRootAccess({bool forceRefresh = false}) async {
+    if (!Platform.isAndroid) return false;
+    if (!forceRefresh && _hasRootAccessCache != null) {
+      return _hasRootAccessCache!;
+    }
+    for (final suBin in const [
+      'su',
+      '/system/bin/su',
+      '/system/xbin/su',
+      '/sbin/su',
+      '/su/bin/su',
+      '/data/adb/magisk/su',
+      '/data/adb/ksu/bin/su',
+      '/data/adb/ap/bin/su',
+    ]) {
+      try {
+        final res = await Process.run(
+          suBin,
+          ['-c', 'id'],
+        ).timeout(const Duration(seconds: 4));
+        final out = '${res.stdout}${res.stderr}';
+        if (res.exitCode == 0 && out.contains('uid=0')) {
+          _hasRootAccessCache = true;
+          notifyListeners();
+          return true;
+        }
+      } catch (_) {}
+    }
+    _hasRootAccessCache = false;
+    notifyListeners();
+    return false;
+  }
+
+  /// Enables or disables running directly on the device kernel via Root (`su`)
+  /// without downloading or using the Ubuntu PRoot container.
+  Future<void> setUseNativeRootMode(bool enabled) async {
+    _useNativeRootMode = enabled;
+    try {
+      if (Platform.isAndroid && _filesDir.contains('quantum_ide')) {
+        // Ensure config dir exists
+      } else if (Platform.isAndroid) {
+        try {
+          _filesDir = await _channel.invokeMethod('getFilesDir');
+          _nativeLibDir = await _channel.invokeMethod('getNativeLibDir');
+        } catch (_) {}
+      }
+      final flagFile = File(_nativeRootFlagPath);
+      await flagFile.parent.create(recursive: true);
+      if (enabled) {
+        await flagFile.writeAsString('1\n', flush: true);
+      } else if (await flagFile.exists()) {
+        await flagFile.delete();
+      }
+      await _ensureBinaries();
+      if (enabled) {
+        _isInitialized = true;
+        _status = 'Ready (Native Root Kernel)';
+        _progress = 1.0;
+      }
+    } catch (e) {
+      debugPrint('RuntimeService: Failed to toggle native root mode: $e');
+    }
+    notifyListeners();
+  }
 
   Future<bool> isBootstrapComplete() async {
     if (Platform.isAndroid || Platform.isIOS) {
       try {
+        if (_filesDir.isEmpty || !_filesDir.startsWith('/data')) {
+          _filesDir = await _channel.invokeMethod('getFilesDir');
+        }
+        if (File(_nativeRootFlagPath).existsSync()) {
+          _useNativeRootMode = true;
+          return true;
+        }
         final bool? complete = await _channel.invokeMethod('isBootstrapComplete');
         return complete ?? false;
       } catch (_) {
@@ -346,6 +426,15 @@ class RuntimeService extends ChangeNotifier {
         // 2. Always update scripts to ensure they have the latest fixes
         await _ensureBinaries();
 
+        if (File(_nativeRootFlagPath).existsSync()) {
+          _useNativeRootMode = true;
+          _isInitialized = true;
+          _status = 'Ready (Native Root Kernel)';
+          _progress = 1.0;
+          notifyListeners();
+          return;
+        }
+
         // 3. Self-heal a rootfs whose arm64 glibc / ELF interpreter was destroyed
         //    (e.g. an interrupted apt libc6 upgrade). Without it every PRoot start fails with
         //    `execve("/usr/bin/env"): Function not implemented`.
@@ -415,17 +504,40 @@ class RuntimeService extends ChangeNotifier {
     }
   }
 
-  Future<String> runCommand(String command, {String? workingDirectory}) async {
+  /// Translates any hardcoded Android host paths inside a shell command string
+  /// (e.g. `/data/user/0/com.../files/projects/foo`) to their guest equivalents
+  /// (`/root/projects/foo`) when running in PRoot mode.
+  String translateCommandPaths(String command) {
+    if (!Platform.isAndroid || _useNativeRootMode || _filesDir.isEmpty) {
+      return command;
+    }
+    return command
+        .replaceAll('$_filesDir/projects', '/root/projects')
+        .replaceAll(
+          RegExp(r'/data/(?:user/0|data)/[^/\s"'\'']+/files/projects'),
+          '/root/projects',
+        );
+  }
+
+  /// Runs a command and returns structured exit code + stdout/stderr without throwing.
+  Future<({int exitCode, String stdout, String stderr, String combined})>
+      runCommandDetailed(
+    String command, {
+    String? workingDirectory,
+    Duration timeout = const Duration(seconds: 120),
+  }) async {
     await _acquireCommandSlot();
     try {
       if (Platform.isAndroid || Platform.isIOS) {
         if (Platform.isAndroid) {
           final initHost = p.join(_filesDir, 'bin', 'init-host');
           if (await File(initHost).exists()) {
-            final guestCwd = workingDirectory != null 
-                ? PathMapper.mapToGuest(workingDirectory, _filesDir)
-                : '/root';
-            debugPrint('RuntimeService: Running command via init-host: $command in $guestCwd');
+            final guestCwd = workingDirectory != null
+                ? (_useNativeRootMode
+                    ? workingDirectory
+                    : PathMapper.mapToGuest(workingDirectory, _filesDir))
+                : (_useNativeRootMode ? _filesDir : '/root');
+            final translatedCmd = translateCommandPaths(command);
             final result = await Process.run(
               'sh',
               [
@@ -434,23 +546,32 @@ class RuntimeService extends ChangeNotifier {
                 guestCwd,
                 '/bin/bash',
                 '-c',
-                command,
+                translatedCmd,
               ],
             ).timeout(
-              const Duration(seconds: 20),
-              onTimeout: () => ProcessResult(0, -1, '', 'Command timed out after 20s: $command'),
+              timeout,
+              onTimeout: () => ProcessResult(
+                0,
+                124,
+                '',
+                'Command timed out after ${timeout.inSeconds}s: $translatedCmd',
+              ),
             );
-            
-            final output = result.stdout.toString() + result.stderr.toString();
-            if (result.exitCode != 0) {
-              throw Exception('Command failed (exit code ${result.exitCode}): $output');
-            }
-            return output;
+            final outStr = result.stdout.toString();
+            final errStr = result.stderr.toString();
+            return (
+              exitCode: result.exitCode,
+              stdout: outStr,
+              stderr: errStr,
+              combined: '$outStr$errStr',
+            );
           }
         }
-        return await _channel.invokeMethod('runCommand', {'command': command});
+        final out =
+            await _channel.invokeMethod('runCommand', {'command': command});
+        final str = out?.toString() ?? '';
+        return (exitCode: 0, stdout: str, stderr: '', combined: str);
       } else {
-        // Desktop platforms direct execution
         String execCommand = command;
         if (Platform.isWindows) {
           execCommand = execCommand
@@ -458,58 +579,172 @@ class RuntimeService extends ChangeNotifier {
               .replaceAll('>/dev/null', '>nul')
               .replaceAll('cd "', 'cd /d "');
         }
-        debugPrint('RuntimeService: Running command natively: $execCommand in ${workingDirectory ?? 'current'}');
+        final envMap = desktopEnv;
         final result = await Process.run(
           Platform.isWindows ? 'cmd' : 'bash',
           Platform.isWindows ? ['/c', execCommand] : ['-c', execCommand],
           workingDirectory: workingDirectory,
+          environment: envMap,
         ).timeout(
-          const Duration(seconds: 20),
-          onTimeout: () => ProcessResult(0, -1, '', 'Command timed out after 20s: $command'),
+          timeout,
+          onTimeout: () => ProcessResult(
+            0,
+            124,
+            '',
+            'Command timed out after ${timeout.inSeconds}s: $command',
+          ),
         );
-        final output = result.stdout.toString() + result.stderr.toString();
-        if (result.exitCode != 0) {
-           throw Exception('Command failed (exit code ${result.exitCode}): $output');
-        }
-        return output;
+        final outStr = result.stdout.toString();
+        final errStr = result.stderr.toString();
+        return (
+          exitCode: result.exitCode,
+          stdout: outStr,
+          stderr: errStr,
+          combined: '$outStr$errStr',
+        );
       }
-    } catch (e) {
-      debugPrint('Command failed: $command, error: $e');
-
-      rethrow;
     } finally {
       _releaseCommandSlot();
     }
   }
 
-  /// Desktop environment with a PATH that also covers user-local tool dirs
-  /// (~/.local/bin, any ~/.nvm or ~/.config/nvm Node version, ~/.npm-global, cargo).
-  Map<String, String> get desktopEnv {
-    final env = Map<String, String>.from(Platform.environment);
-    final home = env['HOME'] ?? '';
-    final extra = <String>[
-      '$home/.local/bin',
-      '$home/.npm-global/bin',
-      '$home/.cargo/bin',
-      '$home/bin',
+  Future<String> runCommand(
+    String command, {
+    String? workingDirectory,
+    Duration timeout = const Duration(seconds: 90),
+    bool throwOnError = true,
+  }) async {
+    final res = await runCommandDetailed(
+      command,
+      workingDirectory: workingDirectory,
+      timeout: timeout,
+    );
+    if (throwOnError && res.exitCode != 0) {
+      throw Exception(
+        'Command failed (exit code ${res.exitCode}): ${res.combined}',
+      );
+    }
+    return res.combined;
+  }
+
+  List<String>? _cachedDiscoveredSdkDirs;
+
+  /// Automatically scans the host system (Linux, macOS, Windows) for installed
+  /// Flutter, Dart, Java, Gradle, Android SDK, Node, Python, Rust, and Go toolchains.
+  List<String> _discoverDesktopSdkDirs(String home) {
+    if (_cachedDiscoveredSdkDirs != null) return _cachedDiscoveredSdkDirs!;
+    final sep = Platform.pathSeparator;
+    final candidates = <String>[
+      '$home${sep}flutter${sep}bin',
+      '$home${sep}development${sep}flutter${sep}bin',
+      '$home${sep}dev${sep}flutter${sep}bin',
+      '$home${sep}sdk${sep}flutter${sep}bin',
+      '$home${sep}tools${sep}flutter${sep}bin',
+      '$home${sep}fvm${sep}default${sep}bin',
+      '$home$sep.fvm${sep}default${sep}bin',
+      '$home$sep.local${sep}share${sep}flutter${sep}bin',
+      '$home${sep}snap${sep}flutter${sep}common${sep}flutter${sep}bin',
+      '/opt/flutter/bin',
+      '/usr/lib/flutter/bin',
+      '/usr/local/flutter/bin',
+      '/snap/bin',
+      '$home$sep.pub-cache${sep}bin',
+      '$home$sep.local${sep}bin',
+      '$home$sep.npm-global${sep}bin',
+      '$home$sep.cargo${sep}bin',
+      '$home${sep}go${sep}bin',
+      '/usr/local/go/bin',
+      '$home$sep.bun${sep}bin',
+      '$home$sep.volta${sep}bin',
+      '$home$sep.pyenv${sep}shims',
+      '$home$sep.sdkman${sep}candidates${sep}java${sep}current${sep}bin',
+      '$home$sep.sdkman${sep}candidates${sep}gradle${sep}current${sep}bin',
+      '$home${sep}Android${sep}Sdk${sep}cmdline-tools${sep}latest${sep}bin',
+      '$home${sep}Android${sep}Sdk${sep}platform-tools',
+      '/opt/android-sdk/cmdline-tools/latest/bin',
+      '/opt/android-sdk/platform-tools',
+      '$home${sep}bin',
       '/usr/local/lib/nodejs/bin',
       '/usr/local/bin',
-      '/root/.local/bin',
+      '/usr/bin',
+      '/bin',
+      if (Platform.isWindows) ...[
+        r'C:\src\flutter\bin',
+        r'C:\flutter\bin',
+        r'C:\tools\flutter\bin',
+        '$home\\AppData\\Local\\Pub\\Cache\\bin',
+        '$home\\AppData\\Local\\Android\\Sdk\\platform-tools',
+        '$home\\AppData\\Local\\Android\\Sdk\\cmdline-tools\\latest\\bin',
+        '$home\\AppData\\Roaming\\npm',
+      ],
     ];
-    for (final nvmRoot in ['$home/.nvm/versions/node', '$home/.config/nvm/versions/node']) {
+
+    for (final nvmRoot in [
+      '$home/.nvm/versions/node',
+      '$home/.config/nvm/versions/node',
+      '$home/.local/share/fnm/node-versions',
+    ]) {
       try {
         final dir = Directory(nvmRoot);
         if (dir.existsSync()) {
-          final versions = dir.listSync().whereType<Directory>().map((d) => d.path).toList()
+          final versions = dir
+              .listSync()
+              .whereType<Directory>()
+              .map((d) => d.path)
+              .toList()
             ..sort((a, b) => b.compareTo(a));
           for (final v in versions) {
-            extra.add('$v/bin');
+            candidates.add('$v/bin');
+            candidates.add('$v/installation/bin');
           }
         }
       } catch (_) {}
     }
-    final current = env['PATH'] ?? '/usr/local/bin:/usr/bin:/bin';
-    env['PATH'] = [...extra.where((e) => Directory(e).existsSync()), current].join(':');
+
+    // Also scan 1 level deep in $HOME for any custom folder containing flutter/bin
+    if (home.isNotEmpty) {
+      try {
+        final homeDir = Directory(home);
+        if (homeDir.existsSync()) {
+          for (final entity in homeDir.listSync(followLinks: false)) {
+            if (entity is Directory) {
+              final base = p.basename(entity.path);
+              if (base.startsWith('.')) continue;
+              final subFlutter = p.join(entity.path, 'flutter', 'bin');
+              if (Directory(subFlutter).existsSync()) {
+                candidates.insert(0, subFlutter);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    final seen = <String>{};
+    final existing = <String>[];
+    for (final dir in candidates) {
+      if (dir.isNotEmpty && seen.add(dir) && Directory(dir).existsSync()) {
+        existing.add(dir);
+      }
+    }
+    _cachedDiscoveredSdkDirs = existing;
+    return existing;
+  }
+
+  /// Desktop environment with a PATH that automatically includes all discovered
+  /// Flutter, Dart, Android SDK, Node, Python, Rust, and Go toolchains.
+  Map<String, String> get desktopEnv {
+    final env = Map<String, String>.from(Platform.environment);
+    final home = env['HOME'] ?? env['USERPROFILE'] ?? PlatformUtils.userHomeDir;
+    final extra = _discoverDesktopSdkDirs(home);
+    final sep = Platform.isWindows ? ';' : ':';
+    final current = env['PATH'] ?? (Platform.isWindows ? '' : '/usr/local/bin:/usr/bin:/bin');
+    final currentParts = current.split(sep).where((e) => e.isNotEmpty).toList();
+    final merged = <String>[
+      ...extra,
+      ...currentParts.where((c) => !extra.contains(c)),
+    ];
+    env['PATH'] = merged.join(sep);
     env['TERM'] = 'xterm-256color';
     env.putIfAbsent('LANG', () => 'C.UTF-8');
     return env;
@@ -2292,6 +2527,70 @@ PROOT="\$PROOT_LIB_DIR/libproot.so"
 ROOTFS="\$FILES_DIR/rootfs/ubuntu"
 TMPDIR="\$FILES_DIR/tmp"
 CONFIG="\$FILES_DIR/config"
+
+# ── Native Root Kernel Mode (Direct execution on device kernel without Ubuntu PRoot) ──
+if [ -f "\$CONFIG/native_root_mode.flag" ]; then
+    mkdir -p "\$FILES_DIR/projects" "\$TMPDIR" 2>/dev/null || true
+    case "\$GUEST_CWD" in
+        /root/projects/*)
+            REL_P="\${GUEST_CWD#/root/projects/}"
+            NATIVE_CWD="\$FILES_DIR/projects/\$REL_P"
+            mkdir -p "\$NATIVE_CWD" 2>/dev/null || true
+            ;;
+        /root/projects)
+            NATIVE_CWD="\$FILES_DIR/projects"
+            ;;
+        /root)
+            NATIVE_CWD="\$FILES_DIR/projects"
+            ;;
+        /sdcard/*)
+            REL_S="\${GUEST_CWD#/sdcard/}"
+            NATIVE_CWD="/storage/emulated/0/\$REL_S"
+            ;;
+        *)
+            NATIVE_CWD="\$GUEST_CWD"
+            ;;
+    esac
+    [ ! -d "\$NATIVE_CWD" ] && NATIVE_CWD="\$FILES_DIR"
+    NATIVE_PATH="/data/data/com.termux/files/usr/bin:/data/user/0/com.termux/files/usr/bin:/data/user/0/com.agy/files/usr/bin:/data/local/tmp/bin:/data/adb/magisk:/data/adb/ksu/bin:/data/adb/ap/bin:\$FILES_DIR/bin:/system/bin:/system/xbin:/sbin:/vendor/bin"
+    SU_BIN=""
+    for cand in su /system/bin/su /system/xbin/su /sbin/su /su/bin/su /data/adb/magisk/su /data/adb/ksu/bin/su /data/adb/ap/bin/su; do
+        if command -v "\$cand" >/dev/null 2>&1 || [ -x "\$cand" ]; then
+            SU_BIN="\$cand"
+            break
+        fi
+    done
+    SHELL_BIN="/system/bin/sh"
+    for sh_cand in /data/data/com.termux/files/usr/bin/bash /data/user/0/com.agy/files/usr/bin/bash /bin/bash /system/bin/sh; do
+        if [ -x "\$sh_cand" ]; then
+            SHELL_BIN="\$sh_cand"
+            break
+        fi
+    done
+    if [ \$# -gt 2 ]; then
+        shift 2
+        if [ "\$1" = "/bin/bash" ] && [ "\$2" = "-c" ]; then
+            shift 2
+        fi
+        CMD_STR="\$*"
+        if [ -n "\$SU_BIN" ]; then
+            exec "\$SU_BIN" -c "export PATH=\\"\$NATIVE_PATH:\\\$PATH\\" HOME=\\"\$FILES_DIR\\" TMPDIR=\\"\$TMPDIR\\" TERM=xterm-256color; cd \\"\$NATIVE_CWD\\" 2>/dev/null || true; \$CMD_STR"
+        else
+            export PATH="\$NATIVE_PATH:\$PATH" HOME="\$FILES_DIR" TMPDIR="\$TMPDIR" TERM=xterm-256color
+            cd "\$NATIVE_CWD" 2>/dev/null || true
+            exec "\$SHELL_BIN" -c "\$CMD_STR"
+        fi
+    else
+        if [ -n "\$SU_BIN" ]; then
+            exec "\$SU_BIN" -c "export PATH=\\"\$NATIVE_PATH:\\\$PATH\\" HOME=\\"\$FILES_DIR\\" TMPDIR=\\"\$TMPDIR\\" TERM=xterm-256color COLORTERM=truecolor; cd \\"\$NATIVE_CWD\\" 2>/dev/null || true; echo '⚡ QuantumIDE Native Root Kernel Mode (uid=0)'; exec \\"\$SHELL_BIN\\""
+        else
+            export PATH="\$NATIVE_PATH:\$PATH" HOME="\$FILES_DIR" TMPDIR="\$TMPDIR" TERM=xterm-256color COLORTERM=truecolor
+            cd "\$NATIVE_CWD" 2>/dev/null || true
+            echo "⚡ QuantumIDE Native Kernel Shell"
+            exec "\$SHELL_BIN"
+        fi
+    fi
+fi
 
 # Create proc/sys fakes if missing or empty to avoid proot warnings and support ps/top/uptime
 mkdir -p "\$CONFIG/proc_fakes" "\$CONFIG/sys_fakes"

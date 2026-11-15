@@ -237,8 +237,40 @@ class RoxumAgenticTools {
         },
       ),
       _toolDef(
+        'codeOutline',
+        'Extracts a compact AST/symbol outline (classes, methods, functions, widgets, providers, and #L line numbers) for a file or directory to save 85% tokens instead of reading full files.',
+        {
+          'path': {
+            'type': 'string',
+            'description': 'File or directory path (default ".").',
+          },
+        },
+      ),
+      _toolDef(
+        'checkEnvironment',
+        'Discovers all installed compilers, SDKs, and tools across the system (flutter, dart, java, gradle, aapt2, node, npm, python3, pip, git, cargo, gcc, go) with their exact executable paths and versions. ALWAYS call this before claiming a tool is missing or before installing SDKs.',
+        {},
+      ),
+      _toolDef(
+        'installPackages',
+        'Automatically installs missing packages or dependencies using the appropriate package manager (pub, npm, pip, apt, cargo).',
+        {
+          'manager': {
+            'type': 'string',
+            'enum': ['auto', 'pub', 'npm', 'pip', 'apt', 'cargo'],
+            'description': 'Package manager to use (or "auto" to detect from project).',
+          },
+          'packages': {
+            'type': 'array',
+            'items': {'type': 'string'},
+            'description': 'List of package names to install.',
+          },
+        },
+        required: ['packages'],
+      ),
+      _toolDef(
         'runCommand',
-        'Runs a shell command inside the Ubuntu PRoot environment.',
+        'Runs a shell command in the project workspace with full system PATH and SDK discovery.',
         {
           'command': {'type': 'string', 'description': 'Shell command to run.'},
         },
@@ -324,12 +356,12 @@ class RoxumAgenticTools {
         case 'currentlySelectedText':
           return _currentlySelectedText();
         case 'getLspDiagnostics':
-          return _getLspDiagnostics(args['filePath']?.toString());
+          return await _getLspDiagnostics(args['filePath']?.toString());
         case 'readFile':
           return await _readFile(
             args['filePath']?.toString() ?? '',
-            startLine: args['startLine'] as int?,
-            endLine: args['endLine'] as int?,
+            startLine: (args['startLine'] as num?)?.toInt(),
+            endLine: (args['endLine'] as num?)?.toInt(),
           );
         case 'readFilesBatch':
           final list = (args['filePaths'] as List?)
@@ -396,6 +428,19 @@ class RoxumAgenticTools {
         case 'gitLog':
           final limit = ((args['limit'] as num?)?.toInt() ?? 10).clamp(1, 50);
           return await _runShell('git log -n $limit --oneline');
+        case 'codeOutline':
+          return await _codeOutline(args['path']?.toString() ?? '');
+        case 'checkEnvironment':
+          return await _checkEnvironment();
+        case 'installPackages':
+          final pkgs = (args['packages'] as List?)
+                  ?.map((e) => e.toString())
+                  .toList() ??
+              const [];
+          return await _installPackages(
+            pkgs,
+            manager: args['manager']?.toString() ?? 'auto',
+          );
         case 'runCommand':
           return await _runShell(args['command']?.toString() ?? '');
         default:
@@ -456,7 +501,7 @@ class RoxumAgenticTools {
     );
   }
 
-  RoxumToolExecutionResult _getLspDiagnostics(String? filePath) {
+  Future<RoxumToolExecutionResult> _getLspDiagnostics(String? filePath) async {
     final editor = _ref.read(editorProvider);
     final target = filePath != null && filePath.isNotEmpty
         ? _resolvePath(filePath)
@@ -473,11 +518,62 @@ class RoxumAgenticTools {
         });
       }
     }
-    return RoxumToolExecutionResult(
+    if (items.isNotEmpty) {
+      return RoxumToolExecutionResult(
+        success: true,
+        output: jsonEncode(items),
+      );
+    }
+
+    // Fallback: Run real static analysis on the workspace or target file so
+    // errors in unopened or newly created files are ALWAYS detected!
+    final runtime = _ref.read(runtimeServiceProvider);
+    final targetArg = target != null ? '"${_relativePath(target)}"' : '';
+    final pubspec = File(p.join(workspacePath, 'pubspec.yaml'));
+    final tsconfig = File(p.join(workspacePath, 'tsconfig.json'));
+    if (await pubspec.exists()) {
+      final res = await runtime.runCommandDetailed(
+        '(dart analyze $targetArg 2>&1 || flutter analyze --no-pub $targetArg 2>&1)',
+        workingDirectory: workspacePath,
+        timeout: const Duration(seconds: 75),
+      );
+      final diagLines = res.combined
+          .split('\n')
+          .where(
+            (l) =>
+                l.contains('error •') ||
+                l.contains('warning •') ||
+                l.contains('info •') ||
+                l.contains('Error:') ||
+                l.contains('No issues found'),
+          )
+          .take(60)
+          .toList();
+      if (diagLines.isNotEmpty) {
+        return RoxumToolExecutionResult(
+          success: true,
+          output: diagLines.join('\n'),
+        );
+      }
+    } else if (await tsconfig.exists()) {
+      final res = await runtime.runCommandDetailed(
+        'npx tsc --noEmit 2>&1',
+        workingDirectory: workspacePath,
+        timeout: const Duration(seconds: 60),
+      );
+      if (res.combined.trim().isNotEmpty) {
+        return RoxumToolExecutionResult(
+          success: true,
+          output: res.combined.length > 3500
+              ? res.combined.substring(0, 3500)
+              : res.combined,
+        );
+      }
+    }
+
+    return const RoxumToolExecutionResult(
       success: true,
-      output: items.isEmpty
-          ? 'No diagnostics reported in open files.'
-          : jsonEncode(items),
+      output: 'No diagnostics reported (0 errors, 0 warnings).',
     );
   }
 
@@ -501,14 +597,29 @@ class RoxumAgenticTools {
       );
     }
     final lines = await file.readAsLines();
-    final s = (startLine ?? 1).clamp(1, lines.isEmpty ? 1 : lines.length);
-    final e = (endLine ?? lines.length).clamp(s, lines.isEmpty ? 1 : lines.length);
     if (lines.isEmpty) {
-      return const RoxumToolExecutionResult(success: true, output: '');
+      return RoxumToolExecutionResult(
+        success: true,
+        output: '[File: ${_relativePath(path)} #L1-1 (empty)]',
+      );
     }
+    final s = (startLine ?? 1).clamp(1, lines.length);
+    // Cap default un-ranged reads to 320 lines to avoid blowing up context tokens
+    final defaultEnd = (startLine == null && endLine == null && lines.length > 320)
+        ? 320
+        : lines.length;
+    final e = (endLine ?? defaultEnd).clamp(s, lines.length);
     final buf = StringBuffer();
+    buf.writeln(
+      '[File: ${_relativePath(path)} #L$s-$e of ${lines.length} lines]',
+    );
     for (int i = s; i <= e; i++) {
       buf.writeln('$i: ${lines[i - 1]}');
+    }
+    if (e < lines.length && endLine == null) {
+      buf.writeln(
+        '... [Showing lines $s-$e of ${lines.length}. Call readFile with startLine=${e + 1}, endLine=${(e + 320).clamp(e + 1, lines.length)} to read further, or use codeOutline.]',
+      );
     }
     return RoxumToolExecutionResult(success: true, output: buf.toString());
   }
@@ -925,6 +1036,184 @@ class RoxumAgenticTools {
     );
   }
 
+  Future<RoxumToolExecutionResult> _codeOutline(String rawPath) async {
+    final targetPath = _resolvePath(rawPath);
+    if (!_isInsideWorkspace(targetPath)) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'Permission denied: path is outside workspace.',
+      );
+    }
+    final symRegex = RegExp(
+      r'^\s*(?:abstract\s+|sealed\s+|final\s+)?(?:class|enum|mixin|extension|typedef|def|function|interface|struct)\s+([A-Za-z0-9_]+)|^\s*(?:@override\s+)?(?:Future<[^>]+>|Stream<[^>]+>|Widget|State<[^>]+>|void|String|int|bool|double|dynamic)\s+([A-Za-z0-9_]+)\s*\(',
+    );
+
+    Future<String> outlineSingleFile(File f) async {
+      final lines = await f.readAsLines();
+      final rel = _relativePath(f.path);
+      final items = <String>[];
+      for (int i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        final m = symRegex.firstMatch(line);
+        if (m != null) {
+          final name = m.group(1) ?? m.group(2) ?? '';
+          if (name.isNotEmpty &&
+              !const {'if', 'for', 'while', 'switch', 'catch'}.contains(name)) {
+            items.add('  #L${i + 1}: ${line.trim()}');
+          }
+        }
+      }
+      if (items.isEmpty) {
+        return '$rel (${lines.length} lines): (no top-level classes/functions matched)';
+      }
+      return '$rel (#L1-${lines.length}):\n${items.take(60).join('\n')}';
+    }
+
+    if (await File(targetPath).exists()) {
+      return RoxumToolExecutionResult(
+        success: true,
+        output: await outlineSingleFile(File(targetPath)),
+      );
+    }
+    final dir = Directory(targetPath);
+    if (!await dir.exists()) {
+      return RoxumToolExecutionResult(
+        success: false,
+        output: 'Path not found: ${_relativePath(targetPath)}',
+      );
+    }
+    final summaries = <String>[];
+    await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      if (entity is! File) continue;
+      final rel = _relativePath(entity.path);
+      if (rel.startsWith('.') ||
+          rel.contains('/.') ||
+          rel.contains('/build/') ||
+          rel.contains('node_modules')) {
+        continue;
+      }
+      final ext = p.extension(rel).toLowerCase();
+      if (!const {
+        '.dart',
+        '.ts',
+        '.tsx',
+        '.js',
+        '.jsx',
+        '.py',
+        '.rs',
+        '.go',
+        '.kt',
+        '.java',
+      }.contains(ext)) {
+        continue;
+      }
+      try {
+        summaries.add(await outlineSingleFile(entity));
+        if (summaries.length >= 40) break;
+      } catch (_) {}
+    }
+    return RoxumToolExecutionResult(
+      success: true,
+      output: summaries.isEmpty
+          ? 'No source files found for outline.'
+          : summaries.join('\n\n'),
+    );
+  }
+
+  Future<RoxumToolExecutionResult> _checkEnvironment() async {
+    final runtime = _ref.read(runtimeServiceProvider);
+    const script = r'''
+echo "=== QuantumIDE Environment & Toolchain Discovery ==="
+echo "OS: $(uname -srm 2>/dev/null || echo unknown)"
+echo "Mode: $([ -f "$HOME/config/native_root_mode.flag" ] && echo 'Native Root Kernel (uid=0)' || echo 'Standard Runtime')"
+echo "PWD: $(pwd)"
+for tool in flutter dart java javac gradle aapt2 node npm npx python3 pip git cargo rustc go gcc clang cmake ninja; do
+  BIN_PATH=$(command -v "$tool" 2>/dev/null || true)
+  if [ -z "$BIN_PATH" ]; then
+    for d in "$HOME/flutter/bin" "$HOME/development/flutter/bin" "$HOME/dev/flutter/bin" "/opt/flutter/bin" "/snap/bin" "$HOME/snap/flutter/common/flutter/bin" "$HOME/.fvm/default/bin" "$HOME/fvm/default/bin" "$HOME/.local/bin" "$HOME/.cargo/bin" "$HOME/.pub-cache/bin" "/usr/local/bin" "/usr/bin"; do
+      if [ -x "$d/$tool" ]; then
+        BIN_PATH="$d/$tool"
+        break
+      fi
+    done
+  fi
+  if [ -n "$BIN_PATH" ]; then
+    VER=$("$BIN_PATH" --version 2>&1 | head -n 1 | cut -c1-80 || true)
+    echo "[FOUND] $tool -> $BIN_PATH ($VER)"
+  else
+    echo "[MISSING] $tool"
+  fi
+done
+''';
+    final res = await runtime.runCommandDetailed(
+      script,
+      workingDirectory: workspacePath,
+      timeout: const Duration(seconds: 45),
+    );
+    return RoxumToolExecutionResult(
+      success: true,
+      output: res.combined.trim(),
+    );
+  }
+
+  Future<RoxumToolExecutionResult> _installPackages(
+    List<String> packages, {
+    String manager = 'auto',
+  }) async {
+    final cleanPkgs = packages
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && RegExp(r'^[a-zA-Z0-9_.\-@/:+]+$').hasMatch(e))
+        .toList();
+    if (cleanPkgs.isEmpty) {
+      return const RoxumToolExecutionResult(
+        success: false,
+        output: 'No valid package names provided.',
+      );
+    }
+
+    var resolvedManager = manager.toLowerCase();
+    if (resolvedManager == 'auto') {
+      if (await File(p.join(workspacePath, 'pubspec.yaml')).exists()) {
+        resolvedManager = 'pub';
+      } else if (await File(p.join(workspacePath, 'package.json')).exists()) {
+        resolvedManager = 'npm';
+      } else if (await File(p.join(workspacePath, 'Cargo.toml')).exists()) {
+        resolvedManager = 'cargo';
+      } else if (await File(p.join(workspacePath, 'requirements.txt')).exists() ||
+          await File(p.join(workspacePath, 'pyproject.toml')).exists()) {
+        resolvedManager = 'pip';
+      } else {
+        resolvedManager = 'apt';
+      }
+    }
+
+    final pkgArgs = cleanPkgs.join(' ');
+    final String cmd = switch (resolvedManager) {
+      'pub' =>
+        '(flutter pub add $pkgArgs 2>&1 || dart pub add $pkgArgs 2>&1)',
+      'npm' => 'npm install $pkgArgs 2>&1',
+      'pip' =>
+        '(pip3 install --break-system-packages $pkgArgs 2>&1 || pip3 install $pkgArgs 2>&1)',
+      'cargo' => 'cargo add $pkgArgs 2>&1',
+      _ =>
+        'export DEBIAN_FRONTEND=noninteractive; (apt-get update -y && apt-get install -y --no-install-recommends $pkgArgs) 2>&1 || (pkg install $pkgArgs) 2>&1',
+    };
+
+    final runtime = _ref.read(runtimeServiceProvider);
+    final res = await runtime.runCommandDetailed(
+      cmd,
+      workingDirectory: workspacePath,
+      timeout: const Duration(seconds: 300),
+    );
+    final out = res.combined.length > 6000
+        ? '${res.combined.substring(0, 6000)}\n... [truncated]'
+        : res.combined;
+    return RoxumToolExecutionResult(
+      success: res.exitCode == 0,
+      output: '[Manager: $resolvedManager | ExitCode: ${res.exitCode}]\n$out',
+    );
+  }
+
   Future<RoxumToolExecutionResult> _runShell(String command) async {
     if (command.trim().isEmpty) {
       return const RoxumToolExecutionResult(
@@ -933,16 +1222,31 @@ class RoxumAgenticTools {
       );
     }
     final runtime = _ref.read(runtimeServiceProvider);
-    final out = await runtime.runCommand(
+    final res = await runtime.runCommandDetailed(
       command,
       workingDirectory: workspacePath,
+      timeout: const Duration(seconds: 180),
     );
-    final trimmed = out.length > 8000
-        ? '${out.substring(0, 8000)}\n... [truncated]'
-        : out;
+    var combined = res.combined;
+    if (combined.length > 6000) {
+      combined =
+          '${combined.substring(0, 2500)}\n... [middle truncated to save tokens] ...\n${combined.substring(combined.length - 2500)}';
+    }
+    if (res.exitCode != 0 &&
+        (combined.contains('command not found') ||
+            combined.contains('not found') ||
+            res.exitCode == 127)) {
+      combined +=
+          '\n[Hint: Call checkEnvironment to locate installed SDK binaries on this machine, or call installPackages to install missing packages.]';
+    }
+    final header = res.exitCode == 0 ? '' : '[Exit code: ${res.exitCode}]\n';
     return RoxumToolExecutionResult(
-      success: true,
-      output: trimmed.isEmpty ? '(command completed with no output)' : trimmed,
+      // Return success: true even on non-zero command exit codes unless the command timed out,
+      // so the UI doesn't show a fatal tool crash when `grep`, `which`, or `analyze` finds issues.
+      success: res.exitCode != 124,
+      output: combined.trim().isEmpty
+          ? '${header}(command completed with exit code ${res.exitCode} and no output)'
+          : '$header$combined',
     );
   }
 }

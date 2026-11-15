@@ -87,6 +87,8 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
   final Set<DevStack> _selectedStacks = {DevStack.web, DevStack.python};
   bool _isChecking = true;
   bool _isMigrating = false;
+  bool _useNativeRootKernel = false;
+  bool _hasRootAccess = false;
   String? _migrationError;
   Map<String, String>? _upgradeEnv;
   final List<String> _logLines = [];
@@ -115,11 +117,15 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
       return;
     }
 
-    // Check if rootfs already exists on disk
+    if (Platform.isAndroid) {
+      _hasRootAccess = await runtime.checkRootAccess();
+    }
+
+    // Check if rootfs already exists on disk or Native Root Mode is active
     final isComplete = await runtime.isBootstrapComplete();
     if (isComplete) {
       await runtime.init();
-      if (Platform.isAndroid || Platform.isIOS) {
+      if ((Platform.isAndroid || Platform.isIOS) && !runtime.useNativeRootMode) {
         final env = await runtime.inspectEnvironment();
         if (env['needsUpgrade'] == 'true' && mounted) {
           setState(() {
@@ -145,17 +151,33 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
   }
 
   Future<void> _startBootstrap() async {
+    final runtime = ref.read(runtimeServiceProvider);
+
+    if (_useNativeRootKernel && Platform.isAndroid) {
+      setState(() {
+        _currentStep = 1;
+      });
+      _addLog('Включение режима прямого запуска на ядре устройства (Root Mode)...');
+      await runtime.setUseNativeRootMode(true);
+      await runtime.init();
+      _addLog('✓ Среда нативного ядра готова без скачивания Ubuntu.');
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted) {
+        _finishBootstrap();
+      }
+      return;
+    }
+
     setState(() {
       _currentStep = 1;
     });
-
-    final runtime = ref.read(runtimeServiceProvider);
 
     _addLog('Checking device architecture: ${Platform.operatingSystem} ${Platform.version.split(' ').first}');
     _addLog('Selected dev stacks: ${_selectedStacks.map((s) => s.name).join(', ')}');
 
     try {
       _addLog('Initializing QuantumIDE runtime environment...');
+      await runtime.setUseNativeRootMode(false);
       await runtime.init();
 
       if (!runtime.isInitialized) {
@@ -505,52 +527,204 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
               children: [
                 Icon(LucideIcons.cpu, size: 16, color: theme.colorScheme.primary),
                 const SizedBox(width: 10),
-                Text(
-                  'Environment: ${Platform.operatingSystem.toUpperCase()} · Rootfs Ubuntu 24.04 ready',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: theme.colorScheme.onSurfaceVariant,
+                Expanded(
+                  child: Text(
+                    _useNativeRootKernel
+                        ? 'Режим: Прямой запуск на ядре устройства (Root / Без Ubuntu)'
+                        : 'Environment: ${Platform.operatingSystem.toUpperCase()} · Rootfs Ubuntu 24.04 ready',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
-                const Spacer(),
                 Icon(LucideIcons.badge_check, size: 16, color: Colors.greenAccent.shade400),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 18),
 
-          Text(
-            'Select Development Stacks',
-            style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: theme.colorScheme.onSurface,
+          if (Platform.isAndroid) ...[
+            Text(
+              'Режим работы ядра (Execution Mode)',
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'В образ уже вшиты: Git, Node.js, Python 3, Clang/CMake, JDK 17 и Flutter. Выберите, что нужно доустановить (уже установленное пропустится автоматически):',
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // DevStack cards
-          for (final stack in DevStack.values) ...[
-            _buildStackCard(theme, stack),
             const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => setState(() => _useNativeRootKernel = false),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: !_useNativeRootKernel
+                            ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: !_useNativeRootKernel
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+                          width: !_useNativeRootKernel ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                LucideIcons.box,
+                                size: 16,
+                                color: !_useNativeRootKernel
+                                    ? theme.colorScheme.primary
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Ubuntu 24.04 (PRoot)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Скачивание контейнера Ubuntu (не требует Root)',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () async {
+                      final hasRoot = await ref
+                          .read(runtimeServiceProvider)
+                          .checkRootAccess(forceRefresh: true);
+                      if (!mounted) return;
+                      setState(() {
+                        _hasRootAccess = hasRoot;
+                        _useNativeRootKernel = true;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _useNativeRootKernel
+                            ? const Color(0xFF22C55E).withValues(alpha: 0.14)
+                            : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _useNativeRootKernel
+                              ? const Color(0xFF22C55E)
+                              : theme.colorScheme.outlineVariant.withValues(alpha: 0.2),
+                          width: _useNativeRootKernel ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                LucideIcons.zap,
+                                size: 16,
+                                color: _useNativeRootKernel
+                                    ? const Color(0xFF22C55E)
+                                    : Colors.amberAccent,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Своё ядро (Root)',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _hasRootAccess
+                                ? '✓ Root активен: запуск без скачивания Ubuntu'
+                                : 'Напрямую на ядре устройства без скачивания Ubuntu',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: _hasRootAccess
+                                  ? const Color(0xFF22C55E)
+                                  : theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
           ],
-          const SizedBox(height: 24),
+
+          if (!_useNativeRootKernel) ...[
+            Text(
+              'Select Development Stacks',
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'В образ уже вшиты: Git, Node.js, Python 3, Clang/CMake, JDK 17 и Flutter. Выберите, что нужно доустановить (уже установленное пропустится автоматически):',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // DevStack cards
+            for (final stack in DevStack.values) ...[
+              _buildStackCard(theme, stack),
+              const SizedBox(height: 8),
+            ],
+            const SizedBox(height: 24),
+          ],
 
           // Next Button
           ElevatedButton(
             onPressed: _startBootstrap,
             style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: theme.colorScheme.onPrimary,
+              backgroundColor: _useNativeRootKernel
+                  ? const Color(0xFF22C55E)
+                  : theme.colorScheme.primary,
+              foregroundColor: _useNativeRootKernel
+                  ? Colors.black
+                  : theme.colorScheme.onPrimary,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -558,7 +732,9 @@ class _BootstrapPageState extends ConsumerState<BootstrapPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  'Install & Launch Runtime',
+                  _useNativeRootKernel
+                      ? 'Запустить на своём ядре (Без скачивания Ubuntu)'
+                      : 'Install & Launch Runtime',
                   style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 8),

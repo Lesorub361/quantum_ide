@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:quantum_ide/core/services/mcp_service.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/talker_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
@@ -474,17 +475,20 @@ class RoxumChatNotifier extends Notifier<RoxumChatState> {
     state = state.copyWith(isGenerating: true, selectedModelId: model.id);
 
     final workspace = ref.read(workspaceProvider).currentPath ?? '';
+    final runtime = ref.read(runtimeServiceProvider);
+    final guestWorkspace = runtime.toProotPath(workspace);
     final activeFilePath = ref.read(editorProvider).activeFilePath;
     final systemPrompt = state.chatMode == RoxumChatMode.agent
-        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace via function/tool calls '
-            '(readFile, writeFile, editFile, listFiles, grepInFiles, runCommand, getLspDiagnostics, gitStatus, and MCP tools). '
-            'Workspace root: "$workspace". '
+        ? 'You are Roxum Agent inside QuantumIDE with FULL direct access to the user\'s workspace and shell via tool calls '
+            '(readFile, codeOutline, writeFile, editFile, listFiles, grepInFiles, runCommand, checkEnvironment, installPackages, getLspDiagnostics, gitStatus, and MCP tools). '
+            'Workspace root: "$workspace"${guestWorkspace != workspace ? ' (in shell/terminal mapped to "$guestWorkspace")' : ''}. '
             '${activeFilePath != null ? 'Active editor file: "$activeFilePath". ' : ''}'
-            'Work in clear stages: '
-            '1) Briefly state your 1-2 sentence plan, then immediately call tools to inspect the relevant files. '
-            '2) Apply edits with writeFile/editFile and verify with diagnostics or commands if needed. '
-            '3) Finish with a clean summary of what you actually changed and verified. '
-            'IMPORTANT: NEVER say you cannot access files or run commands, and NEVER claim you edited a file unless you actually called writeFile/editFile. '
+            'CRITICAL RULES FOR HIGH EFFICIENCY & ACCURACY:\n'
+            '1) TOKEN SAVING: For unfamiliar or large files, call `codeOutline` or `grepInFiles` first, then `readFile` with `startLine` and `endLine` instead of reading entire large files repeatedly.\n'
+            '2) ENVIRONMENT & SDKS: NEVER assume `flutter`, `dart`, `node`, `python`, `java`, or `git` is missing and NEVER try to manually download huge SDK tarballs via curl unless `checkEnvironment` proves it is absent. Always call `checkEnvironment` first to see exact installed SDK paths and versions.\n'
+            '3) INSTALLING PACKAGES: If a project or system dependency is missing, install it directly using `installPackages` (supports apt, npm, pip, pub, cargo) or `runCommand`.\n'
+            '4) REAL VERIFICATION: After creating or editing files, ALWAYS call `getLspDiagnostics` (which runs both open-tab LSP and project-wide `dart analyze` / `flutter analyze` / `tsc`) to see all real errors and fix them before finishing.\n'
+            '5) HONESTY: NEVER claim you ran a command, installed an SDK, or edited a file unless you actually invoked the corresponding tool call in this turn.\n'
             'Respond in the user\'s language.'
         : 'You are a helpful coding assistant inside QuantumIDE. '
             '${activeFilePath != null ? 'Active file: "$activeFilePath". ' : ''}'

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:path/path.dart' as p;
 import 'package:quantum_ide/core/services/mcp_service.dart';
+import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/services/workspace_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
@@ -1301,6 +1302,8 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
                 toolCalls: turn.toolCalls,
                 surfaceColor: surfaceColor,
                 textColor: textColor,
+                onOpenFile: (fp) =>
+                    ref.read(editorProvider.notifier).openFile(fp),
               ),
             if (turn.fileEdits.isNotEmpty)
               ...turn.fileEdits.map(
@@ -1351,6 +1354,7 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
             toolCalls: batch,
             surfaceColor: surfaceColor,
             textColor: textColor,
+            onOpenFile: (fp) => ref.read(editorProvider.notifier).openFile(fp),
           ),
         );
         continue;
@@ -1423,39 +1427,21 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
     required Color surfaceColor,
     required Color textColor,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(top: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFF38BDF8).withValues(alpha: 0.25),
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Color(0xFF38BDF8),
-            ),
-          ),
-          const SizedBox(width: 8),
           Text(
-            isToolRunning
-                ? AppLocalizations.of(context)!.runningAgentStep
-                : AppLocalizations.of(context)!.generatingResponse,
+            'Working',
             style: TextStyle(
-              fontSize: 12,
-              color: textColor.withValues(alpha: 0.8),
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: textColor.withValues(alpha: 0.72),
             ),
           )
               .animate(onPlay: (c) => c.repeat())
-              .shimmer(duration: 1200.ms, color: const Color(0xFF38BDF8)),
+              .shimmer(duration: 1300.ms, color: textColor),
         ],
       ),
     );
@@ -1659,36 +1645,58 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
   }
 
   Widget _buildTurnFooter(RoxumConversationTurn turn, Color textColor) {
+    final hitStepLimit = turn.aiResponse.contains('Достигнут лимит шагов');
     return Padding(
       padding: const EdgeInsets.only(top: 4, left: 4, right: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (turn.usage.totalTokens > 0)
-            Text(
-              '↓${turn.usage.promptTokens} · ↑${turn.usage.completionTokens}${turn.usage.costUsd > 0 ? ' · \$${turn.usage.costUsd.toStringAsFixed(4)}' : ''}',
-              style: TextStyle(
-                fontSize: 10.5,
-                color: textColor.withValues(alpha: 0.45),
-              ),
-            )
-          else
-            const SizedBox.shrink(),
-          InkWell(
-            onTap: () {
-              Clipboard.setData(ClipboardData(text: turn.aiResponse));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Ответ скопирован'),
-                  duration: Duration(seconds: 1),
+          if (hitStepLimit)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: FilledButton.tonalIcon(
+                onPressed: () {
+                  ref.read(roxumChatProvider.notifier).sendPrompt(
+                        'Продолжи выполнение задачи с того места, где остановился, и доведи её до конца.',
+                      );
+                },
+                icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                label: const Text(
+                  'Продолжить выполнение',
+                  style: TextStyle(fontSize: 12),
                 ),
-              );
-            },
-            child: Icon(
-              Icons.copy_outlined,
-              size: 14,
-              color: textColor.withValues(alpha: 0.5),
+              ),
             ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              if (turn.usage.totalTokens > 0)
+                Text(
+                  '↓${turn.usage.promptTokens} · ↑${turn.usage.completionTokens}${turn.usage.costUsd > 0 ? ' · \$${turn.usage.costUsd.toStringAsFixed(4)}' : ''}',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: textColor.withValues(alpha: 0.45),
+                  ),
+                )
+              else
+                const SizedBox.shrink(),
+              InkWell(
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: turn.aiResponse));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Ответ скопирован'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                },
+                child: Icon(
+                  Icons.copy_outlined,
+                  size: 14,
+                  color: textColor.withValues(alpha: 0.5),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1822,52 +1830,97 @@ class _RoxumChatPanelState extends ConsumerState<RoxumChatPanel> {
       builder: (sheetCtx) {
         return DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.65,
-          maxChildSize: 0.9,
+          initialChildSize: 0.7,
+          maxChildSize: 0.92,
           builder: (_, scrollCtrl) {
-            return Consumer(
-              builder: (context, innerRef, _) {
-                final liveState = innerRef.watch(roxumChatProvider);
-                return Column(
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.all(14),
-                      child: Text(
-                        'Инструменты Roxum Agent',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
+            return StatefulBuilder(
+              builder: (context, setSheetState) {
+                return Consumer(
+                  builder: (context, innerRef, _) {
+                    final liveState = innerRef.watch(roxumChatProvider);
+                    final runtime = innerRef.read(runtimeServiceProvider);
+                    return Column(
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.all(14),
+                          child: Text(
+                            'Инструменты и Ядро Roxum Agent',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: ListView.builder(
-                        controller: scrollCtrl,
-                        itemCount: agenticToolSpecs.length,
-                        itemBuilder: (_, i) {
-                          final spec = agenticToolSpecs[i];
-                          final enabled =
-                              liveState.toolSelections[spec.name] ?? true;
-                          return SwitchListTile(
-                            value: enabled,
-                            onChanged: (v) => innerRef
-                                .read(roxumChatProvider.notifier)
-                                .toggleTool(spec.name, v),
-                            title: Text(
-                              spec.label,
-                              style: const TextStyle(fontSize: 13.5),
+                        const Divider(height: 1),
+                        if (Platform.isAndroid) ...[
+                          SwitchListTile(
+                            value: runtime.useNativeRootMode,
+                            onChanged: (val) async {
+                              if (val) {
+                                final ok = await runtime.checkRootAccess();
+                                if (!ok && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Root-доступ (su) не обнаружен, но режим Своего ядра включён.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              }
+                              await runtime.setUseNativeRootMode(val);
+                              setSheetState(() {});
+                            },
+                            secondary: const Icon(
+                              Icons.bolt_rounded,
+                              color: Color(0xFF22C55E),
+                            ),
+                            title: const Text(
+                              'Своё ядро (Root — без скачивания Ubuntu)',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                             subtitle: Text(
-                              spec.description,
+                              runtime.useNativeRootMode
+                                  ? 'Активно: команды и терминал работают напрямую на ядре устройства (Root/su)'
+                                  : 'Выключено: используется песочница Ubuntu 24.04 (PRoot)',
                               style: const TextStyle(fontSize: 11.5),
                             ),
                             dense: true,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                          ),
+                          const Divider(height: 1),
+                        ],
+                        Expanded(
+                          child: ListView.builder(
+                            controller: scrollCtrl,
+                            itemCount: agenticToolSpecs.length,
+                            itemBuilder: (_, i) {
+                              final spec = agenticToolSpecs[i];
+                              final enabled =
+                                  liveState.toolSelections[spec.name] ?? true;
+                              return SwitchListTile(
+                                value: enabled,
+                                onChanged: (v) => innerRef
+                                    .read(roxumChatProvider.notifier)
+                                    .toggleTool(spec.name, v),
+                                title: Text(
+                                  spec.label,
+                                  style: const TextStyle(fontSize: 13.5),
+                                ),
+                                subtitle: Text(
+                                  spec.description,
+                                  style: const TextStyle(fontSize: 11.5),
+                                ),
+                                dense: true,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             );

@@ -699,7 +699,7 @@ class RoxumAiClient {
     _client = client;
 
     final messages = List<Map<String, dynamic>>.from(historyMessages);
-    const maxIterations = 16;
+    const maxIterations = 48;
     var executedAnyTool = false;
     var nudgedHallucination = false;
 
@@ -707,6 +707,8 @@ class RoxumAiClient {
       for (int step = 0; step < maxIterations; step++) {
         if (isCancelled()) return '';
         onStepStart?.call(step);
+
+        _compactMessagesForTokenSavings(messages);
 
         final payload = _buildPayload(
           model: model,
@@ -731,7 +733,7 @@ class RoxumAiClient {
                 headers: model.headers,
                 body: jsonEncode(payload),
               )
-              .timeout(const Duration(seconds: 90));
+              .timeout(const Duration(seconds: 120));
 
           if (isCancelled()) return '';
 
@@ -810,11 +812,33 @@ class RoxumAiClient {
           });
         }
       }
-      return 'Достигнут лимит шагов агента (16).';
+      return 'Достигнут лимит шагов агента (48). Нажмите «Продолжить выполнение», чтобы завершить задачу.';
     } finally {
       if (_client == client) {
         _client?.close();
         _client = null;
+      }
+    }
+  }
+
+  /// Compacts older tool outputs in-place so multi-step agent loops do not
+  /// re-send huge file reads or command outputs on every subsequent turn.
+  void _compactMessagesForTokenSavings(List<Map<String, dynamic>> messages) {
+    if (messages.length <= 8) return;
+    final cutoff = messages.length - 6;
+    for (int i = 1; i < cutoff; i++) {
+      final msg = messages[i];
+      if (msg['role'] == 'tool') {
+        final content = msg['content']?.toString() ?? '';
+        if (content.length > 900 && !content.contains('[compacted tool output:')) {
+          final head = content.substring(0, 420);
+          final tail = content.substring(content.length - 220);
+          messages[i] = {
+            ...msg,
+            'content':
+                '$head\n...[compacted tool output: ${content.length} chars total to save tokens]...\n$tail',
+          };
+        }
       }
     }
   }
