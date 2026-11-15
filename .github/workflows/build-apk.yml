@@ -142,14 +142,13 @@ jobs:
           sed -i '/org.gradle.jvmargs/d' android/gradle.properties
           sed -i '/kotlin.compiler.execution.strategy/d' android/gradle.properties
           sed -i '/android.aapt2FromMavenOverride/d' android/gradle.properties
-          sed -i 's/org.gradle.daemon=false/org.gradle.daemon=true/g' android/gradle.properties
-          sed -i 's/org.gradle.parallel=false/org.gradle.parallel=true/g' android/gradle.properties
-          sed -i 's/org.gradle.workers.max=.*/org.gradle.workers.max=4/g' android/gradle.properties
-          sed -i 's/android.aapt2FromMaven=false/android.aapt2FromMaven=true/g' android/gradle.properties
+          sed -i 's/org.gradle.daemon=true/org.gradle.daemon=false/g' android/gradle.properties
+          sed -i 's/org.gradle.parallel=true/org.gradle.parallel=false/g' android/gradle.properties
+          sed -i 's/org.gradle.workers.max=.*/org.gradle.workers.max=1/g' android/gradle.properties
+          sed -i 's/android.aapt2FromMaven=true/android.aapt2FromMaven=false/g' android/gradle.properties
           cat << 'EOF' >> android/gradle.properties
-          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
-          kotlin.compiler.execution.strategy=daemon
-          kotlin.daemon.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+          org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8
+          kotlin.compiler.execution.strategy=in-process
           EOF
           echo "=== Effective android/gradle.properties for CI ==="
           cat android/gradle.properties
