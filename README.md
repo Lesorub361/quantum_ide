@@ -11,7 +11,7 @@
 [![Build iOS](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-ios.yml)
 [![Build Web](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml/badge.svg)](https://github.com/Lesorub361/quantum_ide/actions/workflows/build-web.yml)
 
-**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.239`](https://github.com/Lesorub361/quantum_ide/releases/latest)
+**Основная ветка разработки:** `flutter-3.50` · **Релизы:** [`v1.2.240`](https://github.com/Lesorub361/quantum_ide/releases/latest)
 
 </div>
 
@@ -52,7 +52,7 @@ QuantumIDE собирается автоматически через GitHub Act
 ### 💻 Терминал нового поколения (Conduit Engine) и Root-режим без скачивания Ubuntu
 - **Движок [`conduit_vt`](packages/conduit_vt)**: быстрый рендеринг VT-последовательностей, кликабельные ссылки (`Ctrl+клик` / одиночный тап по URL), автокопирование при выделении и **экранная лупа (magnifier)** на мобильных экранах.
 - **Режим Native Root Kernel (`su` без скачивания Ubuntu)**: если на Android-устройстве есть Root-права (**Magisk / KernelSU / APatch**), пользователь может включить работу **напрямую на своём ядре Linux/Android** без скачивания архива Ubuntu 24.04 и без прослойки PRoot — с максимальной скоростью ввода-вывода и прямым доступом к оборудованию.
-- **Ubuntu 24.04 PRoot Sandbox (для устройств без Root)**: полноценная Linux-среда на Android с GLIBC 2.39, автообновлением rootfs и приветствием `term-fetch`.
+- **Ubuntu 24.04 PRoot Sandbox (для устройств без Root)**: полноценная Linux-среда на Android с GLIBC 2.39, автообновлением rootfs, сверхбыстрыми пакетными менеджерами **`uv`** (Python), **`bun`** (ARM64 JS/TS) и **`pnpm`**, а также приветствием `term-fetch`.
 - **Нативная работа с путями на всех ОС (Android, Linux, Windows, macOS)**:
   - На **ПК (Linux / Windows / macOS)** проекты при импорте открываются **мгновенно в своей родной папке** (in-place, без копирования в `.quantum_ide/projects`), а при создании нового проекта доступна видимая папка `~/QuantumIDEProjects` и выбор любой директории через **«Обзор...»**.
   - На карточках проектов отображается полный путь на диске и кнопка **«Показать в файловом менеджере»**.

@@ -1413,7 +1413,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '33';
+    const bashrcVersion = '34';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -1447,7 +1447,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=33
+# BASHRC_VERSION=34
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -1474,7 +1474,7 @@ if [ -d "$JAVA_HOME" ] && ! grep -q "$JAVA_HOME" /root/.config/flutter/settings 
         python3 -c "import json; p='/root/.config/flutter/settings'; d=json.load(open(p)) if open(p).read().strip() else {}; d['jdk-dir']='$JAVA_HOME'; json.dump(d, open(p, 'w'))" 2>/dev/null || true
     fi
 fi
-export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
+export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.bun/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 
 # Auto-detect terminal capability and heal missing terminfo
 [ -d /lib/terminfo ] && [ ! -d /usr/share/terminfo/x ] && ln -sf /lib/terminfo/* /usr/share/terminfo/ 2>/dev/null || true
@@ -1905,7 +1905,7 @@ fi
 if command -v flutter >/dev/null 2>&1 && [ -d "$JAVA_HOME" ]; then
     flutter config --jdk-dir="$JAVA_HOME" >/dev/null 2>&1 || true
 fi
-export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
+export PATH=$JAVA_HOME/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.bun/bin:/usr/local/bin:/usr/local/lib/nodejs/bin:/root/.local/bin:$PATH
 export TERM=xterm-256color
 export COLORTERM=truecolor
 export LANG=C.UTF-8
@@ -2507,7 +2507,9 @@ make_bar() {
 RUNTIMES=""
 command -v flutter >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Flutter "
 command -v node >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Node.js "
+command -v bun >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Bun "
 command -v python3 >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Python "
+command -v uv >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}uv "
 command -v rustc >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Rust "
 command -v clang >/dev/null 2>&1 && RUNTIMES="${RUNTIMES}Clang "
 [ -z "$RUNTIMES" ] && RUNTIMES="Linux Core"
@@ -2764,7 +2766,7 @@ fi
 export PROOT_LOADER="\$PROOT_LIB_DIR/libprootloader.so"
 export PROOT_LOADER_32="\$PROOT_LIB_DIR/libprootloader32.so"
 export LD_LIBRARY_PATH="\$FILES_DIR/lib:\$PROOT_LIB_DIR"
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin:\$PATH"
+export PATH="/usr/local/sbin:/usr/local/bin:/root/.bun/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin:\$PATH"
 
 # Prefer /root/jdk-17, Java 17, or Java 21 if available
 if [ -d "\$ROOTFS/root/jdk-17" ]; then
@@ -3150,7 +3152,7 @@ fi
       'ANDROID_HOME': '/root/android-sdk',
       'ANDROID_SDK_ROOT': '/root/android-sdk',
       'PATH':
-          '/usr/local/sbin:/usr/local/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin',
+          '/usr/local/sbin:/usr/local/bin:/root/.bun/bin:/usr/local/lib/nodejs/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/android-sdk/cmdline-tools/latest/bin:/root/android-sdk/platform-tools:/root/flutter/bin:/root/.local/bin',
       'JAVA_HOME': _detectedJavaHome,
       'FLUTTER_ROOT': '/root/flutter',
       'USER': 'root',
@@ -3822,7 +3824,36 @@ if ! command -v jq >/dev/null 2>&1 || ! command -v tree >/dev/null 2>&1 || ! com
     ln -sf /usr/bin/batcat /usr/bin/bat 2>/dev/null || true
     corepack enable 2>/dev/null || true
     if ! command -v lazygit >/dev/null 2>&1; then
-        (curl -sSL "https://github.com/jesseduffield/lazygit/releases/download/v0.66.2/lazygit_0.66.2_linux_arm64.tar.gz" | tar -xz -C /tmp && mv /tmp/lazygit /usr/local/bin/lazygit && chmod +x /usr/local/bin/lazygit) 2>/dev/null || true
+        (curl -sSL --connect-timeout 10 --max-time 60 "https://github.com/jesseduffield/lazygit/releases/download/v0.66.2/lazygit_0.66.2_linux_arm64.tar.gz" | tar -xz -C /tmp && mv /tmp/lazygit /usr/local/bin/lazygit && chmod +x /usr/local/bin/lazygit) 2>/dev/null || true
+    fi
+fi
+
+# Ensure ultra-fast modern package managers: uv (Python), bun (JS/TS ARM64), and pnpm
+if ! command -v uv >/dev/null 2>&1; then
+    (
+        curl -LsSf --connect-timeout 10 --max-time 60 https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+    ) >/dev/null 2>&1 || pip3 install --break-system-packages -q uv >/dev/null 2>&1 || true
+    [ -x /root/.local/bin/uv ] && [ ! -e /usr/local/bin/uv ] && ln -sf /root/.local/bin/uv /usr/local/bin/uv 2>/dev/null || true
+    [ -x /root/.local/bin/uvx ] && [ ! -e /usr/local/bin/uvx ] && ln -sf /root/.local/bin/uvx /usr/local/bin/uvx 2>/dev/null || true
+fi
+
+if ! command -v bun >/dev/null 2>&1; then
+    (
+        export BUN_INSTALL=/root/.bun
+        curl -fsSL --connect-timeout 10 --max-time 60 https://bun.sh/install | bash
+    ) >/dev/null 2>&1 || true
+    if [ -x /root/.bun/bin/bun ]; then
+        ln -sf /root/.bun/bin/bun /usr/local/bin/bun 2>/dev/null || true
+        ln -sf /root/.bun/bin/bun /usr/local/bin/bunx 2>/dev/null || true
+    fi
+fi
+
+if ! command -v pnpm >/dev/null 2>&1; then
+    if command -v corepack >/dev/null 2>&1; then
+        corepack enable >/dev/null 2>&1 || true
+        corepack prepare pnpm@latest --activate >/dev/null 2>&1 || true
+    elif command -v npm >/dev/null 2>&1; then
+        npm install -g pnpm >/dev/null 2>&1 || true
     fi
 fi
 

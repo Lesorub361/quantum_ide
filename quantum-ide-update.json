@@ -1,16 +1,16 @@
 {
-  "versionCode": 252,
-  "versionName": "1.2.235",
-  "notes": "## 🚀 QuantumIDE v1.2.235\n\n### Что нового\n- **Исправление артефактов масштабирования (Pinch-to-Zoom) и Reflow в терминале (`conduit_vt`)**:\n  - Полностью устранены фантомные символы и разбросанные спиннеры (`⠋ ⠙ ⠸`, `' ' : : #`) при приближении и отдалении терминала или консоли сборки (`BufferLine.resize`, `Buffer.resize`, `reflow`).\n  - Добавлено отслеживание позиции курсора через `CellAnchor` при перестроении строк, квантование шага шрифта при жесте щипка и защита PTY от лишних `SIGWINCH`.\n- **Открытие многострочных ссылок и плавное выделение / копирование (`TerminalView`, `QuantumLinkDetector`)**:\n  - Ссылки, перенесённые на несколько строк (включая длинные OAuth-ссылки авторизации `agy`), теперь автоматически склеиваются: одиночное нажатие на любую строку ссылки сразу открывает её в браузере и копирует в буфер обмена без разрывов строк (`\\n`).\n  - Долгое нажатие на ссылку автоматически выделяет весь многострочный URL целиком, а ползунки выделения плавно тянутся в любую сторону с лупой и автопрокруткой без зависаний.\n- **Профессиональный Git UI и единая тема (`GitPanel`, `GitThemeColors`)**:\n  - Обновлённый интерфейс Git с удобным управлением ветками/Stash и синхронизацией фона с активной палитрой приложения.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 257,
+  "versionName": "1.2.240",
+  "notes": "## 🚀 QuantumIDE v1.2.240\n\n### Что нового\n- **Native Root Kernel Mode (`su`) без скачивания Ubuntu**:\n  - Пользователи Android с Root-правами (**Magisk / KernelSU / APatch**) могут работать напрямую на своём ядре устройства без загрузки архива Ubuntu 24.04 (600 МБ) и без прослойки PRoot.\n- **Ультрабыстрые пакетные менеджеры в Ubuntu 24.04 (`uv`, `bun`, `pnpm`)**:\n  - Автоматическая установка **`uv`** (Python), **`bun`** (ARM64 JS/TS) и **`pnpm`** в `setup-arm64.sh` — установка зависимостей в 10–30 раз быстрее обычных `pip`/`npm`.\n- **Нативные пути на ПК (Linux / Windows / macOS) и Android**:\n  - На ПК проекты при добавлении открываются мгновенно на месте (in-place, без копирования в `.quantum_ide/projects`), добавлена папка по умолчанию `~/QuantumIDEProjects`, кнопка выбора папки и «Открыть в файловом менеджере».\n  - Автообнаружение установленных на ПК `flutter`, `dart`, `agy`, `node`, `npm`, `cargo`, `go`, `python3` в терминале и ИИ-агенте.\n- **ИИ-агент профессионального уровня (до 48 шагов + Smart Context Compaction)**:\n  - Визуальный таймлайн шагов в стиле Antigravity (цветные иконки языков, `#L1-80`, статистика `+N -M`, кликабельный переход в редактор).\n  - 4 встроенных нативных MCP-сервера (`quantum-code-intel`, `quantum-git-ops`, `quantum-pkg-manager`, `quantum-memory`) + автопоиск SDK и реальная проверка ошибок (`flutter analyze` / `dart analyze` / LSP).\n- **Терминал Conduit (`conduit_vt`)**:\n  - Исправлены артефакты масштабирования, работает открытие многострочных ссылок по клику и плавное копирование с лупой.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.235/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.240/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.235",
-  "buildNumber": 252,
-  "tag_name": "v1.2.235",
-  "releaseNotes": "Исправление артефактов масштабирования (Pinch-to-Zoom) в терминале, открытие и выделение многострочных ссылок (OAuth agy), плавные ползунки копирования и обновлённый Git UI."
+  "version": "1.2.240",
+  "buildNumber": 257,
+  "tag_name": "v1.2.240",
+  "releaseNotes": "Native Root Kernel Mode (su) без скачивания Ubuntu, ультрабыстрые uv/bun/pnpm в Ubuntu 24.04, нативные пути на ПК, 48-шаговый ИИ-агент с визуальным таймлайном и 4 встроенных MCP-сервера."
 }
