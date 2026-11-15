@@ -1523,9 +1523,14 @@ class _ShizukuStatusChip extends StatelessWidget {
               await bridge.initialize();
               if (!bridge.isBinderAlive) {
                 if (!context.mounted) return;
+                final err = bridge.lastError;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Shizuku не запущен. Запустите сервис Shizuku и нажмите снова.'),
+                  SnackBar(
+                    content: Text(
+                      err != null && err.isNotEmpty()
+                          ? 'Shizuku недоступен: $err'
+                          : 'Shizuku не запущен. Запустите сервис Shizuku и нажмите снова.',
+                    ),
                     backgroundColor: Colors.orange,
                   ),
                 );

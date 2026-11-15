@@ -14,11 +14,13 @@ class ShizukuBridge {
   bool _isAvailable = false;
   bool _permissionGranted = false;
   int _uid = -1;
+  String? _lastError;
 
   bool get isAvailable => _isAvailable && _permissionGranted;
   bool get isBinderAlive => _isAvailable;
   bool get hasPermission => _permissionGranted;
   int get uid => _uid;
+  String? get lastError => _lastError;
 
   void _notifyStatusChanged() {
     statusVersion.value++;
@@ -28,6 +30,7 @@ class ShizukuBridge {
     if (!Platform.isAndroid) {
       _isAvailable = false;
       _permissionGranted = false;
+      _lastError = null;
       _notifyStatusChanged();
       return;
     }
@@ -37,14 +40,16 @@ class ShizukuBridge {
         _isAvailable = status['available'] == true;
         _permissionGranted = status['permissionGranted'] == true;
         _uid = (status['uid'] as num?)?.toInt() ?? -1;
+        _lastError = status['error']?.toString();
         debugPrint(
-          'Shizuku initialized: binder=$_isAvailable, permission=$_permissionGranted, uid=$_uid',
+          'Shizuku initialized: binder=$_isAvailable, permission=$_permissionGranted, uid=$_uid, err=$_lastError',
         );
       }
     } catch (e) {
       debugPrint('Shizuku init error: $e');
       _isAvailable = false;
       _permissionGranted = false;
+      _lastError = e.toString();
     }
     _notifyStatusChanged();
   }

@@ -22,6 +22,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuProvider
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.quantum_ide/native"
@@ -247,6 +248,12 @@ class MainActivity : FlutterActivity() {
                 }
                 "shizukuStatus" -> {
                     try {
+                        if (!Shizuku.pingBinder()) {
+                            try {
+                                ShizukuProvider.enableMultiProcessSupport(false)
+                                ShizukuProvider.requestBinderForNonProviderProcess(applicationContext)
+                            } catch (_: Throwable) {}
+                        }
                         val available = Shizuku.pingBinder()
                         val granted = available && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
                         val uid = if (available) {
@@ -261,7 +268,8 @@ class MainActivity : FlutterActivity() {
                         result.success(mapOf(
                             "available" to false,
                             "permissionGranted" to false,
-                            "uid" to -1
+                            "uid" to -1,
+                            "error" to (e.message ?: e.toString())
                         ))
                     }
                 }
