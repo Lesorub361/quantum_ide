@@ -1422,7 +1422,7 @@ class RuntimeService extends ChangeNotifier {
     );
 
     // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '35';
+    const bashrcVersion = '36';
     const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
 
     bool needsWrite = true;
@@ -1456,7 +1456,7 @@ class RuntimeService extends ChangeNotifier {
       }
 
       const bashrcContent = r'''
-# BASHRC_VERSION=35
+# BASHRC_VERSION=36
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -1600,6 +1600,7 @@ _quantum_tune_gradle() {
     export BOX64_DYNAREC_SAFEFLAGS=2
     export BOX64_NOBANNER=1
     export MALLOC_ARENA_MAX=2
+    export GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1"
 
     # Native C/C++/NDK acceleration (ccache + mold linker if installed)
     if command -v ccache >/dev/null 2>&1; then
@@ -1797,7 +1798,7 @@ flutter() {
         if [ $ret -ne 0 ]; then
             echo -e "\033[1;33m[Build Doctor]\033[0m Ошибка сборки (код $ret). Запускаю авто-диагностику (SDK/AAPT2/Box64) и безопасный повтор..."
             /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
-            BOX64_DYNAREC=0 MALLOC_CHECK_=0 command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
+            BOX64_DYNAREC=0 GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1" MALLOC_ARENA_MAX=1 command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
             ret=$?
         fi
 
@@ -1808,7 +1809,13 @@ flutter() {
             fi
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
-                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+                if command -v unzip >/dev/null 2>&1 && ! unzip -l ./app-release.apk 2>/dev/null | grep -q "AndroidManifest.xml"; then
+                    echo -e "\033[1;31m✗ ВНИМАНИЕ: ./app-release.apk собран без AndroidManifest.xml (сбросьте кэш: flutter clean && rm -rf build/ android/.gradle/).\033[0m"
+                    rm -f ./app-release.apk
+                    ret=1
+                else
+                    echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+                fi
             fi
             if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release-arm64.apk 2>/dev/null || true
@@ -3826,11 +3833,11 @@ else
     fi
 fi
 
-# 6. Auto-heal AAPT2 to modern ARM64 binary (supports Android 16 / API 36 & --source-path)
+# 6. Auto-heal AAPT2 to modern ARM64 binary (supports --source-path; checks 36.x once on --doctor)
 NEED_AAPT2_UPGRADE=0
 if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
     NEED_AAPT2_UPGRADE=1
-elif [ -d /root/android-sdk/platforms/android-36 ] && ! (/usr/bin/aapt2 version 2>&1 | grep -qE '36\.|2\.19-1[2-9]'); then
+elif [ "$1" = "--doctor" ] && [ -d /root/android-sdk/platforms/android-36 ] && ! (/usr/bin/aapt2 version 2>&1 | grep -qE '36\.|2\.19-1[2-9]'); then
     NEED_AAPT2_UPGRADE=1
 fi
 
@@ -3863,14 +3870,33 @@ if [ "$NEED_AAPT2_UPGRADE" = "1" ]; then
     fi
 fi
 
-# Ensure SDK build-tools and Gradle caches use our working ARM64 aapt2
+# Ensure SDK build-tools has working aapt2 (without downgrading existing 36+ aapt2)
 if /usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'; then
     for bt in /root/android-sdk/build-tools/*; do
         if [ -d "$bt" ]; then
+            if [ -x "$bt/aapt2" ] && ("$bt/aapt2" version 2>&1 | grep -qE '36\.|2\.19-1[2-9]'); then
+                continue
+            fi
             cp -f /usr/bin/aapt2 "$bt/aapt2" 2>/dev/null || true
             chmod +x "$bt/aapt2" 2>/dev/null || true
         fi
     done
+fi
+
+# Auto-repair corrupted /usr/local/bin/apksigner and /usr/local/bin/bundletool wrappers
+if [ -f /usr/local/bin/apksigner ] && grep -q "export HOME=" /usr/local/bin/apksigner 2>/dev/null; then
+    if [ -f /usr/lib/android-sdk/build-tools/debian/apksigner.jar ]; then
+        printf '#!/bin/sh\nexec java -jar /usr/lib/android-sdk/build-tools/debian/apksigner.jar "$@"\n' > /usr/local/bin/apksigner
+        chmod 755 /usr/local/bin/apksigner
+        echo "[quantum-heal-x64] ✓ Repaired /usr/local/bin/apksigner."
+    fi
+fi
+if [ -f /usr/local/bin/bundletool ] && grep -q "export HOME=" /usr/local/bin/bundletool 2>/dev/null; then
+    if [ -f /usr/local/bin/bundletool.jar ]; then
+        printf '#!/bin/sh\nexec java -jar /usr/local/bin/bundletool.jar "$@"\n' > /usr/local/bin/bundletool
+        chmod 755 /usr/local/bin/bundletool
+        echo "[quantum-heal-x64] ✓ Repaired /usr/local/bin/bundletool."
+    fi
 fi
 
 # 7. Box64 anti-fasttop profile for Flutter gen_snapshot
