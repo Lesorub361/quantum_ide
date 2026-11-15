@@ -21,6 +21,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
+import rikka.shizuku.Shizuku
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.quantum_ide/native"
@@ -242,6 +243,85 @@ class MainActivity : FlutterActivity() {
                         }
                     } else {
                         result.error("INVALID_ARGS", "filename required", null)
+                    }
+                }
+                "shizukuStatus" -> {
+                    try {
+                        val available = Shizuku.pingBinder()
+                        val granted = available && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+                        val uid = if (available) {
+                            try { Shizuku.getUid() } catch (_: Throwable) { -1 }
+                        } else -1
+                        result.success(mapOf(
+                            "available" to available,
+                            "permissionGranted" to granted,
+                            "uid" to uid
+                        ))
+                    } catch (e: Throwable) {
+                        result.success(mapOf(
+                            "available" to false,
+                            "permissionGranted" to false,
+                            "uid" to -1
+                        ))
+                    }
+                }
+                "shizukuRequestPermission" -> {
+                    try {
+                        if (!Shizuku.pingBinder()) {
+                            result.success(false)
+                        } else if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+                            result.success(true)
+                        } else {
+                            val reqCode = 36101
+                            lateinit var listener: Shizuku.OnRequestPermissionResultListener
+                            listener = Shizuku.OnRequestPermissionResultListener { code, grantResult ->
+                                if (code == reqCode) {
+                                    Shizuku.removeRequestPermissionResultListener(listener)
+                                    runOnUiThread {
+                                        result.success(grantResult == PackageManager.PERMISSION_GRANTED)
+                                    }
+                                }
+                            }
+                            Shizuku.addRequestPermissionResultListener(listener)
+                            Shizuku.requestPermission(reqCode)
+                        }
+                    } catch (e: Throwable) {
+                        result.error("SHIZUKU_ERROR", e.message, null)
+                    }
+                }
+                "shizukuExec" -> {
+                    val executable = call.argument<String>("executable")
+                    val args = call.argument<List<String>>("args") ?: emptyList()
+                    if (executable.isNullOrBlank()) {
+                        result.error("INVALID_ARGS", "executable required", null)
+                    } else {
+                        Thread {
+                            try {
+                                val cmd = arrayOf(executable, *args.toTypedArray())
+                                val method = Shizuku::class.java.getDeclaredMethod(
+                                    "newProcess",
+                                    Array<String>::class.java,
+                                    Array<String>::class.java,
+                                    String::class.java
+                                )
+                                method.isAccessible = true
+                                val proc = method.invoke(null, cmd, null, null) as java.lang.Process
+                                val stdout = proc.inputStream.bufferedReader().use { it.readText() }
+                                val stderr = proc.errorStream.bufferedReader().use { it.readText() }
+                                val exitCode = proc.waitFor()
+                                runOnUiThread {
+                                    result.success(mapOf(
+                                        "exitCode" to exitCode,
+                                        "stdout" to stdout,
+                                        "stderr" to stderr
+                                    ))
+                                }
+                            } catch (e: Throwable) {
+                                runOnUiThread {
+                                    result.error("SHIZUKU_EXEC_ERROR", e.message ?: e.toString(), null)
+                                }
+                            }
+                        }.start()
                     }
                 }
                 else -> result.notImplemented()

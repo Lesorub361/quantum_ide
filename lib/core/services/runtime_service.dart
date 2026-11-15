@@ -8,17 +8,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
+import 'package:quantum_ide/core/utils/platform_utils.dart';
 import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 class RuntimeService extends ChangeNotifier {
   static const _channel = MethodChannel('com.example.quantum_ide/native');
 
-  Future<void> initialize() async {
-    await ShizukuBridge.instance.initialize();
-    _isInitialized = true;
-    notifyListeners();
-  }
+  bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
 
   String _status = 'Idle';
   String get status => _status;
@@ -418,6 +416,9 @@ class RuntimeService extends ChangeNotifier {
         _filesDir = await _channel.invokeMethod('getFilesDir');
         _nativeLibDir = await _channel.invokeMethod('getNativeLibDir');
         debugPrint('RuntimeService: filesDir=$_filesDir, nativeLibDir=$_nativeLibDir');
+        if (Platform.isAndroid) {
+          unawaited(ShizukuBridge.instance.initialize());
+        }
 
         // 0. Remove leftovers of the withdrawn v1.2.211 Ubuntu 24.04 migration
         //    (downloaded image archive). The installed system is left untouched.
