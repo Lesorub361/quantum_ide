@@ -26,10 +26,9 @@ import 'package:quantum_ide/features/file_explorer/presentation/notifiers/bookma
 import 'package:quantum_ide/features/file_explorer/presentation/pages/file_preview_page.dart';
 import 'package:quantum_ide/features/git/presentation/widgets/git_panel.dart';
 import 'package:quantum_ide/features/git/presentation/widgets/git_download_dialog.dart';
-import 'package:quantum_ide/features/preview/presentation/widgets/web_preview_panel.dart';
+import 'package:quantum_ide/shared/providers/panel_provider.dart';
 import 'package:quantum_ide/core/services/quantum_plugin_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/packages_panel.dart';
-import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_panels.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/live_share_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/extensions_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/app_logs_panel.dart';
@@ -342,6 +341,18 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         color: Colors.transparent,
         child: InkWell(
           onTap: () {
+            if (index == 6) {
+              final isOpen = ref.read(floatingPreviewVisibleProvider);
+              ref.read(floatingPreviewVisibleProvider.notifier).state = !isOpen;
+              if (!isOpen) {
+                ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              }
+              final scaffold = Scaffold.maybeOf(context);
+              if (scaffold != null && scaffold.isDrawerOpen) {
+                scaffold.closeDrawer();
+              }
+              return;
+            }
             ref.read(drawerTabProvider.notifier).state = index;
           },
           child: SizedBox(
@@ -453,7 +464,7 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
         ? pluginState.sidebarLayout!.sectionOrder
         : const [
             'explorer', 'search', 'structure', 'disk', 'problems', 'git',
-            'preview', 'packages', 'run', 'build', 'liveShare', 'plugins', 'appLogs'
+            'preview', 'packages', 'liveShare', 'plugins', 'appLogs'
           ];
 
     final settings = ref.watch(settingsProvider);
@@ -505,13 +516,9 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
                       if (sec == 'git')
                         _buildActivityIcon(ref, 5, LucideIcons.git_branch, 'Git', selectedTab == 5, badgeCount: gitChangesCount, isMobile: isMobile),
                       if (sec == 'preview')
-                        _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, selectedTab == 6, isMobile: isMobile),
+                        _buildActivityIcon(ref, 6, LucideIcons.server, AppLocalizations.of(context)!.preview, ref.watch(floatingPreviewVisibleProvider), isMobile: isMobile),
                       if (sec == 'packages')
                         _buildActivityIcon(ref, 7, LucideIcons.toy_brick, AppLocalizations.of(context)!.packages, selectedTab == 7, isMobile: isMobile),
-                      if (sec == 'run')
-                        _buildActivityIcon(ref, 8, LucideIcons.play, AppLocalizations.of(context)!.run, selectedTab == 8, isMobile: isMobile),
-                      if (sec == 'build')
-                        _buildActivityIcon(ref, 9, LucideIcons.hammer, AppLocalizations.of(context)!.build, selectedTab == 9, isMobile: isMobile),
                       if (sec == 'liveShare')
                         _buildActivityIcon(ref, 10, LucideIcons.users, AppLocalizations.of(context)!.liveShare, selectedTab == 10, isMobile: isMobile),
                       if (sec == 'plugins')
@@ -562,17 +569,8 @@ class FileDrawerState extends ConsumerState<FileDrawer> {
       case 5:
         activePanel = const SidebarGitPanel();
         break;
-      case 6:
-        activePanel = const SidebarWebPreviewPanel();
-        break;
       case 7:
         activePanel = const SidebarPackagesPanel();
-        break;
-      case 8:
-        activePanel = const SidebarRunPanel();
-        break;
-      case 9:
-        activePanel = const SidebarBuildPanel();
         break;
       case 10:
         activePanel = const LiveSharePanel();

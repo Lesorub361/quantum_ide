@@ -30,6 +30,7 @@ import 'package:quantum_ide/features/editor/presentation/widgets/build_target_di
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_terminal_surface.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart';
+import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
 // Project-safe: never mutate user's build.gradle.kts or AndroidManifest.xml.
 const String _ktRepairCmd = '';
@@ -297,71 +298,163 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
     switch (projectType) {
       case ProjectType.flutter:
         title = l10n.flutterProject;
+        final autoHotReload = ref.watch(flutterAutoHotReloadProvider);
+        final isRu = Localizations.localeOf(context).languageCode == 'ru';
         if (Platform.isAndroid) {
           actions.addAll([
-            _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-                () => _runDedicatedCommand(workspaceState.currentPath, 'flutter run -d web-server --web-port 8080')),
-            _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.cyanAccent, 
+            _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, () {
+              ref.read(serverRunningProvider.notifier).state = true;
+              ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
+              ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+              ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              _runDedicatedCommand(
+                workspaceState.currentPath,
+                'flutter run -d web-server --web-port 8080 --web-hostname 127.0.0.1',
+              );
+            }),
+            _buildActionButton(
+              isRu ? 'Web (Статик)' : 'Web (Static)',
+              LucideIcons.globe,
+              Colors.tealAccent,
+              () {
+                ref.read(serverRunningProvider.notifier).state = true;
+                ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
+                ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+                ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+                _runDedicatedCommand(
+                  workspaceState.currentPath,
+                  'flutter build web --no-tree-shake-icons && python3 -m http.server 8080 -d build/web',
+                  displayCmd: 'flutter build web + http.server :8080',
+                );
+              },
+            ),
+            _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.cyanAccent,
                 () => _installBuiltApk(workspaceState.currentPath)),
-            _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
+            _buildActionButton('Reload (r)', LucideIcons.zap, Colors.yellow,
                 () => _sendRawKeyToDedicatedTerminal('r')),
-            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-                () => _sendRawKeyToDedicatedTerminal('q')),
+            _buildActionButton('Restart (R)', LucideIcons.rotate_cw, Colors.orangeAccent,
+                () => _sendRawKeyToDedicatedTerminal('R')),
+            _buildActionButton(
+              isRu ? 'Авто-Reload' : 'Auto-Reload',
+              autoHotReload ? LucideIcons.sparkles : LucideIcons.circle_pause,
+              autoHotReload ? Colors.greenAccent : Colors.white54,
+              () => ref.read(flutterAutoHotReloadProvider.notifier).state = !autoHotReload,
+            ),
+            _buildActionButton(
+              isRu ? 'Браузер' : 'Preview',
+              LucideIcons.monitor,
+              Colors.lightBlueAccent,
+              () {
+                ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+                ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              },
+            ),
+            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, () {
+              _sendRawKeyToDedicatedTerminal('q');
+              ref.read(serverRunningProvider.notifier).state = false;
+            }),
           ]);
         } else {
           actions.addAll([
-            _buildActionButton(l10n.runPC, LucideIcons.laptop, Colors.cyanAccent, 
+            _buildActionButton(l10n.runPC, LucideIcons.laptop, Colors.cyanAccent,
                 () => _runDedicatedCommand(workspaceState.currentPath, 'flutter run -d linux')),
-            _buildActionButton(l10n.runMob, LucideIcons.smartphone, Colors.greenAccent, 
+            _buildActionButton(l10n.runMob, LucideIcons.smartphone, Colors.greenAccent,
                 () => _runDedicatedCommand(workspaceState.currentPath, 'flutter run -d android')),
-            _buildActionButton('Hot Reload', LucideIcons.zap, Colors.yellow, 
+            _buildActionButton('Web', LucideIcons.globe, Colors.tealAccent, () {
+              ref.read(serverRunningProvider.notifier).state = true;
+              ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
+              ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+              ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              _runDedicatedCommand(
+                workspaceState.currentPath,
+                'flutter run -d web-server --web-port 8080 --web-hostname 127.0.0.1',
+              );
+            }),
+            _buildActionButton('Reload (r)', LucideIcons.zap, Colors.yellow,
                 () => _sendRawKeyToDedicatedTerminal('r')),
-            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-                () => _sendRawKeyToDedicatedTerminal('q')),
+            _buildActionButton('Restart (R)', LucideIcons.rotate_cw, Colors.orangeAccent,
+                () => _sendRawKeyToDedicatedTerminal('R')),
+            _buildActionButton(
+              isRu ? 'Авто-Reload' : 'Auto-Reload',
+              autoHotReload ? LucideIcons.sparkles : LucideIcons.circle_pause,
+              autoHotReload ? Colors.greenAccent : Colors.white54,
+              () => ref.read(flutterAutoHotReloadProvider.notifier).state = !autoHotReload,
+            ),
+            _buildActionButton(
+              isRu ? 'Браузер' : 'Preview',
+              LucideIcons.monitor,
+              Colors.lightBlueAccent,
+              () {
+                ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+                ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+              },
+            ),
+            _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, () {
+              _sendRawKeyToDedicatedTerminal('q');
+              ref.read(serverRunningProvider.notifier).state = false;
+            }),
           ]);
         }
         break;
       case ProjectType.python:
         title = l10n.pythonProject;
         actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 
-                  'python3 main.py || python3 app.py || (py_file=\$(find . -maxdepth 2 -name "*.py" | head -n 1); if [ -n "\$py_file" ]; then python3 "\$py_file"; else echo "No python file found. Please create main.py"; fi)')),
-          _buildActionButton('Server', LucideIcons.server, Colors.cyanAccent,
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'python3 -m flask run --host=0.0.0.0 2>/dev/null || python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 2>/dev/null || python3 -m http.server 8080')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _stopCommand()),
+                  'python3 main.py || python3 app.py || (py_file=\$(find . -maxdepth 2 -name "*.py" | head -n 1); if [ -n "\$py_file" ]; then python3 "\$py_file"; else echo "No python file found. Please create main.py"; fi)')),
+          _buildActionButton('Server', LucideIcons.server, Colors.cyanAccent, () {
+            ref.read(serverRunningProvider.notifier).state = true;
+            ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
+            ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+            ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+            _runDedicatedCommand(workspaceState.currentPath,
+                'python3 -m flask run --host=0.0.0.0 2>/dev/null || python3 -m uvicorn main:app --host 0.0.0.0 --port 8080 2>/dev/null || python3 -m http.server 8080');
+          }),
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, () {
+            _stopCommand();
+            ref.read(serverRunningProvider.notifier).state = false;
+          }),
         ]);
         break;
       case ProjectType.nodejs:
         title = l10n.nodejsProject;
         actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent,
+              () => _runDedicatedCommand(workspaceState.currentPath,
                   'npm start || node index.js || node server.js || node app.js || (js_file=\$(find . -maxdepth 2 -name "*.js" ! -path "*/node_modules/*" | head -n 1); if [ -n "\$js_file" ]; then node "\$js_file"; else echo "No JS file found. Please create index.js or package.json"; fi)')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent,
               () => _stopCommand()),
         ]);
         break;
       case ProjectType.dart:
         title = l10n.dartProject;
         actions.addAll([
-          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 
+          _buildActionButton(l10n.run, LucideIcons.play, Colors.greenAccent,
+              () => _runDedicatedCommand(workspaceState.currentPath,
                   'dart run || dart bin/main.dart || dart main.dart || (dart_file=\$(find . -maxdepth 2 -name "*.dart" | head -n 1); if [ -n "\$dart_file" ]; then dart "\$dart_file"; else echo "No Dart file found. Please create bin/main.dart"; fi)')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent,
               () => _stopCommand()),
         ]);
         break;
       case ProjectType.web:
         title = l10n.webProject;
         actions.addAll([
-          _buildActionButton(l10n.startServer, LucideIcons.play, Colors.greenAccent, 
-              () => _runDedicatedCommand(workspaceState.currentPath, 
-                  'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080')),
-          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, 
-              () => _stopCommand()),
+          _buildActionButton(l10n.startServer, LucideIcons.play, Colors.greenAccent, () {
+            ref.read(serverRunningProvider.notifier).state = true;
+            ref.read(floatingPreviewUrlProvider.notifier).state = 'http://127.0.0.1:8080';
+            ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+            ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+            _runDedicatedCommand(workspaceState.currentPath,
+                'python3 -m http.server 8080 || npx http-server -p 8080 || npx serve -p 8080');
+          }),
+          _buildActionButton('Браузер', LucideIcons.monitor, Colors.lightBlueAccent, () {
+            ref.read(floatingPreviewVisibleProvider.notifier).state = true;
+            ref.read(floatingPreviewMinimizedProvider.notifier).state = false;
+          }),
+          _buildActionButton(l10n.stop, LucideIcons.square, Colors.redAccent, () {
+            _stopCommand();
+            ref.read(serverRunningProvider.notifier).state = false;
+          }),
         ]);
         break;
       case ProjectType.androidKotlin:

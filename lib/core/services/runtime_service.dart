@@ -1638,18 +1638,19 @@ _quantum_tune_gradle() {
         elif [ "$_qt_cores" -ge 4 ]; then _qt_workers=3
         else _qt_workers=2; fi
     elif [ "$_qt_mem_mb" -ge 2000 ]; then
-        _qt_jvm="1600m"; _qt_meta="448m"; _qt_dart="896"
+        _qt_jvm="1280m"; _qt_meta="320m"; _qt_dart="768"
         if [ "$_qt_cores" -ge 6 ]; then _qt_workers=3
         else _qt_workers=2; fi
     elif [ "$_qt_mem_mb" -ge 1400 ]; then
-        _qt_jvm="1280m"; _qt_meta="384m"; _qt_dart="768"
+        _qt_jvm="1024m"; _qt_meta="320m"; _qt_dart="640"
         _qt_workers=2; _qt_parallel=false
     else
-        _qt_jvm="1024m"; _qt_meta="320m"; _qt_dart="640"
+        _qt_jvm="896m"; _qt_meta="256m"; _qt_dart="512"
         _qt_workers=1; _qt_parallel=false
     fi
 
     if [ "$QUANTUM_BUILD_PROFILE" = "safe" ]; then
+        _qt_jvm="1024m"; _qt_meta="256m"; _qt_dart="640"
         _qt_workers=1
         _qt_parallel=false
     elif [ "$QUANTUM_BUILD_PROFILE" = "turbo" ]; then

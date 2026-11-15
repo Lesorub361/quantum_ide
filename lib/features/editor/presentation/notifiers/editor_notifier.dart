@@ -27,6 +27,8 @@ import 'package:quantum_ide/core/services/runtime_service.dart';
 import 'package:quantum_ide/core/services/collaboration_service.dart';
 import 'package:quantum_ide/core/services/fast_syntax_engine.dart';
 import 'package:quantum_ide/core/services/live_telemetry_service.dart';
+import 'package:quantum_ide/shared/providers/panel_provider.dart';
+import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 
 class EditorFile {
   final String path;
@@ -139,6 +141,7 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
   StreamSubscription<Uint8List>? _agentPtySubscription;
   StreamSubscription<FileSystemEvent>? _workspaceWatcherSubscription;
   Timer? _externalSyncTimer;
+  Timer? _autoHotReloadTimer;
   bool _isReloadingFromDisk = false;
 
   EditorNotifier(this.ref) : super(EditorState()) {
@@ -649,6 +652,27 @@ class EditorNotifier extends StateNotifier<EditorState> with WidgetsBindingObser
       ref.read(analysisServiceProvider).triggerAnalysis(immediate: true);
       ref.read(gitProvider.notifier).refreshStatus();
       ref.read(symbolIndexerProvider.notifier).indexFile(path);
+
+      if (path.toLowerCase().endsWith('.dart') &&
+          ref.read(flutterAutoHotReloadProvider)) {
+        final runSession =
+            ref.read(dedicatedTerminalProvider).sessions[DedicatedTerminalType.run];
+        if (runSession != null && !runSession.isExited) {
+          _autoHotReloadTimer?.cancel();
+          _autoHotReloadTimer = Timer(const Duration(milliseconds: 400), () {
+            final currentRun = ref
+                .read(dedicatedTerminalProvider)
+                .sessions[DedicatedTerminalType.run];
+            if (currentRun != null &&
+                !currentRun.isExited &&
+                ref.read(flutterAutoHotReloadProvider)) {
+              ref
+                  .read(dedicatedTerminalProvider.notifier)
+                  .sendRawChar(DedicatedTerminalType.run, 'r');
+            }
+          });
+        }
+      }
     } catch (e) {
       debugPrint('Error saving file $path: $e');
     } finally {

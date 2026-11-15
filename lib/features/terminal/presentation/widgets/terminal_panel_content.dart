@@ -43,6 +43,7 @@ import 'package:quantum_ide/features/terminal/engine/quantum_link_detector.dart'
 import 'package:quantum_ide/features/editor/presentation/widgets/debugger_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/device_mirror_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
+import 'package:quantum_ide/features/terminal/presentation/widgets/run_build_panels.dart';
 import 'package:quantum_ide/core/services/quantum_ai_agent_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -1061,9 +1062,9 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
           key: const ValueKey('terminal'),
         );
       case PanelTab.run:
-        return _buildRunView(key: const ValueKey('run'));
+        return const SidebarRunPanel(key: ValueKey('bottom_run'));
       case PanelTab.buildLogs:
-        return _buildBuildLogsView(key: const ValueKey('buildLogs'));
+        return const SidebarBuildPanel(key: ValueKey('bottom_build'));
       case PanelTab.appLogs:
         return _buildAppLogsView(key: const ValueKey('appLogs'));
       case PanelTab.problems:

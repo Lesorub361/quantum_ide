@@ -43,6 +43,7 @@ import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/project_requirements_service.dart';
 import 'package:quantum_ide/shared/widgets/project_requirements_dialog.dart';
 import 'package:quantum_ide/core/services/app_update_service.dart';
+import 'package:quantum_ide/features/preview/presentation/widgets/floating_web_preview_overlay.dart';
 import 'package:quantum_ide/core/services/project_sync_service.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/project_sync_panel.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/quantum_ai_agent_panel.dart';
@@ -1244,12 +1245,17 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                   ),
                 ),
               ),
-        body: _buildWorkspaceLayout(
-          mainBody,
-          screenWidth: screenWidth,
-          leftOpen:
-              isDesktop && ref.watch(leftPanelOpenProvider) && !_isZenMode,
-          rightAiOpen: canDockSide && isRightAiOpen && !_isZenMode,
+        body: Stack(
+          children: [
+            _buildWorkspaceLayout(
+              mainBody,
+              screenWidth: screenWidth,
+              leftOpen:
+                  isDesktop && ref.watch(leftPanelOpenProvider) && !_isZenMode,
+              rightAiOpen: canDockSide && isRightAiOpen && !_isZenMode,
+            ),
+            const FloatingWebPreviewOverlay(),
+          ],
         ),
         bottomNavigationBar: _isZenMode ? null : const StatusBar(),
       ),
