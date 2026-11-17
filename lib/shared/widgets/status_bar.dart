@@ -1111,9 +1111,7 @@ class _SystemSheetState extends ConsumerState<_SystemSheet> {
               ),
               _row(
                 'Видеоускоритель (${stats.gpuName})',
-                stats.isGpuEstimated
-                    ? '~${(stats.gpuUsage * 100).toStringAsFixed(0)}% (оценка)'
-                    : '${(stats.gpuUsage * 100).toStringAsFixed(0)}%',
+                '${stats.isGpuEstimated ? '~${(stats.gpuUsage * 100).toStringAsFixed(0)}% (оценка)' : '${(stats.gpuUsage * 100).toStringAsFixed(0)}%'}${stats.gpuFreqMhz > 0 ? ' · ${stats.gpuFreqMhz} МГц' : ''}',
                 stats.gpuUsage,
                 LucideIcons.zap,
               ),
@@ -1527,7 +1525,7 @@ class _ShizukuStatusChip extends StatelessWidget {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      err != null && err.isNotEmpty()
+                      err != null && err.isNotEmpty
                           ? 'Shizuku недоступен: $err'
                           : 'Shizuku не запущен. Запустите сервис Shizuku и нажмите снова.',
                     ),

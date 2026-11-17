@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -105,6 +107,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
   Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
     ref.read(projectSyncProvider.notifier).cancelSync();
     await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
+    unawaited(ShizukuBridge.instance.boostForBuild());
     final runtime = ref.read(runtimeServiceProvider);
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
@@ -788,6 +791,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   Future<void> _runDedicatedCommand(String? workspacePath, String cmd, {String? displayCmd}) async {
     ref.read(projectSyncProvider.notifier).cancelSync();
     await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
+    unawaited(ShizukuBridge.instance.boostForBuild());
     final runtime = ref.read(runtimeServiceProvider);
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';

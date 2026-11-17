@@ -4,6 +4,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:quantum_ide/core/services/build_progress_tracker.dart';
 import 'package:quantum_ide/core/services/live_telemetry_service.dart';
+import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 
 class SystemProcessItem {
   final int pid;
@@ -66,6 +67,10 @@ class SystemStats {
   final double builderCores;
   /// Число логических ядер устройства
   final int cpuCores;
+  /// Текущая пиковая частота ядер CPU в МГц (через Shizuku / sysfs)
+  final int cpuFreqMhz;
+  /// Текущая частота GPU в МГц (через Shizuku root / sysfs)
+  final int gpuFreqMhz;
   /// Идёт ли сейчас сборка
   final bool isBuilding;
   /// Список активных процессов и пакетов (как в Диспетчере задач Windows)
@@ -89,6 +94,8 @@ class SystemStats {
     this.appCpuPercent = 0.0,
     this.builderCores = 0.0,
     this.cpuCores = 8,
+    this.cpuFreqMhz = 0,
+    this.gpuFreqMhz = 0,
     this.isBuilding = false,
     this.processes = const [],
   });
@@ -97,13 +104,22 @@ class SystemStats {
   double get otherCpuPercent =>
       (cpuUsage * 100 - appCpuPercent - builderCpuPercent).clamp(0.0, 100.0);
 
-  /// Единая подпись для всех экранов: "21% · сборка 17% · IDE 3%"
+  String get cpuFreqFormatted {
+    if (cpuFreqMhz <= 0) return '';
+    if (cpuFreqMhz >= 1000) {
+      return '${(cpuFreqMhz / 1000.0).toStringAsFixed(2)} ГГц';
+    }
+    return '$cpuFreqMhz МГц';
+  }
+
+  /// Единая подпись для всех экранов: "21% · 1.59 ГГц · сборка 17%"
   String get cpuSummary {
     final total = '${(cpuUsage * 100).toStringAsFixed(0)}%';
+    final freqPart = cpuFreqMhz > 0 ? ' · $cpuFreqFormatted' : '';
     if (builderCpuPercent >= 1) {
-      return '$total · сборка ${builderCpuPercent.toStringAsFixed(0)}% (${builderCores.toStringAsFixed(1)}/$cpuCores ядер)';
+      return '$total$freqPart · сборка ${builderCpuPercent.toStringAsFixed(0)}% (${builderCores.toStringAsFixed(1)}/$cpuCores ядер)';
     }
-    return total;
+    return '$total$freqPart';
   }
 
   /// Удобное форматирование памяти приложения ("184 МБ" или "1.2 ГБ")
@@ -140,6 +156,8 @@ class SystemStats {
     double? appCpuPercent,
     double? builderCores,
     int? cpuCores,
+    int? cpuFreqMhz,
+    int? gpuFreqMhz,
     bool? isBuilding,
     List<SystemProcessItem>? processes,
   }) {
@@ -161,6 +179,8 @@ class SystemStats {
       appCpuPercent: appCpuPercent ?? this.appCpuPercent,
       builderCores: builderCores ?? this.builderCores,
       cpuCores: cpuCores ?? this.cpuCores,
+      cpuFreqMhz: cpuFreqMhz ?? this.cpuFreqMhz,
+      gpuFreqMhz: gpuFreqMhz ?? this.gpuFreqMhz,
       isBuilding: isBuilding ?? this.isBuilding,
       processes: processes ?? this.processes,
     );
@@ -358,6 +378,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     final double gpu = await _parseGpuUsage(cpu);
     final String gpuName = await _detectGpuName();
     final String socName = await _detectSocName();
+    final int cpuFreqMhz = await _parsePeakCpuFreqMhz();
+    final int gpuFreqMhz = await _parseGpuFreqMhz();
 
     // 4. Список активных процессов: только по запросу (Диспетчер задач) или во время активной сборки
     final isBuilding = LiveTelemetryService.instance.isBuilding ||
@@ -439,6 +461,8 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
         appCpuPercent: appCpuPercent.clamp(0.5, 100.0),
         builderCores: builderCores,
         cpuCores: _cpuCores,
+        cpuFreqMhz: cpuFreqMhz,
+        gpuFreqMhz: gpuFreqMhz,
         isBuilding: isBuilding,
         processes: processes,
       );
@@ -1244,23 +1268,85 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   }
 
   Future<List<int>?> _parseCpuStats() async {
-    if (_procStatBlocked) return null;
-    try {
-      final file = File('/proc/stat');
-      if (!await file.exists()) {
+    if (!_procStatBlocked) {
+      try {
+        final file = File('/proc/stat');
+        if (await file.exists()) {
+          final lines = await file.readAsLines();
+          if (lines.isNotEmpty && lines.first.startsWith('cpu')) {
+            final parts = lines.first.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).skip(1);
+            return parts.map((p) => int.tryParse(p) ?? 0).toList();
+          }
+        }
+      } catch (_) {
         _procStatBlocked = true;
-        return null;
       }
-      final lines = await file.readAsLines();
-      if (lines.isEmpty) return null;
-      final firstLine = lines.first;
-      if (!firstLine.startsWith('cpu')) return null;
-      final parts = firstLine.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).skip(1);
-      return parts.map((p) => int.tryParse(p) ?? 0).toList();
-    } catch (_) {
-      _procStatBlocked = true;
-      return null;
     }
+
+    if (ShizukuBridge.instance.isAvailable) {
+      try {
+        final res = await ShizukuBridge.instance.execute('cat', ['/proc/stat']);
+        if (res.exitCode == 0 && res.stdout.toString().isNotEmpty) {
+          final lines = res.stdout.toString().split('\n');
+          if (lines.isNotEmpty && lines.first.startsWith('cpu')) {
+            final parts = lines.first.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).skip(1);
+            return parts.map((p) => int.tryParse(p) ?? 0).toList();
+          }
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<int> _parsePeakCpuFreqMhz() async {
+    int maxFreqKHz = 0;
+    try {
+      for (int i = 0; i < _cpuCores; i++) {
+        final curFile = File('/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq');
+        if (await curFile.exists()) {
+          final curStr = (await curFile.readAsString()).trim();
+          final val = int.tryParse(curStr);
+          if (val != null && val > maxFreqKHz) {
+            maxFreqKHz = val;
+          }
+        }
+      }
+    } catch (_) {}
+    if (maxFreqKHz == 0 && ShizukuBridge.instance.isAvailable) {
+      try {
+        final res = await ShizukuBridge.instance.execute('cat', ['/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq']);
+        if (res.exitCode == 0) {
+          final val = int.tryParse(res.stdout.toString().trim());
+          if (val != null) maxFreqKHz = val;
+        }
+      } catch (_) {}
+    }
+    return (maxFreqKHz / 1000.0).round();
+  }
+
+  Future<int> _parseGpuFreqMhz() async {
+    try {
+      final curClkFile = File('/sys/class/kgsl/kgsl-3d0/gpuclk');
+      if (await curClkFile.exists()) {
+        final clk = int.tryParse((await curClkFile.readAsString()).trim());
+        if (clk != null) {
+          return clk > 1000000 ? (clk / 1000000).round() : (clk / 1000).round();
+        }
+      }
+    } catch (_) {}
+
+    if (ShizukuBridge.instance.isAvailable && ShizukuBridge.instance.uid == 0) {
+      try {
+        final res = await ShizukuBridge.instance.execute('cat', ['/sys/class/kgsl/kgsl-3d0/gpuclk']);
+        if (res.exitCode == 0) {
+          final clk = int.tryParse(res.stdout.toString().trim());
+          if (clk != null) {
+            return clk > 1000000 ? (clk / 1000000).round() : (clk / 1000).round();
+          }
+        }
+      } catch (_) {}
+    }
+    return 0;
   }
 
   /// Читает процессорное время самого процесса IDE (/proc/self/stat).

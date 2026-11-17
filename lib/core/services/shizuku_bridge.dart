@@ -100,4 +100,35 @@ class ShizukuBridge {
       return false;
     }
   }
+
+  /// Boosts Android OS build performance via Shizuku before heavy compilation:
+  /// 1. Disables Android 12+ Phantom Process Killer (32 child process limit)
+  /// 2. Whitelists QuantumIDE from Doze & App Standby CPU/network throttling
+  /// 3. Frees cached background app RAM (`am kill-all`) to avoid swap thrashing
+  /// 4. If running as root (`uid == 0`), lowers swappiness and drops clean pagecache
+  Future<void> boostForBuild() async {
+    if (!Platform.isAndroid) return;
+    if (!isAvailable) {
+      await initialize();
+      if (!isAvailable) return;
+    }
+    try {
+      final cmds = <String>[
+        'device_config set_sync_disabled_for_tests persistent 2>/dev/null || true',
+        'device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null || true',
+        'settings put global settings_enable_monitor_phantom_procs false 2>/dev/null || true',
+        'dumpsys deviceidle whitelist +com.example.quantum_ide >/dev/null 2>&1 || true',
+        'cmd appops set com.example.quantum_ide RUN_IN_BACKGROUND allow 2>/dev/null || true',
+        'cmd appops set com.example.quantum_ide RUN_ANY_IN_BACKGROUND allow 2>/dev/null || true',
+        'am kill-all 2>/dev/null || true',
+      ];
+      if (_uid == 0) {
+        cmds.add('sysctl -w vm.swappiness=20 >/dev/null 2>&1 || true');
+        cmds.add('sync && echo 1 > /proc/sys/vm/drop_caches 2>/dev/null || true');
+      }
+      await execute('sh', ['-c', cmds.join('; ')]);
+    } catch (e) {
+      debugPrint('Shizuku boostForBuild skipped: $e');
+    }
+  }
 }
