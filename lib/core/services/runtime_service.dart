@@ -1425,42 +1425,7 @@ class RuntimeService extends ChangeNotifier {
       p.join(_filesDir, 'rootfs', 'ubuntu', 'root', '.bashrc'),
     );
 
-    // Version tag — increment this when you need to push bashrc updates to all users
-    const bashrcVersion = '37';
-    const bashrcVersionLine = '# BASHRC_VERSION=$bashrcVersion';
-
-    bool needsWrite = true;
-    if (await bashrc.exists()) {
-      try {
-        final content = await bashrc.readAsString();
-        needsWrite = !content.contains(bashrcVersionLine);
-      } catch (_) {
-        needsWrite = true;
-      }
-    }
-
-    if (needsWrite) {
-      final termFetchScript = _generateTermFetchScript().replaceAll('\r', '');
-
-      // 1. Write standalone term-fetch executable
-      final termFetchTargets = [
-        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'term-fetch'),
-        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'term-fetch'),
-        '/usr/local/bin/term-fetch',
-        '/usr/bin/term-fetch',
-      ];
-      for (final targetPath in termFetchTargets) {
-        try {
-          final f = File(targetPath);
-          if (await f.parent.exists()) {
-            await f.writeAsString(termFetchScript);
-            await Process.run('chmod', ['755', targetPath]);
-          }
-        } catch (_) {}
-      }
-
-      const bashrcContent = r'''
-# BASHRC_VERSION=37
+    const bashrcContent = r'''
 export ANDROID_HOME=/root/android-sdk
 export ANDROID_SDK_ROOT=/root/android-sdk
 # Dynamically detect JAVA_HOME inside guest (prefer Java 17 / 21)
@@ -1889,6 +1854,42 @@ if command -v starship >/dev/null 2>&1; then
     eval "$(starship init bash)"
 fi
 ''';
+
+    var fnvHash = 0x811c9dc5;
+    for (var i = 0; i < bashrcContent.length; i++) {
+      fnvHash ^= bashrcContent.codeUnitAt(i);
+      fnvHash = (fnvHash * 0x01000193) & 0xffffffff;
+    }
+    final bashrcHashLine = '# BASHRC_HASH=${fnvHash.toRadixString(16)}';
+
+    bool needsWrite = true;
+    if (await bashrc.exists()) {
+      try {
+        final content = await bashrc.readAsString();
+        needsWrite = !content.contains(bashrcHashLine);
+      } catch (_) {
+        needsWrite = true;
+      }
+    }
+
+    if (needsWrite) {
+      final termFetchScript = _generateTermFetchScript().replaceAll('\r', '');
+      final termFetchTargets = [
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'local', 'bin', 'term-fetch'),
+        p.join(_filesDir, 'rootfs', 'ubuntu', 'usr', 'bin', 'term-fetch'),
+        '/usr/local/bin/term-fetch',
+        '/usr/bin/term-fetch',
+      ];
+      for (final targetPath in termFetchTargets) {
+        try {
+          final f = File(targetPath);
+          if (await f.parent.exists()) {
+            await f.writeAsString(termFetchScript);
+            await Process.run('chmod', ['755', targetPath]);
+          }
+        } catch (_) {}
+      }
+
       try {
         final bashrcTargets = [
           bashrc,
@@ -1896,10 +1897,11 @@ fi
           if (Platform.isLinux && Platform.environment['HOME'] != null)
             File(p.join(Platform.environment['HOME']!, '.bashrc')),
         ];
+        final finalBashrc = '$bashrcHashLine\n${bashrcContent.replaceAll('\r', '')}';
         for (final target in bashrcTargets) {
           try {
             if (await target.parent.exists()) {
-              await target.writeAsString(bashrcContent.replaceAll('\r', ''));
+              await target.writeAsString(finalBashrc);
             }
           } catch (_) {}
         }
