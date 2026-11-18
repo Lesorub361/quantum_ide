@@ -24,13 +24,7 @@ jobs:
           ENGINE_HASH="${{ inputs.engine_version }}"
           if [ -z "$ENGINE_HASH" ]; then
             # Fetch latest stable Flutter release info and read its engine.version
-            FLUTTER_URL=$(python3 -c '
-import json, urllib.request
-data = json.loads(urllib.request.urlopen("https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json").read())
-stable_hash = data["current_release"]["stable"]
-rel = next(r for r in data["releases"] if r["hash"] == stable_hash)
-print(data["base_url"] + "/" + rel["archive"])
-')
+            FLUTTER_URL=$(python3 -c 'import json, urllib.request; d = json.loads(urllib.request.urlopen("https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json").read()); sh = d["current_release"]["stable"]; rel = next(r for r in d["releases"] if r["hash"] == sh); print(d["base_url"] + "/" + rel["archive"])')
             echo "Downloading Flutter metadata from $FLUTTER_URL"
             curl -fsSL "$FLUTTER_URL" -o /tmp/flutter.tar.xz
             tar -xJf /tmp/flutter.tar.xz -C /tmp flutter/bin/internal/engine.version
