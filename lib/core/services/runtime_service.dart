@@ -1563,13 +1563,9 @@ _quantum_tune_gradle() {
     pkill -9 -f GradleDaemon 2>/dev/null || true
     pkill -9 -f KotlinCompileDaemon 2>/dev/null || true
 
-    # Box64 + glibc anti-fasttop crash protection for x86_64 tools (e.g. Flutter gen_snapshot)
-    export BOX64_DYNAREC_STRONGMEM=1
-    export BOX64_DYNAREC_BIGBLOCK=0
-    export BOX64_DYNAREC_SAFEFLAGS=2
+    # Box64 banner suppression (anti-fasttop flags are scoped to [gen_snapshot] in /etc/box64.box64rc
+    # so native Java/Gradle/R8/Kotlin/C++ processes keep full glibc tcache & arena performance)
     export BOX64_NOBANNER=1
-    export MALLOC_ARENA_MAX=2
-    export GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1"
 
     # Native C/C++/NDK acceleration (ccache + mold linker if installed)
     if command -v ccache >/dev/null 2>&1; then
@@ -1615,8 +1611,16 @@ _quantum_tune_gradle() {
         _qt_workers=1
         _qt_parallel=false
     elif [ "$QUANTUM_BUILD_PROFILE" = "turbo" ]; then
-        _qt_parallel=true
-        [ "$_qt_mem_mb" -ge 6000 ] && _qt_workers=3 || _qt_workers=2
+        if [ "$_qt_mem_mb" -ge 6000 ]; then
+            _qt_parallel=true
+            _qt_workers=3
+        elif [ "$_qt_mem_mb" -ge 3000 ]; then
+            _qt_parallel=true
+            _qt_workers=2
+        else
+            _qt_parallel=false
+            _qt_workers=1
+        fi
     fi
 
     if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
@@ -1625,10 +1629,14 @@ _quantum_tune_gradle() {
 
     export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
     export DART_VM_OPTIONS="--old_gen_heap_size=${_qt_dart}"
-    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${_qt_workers} -Dorg.gradle.parallel=${_qt_parallel} -Dorg.gradle.caching=true -Dkotlin.compiler.execution.strategy=in-process"
+    export CMAKE_BUILD_PARALLEL_LEVEL="${_qt_workers}"
+    export GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=${_qt_workers} -Dorg.gradle.parallel=${_qt_parallel} -Dorg.gradle.caching=true -Dorg.gradle.vfs.watch=false -Dkotlin.compiler.execution.strategy=in-process -Dkotlin.daemon.jvm.options=-Xmx512m"
 
-    /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
-    /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+    if [ ! -f /tmp/.quantum_healed_ok ]; then
+        /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
+        /usr/local/bin/quantum-heal-x64 2>/dev/null || true
+        touch /tmp/.quantum_healed_ok 2>/dev/null || true
+    fi
 
     mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
     for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties; do
@@ -1637,7 +1645,9 @@ _quantum_tune_gradle() {
 org.gradle.daemon=false
 org.gradle.jvmargs=-Xmx${_qt_jvm} -XX:MaxMetaspaceSize=${_qt_meta} -Dfile.encoding=UTF-8
 kotlin.compiler.execution.strategy=in-process
+kotlin.daemon.jvm.options=-Xmx512m
 org.gradle.caching=true
+org.gradle.vfs.watch=false
 org.gradle.parallel=${_qt_parallel}
 org.gradle.workers.max=${_qt_workers}
 android.aapt2FromMaven=false
@@ -1656,6 +1666,8 @@ gradlew() {
         "--no-daemon"
         "--console=plain"
         "-Dorg.gradle.caching=true"
+        "-Dorg.gradle.vfs.watch=false"
+        "-Dorg.gradle.jvmargs=-Xmx${_qt_jvm} -XX:MaxMetaspaceSize=${_qt_meta}"
         "-Pandroid.aapt2FromMaven=false"
         "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
         "-Pandroid.aapt2.daemon=false"
@@ -1743,7 +1755,9 @@ flutter() {
             "-Pandroid.enableJetifier=false"
             "-Porg.gradle.caching=true"
             "-Dorg.gradle.caching=true"
+            "-Dorg.gradle.vfs.watch=false"
             "-Pkotlin.compiler.execution.strategy=in-process"
+            "-Dkotlin.daemon.jvm.options=-Xmx512m"
             "-Dorg.gradle.daemon=false"
         )
         if [ "$has_workers" = "false" ]; then
@@ -1756,17 +1770,29 @@ flutter() {
             extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${_qt_jvm} -XX:MaxMetaspaceSize=${_qt_meta}")
         fi
 
+        local verbose_flag=()
+        [ "${QUANTUM_BUILD_VERBOSE:-0}" = "1" ] && verbose_flag=("-v")
+
+        local build_log="/tmp/quantum_flutter_build.log"
+        rm -f "$build_log" 2>/dev/null || true
+
         echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${_qt_mem_mb}MB, CPU=${_qt_cores} ядер → dart=${_qt_dart}MB, jvm=${_qt_jvm}, workers=${_qt_workers}, cache=on)..."
-        echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle (живой лог задач)..."
-        command flutter "${cleaned_args[@]}" "${extra_flags[@]}" -v 2>&1 | awk '!/^\[[[:space:]]*\+[0-9]+ ms\] / || /Running |Building |Compiling |Gradle|Task|Built |Error|Warning|Failed|Exception|assemble/ { print; fflush() }'
+        echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle..."
+        command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1 | tee "$build_log"
         local ret=${PIPESTATUS[0]}
 
         if [ $ret -ne 0 ]; then
-            echo -e "\033[1;33m[Build Doctor]\033[0m Ошибка сборки (код $ret). Запускаю авто-диагностику (SDK/AAPT2/Box64) и безопасный повтор..."
-            /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
-            BOX64_DYNAREC=0 GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1" MALLOC_ARENA_MAX=1 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" -v 2>&1 | awk '!/^\[[[:space:]]*\+[0-9]+ ms\] / || /Running |Building |Compiling |Gradle|Task|Built |Error|Warning|Failed|Exception|assemble/ { print; fflush() }'
-            ret=${PIPESTATUS[0]}
+            if [ $ret -eq 139 ] || [ $ret -eq 132 ] || [ $ret -eq 134 ] || grep -qE "SIGSEGV|SIGILL|Segmentation fault|fasttop|gen_snapshot.*failed|exit code 254" "$build_log" 2>/dev/null; then
+                echo -e "\033[1;33m[Build Doctor]\033[0m Обнаружен сбой нативного/Box64 рантайма (код $ret). Запускаю авто-диагностику и безопасный повтор..."
+                /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
+                BOX64_DYNAREC=0 GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1" MALLOC_ARENA_MAX=1 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
+                ret=${PIPESTATUS[0]}
+            else
+                echo -e "\033[1;33m[Build Doctor]\033[0m Проверяю целостность SDK/AAPT2 после ошибки (код $ret)..."
+                /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
+            fi
         fi
+        rm -f "$build_log" 2>/dev/null || true
 
         if [ $ret -eq 0 ]; then
             if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
@@ -3902,6 +3928,31 @@ BOX64_DYNAREC_STRONGMEM=1
 BOX64_DYNAREC_BIGBLOCK=0
 BOX64_DYNAREC_SAFEFLAGS=2
 EOF
+fi
+
+# 7a. Auto-download native ARM64 gen_snapshot matching current Flutter engine.version
+ENGINE_VER_FILE="/root/flutter/bin/internal/engine.version"
+ARM64_GS_BIN="/usr/local/bin/gen_snapshot-arm64"
+ARM64_GS_VER="/usr/local/bin/gen_snapshot-arm64.version"
+if [ -f "$ENGINE_VER_FILE" ]; then
+    CUR_ENGINE_HASH="$(tr -d '[:space:]' < "$ENGINE_VER_FILE" 2>/dev/null || true)"
+    INSTALLED_GS_HASH="$(tr -d '[:space:]' < "$ARM64_GS_VER" 2>/dev/null || true)"
+    if [ -n "$CUR_ENGINE_HASH" ] && ( [ ! -x "$ARM64_GS_BIN" ] || [ "$CUR_ENGINE_HASH" != "$INSTALLED_GS_HASH" ] ); then
+        GS_URL="https://github.com/Lesorub361/quantum_ide/releases/download/native-tools-latest/gen_snapshot-arm64-${CUR_ENGINE_HASH}"
+        TMP_GS="${TMPDIR:-/tmp}/gen_snapshot-arm64-$$"
+        if curl -k -fsSL --connect-timeout 6 --max-time 60 "$GS_URL" -o "$TMP_GS" 2>/dev/null; then
+            if head -c 4 "$TMP_GS" 2>/dev/null | grep -q $'\x7fELF'; then
+                chmod 755 "$TMP_GS" 2>/dev/null || true
+                mv -f "$TMP_GS" "$ARM64_GS_BIN" 2>/dev/null || true
+                printf '%s\n' "$CUR_ENGINE_HASH" > "$ARM64_GS_VER" 2>/dev/null || true
+                echo "[quantum-heal-x64] ✓ Native ARM64 gen_snapshot installed for engine ${CUR_ENGINE_HASH:0:8}."
+            else
+                rm -f "$TMP_GS" 2>/dev/null || true
+            fi
+        else
+            rm -f "$TMP_GS" 2>/dev/null || true
+        fi
+    fi
 fi
 
 # 7b. Wrap x86_64 Flutter gen_snapshot so a Box64 heap crash auto-recovers via QEMU in-place (no 7-min Gradle restart)

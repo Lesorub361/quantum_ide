@@ -727,11 +727,11 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   String _buildProfileEnvPrefix() {
     switch (_buildProfile) {
       case 'turbo':
-        return 'export QUANTUM_BUILD_PROFILE=turbo BOX64_DYNAREC_STRONGMEM=1 BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_SAFEFLAGS=2 MALLOC_ARENA_MAX=2; ';
+        return 'export QUANTUM_BUILD_PROFILE=turbo; ';
       case 'safe':
         return 'export QUANTUM_BUILD_PROFILE=safe GRADLE_WORKERS_OVERRIDE=1 BOX64_DYNAREC=0 MALLOC_CHECK_=0 MALLOC_ARENA_MAX=1; ';
       default:
-        return 'export QUANTUM_BUILD_PROFILE=auto BOX64_DYNAREC_STRONGMEM=1 BOX64_DYNAREC_BIGBLOCK=0 BOX64_DYNAREC_SAFEFLAGS=2 MALLOC_ARENA_MAX=2; ';
+        return 'export QUANTUM_BUILD_PROFILE=auto; ';
     }
   }
 
@@ -999,21 +999,21 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK (KT)', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; gradlew assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
                   displayCmd: './gradlew assembleDebug')),
           _buildActionButton('Release APK (KT)', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; gradlew assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
                   displayCmd: './gradlew assembleRelease')),
           _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Clean (KT)', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon clean && rm -f ./app-release.apk ./app-debug.apk',
+                  'chmod +x ./gradlew 2>/dev/null; gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
                   displayCmd: './gradlew clean')),
           _buildActionButton('Sync (KT)', LucideIcons.refresh_cw, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon dependencies',
+                  'chmod +x ./gradlew 2>/dev/null; gradlew dependencies',
                   displayCmd: './gradlew dependencies')),
         ];
         break;
@@ -1022,21 +1022,21 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK (Java)', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; gradlew assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
                   displayCmd: './gradlew assembleDebug')),
           _buildActionButton('Release APK (Java)', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; gradlew assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
                   displayCmd: './gradlew assembleRelease')),
           _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
           _buildActionButton('Clean (Java)', LucideIcons.trash_2, Colors.red,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon clean && rm -f ./app-release.apk ./app-debug.apk',
+                  'chmod +x ./gradlew 2>/dev/null; gradlew clean && rm -f ./app-release.apk ./app-debug.apk',
                   displayCmd: './gradlew clean')),
           _buildActionButton('Sync (Java)', LucideIcons.refresh_cw, Colors.blue,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  'chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon dependencies',
+                  'chmod +x ./gradlew 2>/dev/null; gradlew dependencies',
                   displayCmd: './gradlew dependencies')),
         ];
         break;
@@ -1546,6 +1546,12 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
   Timer? _throttleTimer;
   bool _pendingRefresh = false;
 
+  bool _cacheDirty = true;
+  List<_LogItem> _cachedParsedLines = const [];
+  int _cachedErrorCount = 0;
+  int _cachedWarningCount = 0;
+  List<AndroidBuildIssue> _cachedIssues = const [];
+
   @override
   void initState() {
     super.initState();
@@ -1559,6 +1565,7 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
     if (oldWidget.session != widget.session) {
       oldWidget.session.xtermTerminal.removeListener(_onTerminalChanged);
       widget.session.xtermTerminal.addListener(_onTerminalChanged);
+      _cacheDirty = true;
       _scrollToBottom();
     }
   }
@@ -1574,20 +1581,62 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
 
   void _onTerminalChanged() {
     if (!mounted) return;
+    _cacheDirty = true;
     if (_throttleTimer?.isActive ?? false) {
       _pendingRefresh = true;
       return;
     }
     setState(() {});
     _scrollToBottom();
-    _throttleTimer = Timer(const Duration(milliseconds: 250), () {
+    _throttleTimer = Timer(const Duration(milliseconds: 350), () {
       if (!mounted) return;
       if (_pendingRefresh) {
         _pendingRefresh = false;
+        _cacheDirty = true;
         setState(() {});
         _scrollToBottom();
       }
     });
+  }
+
+  void _rebuildLogCacheIfNeeded() {
+    if (!_cacheDirty) return;
+    _cacheDirty = false;
+    final buffer = widget.session.xtermTerminal.buffer;
+    final lines = <String>[];
+    for (var i = 0; i < buffer.lines.length; i++) {
+      final lineStr = buffer.lines[i].toString().trimRight();
+      if (lineStr.isNotEmpty) {
+        lines.add(lineStr);
+      }
+    }
+
+    final parsedLines = <_LogItem>[];
+    int errorCount = 0;
+    int warningCount = 0;
+    final queryLower = _searchQuery.toLowerCase();
+
+    for (final text in lines) {
+      final type = _detectLogType(text);
+      if (type == LogType.error) errorCount++;
+      if (type == LogType.warning) warningCount++;
+
+      if (queryLower.isNotEmpty && !text.toLowerCase().contains(queryLower)) {
+        continue;
+      }
+
+      if (_filterType == 'error' && type != LogType.error) continue;
+      if (_filterType == 'warning' && type != LogType.warning) continue;
+
+      parsedLines.add(_LogItem(text, type));
+    }
+
+    _cachedParsedLines = parsedLines;
+    _cachedErrorCount = errorCount;
+    _cachedWarningCount = warningCount;
+    _cachedIssues = errorCount > 0
+        ? AndroidBuildDiagnosticsService().parseBuildIssues(lines.join('\n'), '')
+        : const [];
   }
 
   void _scrollToBottom() {
@@ -1604,33 +1653,11 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
 
   @override
   Widget build(BuildContext context) {
-    final buffer = widget.session.xtermTerminal.buffer;
-    final lines = <String>[];
-    for (var i = 0; i < buffer.lines.length; i++) {
-      final lineStr = buffer.lines[i].toString().trimRight();
-      if (lineStr.isNotEmpty) {
-        lines.add(lineStr);
-      }
-    }
-
-    final parsedLines = <_LogItem>[];
-    int errorCount = 0;
-    int warningCount = 0;
-
-    for (final text in lines) {
-      final type = _detectLogType(text);
-      if (type == LogType.error) errorCount++;
-      if (type == LogType.warning) warningCount++;
-
-      if (_searchQuery.isNotEmpty && !text.toLowerCase().contains(_searchQuery.toLowerCase())) {
-        continue;
-      }
-
-      if (_filterType == 'error' && type != LogType.error) continue;
-      if (_filterType == 'warning' && type != LogType.warning) continue;
-
-      parsedLines.add(_LogItem(text, type));
-    }
+    _rebuildLogCacheIfNeeded();
+    final parsedLines = _cachedParsedLines;
+    final errorCount = _cachedErrorCount;
+    final warningCount = _cachedWarningCount;
+    final issues = _cachedIssues;
 
     return Column(
       children: [
@@ -1663,6 +1690,7 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
                     onChanged: (val) {
                       setState(() {
                         _searchQuery = val;
+                        _cacheDirty = true;
                       });
                     },
                   ),
@@ -1677,10 +1705,8 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
             ],
           ),
         ),
-        if (errorCount > 0)
+        if (errorCount > 0 && issues.isNotEmpty)
           Builder(builder: (context) {
-            final issues = AndroidBuildDiagnosticsService().parseBuildIssues(lines.join('\n'), '');
-            if (issues.isEmpty) return const SizedBox.shrink();
             return Container(
               margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               padding: const EdgeInsets.all(8),
@@ -1755,6 +1781,7 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
       onTap: () {
         setState(() {
           _filterType = type;
+          _cacheDirty = true;
         });
       },
       borderRadius: BorderRadius.circular(6),

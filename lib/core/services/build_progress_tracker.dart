@@ -66,6 +66,7 @@ class BuildProgressTracker {
 
   DateTime? _start;
   DateTime _lastOutput = DateTime.now();
+  DateTime _lastNotify = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _ticker;
   String _tail = '';
   final List<String> _log = [];
@@ -76,6 +77,7 @@ class BuildProgressTracker {
   void start(String command) {
     _start = DateTime.now();
     _lastOutput = _start!;
+    _lastNotify = _start!;
     _tail = '';
     progress.value = BuildProgress(
       stage: command.contains('pub get') ? BuildStage.pubGet : BuildStage.gradle,
@@ -120,24 +122,43 @@ class BuildProgressTracker {
     final text = (_tail + chunk).replaceAll(_ansi, '');
     final lines = text.split(RegExp(r'[\r\n]+'));
     _tail = lines.removeLast();
+    var p = progress.value;
+    bool stageOrTerminalChanged = false;
+
     for (final raw in lines.followedBy([_tail])) {
       final line = raw.trim();
       if (line.isEmpty) continue;
-      if (progress.value.active || line.startsWith('▶')) {
+      if (p.active || line.startsWith('▶')) {
         _log.add(line.length > 400 ? line.substring(0, 400) : line);
         if (_log.length > 400) _log.removeAt(0);
       }
-      _line(line);
+      final prevStage = p.stage;
+      p = _processLine(p, line);
+      if (p.stage != prevStage || p.stage == BuildStage.done || p.stage == BuildStage.failed) {
+        stageOrTerminalChanged = true;
+      }
+      if (!p.active && (p.stage == BuildStage.done || p.stage == BuildStage.failed)) {
+        return;
+      }
+    }
+
+    if (!p.active) return;
+    final now = DateTime.now();
+    if (stageOrTerminalChanged || now.difference(_lastNotify).inMilliseconds >= 350) {
+      _lastNotify = now;
+      progress.value = p;
     }
   }
 
-  void _line(String line) {
-    if (!progress.value.active) {
-      if (line.startsWith('▶') && _startRe.hasMatch(line)) start(line.substring(1).trim());
-      if (!progress.value.active) return;
+  BuildProgress _processLine(BuildProgress p, String line) {
+    if (!p.active) {
+      if (line.startsWith('▶') && _startRe.hasMatch(line)) {
+        start(line.substring(1).trim());
+        return progress.value;
+      }
+      return p;
     }
     _lastOutput = DateTime.now();
-    var p = progress.value;
 
     if (line.contains('Running Gradle task') || line.startsWith('> Task') || line.contains('Configure project')) {
       p = p.copyWith(stage: BuildStage.gradle);
@@ -164,14 +185,14 @@ class BuildProgressTracker {
     if (line.startsWith('✓') || line.contains('Built build/') || line.contains('BUILD SUCCESSFUL')) {
       progress.value = p;
       _finish(BuildStage.done, apk: _apkRe.firstMatch(line)?.group(1));
-      return;
+      return progress.value;
     }
     if (line.contains('BUILD FAILED') ||
         line.contains('✗ Сборка') ||
         RegExp(r'Gradle task \w+ failed').hasMatch(line)) {
       progress.value = p.copyWith(errors: [...p.errors, line]);
       _finish(BuildStage.failed);
-      return;
+      return progress.value;
     }
     if (_errRe.hasMatch(line) && p.errors.length < 30) {
       p = p.copyWith(errors: [...p.errors, line]);
@@ -179,6 +200,6 @@ class BuildProgressTracker {
     if (p.message.isEmpty || (!line.startsWith('>') && line.length < 200)) {
       p = p.copyWith(message: line);
     }
-    progress.value = p;
+    return p;
   }
 }

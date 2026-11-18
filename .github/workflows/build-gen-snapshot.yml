@@ -1,0 +1,131 @@
+name: Build Native ARM64 gen_snapshot (Auto-Update)
+
+on:
+  schedule:
+    # Check daily at 03:00 UTC for new Flutter Engine releases
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      engine_version:
+        description: 'Optional Flutter Engine commit hash (leave empty to auto-detect latest stable)'
+        required: false
+        default: ''
+
+jobs:
+  build-gen-snapshot:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+
+    steps:
+      - name: Resolve target Flutter Engine hash
+        id: resolve
+        run: |
+          ENGINE_HASH="${{ inputs.engine_version }}"
+          if [ -z "$ENGINE_HASH" ]; then
+            # Fetch latest stable Flutter release info and read its engine.version
+            FLUTTER_URL=$(python3 -c '
+import json, urllib.request
+data = json.loads(urllib.request.urlopen("https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json").read())
+stable_hash = data["current_release"]["stable"]
+rel = next(r for r in data["releases"] if r["hash"] == stable_hash)
+print(data["base_url"] + "/" + rel["archive"])
+')
+            echo "Downloading Flutter metadata from $FLUTTER_URL"
+            curl -fsSL "$FLUTTER_URL" -o /tmp/flutter.tar.xz
+            tar -xJf /tmp/flutter.tar.xz -C /tmp flutter/bin/internal/engine.version
+            ENGINE_HASH=$(tr -d '[:space:]' < /tmp/flutter/bin/internal/engine.version)
+            rm -f /tmp/flutter.tar.xz
+          fi
+          echo "engine_hash=$ENGINE_HASH" >> "$GITHUB_OUTPUT"
+          echo "Target Engine hash: $ENGINE_HASH"
+
+          ASSET_URL="https://github.com/${{ github.repository }}/releases/download/native-tools-latest/gen_snapshot-arm64-${ENGINE_HASH}"
+          if curl -fsIL "$ASSET_URL" >/dev/null 2>&1; then
+            echo "already_exists=true" >> "$GITHUB_OUTPUT"
+            echo "Asset gen_snapshot-arm64-${ENGINE_HASH} already exists in native-tools-latest."
+          else
+            echo "already_exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install build dependencies
+        if: steps.resolve.outputs.already_exists != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            git curl python3 python3-pip ninja-build pkg-config \
+            clang lld file xz-utils unzip zip
+
+      - name: Checkout depot_tools
+        if: steps.resolve.outputs.already_exists != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: 'chromium/depot_tools'
+          path: 'depot_tools'
+
+      - name: Sync Flutter Engine source at target hash
+        if: steps.resolve.outputs.already_exists != 'true'
+        env:
+          ENGINE_HASH: ${{ steps.resolve.outputs.engine_hash }}
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/depot_tools:${PATH}"
+          mkdir -p engine && cd engine
+          cat << EOF > .gclient
+          solutions = [
+            {
+              "managed": False,
+              "name": "src/flutter",
+              "url": "https://github.com/flutter/flutter.git@${ENGINE_HASH}",
+              "custom_deps": {},
+              "deps_file": "DEPS",
+              "safesync_url": "",
+              "custom_vars": {
+                "download_android_deps": True,
+                "download_esbuild": False,
+                "download_fuchsia_deps": False,
+              },
+            },
+          ]
+          EOF
+          gclient sync --no-history --shallow --nohooks || true
+          gclient runhooks
+
+      - name: Build native ARM64 gen_snapshot for android-arm64-release
+        if: steps.resolve.outputs.already_exists != 'true'
+        env:
+          ENGINE_HASH: ${{ steps.resolve.outputs.engine_hash }}
+        run: |
+          export PATH="${GITHUB_WORKSPACE}/depot_tools:${PATH}"
+          cd engine/src
+          ./flutter/tools/gn --android --android-cpu=arm64 --runtime-mode=release --no-rbe
+          ninja -C out/android_release_arm64 gen_snapshot
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          OUT_BIN=""
+          for candidate in \
+            out/android_release_arm64/clang_arm64/gen_snapshot \
+            out/android_release_arm64/gen_snapshot; do
+            if [ -f "$candidate" ] && file "$candidate" | grep -qiE "aarch64|arm64"; then
+              OUT_BIN="$candidate"
+              break
+            fi
+          done
+          if [ -z "$OUT_BIN" ]; then
+            echo "ERROR: Native ARM64 gen_snapshot not found!"
+            find out/android_release_arm64 -maxdepth 2 -name "gen_snapshot" -exec file {} +
+            exit 1
+          fi
+          cp -f "$OUT_BIN" "${GITHUB_WORKSPACE}/dist/gen_snapshot-arm64-${ENGINE_HASH}"
+          chmod +x "${GITHUB_WORKSPACE}/dist/gen_snapshot-arm64-${ENGINE_HASH}"
+          file "${GITHUB_WORKSPACE}/dist/gen_snapshot-arm64-${ENGINE_HASH}"
+          ls -lh "${GITHUB_WORKSPACE}/dist/gen_snapshot-arm64-${ENGINE_HASH}"
+
+      - name: Publish gen_snapshot to native-tools-latest release
+        if: steps.resolve.outputs.already_exists != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: native-tools-latest
+          name: Native ARM64 Tools (Box64 + AAPT2 + gen_snapshot)
+          fail_on_unmatched_files: false
+          files: |
+            dist/gen_snapshot-arm64-*
+          prerelease: false

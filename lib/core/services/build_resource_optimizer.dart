@@ -111,53 +111,22 @@ class BuildResourceOptimizer {
 
     switch (mode) {
       case BuildPerformanceMode.turbo:
-        // Turbo mode: utilize 50-75% of CPU cores if RAM permits
+        // Turbo mode: utilize CPU cores when free RAM safely permits it
         if (ram >= 6000) {
-          jvmHeap = 3072;
-          jvmMeta = 640;
-          dartHeap = 1536;
-          workers = math.min(cores, 6);
-        } else if (ram >= 3200) {
-          jvmHeap = 2304;
+          jvmHeap = 2560;
           jvmMeta = 512;
           dartHeap = 1280;
           workers = math.min(cores, 4);
-        } else if (ram >= 2000) {
+        } else if (ram >= 3500) {
           jvmHeap = 1792;
           jvmMeta = 448;
           dartHeap = 1024;
           workers = math.min(cores, 3);
-        } else {
-          jvmHeap = 1280;
+        } else if (ram >= 2500) {
+          jvmHeap = 1408;
           jvmMeta = 384;
-          dartHeap = 768;
-          workers = math.min(cores, 2);
-        }
-        break;
-
-      case BuildPerformanceMode.balanced:
-        // Balanced: optimal compilation speed without risking Android LMK
-        if (ram >= 6000) {
-          jvmHeap = 1792;
-          jvmMeta = 512;
-          dartHeap = 1024;
-          workers = cores >= 8 ? 4 : math.min(cores, 3);
-        } else if (ram >= 3200) {
-          jvmHeap = 1536;
-          jvmMeta = 448;
-          dartHeap = 896;
-          workers = cores >= 6 ? 3 : math.min(cores, 2);
-        } else if (ram >= 2000) {
-          jvmHeap = 1600;
-          jvmMeta = 448;
           dartHeap = 896;
           workers = math.min(cores, 2);
-        } else if (ram >= 1400) {
-          jvmHeap = 1280;
-          jvmMeta = 384;
-          dartHeap = 768;
-          workers = 2;
-          parallel = false;
         } else {
           jvmHeap = 1024;
           jvmMeta = 320;
@@ -167,14 +136,47 @@ class BuildResourceOptimizer {
         }
         break;
 
+      case BuildPerformanceMode.balanced:
+        // Balanced: optimal compilation speed without risking Android LMK
+        if (ram >= 6000) {
+          jvmHeap = 1792;
+          jvmMeta = 448;
+          dartHeap = 1024;
+          workers = cores >= 8 ? 3 : math.min(cores, 2);
+        } else if (ram >= 3500) {
+          jvmHeap = 1536;
+          jvmMeta = 384;
+          dartHeap = 896;
+          workers = cores >= 6 ? 2 : 1;
+        } else if (ram >= 2500) {
+          jvmHeap = 1280;
+          jvmMeta = 384;
+          dartHeap = 768;
+          workers = 2;
+          parallel = false;
+        } else if (ram >= 1600) {
+          jvmHeap = 1024;
+          jvmMeta = 320;
+          dartHeap = 640;
+          workers = 1;
+          parallel = false;
+        } else {
+          jvmHeap = 896;
+          jvmMeta = 256;
+          dartHeap = 512;
+          workers = 1;
+          parallel = false;
+        }
+        break;
+
       case BuildPerformanceMode.safe:
         // Safe mode: low memory & battery saver
-        jvmHeap = math.min(1536, (ram * 0.4).toInt());
-        jvmHeap = math.max(1024, jvmHeap);
-        jvmMeta = 384;
-        dartHeap = 768;
-        workers = math.min(cores, 2);
-        parallel = ram >= 2500;
+        jvmHeap = math.min(1024, (ram * 0.35).toInt());
+        jvmHeap = math.max(768, jvmHeap);
+        jvmMeta = 256;
+        dartHeap = 512;
+        workers = 1;
+        parallel = false;
         break;
     }
 
@@ -199,7 +201,7 @@ class BuildResourceOptimizer {
     const checkSdk = '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true)';
 
     final envPrefix =
-        'GRADLE_OPTS="-Xmx${config.jvmHeapMb}m -XX:MaxMetaspaceSize=${config.jvmMetaspaceMb}m -Dorg.gradle.workers.max=$workers"';
+        'GRADLE_OPTS="-Xmx${config.jvmHeapMb}m -XX:MaxMetaspaceSize=${config.jvmMetaspaceMb}m -Dorg.gradle.workers.max=$workers -Dorg.gradle.parallel=${config.parallel} -Dorg.gradle.vfs.watch=false -Dkotlin.daemon.jvm.options=-Xmx512m"';
 
     switch (target) {
       case BuildTargetType.arm64:
