@@ -201,6 +201,7 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
   final int _cpuCores = Platform.numberOfProcessors > 0 ? Platform.numberOfProcessors : 8;
 
   List<SystemProcessItem> _cachedProcesses = const [];
+  DateTime _lastProcessFetch = DateTime.fromMillisecondsSinceEpoch(0);
 
   // --- Мгновенная нагрузка процессов (дельта тиков /proc/<pid>/stat) ---
   // `ps %cpu` показывает среднее за всё время жизни процесса и в «ядрах» (170% = 1.7 ядра),
@@ -385,7 +386,9 @@ class SystemStatsNotifier extends StateNotifier<SystemStats> {
     final isBuilding = LiveTelemetryService.instance.isBuilding ||
         BuildProgressTracker.instance.progress.value.active;
     List<SystemProcessItem> processes = _cachedProcesses;
-    if (fetchProcesses || isBuilding) {
+    final now = DateTime.now();
+    if (fetchProcesses || (isBuilding && now.difference(_lastProcessFetch).inSeconds >= 6)) {
+      _lastProcessFetch = now;
       processes = await _fetchProcessList(appRssBytes, cpu);
       _cachedProcesses = processes;
     } else if (processes.isEmpty) {

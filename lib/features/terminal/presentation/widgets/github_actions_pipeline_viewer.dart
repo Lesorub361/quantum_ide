@@ -82,6 +82,8 @@ class _GithubActionsPipelineViewerState
   late ProjectType _effectiveProjectType;
   int _activeStepIndex = 0;
   Timer? _tickerTimer;
+  Timer? _outputThrottleTimer;
+  bool _pendingOutputParse = false;
   DateTime _jobStartTime = DateTime.now();
   Duration _totalJobDuration = Duration.zero;
   Duration? _parsedTotalDuration;
@@ -111,7 +113,7 @@ class _GithubActionsPipelineViewerState
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
-    )..repeat(reverse: true);
+    );
 
     _initSteps();
     widget.session.xtermTerminal.addListener(_onTerminalOutput);
@@ -119,8 +121,11 @@ class _GithubActionsPipelineViewerState
 
     _tickerTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
-        setState(() {
-          if (!_isBuildFinished && _hasStartedAnyCommand) {
+        if (!_isBuildFinished && _hasStartedAnyCommand) {
+          if (!_pulseController.isAnimating) {
+            _pulseController.repeat(reverse: true);
+          }
+          setState(() {
             _totalJobDuration = DateTime.now().difference(_jobStartTime);
             if (_activeStepIndex < _steps.length &&
                 _steps[_activeStepIndex].status ==
@@ -129,8 +134,10 @@ class _GithubActionsPipelineViewerState
               _steps[_activeStepIndex].duration = DateTime.now()
                   .difference(_steps[_activeStepIndex].startTime!);
             }
-          }
-        });
+          });
+        } else if (_pulseController.isAnimating) {
+          _pulseController.stop();
+        }
       }
     });
   }
@@ -477,13 +484,25 @@ class _GithubActionsPipelineViewerState
   void dispose() {
     widget.session.xtermTerminal.removeListener(_onTerminalOutput);
     _tickerTimer?.cancel();
+    _outputThrottleTimer?.cancel();
     _pulseController.dispose();
     super.dispose();
   }
 
   void _onTerminalOutput() {
     if (!mounted) return;
+    if (_outputThrottleTimer?.isActive ?? false) {
+      _pendingOutputParse = true;
+      return;
+    }
     _parseNewBufferLines();
+    _outputThrottleTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      if (_pendingOutputParse) {
+        _pendingOutputParse = false;
+        _parseNewBufferLines();
+      }
+    });
   }
 
   void _parseInitialBuffer() {
@@ -737,6 +756,9 @@ class _GithubActionsPipelineViewerState
         final stepLogs = _steps[_activeStepIndex].logs;
         if (stepLogs.isEmpty || stepLogs.last != trimmedLeft) {
           stepLogs.add(trimmedLeft);
+          if (stepLogs.length > 300) {
+            stepLogs.removeAt(0);
+          }
         }
       }
 

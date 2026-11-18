@@ -27,6 +27,7 @@ import 'package:quantum_ide/core/services/system_stats_service.dart';
 import 'package:quantum_ide/l10n/app_localizations.dart';
 import 'package:quantum_ide/core/utils/adaptive_dialog_helper.dart';
 import 'package:quantum_ide/core/services/build_resource_optimizer.dart';
+import 'package:quantum_ide/core/theme/app_colors.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/editor/presentation/widgets/build_target_dialog.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
@@ -507,46 +508,111 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         ]);
     }
 
-    actions.add(_buildActionButton(l10n.copy, LucideIcons.copy, Colors.white60, () => _copyTerminalOutput(session, l10n)));
-
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
     final theme = _getTerminalTheme(terminalThemeName);
 
     return Column(
       children: [
-        _buildActionHeader(title, actions),
-        // Toggle Console vs Beautiful Logs
+        // Unified top bar: Project Type badge + Terminal/Logs segmented toggle + Copy
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          color: Colors.black.withValues(alpha: 0.05),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: AppColors.tabBarBackground,
+            border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
+          ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              _buildLogModeButton(
-                label: 'Logs',
-                isActive: _showBeautifulLogs,
-                onTap: () => setState(() => _showBeautifulLogs = true),
-                icon: LucideIcons.file_text,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.accentGreen.withValues(alpha: 0.10),
+                  borderRadius: AppBorderRadius.small,
+                  border: Border.all(
+                    color: AppColors.accentGreen.withValues(alpha: 0.25),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.accentGreen,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      title.toUpperCase(),
+                      style: GoogleFonts.inter(
+                        color: AppColors.accentGreen,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 8),
-              _buildLogModeButton(
-                label: 'Terminal',
-                isActive: !_showBeautifulLogs,
-                onTap: () => setState(() => _showBeautifulLogs = false),
-                icon: LucideIcons.terminal,
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: AppColors.darkBackground,
+                  borderRadius: AppBorderRadius.medium,
+                  border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildLogModeButton(
+                      label: 'Terminal',
+                      isActive: !_showBeautifulLogs,
+                      onTap: () => setState(() => _showBeautifulLogs = false),
+                      icon: LucideIcons.terminal,
+                    ),
+                    _buildLogModeButton(
+                      label: 'Logs',
+                      isActive: _showBeautifulLogs,
+                      onTap: () => setState(() => _showBeautifulLogs = true),
+                      icon: LucideIcons.file_text,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Tooltip(
+                message: l10n.copy,
+                child: InkWell(
+                  onTap: () => _copyTerminalOutput(session, l10n),
+                  borderRadius: AppBorderRadius.small,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.glassBackgroundLight,
+                      borderRadius: AppBorderRadius.small,
+                      border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
+                    ),
+                    child: const Icon(LucideIcons.copy, size: 13, color: AppColors.textWhite70),
+                  ),
+                ),
               ),
             ],
           ),
         ),
+        // Clean action strip
+        _buildActionHeader(actions),
         const BuildProgressCard(),
         Expanded(
           child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            margin: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             decoration: BoxDecoration(
               color: theme.background,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              borderRadius: AppBorderRadius.large,
+              border: Border.all(color: AppColors.glassBorderLight),
             ),
             clipBehavior: Clip.antiAlias,
             child: session != null
@@ -590,42 +656,20 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
     );
   }
 
-  Widget _buildActionHeader(String title, List<Widget> actions) {
+  Widget _buildActionHeader(List<Widget> actions) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.1),
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+        color: AppColors.darkBackground,
+        border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              color: Colors.greenAccent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              title.toUpperCase(),
-              style: GoogleFonts.inter(
-                color: Colors.greenAccent,
-                fontSize: 8,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.0,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: actions,
-              ),
-            ),
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: actions,
+        ),
       ),
     );
   }
@@ -800,6 +844,10 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     const clearScreen = 'printf "\\033[2J\\033[H\\033[3J"';
     final banner = 'printf "\\033[1;36m▶ %s\\033[0m\\n\\033[0;34m──────────────────────────────────────────────────\\033[0m\\n" "$safeLabel"';
     const restoreTty = '; (stty sane 2>/dev/null || true); printf "\\r\\n"';
+    final isGradleOnly = cmd.contains('gradlew') && !cmd.contains('flutter');
+    final killExtra = isGradleOnly
+        ? '(pkill -9 -f flutter_tools 2>/dev/null || true); (pkill -9 -f analysis_server 2>/dev/null || true); '
+        : '';
     const killZombiesAndPrepMem =
         '(pkill -9 -f aapt2 2>/dev/null || true); '
         '(pkill -9 -f GradleDaemon 2>/dev/null || true); '
@@ -808,8 +856,8 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         '(sed -i "/extra-gen-snapshot-options/d" ~/.gradle/gradle.properties 2>/dev/null || true); ';
     final profilePrefix = _buildProfileEnvPrefix();
     final finalCmd = cdCmd.isNotEmpty
-        ? '$clearScreen && $killZombiesAndPrepMem$profilePrefix$cdCmd && $banner && ($cmd)$restoreTty'
-        : '$clearScreen && $killZombiesAndPrepMem$profilePrefix$banner && ($cmd)$restoreTty';
+        ? '$clearScreen && $killZombiesAndPrepMem$killExtra$profilePrefix$cdCmd && $banner && ($cmd)$restoreTty'
+        : '$clearScreen && $killZombiesAndPrepMem$killExtra$profilePrefix$banner && ($cmd)$restoreTty';
     ref.read(dedicatedTerminalProvider.notifier).sendCommand(DedicatedTerminalType.build, finalCmd, interrupt: true, clear: false);
   }
 
@@ -1083,11 +1131,11 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK (KT)', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
                   displayCmd: './gradlew assembleDebug')),
           _buildActionButton('Release APK (KT)', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '$_ktRepairCmd(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nkotlin.compiler.execution.strategy=in-process\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
                   displayCmd: './gradlew assembleRelease')),
           _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
@@ -1106,11 +1154,11 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         buildActions = [
           _buildActionButton('Debug APK (Java)', LucideIcons.bug, Colors.yellow,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleDebug && (cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK: ./app-debug.apk"',
                   displayCmd: './gradlew assembleDebug')),
           _buildActionButton('Release APK (Java)', LucideIcons.package, Colors.orange,
               () => _runDedicatedCommand(workspaceState.currentPath,
-                  '(mkdir -p ~/.gradle 2>/dev/null || true) && (sed -i "/org.gradle.jvmargs/d" gradle.properties ~/.gradle/gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> gradle.properties 2>/dev/null || true) && (printf "\\norg.gradle.jvmargs=-Xmx1280m -XX:MaxMetaspaceSize=384m\\nsystemProp.java.net.preferIPv4Stack=true\\nandroid.enableJetifier=false\\nandroid.aapt2FromMaven=false\\nandroid.aapt2FromMavenOverride=/usr/bin/aapt2\\nandroid.aapt2.daemon=false\\norg.gradle.daemon=false\\norg.gradle.workers.max=1\\n" >> ~/.gradle/gradle.properties 2>/dev/null || true) && (/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon --max-workers=1 assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
+                  '(/usr/local/bin/quantum-patch-ndk 2>/dev/null || true) && chmod +x ./gradlew 2>/dev/null; bash ./gradlew --no-daemon assembleRelease && (cp app/build/outputs/apk/release/app-release-unsigned.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/app-release.apk ./app-release.apk 2>/dev/null || cp app/build/outputs/apk/release/*.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
                   displayCmd: './gradlew assembleRelease')),
           _buildActionButton(l10n.installApk, LucideIcons.smartphone, Colors.greenAccent,
               () => _installBuiltApk(workspaceState.currentPath)),
@@ -1248,28 +1296,81 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         Colors.cyanAccent,
         () => _installBuildAccelerators(workspaceState.currentPath),
       ),
-      _buildActionButton(
-        l10n.copy,
-        LucideIcons.copy,
-        Colors.white60,
-        () => _copyTerminalOutput(session, l10n),
-      ),
     ]);
 
     return Column(
       children: [
-        // Sub-tabs header (Console vs Sign APK)
+        // Unified top toolbar: [Консоль | Подпись APK] + [Profile] + [Pipeline | Terminal] + [Copy]
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.1),
-            border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+            color: AppColors.tabBarBackground,
+            border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
           ),
           child: Row(
             children: [
-              _buildSubTabButton(0, l10n.console, LucideIcons.terminal),
-              const SizedBox(width: 8),
-              _buildSubTabButton(1, l10n.signApk, LucideIcons.pen_tool),
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: AppColors.darkBackground,
+                  borderRadius: AppBorderRadius.medium,
+                  border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildSubTabButton(0, l10n.console, LucideIcons.terminal),
+                    _buildSubTabButton(1, l10n.signApk, LucideIcons.pen_tool),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (_buildSubTab == 0) ...[
+                _buildProfileDropdown(isRu),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: AppColors.darkBackground,
+                    borderRadius: AppBorderRadius.medium,
+                    border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildLogModeButton(
+                        label: 'Pipeline',
+                        isActive: _buildViewerMode == 0,
+                        onTap: () => setState(() => _buildViewerMode = 0),
+                        icon: LucideIcons.git_branch,
+                      ),
+                      _buildLogModeButton(
+                        label: 'Terminal',
+                        isActive: _buildViewerMode == 1,
+                        onTap: () => setState(() => _buildViewerMode = 1),
+                        icon: LucideIcons.terminal,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: l10n.copy,
+                  child: InkWell(
+                    onTap: () => _copyTerminalOutput(session, l10n),
+                    borderRadius: AppBorderRadius.small,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppColors.glassBackgroundLight,
+                        borderRadius: AppBorderRadius.small,
+                        border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
+                      ),
+                      child: const Icon(LucideIcons.copy, size: 13, color: AppColors.textWhite70),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -1278,80 +1379,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
           child: _buildSubTab == 0
               ? Column(
                   children: [
-                    _buildActionHeader(l10n.build, buildActions),
-                    // Build Profile Selector (Auto / Turbo / Safe Anti-Crash)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.16),
-                        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.04))),
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            Text(
-                              isRu ? 'Режим:' : 'Profile:',
-                              style: GoogleFonts.inter(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white54,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildProfileChip('auto', isRu ? 'Авто' : 'Auto', LucideIcons.cpu, Colors.blueAccent),
-                            const SizedBox(width: 6),
-                            _buildProfileChip('turbo', isRu ? 'Турбо (ccache+mold)' : 'Turbo', LucideIcons.zap, Colors.orangeAccent),
-                            const SizedBox(width: 6),
-                            _buildProfileChip('safe', isRu ? 'Безопасный (Anti-Crash)' : 'Safe', LucideIcons.shield, Colors.greenAccent),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Toggle Pipeline vs Terminal
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                      color: Colors.black.withValues(alpha: 0.1),
-                      child: Row(
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 7,
-                                height: 7,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF238636),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'GitHub Actions Pipeline',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF8B949E),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Spacer(),
-                          _buildLogModeButton(
-                            label: 'Pipeline',
-                            isActive: _buildViewerMode == 0,
-                            onTap: () => setState(() => _buildViewerMode = 0),
-                            icon: LucideIcons.git_branch,
-                          ),
-                          const SizedBox(width: 8),
-                          _buildLogModeButton(
-                            label: 'Terminal',
-                            isActive: _buildViewerMode == 1,
-                            onTap: () => setState(() => _buildViewerMode = 1),
-                            icon: LucideIcons.terminal,
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildActionHeader(buildActions),
                     Expanded(
                       child: session != null
                           ? (_buildViewerMode == 0
@@ -1361,11 +1389,11 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                                   onSwitchToTerminal: () => setState(() => _buildViewerMode = 1),
                                 )
                               : Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  margin: const EdgeInsets.fromLTRB(10, 8, 10, 10),
                                   decoration: BoxDecoration(
                                     color: theme.background,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                                    borderRadius: AppBorderRadius.large,
+                                    border: Border.all(color: AppColors.glassBorderLight),
                                   ),
                                   clipBehavior: Clip.antiAlias,
                                   child: ConduitTerminalSurface(
@@ -1413,28 +1441,101 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     );
   }
 
+  Widget _buildProfileDropdown(bool isRu) {
+    final (label, icon, accent) = switch (_buildProfile) {
+      'turbo' => (isRu ? 'Турбо' : 'Turbo', LucideIcons.zap, AppColors.accentOrange),
+      'safe' => (isRu ? 'Безоп.' : 'Safe', LucideIcons.shield, AppColors.accentGreen),
+      _ => (isRu ? 'Авто' : 'Auto', LucideIcons.cpu, AppColors.accentBlue),
+    };
+    return PopupMenuButton<String>(
+      tooltip: isRu ? 'Профиль сборки' : 'Build profile',
+      color: AppColors.panelBackground,
+      onSelected: (val) => setState(() => _buildProfile = val),
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: 'auto',
+          child: Row(
+            children: [
+              const Icon(LucideIcons.cpu, size: 14, color: AppColors.accentBlue),
+              const SizedBox(width: 8),
+              Text(isRu ? 'Авто' : 'Auto', style: GoogleFonts.inter(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'turbo',
+          child: Row(
+            children: [
+              const Icon(LucideIcons.zap, size: 14, color: AppColors.accentOrange),
+              const SizedBox(width: 8),
+              Text(isRu ? 'Турбо (ccache+mold)' : 'Turbo', style: GoogleFonts.inter(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'safe',
+          child: Row(
+            children: [
+              const Icon(LucideIcons.shield, size: 14, color: AppColors.accentGreen),
+              const SizedBox(width: 8),
+              Text(isRu ? 'Безопасный (Anti-Crash)' : 'Safe', style: GoogleFonts.inter(fontSize: 12, color: Colors.white)),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.12),
+          borderRadius: AppBorderRadius.medium,
+          border: Border.all(color: accent.withValues(alpha: 0.32), width: 0.8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: accent),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 2),
+            const Icon(LucideIcons.chevron_down, size: 11, color: Colors.white54),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSubTabButton(int index, String label, IconData icon) {
     final isActive = _buildSubTab == index;
     return GestureDetector(
       onTap: () => setState(() => _buildSubTab = index),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: isActive ? Colors.orangeAccent.withValues(alpha: 0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: isActive ? Colors.orangeAccent.withValues(alpha: 0.2) : Colors.transparent),
+          color: isActive ? AppColors.accentOrange.withValues(alpha: 0.14) : Colors.transparent,
+          borderRadius: AppBorderRadius.small,
+          border: Border.all(
+            color: isActive ? AppColors.accentOrange.withValues(alpha: 0.32) : Colors.transparent,
+            width: 0.8,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 12, color: isActive ? Colors.orangeAccent : Colors.white38),
-            const SizedBox(width: 4),
+            Icon(icon, size: 12, color: isActive ? AppColors.accentOrange : AppColors.textWhite38),
+            const SizedBox(width: 5),
             Text(
               label,
               style: GoogleFonts.inter(
                 fontSize: 10.5,
-                color: isActive ? Colors.white : Colors.white38,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                color: isActive ? Colors.white : AppColors.textWhite54,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
           ],
@@ -1443,42 +1544,20 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     );
   }
 
-  Widget _buildActionHeader(String title, List<Widget> actions) {
+  Widget _buildActionHeader(List<Widget> actions) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.1),
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+        color: AppColors.darkBackground,
+        border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.orangeAccent.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              title.toUpperCase(),
-              style: GoogleFonts.inter(
-                color: Colors.orangeAccent,
-                fontSize: 8.5,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              child: Row(
-                children: actions,
-              ),
-            ),
-          ),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: actions,
+        ),
       ),
     );
   }
@@ -1517,39 +1596,6 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileChip(String id, String label, IconData icon, Color accent) {
-    final isActive = _buildProfile == id;
-    return GestureDetector(
-      onTap: () => setState(() => _buildProfile = id),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: isActive ? accent.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isActive ? accent.withValues(alpha: 0.45) : Colors.white.withValues(alpha: 0.08),
-            width: 0.8,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 11, color: isActive ? accent : Colors.white54),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                color: isActive ? Colors.white : Colors.white60,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1625,6 +1671,8 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _filterType = 'all'; // 'all', 'error', 'warning'
+  Timer? _throttleTimer;
+  bool _pendingRefresh = false;
 
   @override
   void initState() {
@@ -1646,16 +1694,28 @@ class _BeautifulLogsViewerState extends State<BeautifulLogsViewer> {
   @override
   void dispose() {
     widget.session.xtermTerminal.removeListener(_onTerminalChanged);
+    _throttleTimer?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   void _onTerminalChanged() {
-    if (mounted) {
-      setState(() {});
-      _scrollToBottom();
+    if (!mounted) return;
+    if (_throttleTimer?.isActive ?? false) {
+      _pendingRefresh = true;
+      return;
     }
+    setState(() {});
+    _scrollToBottom();
+    _throttleTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      if (_pendingRefresh) {
+        _pendingRefresh = false;
+        setState(() {});
+        _scrollToBottom();
+      }
+    });
   }
 
   void _scrollToBottom() {
