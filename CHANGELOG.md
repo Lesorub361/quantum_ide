@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.267
+- **Стабильность сборки APK / AAB и защита от вылетов (OOM / Android LMK)**:
+  - Унифицированы лимиты памяти (`jvmHeap`, `dartHeap`, `workers`) в `BuildResourceOptimizer` и `_quantum_tune_gradle()` для устройств с ограниченной свободной RAM (исключены вылеты приложения на финальной стадии R8 / упаковки).
+  - Добавлены `-Dorg.gradle.vfs.watch=false`, `-Dkotlin.daemon.jvm.options=-Xmx512m` и `CMAKE_BUILD_PARALLEL_LEVEL` для предотвращения ухода в swap при сборке C++/NDK плагинов.
+  - Убраны глобальные `GLIBC_TUNABLES` и медленные `BOX64_*` флаги из общих переменных сборки (теперь они применяются точечно только к `gen_snapshot` через `/etc/box64.box64rc`), что ускоряет OpenJDK, Gradle, R8, Kotlin и `clang++`.
+- **Поддержка Java / Kotlin (`gradlew`) и ускорение Flutter-сборки**:
+  - Кнопки сборки Java и Kotlin в `SidebarBuildPanel` переведены на обёртку `gradlew` (вместо `bash ./gradlew`), благодаря чему автоматически применяются нативный `/usr/bin/aapt2`, `--console=plain`, настройка памяти и `Build Doctor`.
+  - Убран флаг `-v` из штатного `flutter build`, добавлен кэш-маркер `/tmp/.quantum_healed_ok` и умный повтор с `BOX64_DYNAREC=0` только при реальном сбое нативного/Box64 рантайма.
+  - Добавлен GitHub Actions workflow (`build-gen-snapshot.yml`) для автоматической сборки нативного ARM64 `gen_snapshot` и его авто-подхвата в `quantum-heal-x64`.
+- **Оптимизация UI логов и очистка диагностики**:
+  - Кэширован парсинг логов и ошибок в `BeautifulLogsViewer`, добавлено батчирование обновлений в `BuildProgressTracker`.
+  - Удалены неиспользуемые legacy-файлы `xterm` (`terminal_selection_overlay.dart`, `terminal_text_selection_modal.dart`), убраны 2 ложные ошибки анализатора и 200+ предупреждений `deprecated_member_use` для `material.dart`.
+
 ## 1.2.235
 - **Conduit Terminal Reflow & Pinch-to-Zoom Artifacts Fix (`conduit_vt`, `ConduitTerminalSurface`)**:
   - Fixed ghost character artifacts (`' ' : : #`, `⠋`, `⠙`, `⠸`, `□`) appearing after pinching to zoom in and out by zeroing stale cells in [`BufferLine.resize`](packages/conduit_vt/lib/src/core/buffer/line.dart) and [`_LineBuilder`](packages/conduit_vt/lib/src/core/reflow.dart), tracking cursor coordinates across `reflow()` with `CellAnchor` in [`Buffer.resize`](packages/conduit_vt/lib/src/core/buffer/buffer.dart), and triggering immediate repaints in [`RenderTerminal`](packages/conduit_vt/lib/src/ui/render.dart) and [`Terminal.resize`](packages/conduit_vt/lib/src/terminal.dart).

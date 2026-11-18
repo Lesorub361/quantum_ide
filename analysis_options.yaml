@@ -14,8 +14,8 @@ analyzer:
     - windows/**
     - macos/**
   errors:
-    # Treat deprecated_member_use as warning, not info
-    deprecated_member_use: warning
+    # Keep deprecated_member_use as info (Flutter 3.47+ deprecates package:flutter/material.dart)
+    deprecated_member_use: info
     # Critical async safety
     use_build_context_synchronously: warning
     # Internal package API usage is a bug

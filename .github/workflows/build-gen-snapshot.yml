@@ -48,7 +48,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             git curl python3 python3-pip ninja-build pkg-config \
-            clang lld file xz-utils unzip zip
+            clang lld file xz-utils unzip zip qemu-user-static
 
       - name: Checkout depot_tools
         if: steps.resolve.outputs.already_exists != 'true'
@@ -61,12 +61,12 @@ jobs:
           ENGINE_HASH: ${{ steps.resolve.outputs.engine_hash }}
         run: |
           export PATH="${GITHUB_WORKSPACE}/depot_tools:${PATH}"
-          mkdir -p engine && cd engine
+          mkdir -p flutter_ws && cd flutter_ws
           cat << EOF > .gclient
           solutions = [
             {
               "managed": False,
-              "name": "src/flutter",
+              "name": ".",
               "url": "https://github.com/flutter/flutter.git@${ENGINE_HASH}",
               "custom_deps": {},
               "deps_file": "DEPS",
@@ -79,8 +79,7 @@ jobs:
             },
           ]
           EOF
-          gclient sync --no-history --shallow --nohooks || true
-          gclient runhooks
+          gclient sync --no-history --shallow
 
       - name: Build native ARM64 gen_snapshot for android-arm64-release
         if: steps.resolve.outputs.already_exists != 'true'
@@ -88,7 +87,7 @@ jobs:
           ENGINE_HASH: ${{ steps.resolve.outputs.engine_hash }}
         run: |
           export PATH="${GITHUB_WORKSPACE}/depot_tools:${PATH}"
-          cd engine/src
+          cd flutter_ws/engine/src
           ./flutter/tools/gn --android --android-cpu=arm64 --runtime-mode=release --no-rbe
           ninja -C out/android_release_arm64 gen_snapshot
           mkdir -p "${GITHUB_WORKSPACE}/dist"
