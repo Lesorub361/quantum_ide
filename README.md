@@ -63,6 +63,12 @@ QuantumIDE собирается автоматически через GitHub Act
 - **Quantum Editor & LSP**: автодополнение, переходы к определениям и диагностика для Dart, HTML, CSS, JavaScript, TypeScript и Python.
 - **Системный очиститель (System Cleaner)**: очистка временных кешей, логов, `pub`/Gradle-артефактов и освобождение памяти прямо из интерфейса IDE.
 
+### ⚡ Сборка APK / AAB на Android (Flutter, Java, Kotlin)
+- ✅ **Защита от вылетов (OOM / Android LMK)**: автоматический подбор безопасных лимитов памяти (`jvmHeap`, `dartHeap`, `workers`, `CMAKE_BUILD_PARALLEL_LEVEL`, `kotlin.daemon.jvm.options=-Xmx512m`) под свободную RAM устройства (`MemAvailable`).
+- ✅ **Поддержка Java и Kotlin проектов из коробки**: единая обёртка `gradlew` с нативным ARM64 `/usr/bin/aapt2`, `--console=plain`, `org.gradle.vfs.watch=false`, `in-process` компиляцией Kotlin и `Build Doctor`.
+- ✅ **Ускоренная сборка без лишних тормозов**: точечное применение флагов `Box64` только для `gen_snapshot` (без замедления OpenJDK, Gradle, R8 и C++), кэш-проверка окружения и авто-подхват нативного ARM64 `gen_snapshot` при наличии в релизах.
+- ✅ **Плавный UI во время сборки**: кэшированный разбор логов и диагностик в `BeautifulLogsViewer` и батчирование прогресса сборки без фризов интерфейса.
+
 ---
 
 ## 🛠️ Технологический стек
