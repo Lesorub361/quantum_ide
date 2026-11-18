@@ -1649,10 +1649,12 @@ EOF
 
 # gradlew wrapper for Java / Kotlin / Android projects (noexec-safe + Build Doctor + RAM/CPU tuning)
 gradlew() {
+    echo -e "\033[1;34m[1/2]\033[0m Подготовка Gradle, SDK и AAPT2..."
     _quantum_tune_gradle
     echo -e "\033[1;36m⚡ QuantumIDE Gradle:\033[0m RAM free=${_qt_mem_mb}MB, CPU=${_qt_cores} ядер → jvm=${_qt_jvm}, workers=${_qt_workers}, cache=on..."
     local gflags=(
         "--no-daemon"
+        "--console=plain"
         "-Dorg.gradle.caching=true"
         "-Pandroid.aapt2FromMaven=false"
         "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
@@ -1696,6 +1698,7 @@ flutter() {
     done
 
     if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
+        echo -e "\033[1;34m[1/3]\033[0m Проверка SDK, NDK и нативного AAPT2..."
         _quantum_tune_gradle
 
         local has_plat=false
@@ -1754,14 +1757,15 @@ flutter() {
         fi
 
         echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${_qt_mem_mb}MB, CPU=${_qt_cores} ядер → dart=${_qt_dart}MB, jvm=${_qt_jvm}, workers=${_qt_workers}, cache=on)..."
-        command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
-        local ret=$?
+        echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle (живой лог задач)..."
+        command flutter "${cleaned_args[@]}" "${extra_flags[@]}" -v 2>&1 | awk '!/^\[[[:space:]]*\+[0-9]+ ms\] / || /Running |Building |Compiling |Gradle|Task|Built |Error|Warning|Failed|Exception|assemble/ { print; fflush() }'
+        local ret=${PIPESTATUS[0]}
 
         if [ $ret -ne 0 ]; then
             echo -e "\033[1;33m[Build Doctor]\033[0m Ошибка сборки (код $ret). Запускаю авто-диагностику (SDK/AAPT2/Box64) и безопасный повтор..."
             /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
-            BOX64_DYNAREC=0 GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1" MALLOC_ARENA_MAX=1 command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
-            ret=$?
+            BOX64_DYNAREC=0 GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1" MALLOC_ARENA_MAX=1 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" -v 2>&1 | awk '!/^\[[[:space:]]*\+[0-9]+ ms\] / || /Running |Building |Compiling |Gradle|Task|Built |Error|Warning|Failed|Exception|assemble/ { print; fflush() }'
+            ret=${PIPESTATUS[0]}
         fi
 
         if [ $ret -eq 0 ]; then
@@ -1987,13 +1991,14 @@ alias fetch="/usr/local/bin/term-fetch"
 
 # gradlew wrapper to ensure ./gradlew runs even on SD card / noexec storage and modern AAPT2
 gradlew() {
+    echo -e "\033[1;34m[1/2]\033[0m Подготовка Gradle, SDK и AAPT2..."
     if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
     fi
     if [ -f "./gradlew" ]; then
-        bash ./gradlew --no-daemon "$@"
+        bash ./gradlew --no-daemon --console=plain "$@"
     else
-        command gradlew --no-daemon "$@"
+        command gradlew --no-daemon --console=plain "$@"
     fi
 }
 
@@ -2007,6 +2012,7 @@ flutter() {
         fi
     fi
     if [ "$1" = "build" ] && ( [ "$2" = "apk" ] || [ "$2" = "appbundle" ] ); then
+        echo -e "\033[1;34m[1/3]\033[0m Проверка SDK, NDK и нативного AAPT2..."
         /usr/local/bin/quantum-patch-ndk 2>/dev/null || true
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
@@ -2143,8 +2149,9 @@ EOF
         fi
 
         echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB, CPU=${cpu_cores} ядер → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
-        command flutter "${cleaned_args[@]}" "${extra_flags[@]}"
-        local ret=$?
+        echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle (живой лог задач)..."
+        command flutter "${cleaned_args[@]}" "${extra_flags[@]}" -v 2>&1 | awk '!/^\[[[:space:]]*\+[0-9]+ ms\] / || /Running |Building |Compiling |Gradle|Task|Built |Error|Warning|Failed|Exception|assemble/ { print; fflush() }'
+        local ret=${pipestatus[1]}
 
         if [ $ret -eq 0 ]; then
             if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
