@@ -182,7 +182,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       Timer? resizeDebounce;
       final inputGuard = TerminalInputGuard();
       final xtermTerm = xt.Terminal(
-        maxLines: 2500,
+        maxLines: 1000,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : (Platform.isIOS

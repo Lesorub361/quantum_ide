@@ -1627,39 +1627,31 @@ _quantum_tune_gradle() {
     _qt_jvm="1280m"
     _qt_meta="384m"
     _qt_dart="768"
-    _qt_workers=2
-    _qt_parallel=true
+    _qt_workers=1
+    _qt_parallel=false
 
     if [ "$_qt_mem_mb" -ge 6000 ]; then
-        _qt_jvm="2560m"; _qt_meta="512m"; _qt_dart="1280"
-        if [ "$_qt_cores" -ge 8 ]; then _qt_workers=6
-        elif [ "$_qt_cores" -ge 6 ]; then _qt_workers=4
-        elif [ "$_qt_cores" -ge 4 ]; then _qt_workers=3
-        else _qt_workers=2; fi
-    elif [ "$_qt_mem_mb" -ge 3200 ]; then
-        _qt_jvm="2048m"; _qt_meta="512m"; _qt_dart="1024"
-        if [ "$_qt_cores" -ge 6 ]; then _qt_workers=4
-        elif [ "$_qt_cores" -ge 4 ]; then _qt_workers=3
-        else _qt_workers=2; fi
-    elif [ "$_qt_mem_mb" -ge 2000 ]; then
-        _qt_jvm="1280m"; _qt_meta="320m"; _qt_dart="768"
+        _qt_jvm="1792m"; _qt_meta="384m"; _qt_dart="1024"
         if [ "$_qt_cores" -ge 6 ]; then _qt_workers=3
         else _qt_workers=2; fi
-    elif [ "$_qt_mem_mb" -ge 1400 ]; then
-        _qt_jvm="1024m"; _qt_meta="320m"; _qt_dart="640"
-        _qt_workers=2; _qt_parallel=false
+    elif [ "$_qt_mem_mb" -ge 3200 ]; then
+        _qt_jvm="1280m"; _qt_meta="320m"; _qt_dart="768"
+        _qt_workers=2
+    elif [ "$_qt_mem_mb" -ge 2000 ]; then
+        _qt_jvm="1024m"; _qt_meta="288m"; _qt_dart="640"
+        _qt_workers=1
     else
         _qt_jvm="896m"; _qt_meta="256m"; _qt_dart="512"
-        _qt_workers=1; _qt_parallel=false
+        _qt_workers=1
     fi
 
     if [ "$QUANTUM_BUILD_PROFILE" = "safe" ]; then
-        _qt_jvm="1024m"; _qt_meta="256m"; _qt_dart="640"
+        _qt_jvm="896m"; _qt_meta="256m"; _qt_dart="512"
         _qt_workers=1
         _qt_parallel=false
     elif [ "$QUANTUM_BUILD_PROFILE" = "turbo" ]; then
         _qt_parallel=true
-        [ "$_qt_cores" -ge 4 ] && [ "$_qt_workers" -lt "$_qt_cores" ] && _qt_workers="$_qt_cores"
+        [ "$_qt_mem_mb" -ge 6000 ] && _qt_workers=3 || _qt_workers=2
     fi
 
     if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
@@ -1674,19 +1666,19 @@ _quantum_tune_gradle() {
     /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
     mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
-    for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties gradle.properties; do
-        if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
-            [ -d "$(dirname "$gp")" ] || continue
-            touch "$gp" 2>/dev/null || continue
-            [ -w "$gp" ] || continue
-            sed -i '/extra-gen-snapshot-options/d;/org.gradle.jvmargs/d;/kotlin.compiler.execution.strategy/d;/org.gradle.caching/d;/org.gradle.parallel/d;/org.gradle.workers.max/d' "$gp" 2>/dev/null || true
-            printf "org.gradle.jvmargs=-Xmx%s -XX:MaxMetaspaceSize=%s -Dfile.encoding=UTF-8\nkotlin.compiler.execution.strategy=in-process\norg.gradle.caching=true\norg.gradle.parallel=%s\norg.gradle.workers.max=%s\n" \
-                "$_qt_jvm" "$_qt_meta" "$_qt_parallel" "$_qt_workers" >> "$gp"
-            grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
-            grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
-            grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
-            grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
-        fi
+    for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties; do
+        [ -d "$(dirname "$gp")" ] || continue
+        cat > "$gp" 2>/dev/null <<EOF || true
+org.gradle.daemon=false
+org.gradle.jvmargs=-Xmx${_qt_jvm} -XX:MaxMetaspaceSize=${_qt_meta} -Dfile.encoding=UTF-8
+kotlin.compiler.execution.strategy=in-process
+org.gradle.caching=true
+org.gradle.parallel=${_qt_parallel}
+org.gradle.workers.max=${_qt_workers}
+android.aapt2FromMaven=false
+android.aapt2FromMavenOverride=/usr/bin/aapt2
+android.aapt2.daemon=false
+EOF
     done
 }
 
@@ -2023,60 +2015,47 @@ flutter() {
         local mem_avail_kb=$(grep 'MemAvailable:' /proc/meminfo 2>/dev/null | awk '{print $2}')
         local mem_avail_mb=$(( ${mem_avail_kb:-2000000} / 1024 ))
 
-        local jvm_xmx="1280m"
-        local jvm_meta="384m"
-        local dart_heap="768"
-        local gradle_workers=2
-        local gradle_parallel=true
+        local jvm_xmx="1024m"
+        local jvm_meta="288m"
+        local dart_heap="640"
+        local gradle_workers=1
+        local gradle_parallel=false
 
         if [ "$mem_avail_mb" -ge 6000 ]; then
-            jvm_xmx="2560m"
-            jvm_meta="512m"
-            dart_heap="1280"
-            if [ "$cpu_cores" -ge 8 ]; then
-                gradle_workers=6
-            elif [ "$cpu_cores" -ge 6 ]; then
-                gradle_workers=4
-            elif [ "$cpu_cores" -ge 4 ]; then
-                gradle_workers=3
-            else
-                gradle_workers=2
-            fi
-        elif [ "$mem_avail_mb" -ge 3200 ]; then
-            # Sweet spot for 4GB-8GB tablets/phones (e.g. 8 cores with ~3.9GB available RAM)
-            jvm_xmx="2048m"
-            jvm_meta="512m"
+            jvm_xmx="1792m"
+            jvm_meta="384m"
             dart_heap="1024"
-            if [ "$cpu_cores" -ge 8 ]; then
-                gradle_workers=4
-            elif [ "$cpu_cores" -ge 6 ]; then
-                gradle_workers=4
-            elif [ "$cpu_cores" -ge 4 ]; then
-                gradle_workers=3
-            else
-                gradle_workers=2
-            fi
-        elif [ "$mem_avail_mb" -ge 2000 ]; then
-            jvm_xmx="1600m"
-            jvm_meta="448m"
-            dart_heap="896"
             if [ "$cpu_cores" -ge 6 ]; then
                 gradle_workers=3
             else
                 gradle_workers=2
             fi
-        elif [ "$mem_avail_mb" -ge 1400 ]; then
+        elif [ "$mem_avail_mb" -ge 3200 ]; then
             jvm_xmx="1280m"
-            jvm_meta="384m"
+            jvm_meta="320m"
             dart_heap="768"
             gradle_workers=2
-            gradle_parallel=false
-        else
+        elif [ "$mem_avail_mb" -ge 2000 ]; then
             jvm_xmx="1024m"
-            jvm_meta="320m"
+            jvm_meta="288m"
             dart_heap="640"
             gradle_workers=1
+        else
+            jvm_xmx="896m"
+            jvm_meta="256m"
+            dart_heap="512"
+            gradle_workers=1
+        fi
+
+        if [ "$QUANTUM_BUILD_PROFILE" = "safe" ]; then
+            jvm_xmx="896m"
+            jvm_meta="256m"
+            dart_heap="512"
+            gradle_workers=1
             gradle_parallel=false
+        elif [ "$QUANTUM_BUILD_PROFILE" = "turbo" ]; then
+            gradle_parallel=true
+            [ "$mem_avail_mb" -ge 6000 ] && gradle_workers=3 || gradle_workers=2
         fi
 
         if [ -n "$GRADLE_WORKERS_OVERRIDE" ]; then
@@ -2091,27 +2070,19 @@ flutter() {
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
 
         mkdir -p ~/.gradle /root/.gradle 2>/dev/null || true
-        for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties android/gradle.properties; do
-            if [ -f "$gp" ] || [ "$gp" = ~/.gradle/gradle.properties ] || [ "$gp" = /root/.gradle/gradle.properties ]; then
-                [ -d "$(dirname "$gp")" ] || continue
-                touch "$gp" 2>/dev/null || true
-                [ -w "$gp" ] || continue
-                sed -i '/extra-gen-snapshot-options/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.jvmargs/d' "$gp" 2>/dev/null || true
-                sed -i '/kotlin.compiler.execution.strategy/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.caching/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.parallel/d' "$gp" 2>/dev/null || true
-                sed -i '/org.gradle.workers.max/d' "$gp" 2>/dev/null || true
-                echo "org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8" >> "$gp"
-                echo "kotlin.compiler.execution.strategy=in-process" >> "$gp"
-                echo "org.gradle.caching=true" >> "$gp"
-                echo "org.gradle.parallel=${gradle_parallel}" >> "$gp"
-                echo "org.gradle.workers.max=${gradle_workers}" >> "$gp"
-                grep -q "org.gradle.daemon" "$gp" 2>/dev/null || echo "org.gradle.daemon=false" >> "$gp"
-                grep -q "android.aapt2FromMaven" "$gp" 2>/dev/null || echo "android.aapt2FromMaven=false" >> "$gp"
-                grep -q "android.aapt2FromMavenOverride" "$gp" 2>/dev/null || echo "android.aapt2FromMavenOverride=/usr/bin/aapt2" >> "$gp"
-                grep -q "android.aapt2.daemon" "$gp" 2>/dev/null || echo "android.aapt2.daemon=false" >> "$gp"
-            fi
+        for gp in ~/.gradle/gradle.properties /root/.gradle/gradle.properties; do
+            [ -d "$(dirname "$gp")" ] || continue
+            cat > "$gp" 2>/dev/null <<EOF || true
+org.gradle.daemon=false
+org.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta} -Dfile.encoding=UTF-8
+kotlin.compiler.execution.strategy=in-process
+org.gradle.caching=true
+org.gradle.parallel=${gradle_parallel}
+org.gradle.workers.max=${gradle_workers}
+android.aapt2FromMaven=false
+android.aapt2FromMavenOverride=/usr/bin/aapt2
+android.aapt2.daemon=false
+EOF
         done
 
         local has_plat=false

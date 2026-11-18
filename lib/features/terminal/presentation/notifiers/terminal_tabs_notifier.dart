@@ -198,7 +198,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
       final keyboardCtrl = ConduitKeyboardController(xt.defaultInputHandler);
       final inputGuard = TerminalInputGuard();
       final xtermTerm = xt.Terminal(
-        maxLines: 2500,
+        maxLines: 1200,
         inputHandler: keyboardCtrl,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android

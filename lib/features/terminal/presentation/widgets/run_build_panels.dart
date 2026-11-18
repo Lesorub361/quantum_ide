@@ -836,6 +836,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     ref.read(projectSyncProvider.notifier).cancelSync();
     await ref.read(editorProvider.notifier).syncExternalNow(reloadAllTabs: true);
     unawaited(ShizukuBridge.instance.boostForBuild());
+    unawaited(ref.read(systemStatsProvider.notifier).freeBackgroundMemory(force: false));
     final runtime = ref.read(runtimeServiceProvider);
     final guestPath = workspacePath != null ? PathMapper.mapToGuest(workspacePath, runtime.appDirectory) : null;
     final cdCmd = guestPath != null ? 'mkdir -p "$guestPath" 2>/dev/null; cd "$guestPath"' : '';
