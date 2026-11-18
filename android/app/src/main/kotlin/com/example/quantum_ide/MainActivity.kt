@@ -183,69 +183,6 @@ class MainActivity : FlutterActivity() {
                         }
                     }.start()
                 }
-                else -> result.notImplemented()
-            }
-        }
-
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DOWNLOAD_CHANNEL).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "downloadModel" -> {
-                    val url = call.argument<String>("url")
-                    val filename = call.argument<String>("filename")
-                    val modelsDir = call.argument<String>("modelsDir")
-                    if (url != null && filename != null && modelsDir != null) {
-                        try {
-                            val downloadId = startDownload(url, filename, modelsDir)
-                            downloadIds[filename] = downloadId
-                            result.success(mapOf("downloadId" to downloadId))
-                        } catch (e: Exception) {
-                            result.error("DOWNLOAD_FAILED", e.message, null)
-                        }
-                    } else {
-                        result.error("INVALID_ARGS", "url, filename, modelsDir required", null)
-                    }
-                }
-                "cancelDownload" -> {
-                    val filename = call.argument<String>("filename")
-                    if (filename != null) {
-                        val downloadId = downloadIds.remove(filename)
-                        if (downloadId != null) {
-                            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                            manager.remove(downloadId)
-                        }
-                        result.success(true)
-                    } else {
-                        result.error("INVALID_ARGS", "filename required", null)
-                    }
-                }
-                "getDownloadStatus" -> {
-                    val filename = call.argument<String>("filename")
-                    if (filename != null) {
-                        val downloadId = downloadIds[filename]
-                        if (downloadId != null) {
-                            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-                            val query = DownloadManager.Query().setFilterById(downloadId)
-                            manager.query(query)?.use { cursor ->
-                                if (cursor.moveToFirst()) {
-                                    val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                                    val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
-                                    val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
-                                    result.success(mapOf(
-                                        "status" to status,
-                                        "downloaded" to downloaded,
-                                        "total" to total
-                                    ))
-                                } else {
-                                    result.success(null)
-                                }
-                            } ?: result.success(null)
-                        } else {
-                            result.success(null)
-                        }
-                    } else {
-                        result.error("INVALID_ARGS", "filename required", null)
-                    }
-                }
                 "shizukuStatus" -> {
                     try {
                         if (!Shizuku.pingBinder()) {
@@ -330,6 +267,69 @@ class MainActivity : FlutterActivity() {
                                 }
                             }
                         }.start()
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DOWNLOAD_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "downloadModel" -> {
+                    val url = call.argument<String>("url")
+                    val filename = call.argument<String>("filename")
+                    val modelsDir = call.argument<String>("modelsDir")
+                    if (url != null && filename != null && modelsDir != null) {
+                        try {
+                            val downloadId = startDownload(url, filename, modelsDir)
+                            downloadIds[filename] = downloadId
+                            result.success(mapOf("downloadId" to downloadId))
+                        } catch (e: Exception) {
+                            result.error("DOWNLOAD_FAILED", e.message, null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "url, filename, modelsDir required", null)
+                    }
+                }
+                "cancelDownload" -> {
+                    val filename = call.argument<String>("filename")
+                    if (filename != null) {
+                        val downloadId = downloadIds.remove(filename)
+                        if (downloadId != null) {
+                            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            manager.remove(downloadId)
+                        }
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_ARGS", "filename required", null)
+                    }
+                }
+                "getDownloadStatus" -> {
+                    val filename = call.argument<String>("filename")
+                    if (filename != null) {
+                        val downloadId = downloadIds[filename]
+                        if (downloadId != null) {
+                            val manager = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            val query = DownloadManager.Query().setFilterById(downloadId)
+                            manager.query(query)?.use { cursor ->
+                                if (cursor.moveToFirst()) {
+                                    val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                                    val downloaded = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+                                    val total = cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))
+                                    result.success(mapOf(
+                                        "status" to status,
+                                        "downloaded" to downloaded,
+                                        "total" to total
+                                    ))
+                                } else {
+                                    result.success(null)
+                                }
+                            } ?: result.success(null)
+                        } else {
+                            result.success(null)
+                        }
+                    } else {
+                        result.error("INVALID_ARGS", "filename required", null)
                     }
                 }
                 else -> result.notImplemented()
