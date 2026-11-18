@@ -518,7 +518,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: AppColors.tabBarBackground,
+            color: Colors.black.withValues(alpha: 0.08),
             border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
           ),
           child: Row(
@@ -561,7 +561,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
               Container(
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: AppColors.darkBackground,
+                  color: Colors.black.withValues(alpha: 0.16),
                   borderRadius: AppBorderRadius.medium,
                   border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
                 ),
@@ -661,7 +661,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.darkBackground,
+        color: Colors.transparent,
         border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
       ),
       child: SingleChildScrollView(
@@ -1304,7 +1304,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: AppColors.tabBarBackground,
+            color: Colors.black.withValues(alpha: 0.08),
             border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
           ),
           child: Row(
@@ -1312,7 +1312,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               Container(
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  color: AppColors.darkBackground,
+                  color: Colors.black.withValues(alpha: 0.16),
                   borderRadius: AppBorderRadius.medium,
                   border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
                 ),
@@ -1331,7 +1331,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
                 Container(
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: AppColors.darkBackground,
+                    color: Colors.black.withValues(alpha: 0.16),
                     borderRadius: AppBorderRadius.medium,
                     border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
                   ),
@@ -1449,7 +1449,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     };
     return PopupMenuButton<String>(
       tooltip: isRu ? 'Профиль сборки' : 'Build profile',
-      color: AppColors.panelBackground,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       onSelected: (val) => setState(() => _buildProfile = val),
       itemBuilder: (_) => [
         PopupMenuItem(
@@ -1549,7 +1549,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.darkBackground,
+        color: Colors.transparent,
         border: Border(bottom: BorderSide(color: AppColors.glassBorder)),
       ),
       child: SingleChildScrollView(
