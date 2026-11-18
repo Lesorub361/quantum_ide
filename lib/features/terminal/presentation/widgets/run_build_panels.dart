@@ -16,7 +16,6 @@ import 'package:quantum_ide/models/project_model.dart';
 import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/apk_signer_widget.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/build_progress_card.dart';
-import 'package:quantum_ide/features/terminal/presentation/widgets/github_actions_pipeline_viewer.dart';
 import 'package:quantum_ide/core/services/android_app_installer_service.dart';
 import 'package:quantum_ide/core/services/android_build_diagnostics_service.dart';
 import 'package:quantum_ide/core/utils/path_mapper.dart';
@@ -37,6 +36,15 @@ import 'package:quantum_ide/shared/providers/panel_provider.dart';
 
 // Project-safe: never mutate user's build.gradle.kts or AndroidManifest.xml.
 const String _ktRepairCmd = '';
+
+xt.TerminalTheme _resolveAppTerminalTheme(String themeName) {
+  for (final p in AppPalette.values) {
+    if (p.name == themeName) {
+      return p.terminalTheme;
+    }
+  }
+  return resolveConduitPalette(themeName).terminalTheme;
+}
 
 class SidebarRunPanel extends ConsumerStatefulWidget {
   const SidebarRunPanel({super.key});
@@ -204,76 +212,6 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
         ),
       );
     }
-  }
-
-  xt.TerminalTheme _getTerminalTheme(String themeName) {
-    Color bg;
-    Color fg = Colors.white;
-    switch (themeName) {
-      case 'dracula':
-        bg = const Color(0xFF282A36);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'monokai':
-        bg = const Color(0xFF272822);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'dark':
-        bg = const Color(0xFF0D0F14);
-        fg = const Color(0xFFE0E0E0);
-        break;
-      case 'catppuccin':
-        bg = const Color(0xFF1E1E2E);
-        fg = const Color(0xFFCDD6F4);
-        break;
-      case 'nord':
-        bg = const Color(0xFF2E3440);
-        fg = const Color(0xFFECEFF4);
-        break;
-      case 'oneDark':
-        bg = const Color(0xFF282C34);
-        fg = const Color(0xFFABB2BF);
-        break;
-      case 'tokyoNight':
-        bg = const Color(0xFF1A1B26);
-        fg = const Color(0xFFA9B1D6);
-        break;
-      case 'matrix':
-        bg = const Color(0xFF0D1117);
-        fg = const Color(0xFF00FF66);
-        break;
-      case 'ubuntu':
-      default:
-        bg = const Color(0xFF300A24);
-        fg = Colors.white;
-        break;
-    }
-
-    return xt.TerminalTheme(
-      cursor: fg,
-      selection: const Color(0xFF264F78).withValues(alpha: 0.6),
-      foreground: fg,
-      background: bg,
-      black: Colors.black,
-      red: const Color(0xFFCC0000),
-      green: const Color(0xFF4E9A06),
-      yellow: const Color(0xFFC4A000),
-      blue: const Color(0xFF3465A4),
-      magenta: const Color(0xFF75507B),
-      cyan: const Color(0xFF06989A),
-      white: const Color(0xFFD3D7CF),
-      brightBlack: const Color(0xFF555753),
-      brightRed: const Color(0xFFEF2929),
-      brightGreen: const Color(0xFF8AE234),
-      brightYellow: const Color(0xFFFCE94F),
-      brightBlue: const Color(0xFF729FCF),
-      brightMagenta: const Color(0xFFAD7FA8),
-      brightCyan: const Color(0xFF34E2E2),
-      brightWhite: const Color(0xFFEEEEEC),
-      searchHitBackground: Colors.yellow,
-      searchHitBackgroundCurrent: Colors.orange,
-      searchHitForeground: Colors.black,
-    );
   }
 
   @override
@@ -510,7 +448,7 @@ class _SidebarRunPanelState extends ConsumerState<SidebarRunPanel> {
 
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
-    final theme = _getTerminalTheme(terminalThemeName);
+    final theme = _resolveAppTerminalTheme(terminalThemeName);
 
     return Column(
       children: [
@@ -779,7 +717,6 @@ class SidebarBuildPanel extends ConsumerStatefulWidget {
 
 class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
   int _buildSubTab = 0;
-  int _buildViewerMode = 0; // 0 = Pipeline (GitHub Actions), 1 = Raw Terminal
   String _buildProfile = 'auto'; // 'auto' | 'turbo' | 'safe'
 
   void _stopCommand() {
@@ -934,76 +871,6 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
     );
   }
 
-  xt.TerminalTheme _getTerminalTheme(String themeName) {
-    Color bg;
-    Color fg = Colors.white;
-    switch (themeName) {
-      case 'dracula':
-        bg = const Color(0xFF282A36);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'monokai':
-        bg = const Color(0xFF272822);
-        fg = const Color(0xFFF8F8F2);
-        break;
-      case 'dark':
-        bg = const Color(0xFF0D0F14);
-        fg = const Color(0xFFE0E0E0);
-        break;
-      case 'catppuccin':
-        bg = const Color(0xFF1E1E2E);
-        fg = const Color(0xFFCDD6F4);
-        break;
-      case 'nord':
-        bg = const Color(0xFF2E3440);
-        fg = const Color(0xFFECEFF4);
-        break;
-      case 'oneDark':
-        bg = const Color(0xFF282C34);
-        fg = const Color(0xFFABB2BF);
-        break;
-      case 'tokyoNight':
-        bg = const Color(0xFF1A1B26);
-        fg = const Color(0xFFA9B1D6);
-        break;
-      case 'matrix':
-        bg = const Color(0xFF0D1117);
-        fg = const Color(0xFF00FF66);
-        break;
-      case 'ubuntu':
-      default:
-        bg = const Color(0xFF300A24);
-        fg = Colors.white;
-        break;
-    }
-
-    return xt.TerminalTheme(
-      cursor: fg,
-      selection: const Color(0xFF264F78).withValues(alpha: 0.6),
-      foreground: fg,
-      background: bg,
-      black: Colors.black,
-      red: const Color(0xFFCC0000),
-      green: const Color(0xFF4E9A06),
-      yellow: const Color(0xFFC4A000),
-      blue: const Color(0xFF3465A4),
-      magenta: const Color(0xFF75507B),
-      cyan: const Color(0xFF06989A),
-      white: const Color(0xFFD3D7CF),
-      brightBlack: const Color(0xFF555753),
-      brightRed: const Color(0xFFEF2929),
-      brightGreen: const Color(0xFF8AE234),
-      brightYellow: const Color(0xFFFCE94F),
-      brightBlue: const Color(0xFF729FCF),
-      brightMagenta: const Color(0xFFAD7FA8),
-      brightCyan: const Color(0xFF34E2E2),
-      brightWhite: const Color(0xFFEEEEEC),
-      searchHitBackground: Colors.yellow,
-      searchHitBackgroundCurrent: Colors.orange,
-      searchHitForeground: Colors.black,
-    );
-  }
-
   ProjectType _detectProjectType(String? path, ProjectType registeredType) {
     if (registeredType != ProjectType.other) return registeredType;
     if (path == null) return ProjectType.other;
@@ -1071,7 +938,7 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
 
     final terminalFontSize = ref.watch(settingsProvider).terminalFontSize;
     final terminalThemeName = ref.watch(settingsProvider).terminalTheme;
-    final theme = _getTerminalTheme(terminalThemeName);
+    final theme = _resolveAppTerminalTheme(terminalThemeName);
 
     final currentProject = allProjects.firstWhere(
       (p) => p.path == workspaceState.currentPath,
@@ -1329,32 +1196,6 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               if (_buildSubTab == 0) ...[
                 _buildProfileDropdown(isRu),
                 const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.16),
-                    borderRadius: AppBorderRadius.medium,
-                    border: Border.all(color: AppColors.glassBorderLight, width: 0.8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildLogModeButton(
-                        label: 'Pipeline',
-                        isActive: _buildViewerMode == 0,
-                        onTap: () => setState(() => _buildViewerMode = 0),
-                        icon: LucideIcons.git_branch,
-                      ),
-                      _buildLogModeButton(
-                        label: 'Terminal',
-                        isActive: _buildViewerMode == 1,
-                        onTap: () => setState(() => _buildViewerMode = 1),
-                        icon: LucideIcons.terminal,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 6),
                 Tooltip(
                   message: l10n.copy,
                   child: InkWell(
@@ -1380,58 +1221,71 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
           child: _buildSubTab == 0
               ? Column(
                   children: [
-                    _buildActionHeader(buildActions),
+                    _buildActionHeader([
+                      _buildActionButton(
+                        isRu ? 'Выбрать сборку ▾' : 'Build Commands ▾',
+                        LucideIcons.layers,
+                        AppColors.accentOrange,
+                        () => _showBuildCommandsSheet(context, buildActions, isRu),
+                      ),
+                      _buildActionButton(
+                        l10n.installApk,
+                        LucideIcons.smartphone,
+                        AppColors.accentGreen,
+                        () => _installBuiltApk(workspaceState.currentPath),
+                      ),
+                      _buildActionButton(
+                        l10n.stop,
+                        LucideIcons.square,
+                        Colors.redAccent,
+                        _stopCommand,
+                      ),
+                    ]),
                     Expanded(
                       child: session != null
-                          ? (_buildViewerMode == 0
-                              ? GithubActionsPipelineViewer(
-                                  session: session,
-                                  projectType: projectType,
-                                  onSwitchToTerminal: () => setState(() => _buildViewerMode = 1),
-                                )
-                              : Container(
-                                  margin: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                                  decoration: BoxDecoration(
-                                    color: theme.background,
-                                    borderRadius: AppBorderRadius.large,
-                                    border: Border.all(color: AppColors.glassBorderLight),
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: ConduitTerminalSurface(
-                                    terminal: session.xtermTerminal,
-                                    controller: session.xtermViewController,
-                                    autofocus: !(Platform.isAndroid || Platform.isIOS),
-                                    palette: resolveConduitPalette(
-                                      ref.watch(settingsProvider).terminalTheme,
-                                    ),
-                                    brightness: Brightness.dark,
-                                    customTheme: theme,
-                                    fontFamily: 'jetBrainsMono',
-                                    fontSize: terminalFontSize,
-                                    onFontSizeChanged: (newSize) {
-                                      ref
-                                          .read(settingsProvider.notifier)
-                                          .setTerminalFontSize(
-                                            newSize.clamp(8.0, 26.0),
-                                          );
-                                    },
-                                    onTapUp: (details, offset) {
-                                      final link =
-                                          QuantumLinkDetector.findLinkInBuffer(
-                                            session.xtermTerminal.buffer,
-                                            offset.y,
-                                            offset.x,
-                                          );
-                                      if (link != null) {
-                                        QuantumLinkDetector.handleLinkTap(
-                                          context,
-                                          ref,
-                                          link,
-                                        );
-                                      }
-                                    },
-                                  ),
-                                ))
+                          ? Container(
+                              margin: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                              decoration: BoxDecoration(
+                                color: theme.background,
+                                borderRadius: AppBorderRadius.large,
+                                border: Border.all(color: AppColors.glassBorderLight),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: ConduitTerminalSurface(
+                                terminal: session.xtermTerminal,
+                                controller: session.xtermViewController,
+                                autofocus: !(Platform.isAndroid || Platform.isIOS),
+                                palette: resolveConduitPalette(
+                                  ref.watch(settingsProvider).terminalTheme,
+                                ),
+                                brightness: Brightness.dark,
+                                customTheme: theme,
+                                fontFamily: 'jetBrainsMono',
+                                fontSize: terminalFontSize,
+                                onFontSizeChanged: (newSize) {
+                                  ref
+                                      .read(settingsProvider.notifier)
+                                      .setTerminalFontSize(
+                                        newSize.clamp(8.0, 26.0),
+                                      );
+                                },
+                                onTapUp: (details, offset) {
+                                  final link =
+                                      QuantumLinkDetector.findLinkInBuffer(
+                                        session.xtermTerminal.buffer,
+                                        offset.y,
+                                        offset.x,
+                                      );
+                                  if (link != null) {
+                                    QuantumLinkDetector.handleLinkTap(
+                                      context,
+                                      ref,
+                                      link,
+                                    );
+                                  }
+                                },
+                              ),
+                            )
                           : Center(child: Text(l10n.buildLogs, style: const TextStyle(color: Colors.white38))),
                     ),
                   ],
@@ -1439,6 +1293,60 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               : const ApkSignerWidget(),
         ),
       ],
+    );
+  }
+
+  void _showBuildCommandsSheet(BuildContext context, List<Widget> actions, bool isRu) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(LucideIcons.hammer, size: 16, color: AppColors.accentOrange),
+                  const SizedBox(width: 8),
+                  Text(
+                    isRu ? 'Команды сборки' : 'Build Commands',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(LucideIcons.x, size: 16, color: Colors.white54),
+                    onPressed: () => Navigator.of(sheetCtx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 8,
+                children: actions.map((w) {
+                  return Listener(
+                    behavior: HitTestBehavior.translucent,
+                    onPointerUp: (_) => Future.microtask(() {
+                      if (sheetCtx.mounted) Navigator.of(sheetCtx).pop();
+                    }),
+                    child: w,
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1597,43 +1505,6 @@ class _SidebarBuildPanelState extends ConsumerState<SidebarBuildPanel> {
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLogModeButton({
-    required String label,
-    required bool isActive,
-    required VoidCallback onTap,
-    required IconData icon,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.cyanAccent.withValues(alpha: 0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isActive ? Colors.cyanAccent.withValues(alpha: 0.2) : Colors.transparent,
-            width: 0.8,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 10, color: isActive ? Colors.cyanAccent : Colors.white38),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 9.5,
-                color: isActive ? Colors.white : Colors.white38,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ],
         ),
       ),
     );
