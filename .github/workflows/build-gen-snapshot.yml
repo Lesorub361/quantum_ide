@@ -52,10 +52,8 @@ jobs:
 
       - name: Checkout depot_tools
         if: steps.resolve.outputs.already_exists != 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: 'chromium/depot_tools'
-          path: 'depot_tools'
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "${GITHUB_WORKSPACE}/depot_tools"
 
       - name: Sync Flutter Engine source at target hash
         if: steps.resolve.outputs.already_exists != 'true'
