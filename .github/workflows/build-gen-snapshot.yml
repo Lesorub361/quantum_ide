@@ -62,6 +62,19 @@ jobs:
         run: |
           export PATH="${GITHUB_WORKSPACE}/depot_tools:${PATH}"
           mkdir -p flutter_ws && cd flutter_ws
+          git init
+          git remote add origin https://github.com/flutter/flutter.git
+          git fetch --depth 1 origin "${ENGINE_HASH}"
+          git checkout FETCH_HEAD
+          # Remove CIPD entries that do not exist for linux-arm64 (not needed to build gen_snapshot)
+          python3 -c '
+          p = "DEPS"
+          s = open(p).read()
+          for pkg in ["flutter/android/sdk/all/", "perfetto/trace_to_text/"]:
+              import re
+              s = re.sub(r"\{[^{}]*" + re.escape(pkg) + r"[^{}]*\},?", "", s, flags=re.S)
+          open(p, "w").write(s)
+          '
           cat << EOF > .gclient
           solutions = [
             {
@@ -72,7 +85,7 @@ jobs:
               "deps_file": "DEPS",
               "safesync_url": "",
               "custom_vars": {
-                "download_android_deps": True,
+                "download_android_deps": False,
                 "download_esbuild": False,
                 "download_fuchsia_deps": False,
               },
