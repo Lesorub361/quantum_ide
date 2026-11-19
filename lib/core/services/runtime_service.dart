@@ -2021,11 +2021,27 @@ gradlew() {
     if ! (/usr/bin/aapt2 compile --help 2>&1 | grep -q -- '--source-path'); then
         /usr/local/bin/quantum-heal-x64 2>/dev/null || true
     fi
+    local gflags=(
+        "--no-daemon"
+        "--console=plain"
+        "-Dorg.gradle.caching=true"
+        "-Dorg.gradle.vfs.watch=false"
+        "-Dkotlin.compiler.execution.strategy=in-process"
+        "-Pandroid.aapt2FromMaven=false"
+        "-Pandroid.aapt2FromMavenOverride=/usr/bin/aapt2"
+        "-Pandroid.aapt2.daemon=false"
+    )
     if [ -f "./gradlew" ]; then
-        bash ./gradlew --no-daemon --console=plain "$@"
+        bash ./gradlew "${gflags[@]}" "$@"
     else
-        command gradlew --no-daemon --console=plain "$@"
+        command gradlew "${gflags[@]}" "$@"
     fi
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+        echo -e "\033[1;33m[Build Doctor]\033[0m Проверяю целостность SDK/AAPT2/кэшей после ошибки..."
+        /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
+    fi
+    return $ret
 }
 
 # Flutter build wrapper to auto-ensure ARM64 target, disable daemon, and use native aapt2 on mobile Android PRoot
@@ -4540,7 +4556,18 @@ if [ -f /usr/lib/android-sdk/build-tools/debian/apksigner.jar ]; then
         rm -f /usr/bin/apksigner
         cat << 'APKSIGNER_EOF' > /usr/bin/apksigner
 #!/bin/sh
-exec /usr/lib/jvm/java-17-openjdk-arm64/bin/java -jar /usr/lib/android-sdk/build-tools/debian/apksigner.jar "$@"
+JAVA_BIN="java"
+if [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    JAVA_BIN="$JAVA_HOME/bin/java"
+elif ! command -v java >/dev/null 2>&1; then
+    for d in /usr/lib/jvm/java-21-openjdk-arm64 /usr/lib/jvm/java-17-openjdk-arm64 /root/jdk-17; do
+        if [ -x "$d/bin/java" ]; then
+            JAVA_BIN="$d/bin/java"
+            break
+        fi
+    done
+fi
+exec "$JAVA_BIN" -jar /usr/lib/android-sdk/build-tools/debian/apksigner.jar "$@"
 APKSIGNER_EOF
         chmod +x /usr/bin/apksigner
     fi

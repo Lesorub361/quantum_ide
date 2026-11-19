@@ -34,8 +34,24 @@ jobs:
       - name: Get Flutter dependencies
         run: flutter pub get
 
+      - name: Patch plugins for AGP 9 (proguard-android.txt is unsupported)
+        run: |
+          grep -rlE "proguard-android\.txt" "$HOME/.pub-cache/hosted" --include=build.gradle --include=build.gradle.kts 2>/dev/null | while read -r f; do
+            echo "Patching $f"
+            sed -i "s/proguard-android\.txt/proguard-android-optimize.txt/g" "$f"
+          done || true
+
       - name: Build Debug APK for Emulator
-        run: flutter build apk --debug --no-tree-shake-icons
+        env:
+          GRADLE_OPTS: "-Xmx1024m -Dfile.encoding=UTF-8"
+        run: |
+          sed -i '/org.gradle.jvmargs/d' android/gradle.properties
+          sed -i '/kotlin.compiler.execution.strategy/d' android/gradle.properties
+          sed -i '/android.aapt2.daemon/d' android/gradle.properties
+          sed -i 's/org.gradle.daemon=.*/org.gradle.daemon=true/g' android/gradle.properties
+          sed -i 's/android.aapt2FromMaven=.*/android.aapt2FromMaven=true/g' android/gradle.properties
+          printf 'org.gradle.jvmargs=-Xmx3072m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8\nkotlin.compiler.execution.strategy=daemon\n' >> android/gradle.properties
+          flutter build apk --debug --no-tree-shake-icons
 
       - name: Enable KVM hardware acceleration
         run: |

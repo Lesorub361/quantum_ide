@@ -159,8 +159,10 @@ jobs:
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 14
 
-      - name: Extract release notes from manifest
+      - name: Extract release notes and version from manifest
         run: |
+          PUB_VER=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d'+' -f1)
+          echo "PUBSPEC_TAG=v${PUB_VER}" >> $GITHUB_ENV
           if [ -f quantum-ide-update.json ]; then
             NOTES=$(jq -r '.notes // empty' quantum-ide-update.json)
             if [ -n "$NOTES" ]; then
@@ -174,12 +176,11 @@ jobs:
         if: (github.ref_type == 'tag' && startsWith(github.ref_name, 'v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || 'v1.2.48') }}
-          name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || 'v1.2.48') }}
+          tag_name: ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || env.PUBSPEC_TAG) }}
+          name: QuantumIDE ${{ github.event.inputs.version != '' && github.event.inputs.version || (startsWith(github.ref_name, 'v') && github.ref_name || env.PUBSPEC_TAG) }}
           body: ${{ github.event.inputs.release_notes != '' && github.event.inputs.release_notes || env.DEFAULT_NOTES }}
           files: |
             build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/flutter-apk/app-universal-release.apk
             build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
             build/app/outputs/flutter-apk/app-x86_64-release.apk

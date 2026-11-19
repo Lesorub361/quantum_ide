@@ -1,10 +1,6 @@
 -keep class com.pichillilorenzo.flutter_inappwebview_android.** { *; }
 -dontwarn com.pichillilorenzo.flutter_inappwebview_android.**
 
-# Keep local inference packages for Dart FFI
--keep class com.songhieu.flutter_litert_lm.** { *; }
--dontwarn com.songhieu.flutter_litert_lm.**
-
 # Keep compression libraries and app native bridge
 -keep class com.github.luben.zstd.** { *; }
 -dontwarn com.github.luben.zstd.**

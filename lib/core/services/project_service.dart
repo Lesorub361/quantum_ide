@@ -1356,20 +1356,22 @@ include(":app")
     final sdkPath = _getAndroidSdkPath();
     await _createFile(p.join(projectPath, 'local.properties'), 'sdk.dir=$sdkPath\n');
 
-    // 2.2 gradle.properties (Optimized for ARM64 PRoot / Mobile-Harness)
+    // 2.2 gradle.properties (Optimized for ARM64 PRoot / Android tablets)
     await _createFile(p.join(projectPath, 'gradle.properties'), '''android.useAndroidX=true
 android.enableJetifier=false
 kotlin.code.style=official
 android.nonTransitiveRClass=true
 systemProp.java.net.preferIPv4Stack=true
-org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8
 org.gradle.daemon=false
+org.gradle.caching=true
+org.gradle.vfs.watch=false
 org.gradle.parallel=false
 org.gradle.workers.max=1
+kotlin.compiler.execution.strategy=in-process
 android.aapt2.daemon=false
 android.aapt2FromMaven=false
 android.aapt2FromMavenOverride=/usr/bin/aapt2
-org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-arm64
 ''');
 
     // 3. app/build.gradle.kts
@@ -1604,7 +1606,6 @@ public class MainActivity extends AppCompatActivity {
       'gradlew',
       'gradlew.bat',
       'gradle/wrapper/gradle-wrapper.jar',
-      'gradle/wrapper/gradle-wrapper.properties',
     ];
 
     bool copiedWrapperJar = false;
@@ -1658,7 +1659,7 @@ public class MainActivity extends AppCompatActivity {
       if (!await propFile.exists()) {
         await _createFile(propFile.path, '''distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
-distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip
+distributionUrl=https\\://services.gradle.org/distributions/gradle-8.14-bin.zip
 zipStoreBase=GRADLE_USER_HOME
 zipStorePath=wrapper/dists
 ''');
@@ -2002,7 +2003,7 @@ server.listen(port, () => {
         break;
       case ProjectType.androidJava:
       case ProjectType.androidKotlin:
-        command = 'cd "$guestPath" && (bash ./gradlew installDebug || bash ./gradlew assembleDebug)';
+        command = 'cd "$guestPath" && (gradlew installDebug || gradlew assembleDebug)';
         break;
       case ProjectType.rust:
         command = 'cd "$guestPath" && cargo run';
@@ -2150,7 +2151,7 @@ class MainActivity : AppCompatActivity() {
       final buildCmd = [
         'cd "$guestPath"',
         'chmod +x ./gradlew 2>/dev/null || true',
-        'bash ./gradlew --no-daemon --max-workers=2 assembleDebug 2>&1',
+        'gradlew assembleDebug 2>&1',
         'cp app/build/outputs/apk/debug/app-debug.apk ./app-debug.apk 2>/dev/null || true',
       ].join(' && ');
       terminal.sendCommand(buildCmd);
@@ -2164,7 +2165,7 @@ class MainActivity : AppCompatActivity() {
             'elif [ -d build ]; then cp -r build/* .quantum_android_apk/app/src/main/assets/www/ 2>/dev/null || true; '
             'else find . -maxdepth 2 \\( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.json" -o -name "*.png" -o -name "*.svg" -o -name "*.jpg" \\) ! -path "./.quantum_android_apk/*" ! -path "./node_modules/*" -exec cp --parents {} .quantum_android_apk/app/src/main/assets/www/ \\; 2>/dev/null || true; fi',
         'cd .quantum_android_apk && chmod +x ./gradlew 2>/dev/null || true',
-        'bash ./gradlew --no-daemon --max-workers=2 assembleDebug 2>&1',
+        'gradlew assembleDebug 2>&1',
         'cp app/build/outputs/apk/debug/app-debug.apk ../app-debug.apk 2>/dev/null && echo "✓ Готовый Web APK собран: ./app-debug.apk"',
       ].join(' && ');
       terminal.sendCommand(buildCmd);

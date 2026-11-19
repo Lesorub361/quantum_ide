@@ -45,6 +45,8 @@ app.*.map.json
 /android/app/release
 .quantum/
 *.zip
+*.apk
+*.aab
 android/gradle-8.0-bin.zip
 android/gradle-wrapper.zip
 

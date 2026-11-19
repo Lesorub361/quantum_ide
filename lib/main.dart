@@ -98,7 +98,7 @@ void main() async {
     );
 
     // Request Android permissions asynchronously after UI first frame is mounted
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _initializeAndroid();
       });
