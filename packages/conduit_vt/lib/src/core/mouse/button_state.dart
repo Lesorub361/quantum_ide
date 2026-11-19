@@ -1,1 +1,0 @@
-enum TerminalMouseButtonState { up, down }

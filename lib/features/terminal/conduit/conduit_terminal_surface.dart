@@ -16,9 +16,8 @@ class ConduitTerminalSurface extends StatefulWidget {
     required this.onFontSizeChanged,
     this.focusNode,
     this.autofocus = false,
-    this.terminalMouseInput = true,
+    this.terminalMouseInput = false,
     this.onTapUp,
-    this.onOpenLink,
     this.onSecondaryTapDown,
     this.customTheme,
     this.hardwareKeyboardOnly = false,
@@ -36,7 +35,6 @@ class ConduitTerminalSurface extends StatefulWidget {
   final bool autofocus;
   final bool terminalMouseInput;
   final void Function(TapUpDetails, CellOffset)? onTapUp;
-  final void Function(String url)? onOpenLink;
   final void Function(TapDownDetails, CellOffset)? onSecondaryTapDown;
   final TerminalTheme? customTheme;
   final bool hardwareKeyboardOnly;
@@ -152,12 +150,11 @@ class _ConduitTerminalSurfaceState extends State<ConduitTerminalSurface> {
                 'monospace',
               ],
             ),
-            padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
+            padding: const EdgeInsets.fromLTRB(0, 6, 0, 4),
             cursorType: TerminalCursorType.block,
             alwaysShowCursor: true,
             simulateScroll: true,
             onTapUp: widget.onTapUp,
-            onOpenLink: widget.onOpenLink,
             onSecondaryTapDown: widget.onSecondaryTapDown,
           ),
         ),

@@ -3115,19 +3115,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                           _pasteToTerminal(session);
                         }
                       },
-                      onOpenLink: (url) {
-                        QuantumLinkDetector.handleLinkTap(
-                          context,
-                          ref,
-                          QuantumTerminalLink(
-                            type: QuantumLinkType.webUrl,
-                            rawText: url,
-                            target: url,
-                            startOffset: 0,
-                            endOffset: url.length,
-                          ),
-                        );
-                      },
                       onTapUp: (details, offset) {
                         final buffer = session.xtermTerminal.buffer;
                         final link = QuantumLinkDetector.findLinkInBuffer(

@@ -201,19 +201,6 @@ class QuantumLinkDetector {
       return null;
     }
 
-    // 1. Check multi-line stitched URL first (handles wrapped OAuth / web URLs)
-    final url = buffer.getUrlAt(xt.CellOffset(colIndex, lineIndex));
-    if (url != null && url.isNotEmpty) {
-      return QuantumTerminalLink(
-        type: QuantumLinkType.webUrl,
-        rawText: url,
-        target: url,
-        startOffset: colIndex,
-        endOffset: colIndex + 1,
-      );
-    }
-
-    // 2. Fallback to single-line detection for file paths, localhost, and git URLs
     final lineStr = buffer.lines[lineIndex].toString();
     return findLinkAt(lineStr, colIndex);
   }

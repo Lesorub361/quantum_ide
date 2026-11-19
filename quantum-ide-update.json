@@ -1,16 +1,16 @@
 {
-  "versionCode": 286,
-  "versionName": "1.2.269",
-  "notes": "## 🚀 QuantumIDE v1.2.269\n\n### Что нового\n- Исправлена сборка APK на Android-планшете для **Java**, **Kotlin** и **Flutter**: автоопределение JDK (17/21), `kotlin.compiler.execution.strategy=in-process`, обёртка `gradlew` для Bash и Zsh с нативным ARM64 `aapt2`, Gradle 8.14 и исправленный `apksigner`.\n- Очищены 28 неиспользуемых зависимостей, исправлена конфигурация AGP 9, CI/CD (`build-apk.yml`, `autonomous-qa.yml`) и веб-совместимость.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
+  "versionCode": 287,
+  "versionName": "1.2.270",
+  "notes": "## 🚀 QuantumIDE v1.2.270\n\n### Что нового\n- **Терминал переведён на 100% чистый оригинальный `gwitko/conduit_vt`** (коммит `b486b89`) напрямую из GitHub без локальных патчей; настройки `TerminalSurface` приведены в соответствие с оригинальным Conduit (`terminalMouseInput = false` по умолчанию).\n- Исправлена сборка APK на Android-планшете для **Java**, **Kotlin** и **Flutter**.\n\n### 📦 Сборки для всех платформ\n- **Android**: `app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-release.aab`\n- **Linux Desktop**: `quantum_ide-linux-x64.tar.gz`, `quantum_ide-linux-arm64.tar.gz`\n- **Windows Desktop**: `quantum_ide-windows-x64.zip`, `quantum_ide-windows-arm64.zip`\n- **macOS**: `quantum_ide-macos.zip`\n- **iOS (без подписи)**: `quantum_ide-ios-unsigned.ipa`\n- **Web**: `quantum_ide-web.tar.gz`, `quantum_ide-web.zip`",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.269/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.270/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.269",
-  "buildNumber": 286,
-  "tag_name": "v1.2.269",
-  "releaseNotes": "Исправлена сборка APK на Android для Java, Kotlin и Flutter, очищены зависимости и починен AGP 9 / CI."
+  "version": "1.2.270",
+  "buildNumber": 287,
+  "tag_name": "v1.2.270",
+  "releaseNotes": "Терминал переведён на 100% оригинальный gwitko/conduit_vt напрямую из GitHub + настройки из оригинального Conduit."
 }

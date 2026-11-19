@@ -1,7 +1,7 @@
 name: quantum_ide
 description: "QuantumIDE - A next-generation AI-powered mobile IDE for web development built with Flutter."
 publish_to: 'none'
-version: 1.2.269+286
+version: 1.2.270+287
 
 environment:
   sdk: ^3.11.4
@@ -22,7 +22,9 @@ dependencies:
   flex_color_scheme: ^8.4.0
   flutter_inappwebview: ^6.1.5
   conduit_vt:
-    path: packages/conduit_vt
+    git:
+      url: https://github.com/gwitko/conduit_vt.git
+      ref: b486b89
   flutter_code_crafter:
     path: packages/flutter_code_crafter
   http: ^1.4.0
