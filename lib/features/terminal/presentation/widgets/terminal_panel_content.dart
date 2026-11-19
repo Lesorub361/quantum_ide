@@ -20,7 +20,6 @@ import 'package:quantum_ide/features/terminal/conduit/conduit_keyboard_bar.dart'
 import 'package:quantum_ide/features/terminal/conduit/conduit_terminal_surface.dart';
 import 'package:quantum_ide/features/terminal/engine/quantum_terminal_action_bar.dart';
 import 'package:quantum_ide/features/terminal/presentation/notifiers/terminal_tabs_notifier.dart';
-import '../../engine/terminal_output_pipe.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/virtual_keys.dart';
 import 'package:quantum_ide/features/editor/presentation/notifiers/editor_notifier.dart';
 import 'package:quantum_ide/shared/providers/panel_provider.dart';
@@ -194,7 +193,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
   final ValueNotifier<List<String>?> _suggestionsNotifier = ValueNotifier(null);
   int _selectedSuggestionIndex = 0;
   List<String> _pathBinaries = [];
-  final TerminalInputGuard _inputGuard = TerminalInputGuard();
   Timer? _suggestionsDebounceTimer;
 
   TerminalSession? _lastAttachedSession;
@@ -688,11 +686,6 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
       final hadCtrl = _activeModifiers.contains('CTRL');
       final hadAlt = _activeModifiers.contains('ALT');
       final hadShift = _activeModifiers.contains('SHIFT');
-
-      // Filter out duplicate IME input events on mobile keyboards
-      if (!hadCtrl && !hadAlt && !hadShift) {
-        if (!_inputGuard.accept(data)) return;
-      }
 
       String sequence = '';
       if (hadCtrl) {

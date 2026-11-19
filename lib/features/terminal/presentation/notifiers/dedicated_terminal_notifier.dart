@@ -179,10 +179,8 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
       final xtermVc = xt.TerminalController();
       int lastCols = -1;
       int lastRows = -1;
-      Timer? resizeDebounce;
-      final inputGuard = TerminalInputGuard();
       final xtermTerm = xt.Terminal(
-        maxLines: 1000,
+        maxLines: 10000,
         platform: Platform.isAndroid
             ? xt.TerminalTargetPlatform.android
             : (Platform.isIOS
@@ -193,7 +191,6 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
                         ? xt.TerminalTargetPlatform.windows
                         : xt.TerminalTargetPlatform.linux))),
         onOutput: (data) {
-          if (!inputGuard.accept(data)) return;
           pty.write(Uint8List.fromList(utf8.encode(data)));
         },
         onResize: (cols, rows, int pixelWidth, int pixelHeight) {
@@ -202,12 +199,9 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
           if (safeRows != lastRows || safeCols != lastCols) {
             lastRows = safeRows;
             lastCols = safeCols;
-            resizeDebounce?.cancel();
-            resizeDebounce = Timer(const Duration(milliseconds: 50), () {
-              try {
-                pty.resize(safeRows, safeCols);
-              } catch (_) {}
-            });
+            try {
+              pty.resize(safeRows, safeCols);
+            } catch (_) {}
           }
         },
       );
