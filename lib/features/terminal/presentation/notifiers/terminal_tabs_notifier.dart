@@ -229,7 +229,7 @@ class TerminalTabsNotifier extends StateNotifier<List<TerminalSession>> {
               return;
             }
             resizeDebounceTimer?.cancel();
-            resizeDebounceTimer = Timer(const Duration(milliseconds: 220), () {
+            resizeDebounceTimer = Timer(const Duration(milliseconds: 50), () {
               if (safeRows != lastRows || safeCols != lastCols) {
                 lastRows = safeRows;
                 lastCols = safeCols;

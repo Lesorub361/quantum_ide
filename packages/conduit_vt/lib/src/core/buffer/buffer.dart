@@ -113,11 +113,32 @@ class Buffer {
     codePoint = charset.translate(codePoint);
 
     final cellWidth = unicodeV11.wcwidth(codePoint);
+
+    // Zero-width characters (combining marks, variation selectors like U+FE0F,
+    // ZWJ/ZWSP) must not advance the cursor or consume a cell.
+    if (codePoint != 0 && cellWidth == 0) {
+      return;
+    }
+
     if (_cursorX >= terminal.viewWidth) {
-      index();
-      setCursorX(0);
       if (terminal.autoWrapMode) {
+        index();
+        setCursorX(0);
         currentLine.isWrapped = true;
+      } else {
+        _cursorX = terminal.viewWidth - 1;
+      }
+    }
+
+    // Wide (2-column) character at the last column: wrap before writing.
+    if (cellWidth == 2 && _cursorX == terminal.viewWidth - 1) {
+      if (terminal.autoWrapMode) {
+        currentLine.eraseCell(_cursorX, terminal.cursor);
+        index();
+        setCursorX(0);
+        currentLine.isWrapped = true;
+      } else {
+        return;
       }
     }
 
@@ -131,8 +152,9 @@ class Buffer {
       _cursorX++;
     }
 
-    if (cellWidth == 2) {
-      writeChar(0);
+    if (cellWidth == 2 && _cursorX < viewWidth) {
+      line.setCell(_cursorX, 0, 0, terminal.cursor);
+      _cursorX++;
     }
   }
 
@@ -196,7 +218,7 @@ class Buffer {
   /// cursor.
   void eraseLineToCursor() {
     currentLine.isWrapped = false;
-    currentLine.eraseRange(0, _cursorX, terminal.cursor);
+    currentLine.eraseRange(0, min(_cursorX + 1, viewWidth), terminal.cursor);
   }
 
   /// Erases the line at the current cursor position.

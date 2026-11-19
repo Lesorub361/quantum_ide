@@ -144,10 +144,13 @@ class BufferLine with IndexedItem {
     // reset cell one to the right if end is second cell of a wide char
     // (end == 0 has no cell to the left, and getWidth(-1) would throw)
     if (end > 0 && end < _length && getWidth(end - 1) == 2) {
-      eraseCell(end - 1, style);
+      eraseCell(end, style);
     }
 
     end = min(end, _length);
+    if (start == 0 && end >= _length) {
+      osc8Url = null;
+    }
     for (var i = start; i < end; i++) {
       eraseCell(i, style);
     }

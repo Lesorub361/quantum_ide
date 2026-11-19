@@ -30,7 +30,13 @@ class TerminalOutputPipe {
   final StringBuffer _buffer = StringBuffer();
   int _length = 0;
   Timer? _timer;
+  Timer? _syncFallbackTimer;
+  bool _inSyncUpdate = false;
   bool _closed = false;
+
+  static const String _syncBegin = '\x1b[?2026h';
+  static const String _syncEnd = '\x1b[?2026l';
+  static const int _maxSyncBatchChars = 256 * 1024;
 
   void add(List<int> bytes) {
     if (_closed) return;
@@ -41,6 +47,31 @@ class TerminalOutputPipe {
     if (s.isEmpty) return;
     _buffer.write(s);
     _length += s.length;
+
+    final lastBegin = s.lastIndexOf(_syncBegin);
+    final lastEnd = s.lastIndexOf(_syncEnd);
+    if (lastBegin != -1 || lastEnd != -1) {
+      if (lastBegin > lastEnd) {
+        _inSyncUpdate = true;
+        _timer?.cancel();
+        _timer = null;
+        _syncFallbackTimer ??= Timer(const Duration(milliseconds: 120), flush);
+      } else {
+        _inSyncUpdate = false;
+        _syncFallbackTimer?.cancel();
+        _syncFallbackTimer = null;
+        flush();
+        return;
+      }
+    }
+
+    if (_inSyncUpdate) {
+      if (_length >= _maxSyncBatchChars) {
+        flush();
+      }
+      return;
+    }
+
     if (_length >= maxBatchChars) {
       flush();
       return;
@@ -51,6 +82,9 @@ class TerminalOutputPipe {
   void flush() {
     _timer?.cancel();
     _timer = null;
+    _syncFallbackTimer?.cancel();
+    _syncFallbackTimer = null;
+    _inSyncUpdate = false;
     if (_length == 0) return;
     final text = _buffer.toString();
     _buffer.clear();

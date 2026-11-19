@@ -203,7 +203,7 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
             lastRows = safeRows;
             lastCols = safeCols;
             resizeDebounce?.cancel();
-            resizeDebounce = Timer(const Duration(milliseconds: 180), () {
+            resizeDebounce = Timer(const Duration(milliseconds: 50), () {
               try {
                 pty.resize(safeRows, safeCols);
               } catch (_) {}
