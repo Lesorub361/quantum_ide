@@ -102,7 +102,7 @@ jobs:
           export PATH="${GITHUB_WORKSPACE}/depot_tools:${PATH}"
           cd flutter_ws/engine/src
           ./flutter/tools/gn --android --android-cpu=arm64 --runtime-mode=release --no-rbe
-          ninja -C out/android_release_arm64 gen_snapshot
+          ninja -C out/android_release_arm64 clang_arm64/gen_snapshot
           mkdir -p "${GITHUB_WORKSPACE}/dist"
           OUT_BIN=""
           for candidate in \
