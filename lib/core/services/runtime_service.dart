@@ -2177,7 +2177,9 @@ EOF
             "-Pandroid.enableJetifier=false"
             "-Porg.gradle.caching=true"
             "-Dorg.gradle.caching=true"
+            "-Dorg.gradle.vfs.watch=false"
             "-Pkotlin.compiler.execution.strategy=in-process"
+            "-Dkotlin.daemon.jvm.options=-Xmx512m"
             "-Dorg.gradle.daemon=false"
         )
         if [ "$has_workers" = "false" ]; then
@@ -2190,10 +2192,29 @@ EOF
             extra_flags+=("-Dorg.gradle.jvmargs=-Xmx${jvm_xmx} -XX:MaxMetaspaceSize=${jvm_meta}")
         fi
 
+        local verbose_flag=()
+        [ "${QUANTUM_BUILD_VERBOSE:-0}" = "1" ] && verbose_flag=("-v")
+
+        local build_log="/tmp/quantum_flutter_build.log"
+        rm -f "$build_log" 2>/dev/null || true
+
         echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB, CPU=${cpu_cores} ядер → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
-        echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle (живой лог задач)..."
-        command flutter "${cleaned_args[@]}" "${extra_flags[@]}" -v 2>&1 | awk '!/^\[[[:space:]]*\+[0-9]+ ms\] / || /Running |Building |Compiling |Gradle|Task|Built |Error|Warning|Failed|Exception|assemble/ { print; fflush() }'
+        echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle..."
+        command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1 | tee "$build_log"
         local ret=${pipestatus[1]}
+
+        if [ $ret -ne 0 ]; then
+            if [ $ret -eq 139 ] || [ $ret -eq 132 ] || [ $ret -eq 134 ] || grep -qE "SIGSEGV|SIGILL|Segmentation fault|fasttop|gen_snapshot.*failed|exit code 254" "$build_log" 2>/dev/null; then
+                echo -e "\033[1;33m[Build Doctor]\033[0m Обнаружен сбой нативного/Box64 рантайма (код $ret). Запускаю авто-диагностику и безопасный повтор..."
+                /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
+                BOX64_DYNAREC=0 GLIBC_TUNABLES="glibc.malloc.tcache_count=0:glibc.malloc.arena_max=1" MALLOC_ARENA_MAX=1 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
+                ret=$?
+            else
+                echo -e "\033[1;33m[Build Doctor]\033[0m Проверяю целостность SDK/AAPT2 после ошибки (код $ret)..."
+                /usr/local/bin/quantum-heal-x64 --doctor 2>/dev/null || true
+            fi
+        fi
+        rm -f "$build_log" 2>/dev/null || true
 
         if [ $ret -eq 0 ]; then
             if [ -f "build/app/outputs/bundle/release/app-release.aab" ]; then
@@ -2202,7 +2223,13 @@ EOF
             fi
             if [ -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-release.apk" ./app-release.apk 2>/dev/null || true
-                echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+                if command -v unzip >/dev/null 2>&1 && ! unzip -l ./app-release.apk 2>/dev/null | grep -q "AndroidManifest.xml"; then
+                    echo -e "\033[1;31m✗ ВНИМАНИЕ: ./app-release.apk собран без AndroidManifest.xml (сбросьте кэш: flutter clean && rm -rf build/ android/.gradle/).\033[0m"
+                    rm -f ./app-release.apk
+                    ret=1
+                else
+                    echo -e "\033[1;32m✓ APK готов:\033[0m ./app-release.apk"
+                fi
             fi
             if [ -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
                 cp -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ./app-release-arm64.apk 2>/dev/null || true
