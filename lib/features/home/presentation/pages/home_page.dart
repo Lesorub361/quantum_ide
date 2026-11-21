@@ -2688,17 +2688,160 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildProjectsHeader(int count) {
+  Widget _buildProjectsHeader(int count, {bool hasAnyProjects = true}) {
     final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          AppLocalizations.of(context)!.projectsHeader(count),
-          style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+        Expanded(
+          child: Text(
+            AppLocalizations.of(context)!.projectsHeader(count),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
         ),
-        Icon(LucideIcons.list_filter, size: 14, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
+        if (Platform.isAndroid && hasAnyProjects)
+          _isExportingAllToSd
+              ? const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : IconButton(
+                  tooltip: 'Обновить проекты на SD-карте',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(LucideIcons.hard_drive_upload, size: 18, color: muted),
+                  onPressed: _exportAllToSdCard,
+                ),
+        IconButton(
+          tooltip: _sortByName ? 'Сортировка: по имени' : 'Сортировка: по дате',
+          visualDensity: VisualDensity.compact,
+          icon: Icon(
+            _sortByName ? LucideIcons.arrow_down_a_z : LucideIcons.list_filter,
+            size: 18,
+            color: muted,
+          ),
+          onPressed: () => setState(() => _sortByName = !_sortByName),
+        ),
       ],
+    );
+  }
+
+  Widget _buildMobileQuickActionsBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    final actions = <({IconData icon, String label, Color color, VoidCallback onTap})>[
+      (
+        icon: LucideIcons.plus,
+        label: l10n.createProject,
+        color: theme.colorScheme.primary,
+        onTap: () => _showProjectDialog(context, ref),
+      ),
+      (
+        icon: LucideIcons.folder_open,
+        label: l10n.open,
+        color: Colors.cyanAccent,
+        onTap: () => _importAndOpenProject(context, ref),
+      ),
+      (
+        icon: LucideIcons.git_branch,
+        label: 'Git',
+        color: Colors.purpleAccent,
+        onTap: () => context.push('/github'),
+      ),
+      (
+        icon: LucideIcons.terminal,
+        label: l10n.terminal,
+        color: const Color(0xFF10B981),
+        onTap: () => context.push('/terminal'),
+      ),
+      (
+        icon: LucideIcons.blocks,
+        label: 'Ещё',
+        color: theme.colorScheme.onSurfaceVariant,
+        onTap: () => _showDeveloperToolsSheet(context),
+      ),
+    ];
+    return Row(
+      children: [
+        for (final a in actions)
+          Expanded(
+            child: InkWell(
+              onTap: a.onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: a.color.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: Icon(a.icon, color: a.color, size: 20),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      a.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCompactSystemMonitorChip(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) {
+        final stats = ref.watch(systemStatsProvider);
+        final theme = Theme.of(context);
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(LucideIcons.activity, size: 14, color: Color(0xFF10B981)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'CPU ${stats.cpuUsage.toStringAsFixed(0)}%  ·  RAM ${stats.ramUsage.toStringAsFixed(0)}%',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

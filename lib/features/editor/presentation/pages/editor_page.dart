@@ -2323,7 +2323,6 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                   onTap: () {
                     ref.read(workspaceProvider.notifier).setWorkspace(
                           proj.path,
-                          proj.name,
                         );
                   },
                   child: Padding(

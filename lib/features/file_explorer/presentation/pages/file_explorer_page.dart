@@ -897,7 +897,12 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     );
   }
 
-  Widget _buildFileItem(BuildContext context, WidgetRef ref, FileNode node) {
+  Widget _buildFileItem(
+    BuildContext context,
+    WidgetRef ref,
+    FileNode node, {
+    Color? accentColor,
+  }) {
     final iconInfo = FileIconHelper.getIconInfo(node.name, node.isDirectory);
     final isSelected = _selectedPaths.contains(node.path);
     final isPreviewActive = _selectedPreviewPath == node.path;
@@ -1168,7 +1173,12 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     );
   }
 
-  Widget _buildFAB(BuildContext context, WidgetRef ref) {
+  Widget _buildFAB(
+    BuildContext context,
+    WidgetRef ref, {
+    Color? accentColor,
+    Color? panelColor,
+  }) {
     final clipboard = ref.watch(fileClipboardProvider);
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1629,7 +1639,14 @@ class _FileExplorerPageState extends ConsumerState<FileExplorerPage> {
     return crumbs;
   }
 
-  Widget _buildBreadcrumbs(BuildContext context, String currentPath, String? rootPath) {
+  Widget _buildBreadcrumbs(
+    BuildContext context,
+    String currentPath,
+    String? rootPath, {
+    double horizontalPadding = 0,
+    Color? accentColor,
+    Color? borderColor,
+  }) {
     final crumbs = _getBreadcrumbs(currentPath, rootPath);
     
     WidgetsBinding.instance.addPostFrameCallback((_) {

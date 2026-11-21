@@ -1295,7 +1295,7 @@ class McpClientInstance {
         final diagService = _ref.read(androidBuildDiagnosticsServiceProvider);
         final issues = diagService.parseBuildIssues(
           tailText,
-          projectRoot: workspace,
+          workspace,
         );
         final apkInfo = diagService.findDebugApk(workspace);
 
@@ -1362,7 +1362,6 @@ class McpClientInstance {
         final cmd = BuildResourceOptimizer.generateBuildCommand(
           target: target,
           mode: perfMode,
-          hardware: hw,
         );
         return {
           'content': 'Hardware: $hw'
@@ -1429,11 +1428,11 @@ class McpClientInstance {
         );
         for (final d in adbState.devices) {
           buf.writeln(
-            '- ${d.id} [${d.state}] model=${d.model} (${d.androidVersion ?? 'Android'})',
+            '- ${d.id} [${d.status.name}] model=${d.model} (${d.androidVersion ?? 'Android'})',
           );
         }
         if (includeLogcat) {
-          final logcat = await adbNotifier.fetchDeviceLogcatErrors(lines: 60);
+          final logcat = await adbNotifier.getLogcatErrors(lines: 60);
           buf.writeln('\nRecent Device Logcat Errors:\n$logcat');
         }
         return {'content': buf.toString().trim()};
