@@ -60,10 +60,36 @@ class DedicatedTerminalNotifier extends StateNotifier<DedicatedTerminalState> {
   }
 
   void sendRawChar(DedicatedTerminalType type, String char) {
+    if (char == '\x03') {
+      BuildProgressTracker.instance.cancel();
+      if (LiveTelemetryService.instance.isBuilding) {
+        LiveTelemetryService.instance.onBuildFinished(-1);
+      }
+    }
     final session = state.sessions[type];
     if (session == null || session.isExited) return;
 
     session.pty.write(Uint8List.fromList(utf8.encode(char)));
+  }
+
+  void stopBuildProcess() {
+    BuildProgressTracker.instance.cancel();
+    if (LiveTelemetryService.instance.isBuilding) {
+      LiveTelemetryService.instance.onBuildFinished(-1);
+    }
+    final session = state.sessions[DedicatedTerminalType.build];
+    if (session != null && !session.isExited) {
+      session.pty.write(Uint8List.fromList([3]));
+      Future.delayed(const Duration(milliseconds: 120), () {
+        session.pty.write(
+          Uint8List.fromList(
+            utf8.encode(
+              '\x03(pkill -9 -f gen_snapshot 2>/dev/null || true); (pkill -9 -f GradleDaemon 2>/dev/null || true); (pkill -9 -f GradleWrapperMain 2>/dev/null || true); (pkill -9 -f aapt2 2>/dev/null || true); echo "✗ Сборка отменена пользователем"\n',
+            ),
+          ),
+        );
+      });
+    }
   }
 
   void _sendToSession(

@@ -1559,23 +1559,43 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               ),
                             ),
                             _buildActionButton(
-                              'Release APK',
+                              'APK (D8 · без R8)',
+                              LucideIcons.zap,
+                              const Color(0xFF10B981),
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && QUANTUM_DISABLE_R8=1 flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK (D8 · без R8): ./app-release.apk"',
+                                displayCmd: 'flutter build apk --release (D8 · без R8)',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'Release APK (R8)',
                               LucideIcons.package,
                               Colors.orange,
                               () => _runDedicatedCommand(
                                 DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK: ./app-release.apk"',
-                                displayCmd: 'flutter build apk --release',
+                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK (R8): ./app-release.apk"',
+                                displayCmd: 'flutter build apk --release (R8)',
                               ),
                             ),
                             _buildActionButton(
-                              'AAB (Google Play)',
+                              'AAB с D8 (без R8)',
+                              LucideIcons.zap,
+                              Colors.tealAccent,
+                              () => _runDedicatedCommand(
+                                DedicatedTerminalType.build,
+                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && QUANTUM_DISABLE_R8=1 flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB · D8 без R8): ./app-release.aab"',
+                                displayCmd: 'flutter build appbundle --release (D8 · без R8)',
+                              ),
+                            ),
+                            _buildActionButton(
+                              'AAB с R8 (Google Play)',
                               LucideIcons.rocket,
                               Colors.purpleAccent,
                               () => _runDedicatedCommand(
                                 DedicatedTerminalType.build,
-                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB): ./app-release.aab"',
-                                displayCmd: 'flutter build appbundle --release',
+                                '([ ! -s .dart_tool/package_config.json ] && flutter pub get || true) && flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB · R8): ./app-release.aab"',
+                                displayCmd: 'flutter build appbundle --release (R8)',
                               ),
                             ),
                             _buildActionButton(
@@ -1868,6 +1888,12 @@ class _TerminalPanelContentState extends ConsumerState<TerminalPanelContent> {
                               ),
                             ),
                           ],
+                          _buildActionButton(
+                            l10n.stop,
+                            LucideIcons.square,
+                            Colors.redAccent,
+                            () => ref.read(dedicatedTerminalProvider.notifier).stopBuildProcess(),
+                          ),
                           _buildActionButton(
                             l10n.copy,
                             LucideIcons.copy,

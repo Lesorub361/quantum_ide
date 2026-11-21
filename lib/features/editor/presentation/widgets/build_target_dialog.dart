@@ -276,13 +276,43 @@ class _BuildTargetDialogState extends State<BuildTargetDialog> {
 
           // Target list
           _buildTargetCard(
-            target: BuildTargetType.arm64,
-            title: 'APK ARM64 (64-бит)',
+            target: BuildTargetType.arm64D8,
+            title: 'APK ARM64 с D8 (Быстрый · без R8)',
             subtitle:
-                'Самый быстрый (в 4-5 раз быстрее). Рекомендуется для вашего планшета и 99% современных Android.',
-            badge: '⚡ Рекомендуется · 4 мин',
-            badgeColor: Colors.amber,
+                'Ультра-быстрая релизная сборка APK на чистом D8 без R8-сжатия (в 2 раза быстрее и меньше ОЗУ).',
+            badge: '⚡ D8 Быстрый · 2.5 мин',
+            badgeColor: const Color(0xFF10B981),
             icon: LucideIcons.zap,
+          ),
+          const SizedBox(height: 8),
+          _buildTargetCard(
+            target: BuildTargetType.arm64,
+            title: 'APK ARM64 с R8 (64-бит · сжатие)',
+            subtitle:
+                'Релизный APK с полным R8-сжатием кода и ресурсов для современных Android.',
+            badge: 'R8 Release · 4-8 мин',
+            badgeColor: Colors.amber,
+            icon: LucideIcons.package,
+          ),
+          const SizedBox(height: 8),
+          _buildTargetCard(
+            target: BuildTargetType.aabD8,
+            title: 'AppBundle AAB с D8 (Быстрый · без R8)',
+            subtitle:
+                'Быстрая сборка AAB для Google Play на чистом D8 без ожидания R8 (в 2 раза быстрее).',
+            badge: '⚡ Google Play D8 · 4 мин',
+            badgeColor: Colors.tealAccent,
+            icon: LucideIcons.rocket,
+          ),
+          const SizedBox(height: 8),
+          _buildTargetCard(
+            target: BuildTargetType.aab,
+            title: 'AppBundle AAB с R8 (Google Play · сжатие)',
+            subtitle:
+                'Бандл для публикации в Google Play Store с полным R8-сжатием и минификацией.',
+            badge: 'Google Play R8',
+            badgeColor: Colors.purpleAccent,
+            icon: LucideIcons.rocket,
           ),
           const SizedBox(height: 8),
           _buildTargetCard(
@@ -313,16 +343,6 @@ class _BuildTargetDialogState extends State<BuildTargetDialog> {
             badge: '3 файла APK',
             badgeColor: Colors.orangeAccent,
             icon: LucideIcons.boxes,
-          ),
-          const SizedBox(height: 8),
-          _buildTargetCard(
-            target: BuildTargetType.aab,
-            title: 'AppBundle (AAB)',
-            subtitle:
-                'Бандл для публикации в Google Play Store. Содержит библиотеки всех платформ.',
-            badge: 'Google Play',
-            badgeColor: Colors.purpleAccent,
-            icon: LucideIcons.rocket,
           ),
           const SizedBox(height: 8),
           _buildTargetCard(

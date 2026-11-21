@@ -3,11 +3,13 @@ import 'dart:math' as math;
 
 /// Target architectures and build formats for Android/Flutter builds.
 enum BuildTargetType {
-  arm64, // APK ARM64-v8a (64-bit) — Fastest, modern phones/tablets
+  arm64, // APK ARM64-v8a (64-bit) — R8 Release
+  arm64D8, // APK ARM64-v8a (64-bit) — Fast D8 (no R8)
   arm32, // APK ARMeabi-v7a (32-bit) — Legacy 32-bit phones
   x86_64, // APK x86_64 — PC Android emulators
   split, // Split APKs per ABI (separate APK files)
-  aab, // Android App Bundle (Google Play Store)
+  aab, // Android App Bundle (Google Play Store — with R8)
+  aabD8, // Android App Bundle (Google Play Store — Fast D8 without R8)
   debug, // Debug APK (ARM64)
 }
 
@@ -205,7 +207,10 @@ class BuildResourceOptimizer {
 
     switch (target) {
       case BuildTargetType.arm64:
-        return '$checkSdk && $envPrefix flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK (ARM64 64-бит): ./app-release.apk"';
+        return '$checkSdk && $envPrefix flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK (ARM64 · R8): ./app-release.apk"';
+
+      case BuildTargetType.arm64D8:
+        return '$checkSdk && QUANTUM_DISABLE_R8=1 $envPrefix flutter build apk --release --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-release.apk ./app-release.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ./app-release.apk 2>/dev/null || true) && echo "✓ Release APK (ARM64 · D8 без R8): ./app-release.apk"';
 
       case BuildTargetType.arm32:
         return '$checkSdk && $envPrefix flutter build apk --release --no-pub --target-platform android-arm --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk ./app-release-armv7.apk 2>/dev/null || cp build/app/outputs/flutter-apk/app-release.apk ./app-release-armv7.apk 2>/dev/null || true) && echo "✓ Release APK (ARMv7 32-бит): ./app-release-armv7.apk"';
@@ -217,7 +222,10 @@ class BuildResourceOptimizer {
         return '$checkSdk && $envPrefix flutter build apk --release --no-pub --split-per-abi --no-tree-shake-icons --android-skip-build-dependency-validation && (for apk in build/app/outputs/flutter-apk/*.apk; do cp -f "\$apk" ./ 2>/dev/null; done) && echo "✓ Split APKs (arm64, armv7, x86_64) готовы в корне проекта"';
 
       case BuildTargetType.aab:
-        return '$checkSdk && $envPrefix flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB): ./app-release.aab"';
+        return '$checkSdk && $envPrefix flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB · R8): ./app-release.aab"';
+
+      case BuildTargetType.aabD8:
+        return '$checkSdk && QUANTUM_DISABLE_R8=1 $envPrefix flutter build appbundle --release --no-pub --no-tree-shake-icons --android-skip-build-dependency-validation && (cp -f build/app/outputs/bundle/release/app-release.aab ./app-release.aab 2>/dev/null || true) && echo "✓ Google Play Bundle (AAB · D8 без R8): ./app-release.aab"';
 
       case BuildTargetType.debug:
         return '$checkSdk && $envPrefix flutter build apk --debug --no-pub --target-platform android-arm64 --no-tree-shake-icons --android-skip-build-dependency-validation && (cp build/app/outputs/flutter-apk/app-debug.apk ./app-debug.apk 2>/dev/null || true) && echo "✓ Debug APK (ARM64): ./app-debug.apk"';
@@ -228,7 +236,9 @@ class BuildResourceOptimizer {
   static String getDisplayCommand(BuildTargetType target) {
     switch (target) {
       case BuildTargetType.arm64:
-        return 'flutter build apk --release --target-platform android-arm64';
+        return 'flutter build apk --release --target-platform android-arm64 (R8)';
+      case BuildTargetType.arm64D8:
+        return 'flutter build apk --release --target-platform android-arm64 (D8 · без R8)';
       case BuildTargetType.arm32:
         return 'flutter build apk --release --target-platform android-arm';
       case BuildTargetType.x86_64:
@@ -236,7 +246,9 @@ class BuildResourceOptimizer {
       case BuildTargetType.split:
         return 'flutter build apk --release --split-per-abi';
       case BuildTargetType.aab:
-        return 'flutter build appbundle --release';
+        return 'flutter build appbundle --release (R8)';
+      case BuildTargetType.aabD8:
+        return 'flutter build appbundle --release (D8 · без R8)';
       case BuildTargetType.debug:
         return 'flutter build apk --debug';
     }

@@ -77,13 +77,12 @@ class BuildProgressCard extends StatelessWidget {
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
-                  if (!p.active)
-                    IconButton(
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 18,
-                      icon: const Icon(Icons.close),
-                      onPressed: tracker.dismiss,
-                    ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 18,
+                    icon: const Icon(Icons.close),
+                    onPressed: tracker.cancel,
+                  ),
                 ],
               ),
               const SizedBox(height: 6),

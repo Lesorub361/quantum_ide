@@ -111,9 +111,19 @@ class BuildProgressTracker {
     _start = null;
   }
 
+  void cancel() {
+    _ticker?.cancel();
+    _ticker = null;
+    _start = null;
+    _tail = '';
+    progress.value = const BuildProgress();
+  }
+
   void dismiss() {
     _ticker?.cancel();
+    _ticker = null;
     _start = null;
+    _tail = '';
     progress.value = const BuildProgress();
   }
 
@@ -185,6 +195,13 @@ class BuildProgressTracker {
     if (line.startsWith('✓') || line.contains('Built build/') || line.contains('BUILD SUCCESSFUL')) {
       progress.value = p;
       _finish(BuildStage.done, apk: _apkRe.firstMatch(line)?.group(1));
+      return progress.value;
+    }
+    if (line.contains('^C') ||
+        line.contains('Сборка отменена') ||
+        line.contains('Build cancelled') ||
+        line.contains('Build canceled')) {
+      cancel();
       return progress.value;
     }
     if (line.contains('BUILD FAILED') ||

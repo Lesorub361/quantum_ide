@@ -19,6 +19,7 @@ import 'package:quantum_ide/core/services/settings_service.dart';
 import 'package:quantum_ide/core/theme/conduit_palette.dart';
 import 'package:quantum_ide/features/terminal/conduit/conduit_appearance_sheet.dart';
 import 'package:quantum_ide/features/terminal/presentation/widgets/build_completion_dialog.dart';
+import 'package:quantum_ide/features/terminal/presentation/notifiers/dedicated_terminal_notifier.dart';
 import 'package:quantum_ide/core/services/shizuku_bridge.dart';
 
 class StatusBar extends ConsumerStatefulWidget {
@@ -1436,21 +1437,22 @@ class _StatusBarBuildIndicator extends ConsumerWidget {
                       color: color,
                     ),
                   ),
-                  if (!active) ...[
-                    const SizedBox(width: 3),
-                    InkWell(
-                      onTap: () => BuildProgressTracker.instance.dismiss(),
-                      borderRadius: BorderRadius.circular(3),
-                      child: Padding(
-                        padding: const EdgeInsets.all(1.5),
-                        child: Icon(
-                          LucideIcons.x,
-                          size: 8.5,
-                          color: color.withValues(alpha: 0.7),
-                        ),
+                  const SizedBox(width: 3),
+                  InkWell(
+                    onTap: () {
+                      ref.read(dedicatedTerminalProvider.notifier).stopBuildProcess();
+                      BuildProgressTracker.instance.cancel();
+                    },
+                    borderRadius: BorderRadius.circular(3),
+                    child: Padding(
+                      padding: const EdgeInsets.all(1.5),
+                      child: Icon(
+                        LucideIcons.x,
+                        size: 8.5,
+                        color: color.withValues(alpha: 0.7),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

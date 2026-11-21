@@ -1535,6 +1535,8 @@ alias build-arm64="flutter build apk --release --target-platform android-arm64"
 alias build-arm32="flutter build apk --release --target-platform android-arm"
 alias build-x64="flutter build apk --release --target-platform android-x64"
 alias build-aab="flutter build appbundle --release"
+alias build-aab-d8="QUANTUM_DISABLE_R8=1 flutter build appbundle --release"
+alias build-apk-d8="QUANTUM_DISABLE_R8=1 flutter build apk --release"
 alias fb-arm64="flutter build apk --release --target-platform android-arm64"
 alias fb-arm32="flutter build apk --release --target-platform android-arm"
 alias fb-x64="flutter build apk --release --target-platform android-x64"
@@ -1775,6 +1777,21 @@ flutter() {
         local build_log="/tmp/quantum_flutter_build.log"
         rm -f "$build_log" 2>/dev/null || true
 
+        local _r8_patched_file=""
+        local _r8_backup_file=""
+        if [ "${QUANTUM_DISABLE_R8:-0}" = "1" ]; then
+            echo -e "\033[1;32m⚡ Режим D8 (без R8):\033[0m временно отключаю minifyEnabled/shrinkResources для быстрой сборки..."
+            for _bg in ./android/app/build.gradle ./android/app/build.gradle.kts; do
+                if [ -f "$_bg" ] && grep -qE "(isMinifyEnabled|minifyEnabled)[[:space:]=]+true" "$_bg" 2>/dev/null; then
+                    _r8_patched_file="$_bg"
+                    _r8_backup_file="/tmp/.quantum_r8_bak_$$"
+                    cp -f "$_bg" "$_r8_backup_file" 2>/dev/null || true
+                    sed -i -E 's/(isMinifyEnabled|minifyEnabled)([[:space:]=]+)true/\1\2false/g; s/(isShrinkResources|shrinkResources)([[:space:]=]+)true/\1\2false/g' "$_bg" 2>/dev/null || true
+                    break
+                fi
+            done
+        fi
+
         echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${_qt_mem_mb}MB, CPU=${_qt_cores} ядер → dart=${_qt_dart}MB, jvm=${_qt_jvm}, workers=${_qt_workers}, cache=on)..."
         echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle..."
         command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1 | tee "$build_log"
@@ -1807,6 +1824,10 @@ flutter() {
                 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
                 ret=${PIPESTATUS[0]}
             fi
+        fi
+
+        if [ -n "$_r8_patched_file" ] && [ -f "$_r8_backup_file" ]; then
+            mv -f "$_r8_backup_file" "$_r8_patched_file" 2>/dev/null || true
         fi
 
         if [ $ret -eq 0 ]; then
@@ -2020,6 +2041,8 @@ alias build-arm64="flutter build apk --release --target-platform android-arm64"
 alias build-arm32="flutter build apk --release --target-platform android-arm"
 alias build-x64="flutter build apk --release --target-platform android-x64"
 alias build-aab="flutter build appbundle --release"
+alias build-aab-d8="QUANTUM_DISABLE_R8=1 flutter build appbundle --release"
+alias build-apk-d8="QUANTUM_DISABLE_R8=1 flutter build apk --release"
 alias fb-arm64="flutter build apk --release --target-platform android-arm64"
 alias fb-arm32="flutter build apk --release --target-platform android-arm"
 alias fb-x64="flutter build apk --release --target-platform android-x64"
@@ -2227,6 +2250,21 @@ EOF
         local build_log="/tmp/quantum_flutter_build.log"
         rm -f "$build_log" 2>/dev/null || true
 
+        local _r8_patched_file=""
+        local _r8_backup_file=""
+        if [ "${QUANTUM_DISABLE_R8:-0}" = "1" ]; then
+            echo -e "\033[1;32m⚡ Режим D8 (без R8):\033[0m временно отключаю minifyEnabled/shrinkResources для быстрой сборки..."
+            for _bg in ./android/app/build.gradle ./android/app/build.gradle.kts; do
+                if [ -f "$_bg" ] && grep -qE "(isMinifyEnabled|minifyEnabled)[[:space:]=]+true" "$_bg" 2>/dev/null; then
+                    _r8_patched_file="$_bg"
+                    _r8_backup_file="/tmp/.quantum_r8_bak_$$"
+                    cp -f "$_bg" "$_r8_backup_file" 2>/dev/null || true
+                    sed -i -E 's/(isMinifyEnabled|minifyEnabled)([[:space:]=]+)true/\1\2false/g; s/(isShrinkResources|shrinkResources)([[:space:]=]+)true/\1\2false/g' "$_bg" 2>/dev/null || true
+                    break
+                fi
+            done
+        fi
+
         echo -e "\033[1;36m⚡ QuantumIDE Engine:\033[0m сборка $2 (RAM free=${mem_avail_mb}MB, CPU=${cpu_cores} ядер → dart=${dart_heap}MB, jvm=${jvm_xmx}, workers=${gradle_workers}, cache=on)..."
         echo -e "\033[1;34m[2/3]\033[0m Запуск Flutter и Gradle..."
         command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1 | tee "$build_log"
@@ -2259,6 +2297,10 @@ EOF
                 command flutter "${cleaned_args[@]}" "${extra_flags[@]}" "${verbose_flag[@]}" 2>&1
                 ret=$?
             fi
+        fi
+
+        if [ -n "$_r8_patched_file" ] && [ -f "$_r8_backup_file" ]; then
+            mv -f "$_r8_backup_file" "$_r8_patched_file" 2>/dev/null || true
         fi
 
         if [ $ret -eq 0 ]; then
