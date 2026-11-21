@@ -1588,28 +1588,28 @@ _quantum_tune_gradle() {
     _qt_mem_mb=$(( ${mem_avail_kb:-2000000} / 1024 ))
 
     _qt_jvm="1280m"
-    _qt_meta="384m"
+    _qt_meta="640m"
     _qt_dart="768"
     _qt_workers=1
     _qt_parallel=false
 
     if [ "$_qt_mem_mb" -ge 6000 ]; then
-        _qt_jvm="1792m"; _qt_meta="384m"; _qt_dart="1024"
+        _qt_jvm="1792m"; _qt_meta="768m"; _qt_dart="1024"
         if [ "$_qt_cores" -ge 6 ]; then _qt_workers=3
         else _qt_workers=2; fi
     elif [ "$_qt_mem_mb" -ge 3200 ]; then
-        _qt_jvm="1280m"; _qt_meta="320m"; _qt_dart="768"
+        _qt_jvm="1280m"; _qt_meta="640m"; _qt_dart="768"
         _qt_workers=2
     elif [ "$_qt_mem_mb" -ge 2000 ]; then
-        _qt_jvm="1024m"; _qt_meta="288m"; _qt_dart="640"
+        _qt_jvm="1024m"; _qt_meta="512m"; _qt_dart="640"
         _qt_workers=1
     else
-        _qt_jvm="896m"; _qt_meta="256m"; _qt_dart="512"
+        _qt_jvm="896m"; _qt_meta="512m"; _qt_dart="512"
         _qt_workers=1
     fi
 
     if [ "$QUANTUM_BUILD_PROFILE" = "safe" ]; then
-        _qt_jvm="896m"; _qt_meta="256m"; _qt_dart="512"
+        _qt_jvm="896m"; _qt_meta="512m"; _qt_dart="512"
         _qt_workers=1
         _qt_parallel=false
     elif [ "$QUANTUM_BUILD_PROFILE" = "turbo" ]; then
@@ -2117,14 +2117,14 @@ flutter() {
         local mem_avail_mb=$(( ${mem_avail_kb:-2000000} / 1024 ))
 
         local jvm_xmx="1024m"
-        local jvm_meta="288m"
+        local jvm_meta="512m"
         local dart_heap="640"
         local gradle_workers=1
         local gradle_parallel=false
 
         if [ "$mem_avail_mb" -ge 6000 ]; then
             jvm_xmx="1792m"
-            jvm_meta="384m"
+            jvm_meta="768m"
             dart_heap="1024"
             if [ "$cpu_cores" -ge 6 ]; then
                 gradle_workers=3
@@ -2133,24 +2133,24 @@ flutter() {
             fi
         elif [ "$mem_avail_mb" -ge 3200 ]; then
             jvm_xmx="1280m"
-            jvm_meta="320m"
+            jvm_meta="640m"
             dart_heap="768"
             gradle_workers=2
         elif [ "$mem_avail_mb" -ge 2000 ]; then
             jvm_xmx="1024m"
-            jvm_meta="288m"
+            jvm_meta="512m"
             dart_heap="640"
             gradle_workers=1
         else
             jvm_xmx="896m"
-            jvm_meta="256m"
+            jvm_meta="512m"
             dart_heap="512"
             gradle_workers=1
         fi
 
         if [ "$QUANTUM_BUILD_PROFILE" = "safe" ]; then
             jvm_xmx="896m"
-            jvm_meta="256m"
+            jvm_meta="512m"
             dart_heap="512"
             gradle_workers=1
             gradle_parallel=false

@@ -1,16 +1,16 @@
 {
-  "versionCode": 299,
-  "versionName": "1.2.282",
-  "notes": "## 🚀 QuantumIDE v1.2.282\n\n### Что исправлено\n- **Окно создания проектов**:\n  - Исправлена строковая интерполяция в чипах SDK (`API 34`, `API 35`, `API 36` и `MIN SDK 21/24/26` вместо `API $sdk`) и в автообновлении `Application ID / Package` (`com.example.<имя_проекта>`).\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
+  "versionCode": 300,
+  "versionName": "1.2.283",
+  "notes": "## 🚀 QuantumIDE v1.2.283\n\n### Что исправлено\n- **Сборка APK / AAB с R8 (`Gradle 9 + AGP 9`)**:\n  - Увеличены лимиты `-XX:MaxMetaspaceSize` во всех профилях памяти в `runtime_service.dart` (с `256m–384m` до `512m–768m`), что устраняет вылет `ERROR: R8: java.lang.OutOfMemoryError: Metaspace` при релизной сборке.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.282/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.283/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.282",
-  "buildNumber": 299,
-  "tag_name": "v1.2.282",
-  "releaseNotes": "Исправлено отображение чипов API SDK и живая автоподстановка Package Name в окне создания проектов."
+  "version": "1.2.283",
+  "buildNumber": 300,
+  "tag_name": "v1.2.283",
+  "releaseNotes": "Исправлен вылет релизной сборки R8 (OutOfMemoryError: Metaspace) за счёт увеличения MaxMetaspaceSize до 512–768 МБ."
 }
