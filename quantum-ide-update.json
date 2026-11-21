@@ -1,16 +1,16 @@
 {
-  "versionCode": 298,
-  "versionName": "1.2.281",
-  "notes": "## 🚀 QuantumIDE v1.2.281\n\n### Что нового и улучшено\n- **Живое слежение за проектом (`watcher: ^1.2.1`)**:\n  - Добавлен [`WorkspaceWatcherService`](lib/core/services/workspace_watcher_service.dart): дерево файлов в Проводнике теперь обновляется автоматически при создании/изменении файлов или сборке APK из терминала.\n- **Точный подсчёт токенов (`langchain_tiktoken: ^1.0.1`)**:\n  - В поле ввода AI-чата отображается живой счётчик BPE-токенов (`cl100k_base`) в реальном времени.\n- **Устойчивые сетевые запросы (`dio_smart_retry`)**:\n  - В `RoxumAiClient` подключён `RetryInterceptor` с автоповтором при кратковременных сбоях сети и ошибках `429/502/503/504`.\n- **Цветные ANSI-логи в Run / Build Logs**:\n  - Добавлен `AnsiTextParser`: вывод Gradle и Flutter с ANSI-цветами корректно подсвечивается в панелях логов сборки и запуска.\n- **UI-панели**:\n  - В `pubspec.yaml` добавлен `multi_split_view: ^3.6.2` для дальнейшего расширения гибких разделителей панелей.\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
+  "versionCode": 299,
+  "versionName": "1.2.282",
+  "notes": "## 🚀 QuantumIDE v1.2.282\n\n### Что исправлено\n- **Окно создания проектов**:\n  - Исправлена строковая интерполяция в чипах SDK (`API 34`, `API 35`, `API 36` и `MIN SDK 21/24/26` вместо `API $sdk`) и в автообновлении `Application ID / Package` (`com.example.<имя_проекта>`).\n\n### 📦 Сборки для всех платформ\n- **Android**: APK (`arm64-v8a`, `armeabi-v7a`, `x86_64`) и AAB\n- **Linux / Windows / macOS / iOS (без подписи) / Web**",
   "artifacts": {
     "online": {
-      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.281/app-arm64-v8a-release.apk",
+      "url": "https://github.com/Lesorub361/quantum_ide/releases/download/v1.2.282/app-arm64-v8a-release.apk",
       "sha256": "",
       "sizeBytes": 0
     }
   },
-  "version": "1.2.281",
-  "buildNumber": 298,
-  "tag_name": "v1.2.281",
-  "releaseNotes": "Добавлено живое автообновление проводника (watcher), точный BPE-подсчёт токенов (langchain_tiktoken), автоповтор сетевых запросов (dio_smart_retry) и цветные ANSI-логи в Run/Build."
+  "version": "1.2.282",
+  "buildNumber": 299,
+  "tag_name": "v1.2.282",
+  "releaseNotes": "Исправлено отображение чипов API SDK и живая автоподстановка Package Name в окне создания проектов."
 }

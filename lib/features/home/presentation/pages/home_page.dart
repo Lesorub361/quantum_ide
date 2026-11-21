@@ -3240,9 +3240,9 @@ class _HomePageState extends ConsumerState<HomePage> {
         .toLowerCase()
         .replaceAll(RegExp(r"[^a-z0-9_]+"), "_")
         .replaceAll(RegExp(r"_+"), "_")
-        .replaceAll(RegExp(r"^_+|_+\$"), "");
+        .replaceAll(RegExp(r"^_+|_+$"), "");
     if (s.isEmpty) return "app";
-    if (RegExp(r"^[0-9]").hasMatch(s)) s = "app_\$s";
+    if (RegExp(r"^[0-9]").hasMatch(s)) s = "app_$s";
     return s;
   }
 
@@ -3251,7 +3251,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final nameCtrl = TextEditingController(text: project?.name ?? "");
     final orgCtrl = TextEditingController(text: "com.example");
     final initialPkg = (project != null)
-        ? "\${orgCtrl.text}.\${_sanitizePackageSegment(project.name)}"
+        ? "${orgCtrl.text}.${_sanitizePackageSegment(project.name)}"
         : "com.example.app";
     final packageCtrl = TextEditingController(text: initialPkg);
     final locationCtrl = TextEditingController(
@@ -3279,10 +3279,10 @@ class _HomePageState extends ConsumerState<HomePage> {
           .trim()
           .toLowerCase()
           .replaceAll(RegExp(r"[^a-z0-9._]"), "")
-          .replaceAll(RegExp(r"^\.+|\.+\$"), "");
+          .replaceAll(RegExp(r"^\.+|\.+$"), "");
       final baseOrg = org.isEmpty ? "com.example" : org;
       final seg = _sanitizePackageSegment(nameCtrl.text);
-      packageCtrl.text = "\$baseOrg.\$seg";
+      packageCtrl.text = "$baseOrg.$seg";
     }
 
     final projectTemplates = [
@@ -3649,7 +3649,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                         children: ["34", "35", "36"].map((sdk) {
                           final sel = selectedCompileSdk == sdk;
                           return ChoiceChip(
-                            label: Text("API \$sdk", style: const TextStyle(fontSize: 11.5)),
+                            label: Text("API $sdk", style: const TextStyle(fontSize: 11.5)),
                             selected: sel,
                             onSelected: (_) => setState(() => selectedCompileSdk = sdk),
                           );
@@ -3671,7 +3671,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           children: ["21", "24", "26"].map((sdk) {
                             final sel = selectedMinSdk == sdk;
                             return ChoiceChip(
-                              label: Text("API \$sdk", style: const TextStyle(fontSize: 11.5)),
+                              label: Text("API $sdk", style: const TextStyle(fontSize: 11.5)),
                               selected: sel,
                               onSelected: (_) => setState(() => selectedMinSdk = sdk),
                             );
